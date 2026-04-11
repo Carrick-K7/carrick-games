@@ -1,6 +1,7 @@
 import { SnakeGame } from './games/snake.js';
 import { BreakoutGame } from './games/breakout.js';
 import { TetrisGame } from './games/tetris.js';
+import { PongGame } from './games/pong.js';
 
 export interface GameMeta {
   id: string;
@@ -77,6 +78,25 @@ export const GAMES: GameMeta[] = [
         { icon: 'swipe-up', action: 'Swipe up', actionZh: '上滑硬降' },
         { icon: 'swipe-down', action: 'Swipe down', actionZh: '下滑软降' },
         { icon: 'tap', action: 'Tap to rotate', actionZh: '点击旋转' },
+      ],
+    },
+  },
+  {
+    id: 'pong',
+    name: 'Pong',
+    nameZh: '乒乓',
+    desc: 'Classic arcade table tennis against AI.',
+    descZh: '经典街机乒乓球对战 AI。',
+    cls: PongGame,
+    canvasSize: { width: 600, height: 400 },
+    controls: {
+      keyboard: [
+        { keys: ['↑', 'W'], action: 'Move up', actionZh: '上移' },
+        { keys: ['↓', 'S'], action: 'Move down', actionZh: '下移' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap upper/lower half to move', actionZh: '点击上半/下半屏移动' },
       ],
     },
   },
