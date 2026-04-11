@@ -28,7 +28,10 @@ export class BaseGame {
     }
     bindInput() {
         window.addEventListener('keydown', this.handleInput.bind(this));
+        window.addEventListener('keyup', this.handleInput.bind(this));
         this.canvas.addEventListener('touchstart', this.handleInput.bind(this), { passive: false });
+        this.canvas.addEventListener('touchend', this.handleInput.bind(this), { passive: false });
+        this.canvas.addEventListener('touchmove', this.handleInput.bind(this), { passive: false });
     }
     start() {
         this.running = true;
