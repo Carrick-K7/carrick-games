@@ -2,6 +2,7 @@ import { SnakeGame } from './games/snake.js';
 import { BreakoutGame } from './games/breakout.js';
 import { TetrisGame } from './games/tetris.js';
 import { PongGame } from './games/pong.js';
+import { SpaceShooterGame } from './games/spaceshooter.js';
 
 export interface GameMeta {
   id: string;
@@ -97,6 +98,25 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap upper/lower half to move', actionZh: '点击上半/下半屏移动' },
+      ],
+    },
+  },
+  {
+    id: 'spaceshooter',
+    name: 'Space Shooter',
+    nameZh: '太空射击',
+    desc: 'Vertical space shooter. Destroy enemies and avoid collisions.',
+    descZh: '纵向太空射击游戏。消灭敌人并避免碰撞。',
+    cls: SpaceShooterGame,
+    canvasSize: { width: 480, height: 640 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap left/right side to move', actionZh: '点击左/右侧移动' },
       ],
     },
   },
