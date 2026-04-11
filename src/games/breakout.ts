@@ -164,9 +164,9 @@ export class BreakoutGame extends BaseGame {
 
     // Score
     ctx.fillStyle = '#f8fafc';
-    ctx.font = '16px monospace';
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`Score: ${this.score}`, 8, 24);
+    ctx.fillText(`SCORE ${this.score}`, 8, 20);
 
     // Game Over / Win overlay
     if (this.gameOver || this.won) {
@@ -174,10 +174,10 @@ export class BreakoutGame extends BaseGame {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 26px sans-serif';
+      ctx.font = '16px "Press Start 2P", monospace';
       ctx.fillText(this.won ? 'YOU WIN!' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '14px sans-serif';
-      ctx.fillText('Press SPACE or tap to restart', this.width / 2, this.height / 2 + 20);
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
     }
   }
 

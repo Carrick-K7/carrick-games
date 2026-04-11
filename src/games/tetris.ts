@@ -359,7 +359,7 @@ export class TetrisGame extends BaseGame {
     ctx.strokeStyle = '#334155';
     ctx.strokeRect(previewX - 8, previewY - 24, 104, 120);
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '14px sans-serif';
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText('NEXT', previewX, previewY - 8);
 
@@ -377,21 +377,21 @@ export class TetrisGame extends BaseGame {
 
     // Draw UI
     ctx.fillStyle = '#f8fafc';
-    ctx.font = '16px monospace';
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`Score: ${this.score}`, this.cols * this.cellSize + 16, 200);
-    ctx.fillText(`Lines: ${this.lines}`, this.cols * this.cellSize + 16, 224);
-    ctx.fillText(`Level: ${this.level}`, this.cols * this.cellSize + 16, 248);
+    ctx.fillText(`SCORE ${this.score}`, this.cols * this.cellSize + 16, 200);
+    ctx.fillText(`LINES ${this.lines}`, this.cols * this.cellSize + 16, 224);
+    ctx.fillText(`LEVEL ${this.level}`, this.cols * this.cellSize + 16, 248);
 
     if (this.gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 24px sans-serif';
+      ctx.font = '16px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '14px sans-serif';
-      ctx.fillText('Press SPACE to restart', this.width / 2, this.height / 2 + 20);
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
     }
   }
 

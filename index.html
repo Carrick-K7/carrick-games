@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Carrick Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎮%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --bg: #0b0f14;
@@ -12,11 +16,16 @@
       --border: rgba(57,197,187,0.12);
       --border-strong: rgba(57,197,187,0.35);
       --text: #f8fafc;
-      --text-secondary: #94a3b8;
+      --text-secondary: #94a3af;
       --accent: #39C5BB;
       --accent-hover: #2ea39a;
       --accent-dim: rgba(57,197,187,0.10);
       --shadow: 0 12px 40px rgba(0,0,0,0.45);
+      --key-bg: #0b1221;
+      --key-border: rgba(57,197,187,0.35);
+      --key-text: #e2e8f0;
+      --key-pressed: var(--accent);
+      --key-pressed-text: #ffffff;
     }
 
     [data-theme="light"] {
@@ -31,6 +40,11 @@
       --accent-hover: #0f766e;
       --accent-dim: rgba(13,148,136,0.10);
       --shadow: 0 12px 40px rgba(0,0,0,0.10);
+      --key-bg: #ffffff;
+      --key-border: rgba(13,148,136,0.45);
+      --key-text: #0f172a;
+      --key-pressed: var(--accent);
+      --key-pressed-text: #ffffff;
     }
 
     @media (prefers-color-scheme: light) {
@@ -46,6 +60,11 @@
         --accent-hover: #0f766e;
         --accent-dim: rgba(13,148,136,0.10);
         --shadow: 0 12px 40px rgba(0,0,0,0.10);
+        --key-bg: #ffffff;
+        --key-border: rgba(13,148,136,0.45);
+        --key-text: #0f172a;
+        --key-pressed: var(--accent);
+        --key-pressed-text: #ffffff;
       }
     }
 
@@ -222,7 +241,7 @@
 
     .content-grid {
       display: grid;
-      grid-template-columns: 1fr 260px;
+      grid-template-columns: 1fr 280px;
       gap: 24px;
       align-items: start;
     }
@@ -390,6 +409,67 @@
       font-size: 0.875rem;
       padding: 24px 0;
       text-align: center;
+    }
+
+    /* Virtual Keyboard */
+    .vkeyboard {
+      --vk-gap: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--vk-gap);
+      margin-top: 10px;
+      user-select: none;
+    }
+
+    .vkeyboard-row {
+      display: flex;
+      gap: var(--vk-gap);
+      justify-content: center;
+    }
+
+    .vkey {
+      min-width: 22px;
+      height: 22px;
+      padding: 0 5px;
+      background: var(--key-bg);
+      border: 1px solid var(--key-border);
+      border-radius: 5px;
+      color: var(--key-text);
+      font-size: 0.65rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .05s ease, background .1s ease, border-color .1s ease, color .1s ease;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+    }
+
+    [data-theme="light"] .vkey {
+      box-shadow: 0 2px 0 rgba(0,0,0,0.08);
+    }
+
+    .vkey.wide-1 { min-width: 32px; }
+    .vkey.wide-2 { min-width: 42px; }
+    .vkey.wide-3 { min-width: 52px; }
+    .vkey.wide-4 { min-width: 76px; }
+    .vkey.wide-5 { min-width: 110px; }
+    .vkey.grow { flex: 1; min-width: 22px; }
+
+    .vkey.pressed {
+      background: var(--key-pressed);
+      border-color: var(--key-pressed);
+      color: var(--key-pressed-text);
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+
+    .vkey.hidden { visibility: hidden; }
+
+    .vkey-hint {
+      font-size: 0.55rem;
+      color: var(--accent);
+      margin-left: 2px;
+      opacity: 0.9;
     }
   </style>
 </head>

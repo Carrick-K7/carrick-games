@@ -86,10 +86,6 @@ let currentGameName: string | null = null;
 let currentGameInstance: { start(): void; stop(): void; init?(): void } | null = null;
 let isRunning = false;
 
-function renderKeycap(label: string): string {
-  return `<span class="keycap">${label}</span>`;
-}
-
 function renderTouchIcon(icon: string): string {
   const icons: Record<string, string> = {
     tap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.2"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>',
@@ -129,6 +125,43 @@ function updateGameTitle() {
   if (descEl) descEl.textContent = meta ? (zh ? meta.descZh : meta.desc) : '';
 }
 
+function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
+  document.querySelectorAll('.vkey').forEach((el) => {
+    const k = el.getAttribute('data-key') || '';
+    el.classList.toggle('pressed', pressedSet.has(k));
+  });
+}
+
+function renderVirtualKeyboard(activeKeys: string[]) {
+  const mk = (label: string, key: string, classes = '', hint = '') => {
+    const active = activeKeys.includes(key) ? ` data-key="${key}"` : '';
+    return `<div class="vkey ${classes}${active ? '' : ' hidden'}"${active}>${label}${hint ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
+  };
+  return `
+    <div class="vkeyboard" id="vkeyboard">
+      <div class="vkeyboard-row">
+        ${mk('Esc', 'Escape', 'wide-1')}
+        <div class="vkey hidden"></div>
+        ${mk('←', 'ArrowLeft', '', 'M')}
+        ${mk('↑', 'ArrowUp', '', 'M')}
+        ${mk('↓', 'ArrowDown', '', 'M')}
+        ${mk('→', 'ArrowRight', '', 'M')}
+        <div class="vkey hidden"></div>
+        ${mk('Space', 'Space', 'grow', 'RST')}
+      </div>
+      <div class="vkeyboard-row">
+        ${mk('Q', 'q')} ${mk('W', 'w', '', 'M')} ${mk('E', 'e')} ${mk('R', 'r')} ${mk('T', 't')} ${mk('Y', 'y')} ${mk('U', 'u')} ${mk('I', 'i')} ${mk('O', 'o')} ${mk('P', 'p')}
+      </div>
+      <div class="vkeyboard-row">
+        ${mk('A', 'a', '', 'M')} ${mk('S', 's', '', 'M')} ${mk('D', 'd', '', 'M')} ${mk('F', 'f')} ${mk('G', 'g')} ${mk('H', 'h')} ${mk('J', 'j')} ${mk('K', 'k')} ${mk('L', 'l')}
+      </div>
+      <div class="vkeyboard-row">
+        ${mk('Z', 'z', '', 'CCW')} ${mk('X', 'x', '', 'CW')} ${mk('C', 'c')} ${mk('V', 'v')} ${mk('B', 'b')} ${mk('N', 'n')} ${mk('M', 'm')}
+      </div>
+    </div>
+  `;
+}
+
 function renderControls() {
   const container = document.getElementById('controlsPanel');
   if (!container) return;
@@ -139,14 +172,18 @@ function renderControls() {
     return;
   }
 
+  const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
+
   let html = '<div class="control-section">';
+  html += `<div class="control-section-title">${zh ? '操作说明' : 'Controls'}</div>`;
 
   if (meta.controls.keyboard && meta.controls.keyboard.length) {
     html += `<div class="control-group-title">${zh ? '键盘' : 'Keyboard'}</div>`;
     for (const row of meta.controls.keyboard) {
-      const keysHtml = row.keys.map((k) => renderKeycap(k)).join('');
+      const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
       html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
     }
+    html += renderVirtualKeyboard(activeKeys);
   }
 
   if (meta.controls.touch && meta.controls.touch.length) {
@@ -158,6 +195,26 @@ function renderControls() {
 
   html += '</div>';
   container.innerHTML = html;
+}
+
+function normalizeKey(label: string): string {
+  const map: Record<string, string> = {
+    '←': 'ArrowLeft',
+    '↑': 'ArrowUp',
+    '→': 'ArrowRight',
+    '↓': 'ArrowDown',
+    'Space': ' ',
+  };
+  if (map[label]) return map[label];
+  return label.length === 1 ? label.toLowerCase() : label;
+}
+
+function getKeysFromEvent(e: KeyboardEvent): string[] {
+  const keys: string[] = [e.key];
+  if (e.code === 'Space') keys.push(' ');
+  if (e.key.length === 1) keys.push(e.key.toLowerCase());
+  // Deduplicate
+  return [...new Set(keys)];
 }
 
 export function prepareGame(name: string) {
@@ -184,7 +241,6 @@ export function prepareGame(name: string) {
   updateGameTitle();
   renderControls();
 
-  // Highlight active list item
   document.querySelectorAll('.game-list-item').forEach((el) => {
     el.classList.toggle('active', el.getAttribute('data-id') === name);
   });
@@ -192,7 +248,6 @@ export function prepareGame(name: string) {
 
 function startPreparedGame() {
   if (!currentGameInstance) return;
-  // Some games reset via init+start. To cleanly restart, stop then start.
   try {
     (currentGameInstance as any).stop?.();
     currentGameInstance.start();
@@ -274,6 +329,21 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
 (window as any).setTheme = setTheme;
 (window as any).startPreparedGame = startPreparedGame;
 
+// Global keyboard highlight listener
+const pressedKeys = new Set<string>();
+window.addEventListener('keydown', (e) => {
+  getKeysFromEvent(e).forEach((k) => pressedKeys.add(k));
+  updateVirtualKeyboardHighlight(pressedKeys);
+});
+window.addEventListener('keyup', (e) => {
+  getKeysFromEvent(e).forEach((k) => pressedKeys.delete(k));
+  updateVirtualKeyboardHighlight(pressedKeys);
+});
+window.addEventListener('blur', () => {
+  pressedKeys.clear();
+  updateVirtualKeyboardHighlight(pressedKeys);
+});
+
 // Init UI
 (function init() {
   const savedLang = (localStorage.getItem('cg-lang') as 'en' | 'zh') || 'zh';
@@ -293,7 +363,6 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
     actionBtn.addEventListener('click', startPreparedGame);
   }
 
-  // Default to first game prepared but not started
   if (GAMES.length) {
     prepareGame(GAMES[0].id);
   }
