@@ -3,6 +3,7 @@ import { BreakoutGame } from './games/breakout.js';
 import { TetrisGame } from './games/tetris.js';
 import { PongGame } from './games/pong.js';
 import { SpaceShooterGame } from './games/spaceshooter.js';
+import { FlappyBirdGame } from './games/flappybird.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -102,6 +103,24 @@ export const GAMES = [
             ],
             touch: [
                 { icon: 'tap', action: 'Tap left/right side to move', actionZh: '点击左/右侧移动' },
+            ],
+        },
+    },
+    {
+        id: 'flappybird',
+        name: 'Flappy Bird',
+        nameZh: '像素鸟',
+        desc: 'Tap to flap. Dodge the pipes and survive.',
+        descZh: '点击飞翔，躲避管道，尽可能存活。',
+        cls: FlappyBirdGame,
+        canvasSize: { width: 400, height: 560 },
+        controls: {
+            keyboard: [
+                { keys: ['Space'], action: 'Flap / Restart', actionZh: '飞翔 / 重新开始' },
+                { keys: ['↑', 'W'], action: 'Flap', actionZh: '飞翔' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap to flap', actionZh: '点击飞翔' },
             ],
         },
     },
