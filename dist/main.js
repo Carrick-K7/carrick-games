@@ -160,13 +160,10 @@ function updateActionButton() {
 }
 function updateGameTitle() {
     const titleEl = document.getElementById('gameTitle');
-    const descEl = document.getElementById('gameDesc');
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     const meta = GAMES.find((g) => g.id === currentGameName);
     if (titleEl)
         titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-    if (descEl)
-        descEl.textContent = meta ? (zh ? meta.descZh : meta.desc) : '';
 }
 function updateVirtualKeyboardHighlight(pressedSet) {
     document.querySelectorAll('.vkey').forEach((el) => {
@@ -176,19 +173,21 @@ function updateVirtualKeyboardHighlight(pressedSet) {
 }
 function renderVirtualKeyboard(activeKeys) {
     const mk = (label, key, classes = '', hint = '') => {
-        const active = activeKeys.includes(key) ? ` data-key="${key}"` : '';
-        return `<div class="vkey ${classes}${active ? '' : ' hidden'}"${active}>${label}${hint ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
+        const isActive = activeKeys.includes(key);
+        const dataAttr = isActive ? ` data-key="${key}"` : '';
+        const cls = `${classes} ${isActive ? '' : ' inactive'}`;
+        return `<div class="vkey ${cls}"${dataAttr}>${label}${hint && isActive ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
     };
     return `
     <div class="vkeyboard" id="vkeyboard">
       <div class="vkeyboard-row">
         ${mk('Esc', 'Escape', 'wide-1')}
-        <div class="vkey hidden"></div>
+        <div class="vkey inactive"></div>
         ${mk('←', 'ArrowLeft', '', 'M')}
         ${mk('↑', 'ArrowUp', '', 'M')}
         ${mk('↓', 'ArrowDown', '', 'M')}
         ${mk('→', 'ArrowRight', '', 'M')}
-        <div class="vkey hidden"></div>
+        <div class="vkey inactive"></div>
         ${mk('Space', 'Space', 'grow', 'RST')}
       </div>
       <div class="vkeyboard-row">
@@ -203,6 +202,24 @@ function renderVirtualKeyboard(activeKeys) {
     </div>
   `;
 }
+function renderRecords() {
+    const records = JSON.parse(localStorage.getItem('cg-records') || '{}');
+    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    let html = `<div class="records-section"><div class="records-title">${zh ? '最高记录' : 'High Scores'}</div>`;
+    let hasAny = false;
+    for (const g of GAMES) {
+        const score = records[g.id];
+        if (score != null) {
+            hasAny = true;
+            html += `<div class="records-row"><span>${zh ? g.nameZh : g.name}</span><span>${score}</span></div>`;
+        }
+    }
+    if (!hasAny) {
+        html += `<div style="font-size:0.8rem;color:var(--text-secondary);padding:6px 0">${zh ? '暂无记录' : 'No records yet'}</div>`;
+    }
+    html += '</div>';
+    return html;
+}
 function renderControls() {
     const container = document.getElementById('controlsPanel');
     if (!container)
@@ -210,11 +227,12 @@ function renderControls() {
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     const meta = GAMES.find((g) => g.id === currentGameName);
     if (!meta) {
-        container.innerHTML = '';
+        container.innerHTML = renderRecords();
         return;
     }
     const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
-    let html = '<div class="control-section">';
+    let html = renderRecords();
+    html += '<div class="control-section">';
     html += `<div class="control-section-title">${zh ? '操作说明' : 'Controls'}</div>`;
     if (meta.controls.keyboard && meta.controls.keyboard.length) {
         html += `<div class="control-group-title">${zh ? '键盘' : 'Keyboard'}</div>`;
@@ -224,14 +242,9 @@ function renderControls() {
         }
         html += renderVirtualKeyboard(activeKeys);
     }
-    if (meta.controls.touch && meta.controls.touch.length) {
-        html += `<div class="control-group-title" style="margin-top:14px">${zh ? '触屏' : 'Touch'}</div>`;
-        for (const row of meta.controls.touch) {
-            html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
-        }
-    }
     html += '</div>';
     container.innerHTML = html;
+    bindVirtualKeyboard();
 }
 function normalizeKey(label) {
     const map = {
@@ -254,6 +267,45 @@ function getKeysFromEvent(e) {
     // Deduplicate
     return [...new Set(keys)];
 }
+function saveRecord(gameId, score) {
+    const records = JSON.parse(localStorage.getItem('cg-records') || '{}');
+    if (records[gameId] == null || score > records[gameId]) {
+        records[gameId] = score;
+        localStorage.setItem('cg-records', JSON.stringify(records));
+        renderControls();
+    }
+}
+window.saveRecord = saveRecord;
+window.reportScore = (score) => {
+    if (!currentGameName)
+        return;
+    saveRecord(currentGameName, score);
+};
+function bindVirtualKeyboard() {
+    const vk = document.getElementById('vkeyboard');
+    if (!vk)
+        return;
+    vk.addEventListener('mousedown', (e) => {
+        const target = e.target;
+        const key = target.getAttribute('data-key');
+        if (!key)
+            return;
+        e.preventDefault();
+        const keyboardEvent = new KeyboardEvent('keydown', { key, bubbles: true });
+        window.dispatchEvent(keyboardEvent);
+        getKeysFromEvent(keyboardEvent).forEach((k) => pressedKeys.add(k));
+        updateVirtualKeyboardHighlight(pressedKeys);
+    });
+    vk.addEventListener('mouseup', () => {
+        pressedKeys.clear();
+        updateVirtualKeyboardHighlight(pressedKeys);
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
+    });
+    vk.addEventListener('mouseleave', () => {
+        pressedKeys.clear();
+        updateVirtualKeyboardHighlight(pressedKeys);
+    });
+}
 export function prepareGame(name) {
     const meta = GAMES.find((g) => g.id === name);
     if (!meta)
@@ -271,6 +323,18 @@ export function prepareGame(name) {
     canvas.width = meta.canvasSize.width;
     canvas.height = meta.canvasSize.height;
     currentGameInstance = new meta.cls();
+    // Draw initial frame so canvas isn't blank
+    try {
+        currentGameInstance.init?.();
+        const ctx2 = canvas.getContext('2d');
+        if (ctx2 && currentGameInstance.draw) {
+            currentGameInstance.draw(ctx2);
+        }
+    }
+    catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(e);
+    }
     updateActionButton();
     updateGameTitle();
     renderControls();

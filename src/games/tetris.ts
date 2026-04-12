@@ -384,6 +384,10 @@ export class TetrisGame extends BaseGame {
     ctx.fillText(`LEVEL ${this.level}`, this.cols * this.cellSize + 16, 248);
 
     if (this.gameOver) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.score);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';

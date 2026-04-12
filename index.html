@@ -341,6 +341,27 @@
       gap: 10px;
     }
 
+    .records-section {
+      margin-bottom: 8px;
+    }
+    .records-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .records-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .records-row:last-child {
+      border-bottom: none;
+    }
+
     .control-section-title {
       font-size: 0.75rem;
       font-weight: 700;
@@ -469,7 +490,7 @@
       box-shadow: none;
     }
 
-    .vkey.hidden { visibility: hidden; }
+    .vkey.inactive { opacity: 0.35; pointer-events: none; }
 
     .vkey-hint {
       font-size: 0.55rem;
@@ -530,7 +551,6 @@
       <div class="stage">
         <div class="game-meta">
           <h2 id="gameTitle">—</h2>
-          <p id="gameDesc">—</p>
         </div>
         <canvas id="gameCanvas" width="400" height="400"></canvas>
         <div class="action-bar">
@@ -550,6 +570,6 @@
       document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => window.setTheme(b.dataset.set)));
     })();
   </script>
-  <script type="module" src="./dist/main.js"></script>
+  <script type="module" src="./dist/main.js?v=3"></script>
 </body>
 </html>

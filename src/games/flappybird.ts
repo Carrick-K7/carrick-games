@@ -192,6 +192,10 @@ export class FlappyBirdGame extends BaseGame {
 
     // Game Over
     if (this.gameOver) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.score);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';

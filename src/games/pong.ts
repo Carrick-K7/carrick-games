@@ -140,6 +140,12 @@ export class PongGame extends BaseGame {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    // Decorative background bars
+    ctx.fillStyle = '#1e293b';
+    for (let y = 0; y < this.height; y += 40) {
+      ctx.fillRect(30, y + 10, this.width - 60, 4);
+    }
+
     // Center dashed line
     ctx.strokeStyle = '#334155';
     ctx.setLineDash([8, 8]);
@@ -171,6 +177,10 @@ export class PongGame extends BaseGame {
 
     // Game over overlay
     if (this.gameOver) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.playerScore);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';

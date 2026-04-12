@@ -83,6 +83,14 @@ export class SnakeGame extends BaseGame {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    // Subtle grid dots
+    ctx.fillStyle = '#1e293b';
+    for (let x = 0; x < this.cols; x++) {
+      for (let y = 0; y < this.rows; y++) {
+        ctx.fillRect(x * this.tileSize + this.tileSize / 2 - 1, y * this.tileSize + this.tileSize / 2 - 1, 2, 2);
+      }
+    }
+
     // Grid border
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 2;
@@ -115,6 +123,10 @@ export class SnakeGame extends BaseGame {
 
     // Game Over
     if (this.gameOver) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.score);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';

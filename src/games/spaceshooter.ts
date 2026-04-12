@@ -173,10 +173,11 @@ export class SpaceShooterGame extends BaseGame {
 
     // Draw stars (simple static stars)
     ctx.fillStyle = '#64748b';
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       const x = (i * 73) % this.width;
       const y = (i * 37) % this.height;
-      ctx.fillRect(x, y, 2, 2);
+      const size = (i % 3 === 0) ? 3 : 2;
+      ctx.fillRect(x, y, size, size);
     }
 
     // Draw player (ship)
@@ -218,6 +219,10 @@ export class SpaceShooterGame extends BaseGame {
 
     // Game Over overlay
     if (this.gameOver) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.score);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';

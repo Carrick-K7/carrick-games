@@ -141,6 +141,14 @@ export class BreakoutGame extends BaseGame {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    // Stars
+    ctx.fillStyle = '#334155';
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 97) % this.width;
+      const sy = (i * 53) % this.height;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+
     // Bricks
     for (const brick of this.bricks) {
       if (!brick.active) continue;
@@ -170,6 +178,10 @@ export class BreakoutGame extends BaseGame {
 
     // Game Over / Win overlay
     if (this.gameOver || this.won) {
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.score);
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
