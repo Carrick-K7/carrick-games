@@ -5,6 +5,7 @@ import { PongGame } from './games/pong.js';
 import { SpaceShooterGame } from './games/spaceshooter.js';
 import { FlappyBirdGame } from './games/flappybird.js';
 import { PacManGame } from './games/pacman.js';
+import { InvadersGame } from './games/invaders.js';
 
 export interface GameMeta {
   id: string;
@@ -156,6 +157,25 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap left/center/right to steer', actionZh: '点击左/中/右侧转向' },
+      ],
+    },
+  },
+  {
+    id: 'invaders',
+    name: 'Space Invaders',
+    nameZh: '太空侵略者',
+    desc: 'Classic horizontal shooter. Destroy waves of invaders before they reach you.',
+    descZh: '经典横版射击。在侵略者抵达前消灭它们。',
+    cls: InvadersGame,
+    canvasSize: { width: 640, height: 480 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['Space'], action: 'Shoot / Restart', actionZh: '射击 / 重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap upper half to shoot, lower half to move', actionZh: '点击上半部射击，下半部移动' },
       ],
     },
   },
