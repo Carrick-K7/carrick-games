@@ -4,6 +4,7 @@ import { TetrisGame } from './games/tetris.js';
 import { PongGame } from './games/pong.js';
 import { SpaceShooterGame } from './games/spaceshooter.js';
 import { FlappyBirdGame } from './games/flappybird.js';
+import { PacManGame } from './games/pacman.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -121,6 +122,25 @@ export const GAMES = [
             ],
             touch: [
                 { icon: 'tap', action: 'Tap to flap', actionZh: '点击飞翔' },
+            ],
+        },
+    },
+    {
+        id: 'pacman',
+        name: 'Pac-Man',
+        nameZh: '吃豆人',
+        desc: 'Classic maze chase. Eat all dots and avoid ghosts.',
+        descZh: '经典迷宫追逐游戏。吃完所有豆子并躲避幽灵。',
+        cls: PacManGame,
+        canvasSize: { width: 448, height: 496 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '↑', '→', '↓'], action: 'Move', actionZh: '移动' },
+                { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+                { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap left/center/right to steer', actionZh: '点击左/中/右侧转向' },
             ],
         },
     },
