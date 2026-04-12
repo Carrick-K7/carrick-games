@@ -6,6 +6,7 @@ import { SpaceShooterGame } from './games/spaceshooter.js';
 import { FlappyBirdGame } from './games/flappybird.js';
 import { PacManGame } from './games/pacman.js';
 import { InvadersGame } from './games/invaders.js';
+import { AsteroidsGame } from './games/asteroids.js';
 
 export interface GameMeta {
   id: string;
@@ -176,6 +177,26 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap upper half to shoot, lower half to move', actionZh: '点击上半部射击，下半部移动' },
+      ],
+    },
+  },
+  {
+    id: 'asteroids',
+    name: 'Asteroids',
+    nameZh: '小行星',
+    desc: 'Classic vector arcade. Thrust and shoot your way through asteroid fields.',
+    descZh: '经典矢量街机游戏。在小行星带中旋转、推进、射击。',
+    cls: AsteroidsGame,
+    canvasSize: { width: 600, height: 600 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Rotate', actionZh: '旋转' },
+        { keys: ['A', 'D'], action: 'Rotate', actionZh: '旋转' },
+        { keys: ['↑', 'W'], action: 'Thrust', actionZh: '推进' },
+        { keys: ['Space'], action: 'Shoot / Restart', actionZh: '射击 / 重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to shoot, swipe edges to rotate/thrust', actionZh: '点击射击，滑动边缘旋转/推进' },
       ],
     },
   },
