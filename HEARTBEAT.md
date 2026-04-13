@@ -34,7 +34,7 @@ Schedule: **03:00, 09:00, 15:00, 21:00** (Asia/Shanghai) — one game per slot.
 4. ~~Pong~~ ✅
 5. ~~Space Shooter~~ ✅
 6. ~~Flappy Bird~~ ✅
-7. Pac-Man clone
-8. Asteroids
-9. Doodle Jump clone
+7. ~~Pac-Man clone~~ ✅
+8. ~~Asteroids~~ ✅
+9. ~~Doodle Jump clone~~ ✅
 10. 2048
