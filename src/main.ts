@@ -7,6 +7,7 @@ import { FlappyBirdGame } from './games/flappybird.js';
 import { PacManGame } from './games/pacman.js';
 import { InvadersGame } from './games/invaders.js';
 import { AsteroidsGame } from './games/asteroids.js';
+import { MinesweeperGame } from './games/minesweeper.js';
 
 export interface GameMeta {
   id: string;
@@ -197,6 +198,28 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap to shoot, swipe edges to rotate/thrust', actionZh: '点击射击，滑动边缘旋转/推进' },
+      ],
+    },
+  },
+  {
+    id: 'minesweeper',
+    name: 'Minesweeper',
+    nameZh: '扫雷',
+    desc: 'Classic puzzle. Reveal cells, avoid mines, and use numbers to deduce safe paths.',
+    descZh: '经典益智游戏。翻开格子，避免地雷，用数字推理安全路径。',
+    cls: MinesweeperGame,
+    canvasSize: { width: 328, height: 412 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '↑', '→', '↓'], action: 'Move cursor', actionZh: '移动光标' },
+        { keys: ['W', 'A', 'S', 'D'], action: 'Move cursor', actionZh: '移动光标' },
+        { keys: ['Space', 'Enter'], action: 'Reveal cell', actionZh: '翻开格子' },
+        { keys: ['F', 'X'], action: 'Flag / unflag', actionZh: '标记 / 取消标记' },
+        { keys: ['R'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to reveal', actionZh: '点击翻开' },
+        { icon: 'hold', action: 'Long press to flag', actionZh: '长按标记' },
       ],
     },
   },
