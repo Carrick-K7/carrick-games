@@ -8,6 +8,8 @@ import { PacManGame } from './games/pacman.js';
 import { InvadersGame } from './games/invaders.js';
 import { AsteroidsGame } from './games/asteroids.js';
 import { MinesweeperGame } from './games/minesweeper.js';
+import { DoodleJumpGame } from './games/doodlejump.js';
+import { Game2048 } from './games/game2048.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -205,6 +207,44 @@ export const GAMES = [
             touch: [
                 { icon: 'tap', action: 'Tap to reveal', actionZh: '点击翻开' },
                 { icon: 'hold', action: 'Long press to flag', actionZh: '长按标记' },
+            ],
+        },
+    },
+    {
+        id: 'doodlejump',
+        name: 'Doodle Jump',
+        nameZh: '涂鸦跳跃',
+        desc: 'Bounce higher and higher on platforms. Avoid falling!',
+        descZh: '在平台上越跳越高，千万别掉下去！',
+        cls: DoodleJumpGame,
+        canvasSize: { width: 400, height: 600 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '→'], action: 'Move left/right', actionZh: '左右移动' },
+                { keys: ['A', 'D'], action: 'Move left/right', actionZh: '左右移动' },
+                { keys: ['Space', '↑', 'W'], action: 'Jump / Restart', actionZh: '跳跃 / 重新开始' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap left/right to move, tap to jump', actionZh: '点击左右移动，点击跳跃' },
+            ],
+        },
+    },
+    {
+        id: '2048',
+        name: '2048',
+        nameZh: '2048',
+        desc: 'Slide and merge tiles to reach 2048.',
+        descZh: '滑动合并数字方块，挑战 2048！',
+        cls: Game2048,
+        canvasSize: { width: 400, height: 400 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '↑', '→', '↓'], action: 'Slide tiles', actionZh: '滑动方块' },
+                { keys: ['W', 'A', 'S', 'D'], action: 'Slide tiles', actionZh: '滑动方块' },
+                { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+            ],
+            touch: [
+                { icon: 'swipe', action: 'Swipe to slide tiles', actionZh: '滑动方向合并' },
             ],
         },
     },

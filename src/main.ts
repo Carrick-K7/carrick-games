@@ -9,6 +9,7 @@ import { InvadersGame } from './games/invaders.js';
 import { AsteroidsGame } from './games/asteroids.js';
 import { MinesweeperGame } from './games/minesweeper.js';
 import { DoodleJumpGame } from './games/doodlejump.js';
+import { Game2048 } from './games/game2048.js';
 
 export interface GameMeta {
   id: string;
@@ -240,6 +241,25 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap left/right to move, tap to jump', actionZh: '点击左右移动，点击跳跃' },
+      ],
+    },
+  },
+  {
+    id: '2048',
+    name: '2048',
+    nameZh: '2048',
+    desc: 'Slide and merge tiles to reach 2048.',
+    descZh: '滑动合并数字方块，挑战 2048！',
+    cls: Game2048,
+    canvasSize: { width: 400, height: 400 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '↑', '→', '↓'], action: 'Slide tiles', actionZh: '滑动方块' },
+        { keys: ['W', 'A', 'S', 'D'], action: 'Slide tiles', actionZh: '滑动方块' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'swipe', action: 'Swipe to slide tiles', actionZh: '滑动方向合并' },
       ],
     },
   },
