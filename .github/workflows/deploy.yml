@@ -5,46 +5,47 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          
       - name: Install dependencies
         run: npm install
+        
       - name: Build
         run: npm run build
-      - name: Prepare artifact
+        
+      - name: Deploy to server
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          mkdir -p _site
-          cp index.html _site/
-          cp -r dist _site/
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          set -e
+          
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          
+          echo "=== Deploying Games ==="
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "sudo mkdir -p /var/www/carrick7.com/games && sudo chown -R \$USER:\$USER /var/www/carrick7.com/games"
+          
+          # 准备部署目录
+          mkdir -p _deploy
+          cp index.html _deploy/
+          cp -r dist _deploy/
+          cp -r fonts _deploy/ 2>/dev/null || true
+          
+          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" ./_deploy/ "$SSH_USER@$SSH_HOST:/var/www/carrick7.com/games/"
+          
+          echo "=== Games deployed to /var/www/carrick7.com/games/ ==="
+          rm -f ~/.ssh/deploy_key
