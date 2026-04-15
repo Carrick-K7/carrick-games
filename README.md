@@ -2,7 +2,7 @@
 
 A curated collection of retro HTML5 Canvas games, built for the web.
 
-Live site: **https://cyber.carrick7.com/games/**
+Live site: **https://games.carrick7.com/**
 
 ---
 
