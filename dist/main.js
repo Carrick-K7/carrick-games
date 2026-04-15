@@ -10,6 +10,7 @@ import { AsteroidsGame } from './games/asteroids.js';
 import { MinesweeperGame } from './games/minesweeper.js';
 import { DoodleJumpGame } from './games/doodlejump.js';
 import { Game2048 } from './games/game2048.js';
+import { SimonSaysGame } from './games/simonsays.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -245,6 +246,25 @@ export const GAMES = [
             ],
             touch: [
                 { icon: 'swipe', action: 'Swipe to slide tiles', actionZh: '滑动方向合并' },
+            ],
+        },
+    },
+    {
+        id: 'simonsays',
+        name: 'Simon Says',
+        nameZh: '记忆游戏',
+        desc: 'Pattern memory game. Watch the sequence and repeat it.',
+        descZh: '记忆游戏。观察并重复颜色序列。',
+        cls: SimonSaysGame,
+        canvasSize: { width: 400, height: 400 },
+        controls: {
+            keyboard: [
+                { keys: ['Q', 'W', 'A', 'S'], action: 'Green/Red/Yellow/Blue', actionZh: '绿/红/黄/蓝' },
+                { keys: ['←', '↑', '→', '↓'], action: 'Quadrants', actionZh: '象限' },
+                { keys: ['Space'], action: 'Start / Restart', actionZh: '开始 / 重新开始' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap colored quadrant', actionZh: '点击颜色象限' },
             ],
         },
     },
