@@ -15,6 +15,7 @@ import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
 import { DonkeyKongGame } from './games/donkeykong.js';
+import { CentipedeGame } from './games/centipede.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -381,6 +382,27 @@ export const GAMES: GameMeta[] = [
         { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
         { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
         { icon: 'tap', action: 'Jump', actionZh: '跳跃' },
+      ],
+    },
+  },
+  {
+    id: 'centipede',
+    name: 'Centipede',
+    nameZh: '蜈蚣',
+    desc: 'Blast the centipede before it reaches the bottom! Mushrooms block its path — shoot them to slow it down.',
+    descZh: '在蜈蚣到达底部之前消灭它！蘑菇会挡住它的去路——射击蘑菇让它减速。',
+    cls: CentipedeGame,
+    canvasSize: { width: 320, height: 480 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
+        { keys: ['Space', 'Z'], action: 'Shoot', actionZh: '射击' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Shoot', actionZh: '射击' },
+        { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
+        { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
       ],
     },
   },
