@@ -17,6 +17,7 @@ import { MissileCommandGame } from './games/missilecommand.js';
 import { DonkeyKongGame } from './games/donkeykong.js';
 import { CentipedeGame } from './games/centipede.js';
 import { SolitaireGame } from './games/solitaire.js';
+import { WordleGame } from './games/wordle.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -424,6 +425,25 @@ export const GAMES: GameMeta[] = [
       touch: [
         { icon: 'tap', action: 'Select / move card', actionZh: '选择 / 移动牌' },
         { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击：自动放牌' },
+      ],
+    },
+  },
+  {
+    id: 'wordle',
+    name: 'Wordle',
+    nameZh: '猜单词',
+    desc: 'Guess the 5-letter word in 6 tries. Green = correct, Yellow = wrong place, Gray = not in word.',
+    descZh: '在六次尝试内猜出五个字母的单词。绿色=正确，黄色=位置错，灰色=不存在。',
+    cls: WordleGame,
+    canvasSize: { width: 400, height: 520 },
+    controls: {
+      keyboard: [
+        { keys: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'], action: 'Type letter', actionZh: '输入字母' },
+        { keys: ['Enter'], action: 'Submit guess', actionZh: '提交猜测' },
+        { keys: ['Backspace'], action: 'Delete letter', actionZh: '删除字母' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap on-screen keys', actionZh: '点击屏幕键盘' },
       ],
     },
   },
