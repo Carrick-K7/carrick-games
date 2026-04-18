@@ -10,8 +10,17 @@ import { AsteroidsGame } from './games/asteroids.js';
 import { MinesweeperGame } from './games/minesweeper.js';
 import { DoodleJumpGame } from './games/doodlejump.js';
 import { Game2048 } from './games/game2048.js';
-import { SimonSaysGame } from './games/simonsays.js';
+import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
+import { MissileCommandGame } from './games/missilecommand.js';
+
+interface VirtualKeySpec {
+  label: string;
+  key: string;
+  aliases?: string[];
+  classes?: string;
+  hint?: string;
+}
 
 export interface GameMeta {
   id: string;
@@ -19,9 +28,10 @@ export interface GameMeta {
   nameZh: string;
   desc: string;
   descZh: string;
-  cls: new () => { start(): void; stop(): void; init?(): void };
+  cls: new () => { start(): void; stop(): void; init?(): void; destroy?(): void };
   controls: {
     keyboard?: { keys: string[]; action: string; actionZh: string }[];
+    keyboardPanel?: VirtualKeySpec[];
     touch?: { icon: 'tap' | 'swipe' | 'swipe-up' | 'swipe-down' | 'swipe-left' | 'swipe-right' | 'hold'; action: string; actionZh: string }[];
   };
   canvasSize: { width: number; height: number };
@@ -266,21 +276,28 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'simonsays',
+    id: 'simon',
     name: 'Simon Says',
-    nameZh: '记忆游戏',
-    desc: 'Pattern memory game. Watch the sequence and repeat it.',
-    descZh: '记忆游戏。观察并重复颜色序列。',
-    cls: SimonSaysGame,
-    canvasSize: { width: 400, height: 400 },
+    nameZh: '西蒙记忆',
+    desc: 'Memorize the color sequence, repeat it, and keep up as the playback speeds up.',
+    descZh: '记住颜色序列并快速重复，随着关卡提升节奏会越来越快。',
+    cls: SimonGame,
+    canvasSize: { width: 400, height: 500 },
     controls: {
       keyboard: [
-        { keys: ['Q', 'W', 'A', 'S'], action: 'Green/Red/Yellow/Blue', actionZh: '绿/红/黄/蓝' },
-        { keys: ['←', '↑', '→', '↓'], action: 'Quadrants', actionZh: '象限' },
-        { keys: ['Space'], action: 'Start / Restart', actionZh: '开始 / 重新开始' },
+        { keys: ['1', 'R'], action: 'Red pad', actionZh: '红色按键' },
+        { keys: ['2', 'B'], action: 'Blue pad', actionZh: '蓝色按键' },
+        { keys: ['3', 'G'], action: 'Green pad', actionZh: '绿色按键' },
+        { keys: ['4', 'Y'], action: 'Yellow pad', actionZh: '黄色按键' },
+      ],
+      keyboardPanel: [
+        { label: '1', key: '1', aliases: ['r'], classes: 'simon-red', hint: 'R' },
+        { label: '2', key: '2', aliases: ['b'], classes: 'simon-blue', hint: 'B' },
+        { label: '3', key: '3', aliases: ['g'], classes: 'simon-green', hint: 'G' },
+        { label: '4', key: '4', aliases: ['y'], classes: 'simon-yellow', hint: 'Y' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap colored quadrant', actionZh: '点击颜色象限' },
+        { icon: 'tap', action: 'Tap a colored pad', actionZh: '点击颜色按键' },
       ],
     },
   },
@@ -307,10 +324,27 @@ export const GAMES: GameMeta[] = [
       ],
     },
   },
+  {
+    id: 'missilecommand',
+    name: 'Missile Command',
+    nameZh: '导弹指挥官',
+    desc: 'Defend your cities from incoming missiles. Aim and fire counter-missiles.',
+    descZh: '防御来袭的导弹。瞄准并发射拦截导弹，保卫你的城市。',
+    cls: MissileCommandGame,
+    canvasSize: { width: 400, height: 600 },
+    controls: {
+      keyboard: [
+        { keys: ['Space'], action: 'Fire missile', actionZh: '发射导弹' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to aim and fire', actionZh: '点击瞄准并发射' },
+      ],
+    },
+  },
 ];
 
 let currentGameName: string | null = null;
-let currentGameInstance: { start(): void; stop(): void; init?(): void } | null = null;
+let currentGameInstance: { start(): void; stop(): void; init?(): void; destroy?(): void } | null = null;
 let isRunning = false;
 
 function renderTouchIcon(icon: string): string {
@@ -357,33 +391,46 @@ function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
   });
 }
 
-function renderVirtualKeyboard(activeKeys: string[]) {
-  const mk = (label: string, key: string, classes = '', hint = '') => {
-    const isActive = activeKeys.includes(key);
-    const dataAttr = isActive ? ` data-key="${key}"` : '';
-    const cls = `${classes} ${isActive ? '' : ' inactive'}`;
-    return `<div class="vkey ${cls}"${dataAttr}>${label}${hint && isActive ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
+function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[]) {
+  const enabledKeys = new Set(activeKeys);
+  const mk = (label: string, key: string, enabled: boolean, classes = '', hint = '') => {
+    const normalizedKey = normalizeKey(key);
+    const dataAttr = enabled ? ` data-key="${normalizedKey}"` : '';
+    const cls = `${classes} ${enabled ? '' : ' inactive'}`;
+    return `<div class="vkey ${cls}"${dataAttr}>${label}${hint && enabled ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
   };
+
+  if (panelKeys?.length) {
+    return `
+      <div class="vkeyboard vkeyboard-compact" id="vkeyboard">
+        <div class="vkeyboard-row">
+          ${panelKeys.map((key) => mk(key.label, key.key, true, key.classes || '', key.hint || '')).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  const isActive = (key: string) => enabledKeys.has(normalizeKey(key));
   return `
     <div class="vkeyboard" id="vkeyboard">
       <div class="vkeyboard-row">
-        ${mk('Esc', 'Escape', 'wide-1')}
+        ${mk('Esc', 'Escape', isActive('Escape'), 'wide-1')}
         <div class="vkey inactive"></div>
-        ${mk('←', 'ArrowLeft', '', 'M')}
-        ${mk('↑', 'ArrowUp', '', 'M')}
-        ${mk('↓', 'ArrowDown', '', 'M')}
-        ${mk('→', 'ArrowRight', '', 'M')}
+        ${mk('←', 'ArrowLeft', isActive('ArrowLeft'), '', 'M')}
+        ${mk('↑', 'ArrowUp', isActive('ArrowUp'), '', 'M')}
+        ${mk('↓', 'ArrowDown', isActive('ArrowDown'), '', 'M')}
+        ${mk('→', 'ArrowRight', isActive('ArrowRight'), '', 'M')}
         <div class="vkey inactive"></div>
-        ${mk('Space', 'Space', 'grow', 'RST')}
+        ${mk('Space', 'Space', isActive(' '), 'grow', 'RST')}
       </div>
       <div class="vkeyboard-row">
-        ${mk('Q', 'q')} ${mk('W', 'w', '', 'M')} ${mk('E', 'e')} ${mk('R', 'r')} ${mk('T', 't')} ${mk('Y', 'y')} ${mk('U', 'u')} ${mk('I', 'i')} ${mk('O', 'o')} ${mk('P', 'p')}
+        ${mk('Q', 'q', isActive('q'))} ${mk('W', 'w', isActive('w'), '', 'M')} ${mk('E', 'e', isActive('e'))} ${mk('R', 'r', isActive('r'))} ${mk('T', 't', isActive('t'))} ${mk('Y', 'y', isActive('y'))} ${mk('U', 'u', isActive('u'))} ${mk('I', 'i', isActive('i'))} ${mk('O', 'o', isActive('o'))} ${mk('P', 'p', isActive('p'))}
       </div>
       <div class="vkeyboard-row">
-        ${mk('A', 'a', '', 'M')} ${mk('S', 's', '', 'M')} ${mk('D', 'd', '', 'M')} ${mk('F', 'f')} ${mk('G', 'g')} ${mk('H', 'h')} ${mk('J', 'j')} ${mk('K', 'k')} ${mk('L', 'l')}
+        ${mk('A', 'a', isActive('a'), '', 'M')} ${mk('S', 's', isActive('s'), '', 'M')} ${mk('D', 'd', isActive('d'), '', 'M')} ${mk('F', 'f', isActive('f'))} ${mk('G', 'g', isActive('g'))} ${mk('H', 'h', isActive('h'))} ${mk('J', 'j', isActive('j'))} ${mk('K', 'k', isActive('k'))} ${mk('L', 'l', isActive('l'))}
       </div>
       <div class="vkeyboard-row">
-        ${mk('Z', 'z', '', 'CCW')} ${mk('X', 'x', '', 'CW')} ${mk('C', 'c')} ${mk('V', 'v')} ${mk('B', 'b')} ${mk('N', 'n')} ${mk('M', 'm')}
+        ${mk('Z', 'z', isActive('z'), '', 'CCW')} ${mk('X', 'x', isActive('x'), '', 'CW')} ${mk('C', 'c', isActive('c'))} ${mk('V', 'v', isActive('v'))} ${mk('B', 'b', isActive('b'))} ${mk('N', 'n', isActive('n'))} ${mk('M', 'm', isActive('m'))}
       </div>
     </div>
   `;
@@ -430,7 +477,14 @@ function renderControls() {
       const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
       html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
     }
-    html += renderVirtualKeyboard(activeKeys);
+    html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+  }
+
+  if (meta.controls.touch && meta.controls.touch.length) {
+    html += `<div class="control-group-title">${zh ? '触摸' : 'Touch'}</div>`;
+    for (const row of meta.controls.touch) {
+      html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
+    }
   }
 
   html += '</div>';
@@ -454,6 +508,13 @@ function getKeysFromEvent(e: KeyboardEvent): string[] {
   const keys: string[] = [e.key];
   if (e.code === 'Space') keys.push(' ');
   if (e.key.length === 1) keys.push(e.key.toLowerCase());
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  for (const panelKey of meta?.controls.keyboardPanel || []) {
+    const aliases = [panelKey.key, ...(panelKey.aliases || [])].map(normalizeKey);
+    if (aliases.some((alias) => keys.includes(alias))) {
+      keys.push(normalizeKey(panelKey.key));
+    }
+  }
   // Deduplicate
   return [...new Set(keys)];
 }
@@ -475,25 +536,58 @@ function saveRecord(gameId: string, score: number) {
 function bindVirtualKeyboard() {
   const vk = document.getElementById('vkeyboard');
   if (!vk) return;
+  let activeVirtualKey: string | null = null;
+  const releaseKey = () => {
+    if (!activeVirtualKey) return;
+    const event = new KeyboardEvent('keyup', {
+      key: activeVirtualKey,
+      code: activeVirtualKey === ' ' ? 'Space' : undefined,
+      bubbles: true,
+    });
+    window.dispatchEvent(event);
+    getKeysFromEvent(event).forEach((k) => pressedKeys.delete(k));
+    updateVirtualKeyboardHighlight(pressedKeys);
+    activeVirtualKey = null;
+  };
+
   vk.addEventListener('mousedown', (e) => {
-    const target = e.target as HTMLElement;
-    const key = target.getAttribute('data-key');
+    const target = (e.target as HTMLElement).closest('.vkey[data-key]') as HTMLElement | null;
+    const key = target?.getAttribute('data-key');
     if (!key) return;
     e.preventDefault();
-    const keyboardEvent = new KeyboardEvent('keydown', { key, bubbles: true });
+    activeVirtualKey = key;
+    const keyboardEvent = new KeyboardEvent('keydown', {
+      key,
+      code: key === ' ' ? 'Space' : undefined,
+      bubbles: true,
+    });
     window.dispatchEvent(keyboardEvent);
     getKeysFromEvent(keyboardEvent).forEach((k) => pressedKeys.add(k));
     updateVirtualKeyboardHighlight(pressedKeys);
   });
   vk.addEventListener('mouseup', () => {
-    pressedKeys.clear();
-    updateVirtualKeyboardHighlight(pressedKeys);
-    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
+    releaseKey();
   });
   vk.addEventListener('mouseleave', () => {
-    pressedKeys.clear();
+    releaseKey();
+  });
+  vk.addEventListener('touchstart', (e) => {
+    const target = (e.target as HTMLElement).closest('.vkey[data-key]') as HTMLElement | null;
+    const key = target?.getAttribute('data-key');
+    if (!key) return;
+    e.preventDefault();
+    activeVirtualKey = key;
+    const keyboardEvent = new KeyboardEvent('keydown', {
+      key,
+      code: key === ' ' ? 'Space' : undefined,
+      bubbles: true,
+    });
+    window.dispatchEvent(keyboardEvent);
+    getKeysFromEvent(keyboardEvent).forEach((k) => pressedKeys.add(k));
     updateVirtualKeyboardHighlight(pressedKeys);
   });
+  vk.addEventListener('touchend', releaseKey);
+  vk.addEventListener('touchcancel', releaseKey);
 }
 
 export function prepareGame(name: string) {
@@ -501,7 +595,11 @@ export function prepareGame(name: string) {
   if (!meta) return;
 
   if (currentGameInstance) {
-    currentGameInstance.stop?.();
+    if (currentGameInstance.destroy) {
+      currentGameInstance.destroy();
+    } else {
+      currentGameInstance.stop?.();
+    }
     currentGameInstance = null;
   }
   isRunning = false;
