@@ -11,6 +11,7 @@ import { MinesweeperGame } from './games/minesweeper.js';
 import { DoodleJumpGame } from './games/doodlejump.js';
 import { Game2048 } from './games/game2048.js';
 import { SimonSaysGame } from './games/simonsays.js';
+import { FroggerGame } from './games/frogger.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -265,6 +266,29 @@ export const GAMES = [
             ],
             touch: [
                 { icon: 'tap', action: 'Tap colored quadrant', actionZh: '点击颜色象限' },
+            ],
+        },
+    },
+    {
+        id: 'frogger',
+        name: 'Frogger',
+        nameZh: '青蛙过河',
+        desc: 'Guide the frog across busy roads and rivers to reach home.',
+        descZh: '控制青蛙穿越繁忙的公路和河流，安全回家。',
+        cls: FroggerGame,
+        canvasSize: { width: 480, height: 560 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '↑', '→', '↓'], action: 'Move / Hop', actionZh: '移动 / 跳跃' },
+                { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+                { keys: ['Space'], action: 'Start / Restart', actionZh: '开始 / 重新开始' },
+            ],
+            touch: [
+                { icon: 'swipe-up', action: 'Hop forward', actionZh: '向前跳' },
+                { icon: 'swipe-down', action: 'Hop backward', actionZh: '向后跳' },
+                { icon: 'swipe-left', action: 'Hop left', actionZh: '向左跳' },
+                { icon: 'swipe-right', action: 'Hop right', actionZh: '向右跳' },
+                { icon: 'tap', action: 'Tap to start / restart', actionZh: '点击开始 / 重新开始' },
             ],
         },
     },
