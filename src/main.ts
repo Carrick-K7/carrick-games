@@ -1,5 +1,6 @@
 import { SnakeGame } from './games/snake.js';
 import { BreakoutGame } from './games/breakout.js';
+import { BubbleShooterGame } from './games/bubbleshooter.js';
 import { TetrisGame } from './games/tetris.js';
 import { PongGame } from './games/pong.js';
 import { SpaceShooterGame } from './games/spaceshooter.js';
@@ -75,6 +76,26 @@ export const GAMES: GameMeta[] = [
       touch: [
         { icon: 'swipe-left', action: 'Swipe left / right', actionZh: '左右滑动' },
         { icon: 'tap', action: 'Tap to restart', actionZh: '点击重新开始' },
+      ],
+    },
+  },
+  {
+    id: 'bubbleshooter',
+    name: 'Bubble Shooter',
+    nameZh: '泡泡龙',
+    desc: 'Aim from the bottom, match colors, and stop the bubble wall from reaching you.',
+    descZh: '从底部瞄准发射，消除同色泡泡，阻止泡泡墙压到底部。',
+    cls: BubbleShooterGame,
+    canvasSize: { width: 420, height: 620 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Adjust aim', actionZh: '调整瞄准' },
+        { keys: ['A', 'D'], action: 'Adjust aim', actionZh: '调整瞄准' },
+        { keys: ['Space', 'Enter'], action: 'Fire / Restart', actionZh: '发射 / 重新开始' },
+      ],
+      touch: [
+        { icon: 'swipe', action: 'Drag to aim', actionZh: '拖动瞄准' },
+        { icon: 'tap', action: 'Tap to fire / restart', actionZh: '点击发射 / 重开' },
       ],
     },
   },
