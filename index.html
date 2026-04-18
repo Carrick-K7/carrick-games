@@ -454,6 +454,14 @@
       justify-content: center;
     }
 
+    .vkeyboard-compact {
+      gap: 10px;
+    }
+
+    .vkeyboard-compact .vkeyboard-row {
+      gap: 10px;
+    }
+
     .vkey {
       min-width: 22px;
       height: 22px;
@@ -497,6 +505,67 @@
       color: var(--accent);
       margin-left: 2px;
       opacity: 0.9;
+    }
+
+    .vkeyboard-compact .vkey {
+      min-width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      position: relative;
+      font-family: "Press Start 2P", monospace;
+      font-size: 0.7rem;
+    }
+
+    .vkeyboard-compact .vkey-hint {
+      position: absolute;
+      right: 6px;
+      bottom: 5px;
+      margin-left: 0;
+      font-size: 0.46rem;
+    }
+
+    .vkey.simon-red {
+      border-color: rgba(251,113,133,0.6);
+      color: #ffe4e6;
+    }
+
+    .vkey.simon-blue {
+      border-color: rgba(96,165,250,0.6);
+      color: #dbeafe;
+    }
+
+    .vkey.simon-green {
+      border-color: rgba(94,234,212,0.6);
+      color: #ccfbf1;
+    }
+
+    .vkey.simon-yellow {
+      border-color: rgba(250,204,21,0.6);
+      color: #fef3c7;
+    }
+
+    .vkey.simon-red.pressed {
+      background: #fb7185;
+      border-color: #fb7185;
+      color: #ffffff;
+    }
+
+    .vkey.simon-blue.pressed {
+      background: #60a5fa;
+      border-color: #60a5fa;
+      color: #ffffff;
+    }
+
+    .vkey.simon-green.pressed {
+      background: #2dd4bf;
+      border-color: #2dd4bf;
+      color: #082f49;
+    }
+
+    .vkey.simon-yellow.pressed {
+      background: #facc15;
+      border-color: #facc15;
+      color: #1f2937;
     }
   </style>
 </head>
@@ -552,7 +621,7 @@
         <div class="game-meta">
           <h2 id="gameTitle">—</h2>
         </div>
-        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <canvas id="gameCanvas" width="400" height="500"></canvas>
         <div class="action-bar">
           <button class="btn btn-primary" id="actionBtn">Start Game</button>
         </div>
@@ -570,6 +639,6 @@
       document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => window.setTheme(b.dataset.set)));
     })();
   </script>
-  <script type="module" src="./dist/main.js?v=3"></script>
+  <script type="module" src="./dist/main.js?v=4"></script>
 </body>
 </html>

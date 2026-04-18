@@ -12,6 +12,8 @@ export abstract class BaseGame implements Game {
   protected running = false;
   protected lastTime = 0;
   protected animationId = 0;
+  private readonly boundHandleInput: (e: KeyboardEvent | TouchEvent | MouseEvent) => void;
+  private inputBound = false;
 
   constructor(canvasId: string, protected width = 640, protected height = 480) {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -22,18 +24,36 @@ export abstract class BaseGame implements Game {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('2D context not available');
     this.ctx = ctx;
+    this.boundHandleInput = this.handleInput.bind(this);
     this.bindInput();
   }
 
   protected bindInput() {
-    window.addEventListener('keydown', this.handleInput.bind(this));
-    window.addEventListener('keyup', this.handleInput.bind(this));
-    this.canvas.addEventListener('touchstart', this.handleInput.bind(this), { passive: false });
-    this.canvas.addEventListener('touchend', this.handleInput.bind(this), { passive: false });
-    this.canvas.addEventListener('touchmove', this.handleInput.bind(this), { passive: false });
+    if (this.inputBound) return;
+    window.addEventListener('keydown', this.boundHandleInput);
+    window.addEventListener('keyup', this.boundHandleInput);
+    this.canvas.addEventListener('touchstart', this.boundHandleInput, { passive: false });
+    this.canvas.addEventListener('touchend', this.boundHandleInput, { passive: false });
+    this.canvas.addEventListener('touchmove', this.boundHandleInput, { passive: false });
+    this.canvas.addEventListener('mousedown', this.boundHandleInput);
+    this.canvas.addEventListener('mouseup', this.boundHandleInput);
+    this.inputBound = true;
+  }
+
+  protected unbindInput() {
+    if (!this.inputBound) return;
+    window.removeEventListener('keydown', this.boundHandleInput);
+    window.removeEventListener('keyup', this.boundHandleInput);
+    this.canvas.removeEventListener('touchstart', this.boundHandleInput);
+    this.canvas.removeEventListener('touchend', this.boundHandleInput);
+    this.canvas.removeEventListener('touchmove', this.boundHandleInput);
+    this.canvas.removeEventListener('mousedown', this.boundHandleInput);
+    this.canvas.removeEventListener('mouseup', this.boundHandleInput);
+    this.inputBound = false;
   }
 
   start() {
+    this.bindInput();
     this.running = true;
     this.lastTime = performance.now();
     this.init();
@@ -43,6 +63,11 @@ export abstract class BaseGame implements Game {
   stop() {
     this.running = false;
     cancelAnimationFrame(this.animationId);
+  }
+
+  destroy() {
+    this.stop();
+    this.unbindInput();
   }
 
   private loop = (now: number) => {
