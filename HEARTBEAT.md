@@ -40,13 +40,13 @@ Schedule: **03:00, 09:00, 15:00, 21:00** (Asia/Shanghai) — one game per slot.
 10. ~~2048~~ ✅
 
 ## Next Batch (Ideas)
-- Simon Says (记忆游戏)
-- Frogger (青蛙过河)
-- Missile Command (导弹指挥官)
-- Centipede (蜈蚣)
-- Donkey Kong clone (大金刚)
-- Bubble Shooter (泡泡龙)
-- Solitaire (纸牌)
-- Wordle clone
+- Simon Says (记忆游戏) ✅
+- Frogger (青蛙过河) ✅
+- Missile Command (导弹指挥官) ✅
+- Centipede (蜈蚣) ✅
+- Donkey Kong clone (大金刚) ✅
+- Bubble Shooter (泡泡龙) ✅
+- Solitaire (纸牌) ✅
+- Wordle clone ✅ (2026-04-19)
 - Sudoku (数独)
 - Chess (国际象棋)
