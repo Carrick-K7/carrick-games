@@ -16,6 +16,7 @@ import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
 import { DonkeyKongGame } from './games/donkeykong.js';
 import { CentipedeGame } from './games/centipede.js';
+import { SolitaireGame } from './games/solitaire.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -403,6 +404,26 @@ export const GAMES: GameMeta[] = [
         { icon: 'tap', action: 'Shoot', actionZh: '射击' },
         { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
         { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
+      ],
+    },
+  },
+  {
+    id: 'solitaire',
+    name: 'Solitaire',
+    nameZh: '纸牌',
+    desc: 'Classic Klondike Solitaire. Move cards, build foundations, and clear the table.',
+    descZh: '经典纸牌游戏。将所有纸牌移到王牌堆即可通关。',
+    cls: SolitaireGame,
+    canvasSize: { width: 480, height: 640 },
+    controls: {
+      keyboard: [
+        { keys: ['1', '2', '3', '4', '5', '6', '7'], action: 'Select column', actionZh: '选择列' },
+        { keys: ['Space'], action: 'Draw card', actionZh: '发牌' },
+        { keys: ['Escape'], action: 'Deselect', actionZh: '取消选择' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Select / move card', actionZh: '选择 / 移动牌' },
+        { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击：自动放牌' },
       ],
     },
   },

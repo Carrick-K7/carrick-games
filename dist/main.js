@@ -15,6 +15,8 @@ import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
 import { DonkeyKongGame } from './games/donkeykong.js';
+import { CentipedeGame } from './games/centipede.js';
+import { SolitaireGame } from './games/solitaire.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -357,6 +359,47 @@ export const GAMES = [
                 { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
                 { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
                 { icon: 'tap', action: 'Jump', actionZh: '跳跃' },
+            ],
+        },
+    },
+    {
+        id: 'centipede',
+        name: 'Centipede',
+        nameZh: '蜈蚣',
+        desc: 'Blast the centipede before it reaches the bottom! Mushrooms block its path — shoot them to slow it down.',
+        descZh: '在蜈蚣到达底部之前消灭它！蘑菇会挡住它的去路——射击蘑菇让它减速。',
+        cls: CentipedeGame,
+        canvasSize: { width: 320, height: 480 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
+                { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
+                { keys: ['Space', 'Z'], action: 'Shoot', actionZh: '射击' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Shoot', actionZh: '射击' },
+                { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
+                { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
+            ],
+        },
+    },
+    {
+        id: 'solitaire',
+        name: 'Solitaire',
+        nameZh: '纸牌',
+        desc: 'Classic Klondike Solitaire. Move cards, build foundations, and clear the table.',
+        descZh: '经典纸牌游戏。将所有纸牌移到王牌堆即可通关。',
+        cls: SolitaireGame,
+        canvasSize: { width: 480, height: 640 },
+        controls: {
+            keyboard: [
+                { keys: ['1', '2', '3', '4', '5', '6', '7'], action: 'Select column', actionZh: '选择列' },
+                { keys: ['Space'], action: 'Draw card', actionZh: '发牌' },
+                { keys: ['Escape'], action: 'Deselect', actionZh: '取消选择' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Select / move card', actionZh: '选择 / 移动牌' },
+                { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击：自动放牌' },
             ],
         },
     },
