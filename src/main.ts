@@ -13,6 +13,7 @@ import { Game2048 } from './games/game2048.js';
 import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
+import { DonkeyKongGame } from './games/donkeykong.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -338,6 +339,27 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap to aim and fire', actionZh: '点击瞄准并发射' },
+      ],
+    },
+  },
+  {
+    id: 'donkeykong',
+    name: 'Donkey Kong',
+    nameZh: '大金刚',
+    desc: 'Jump across barrels and climb ladders to rescue the princess.',
+    descZh: '跳跃躲桶，攀爬梯子，营救公主。',
+    cls: DonkeyKongGame,
+    canvasSize: { width: 480, height: 400 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Move', actionZh: '移动' },
+        { keys: ['↑', '↓'], action: 'Climb ladder', actionZh: '攀爬梯子' },
+        { keys: ['Space', 'Z'], action: 'Jump', actionZh: '跳跃' },
+      ],
+      touch: [
+        { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
+        { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
+        { icon: 'tap', action: 'Jump', actionZh: '跳跃' },
       ],
     },
   },
