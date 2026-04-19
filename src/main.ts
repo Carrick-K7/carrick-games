@@ -19,6 +19,7 @@ import { CentipedeGame } from './games/centipede.js';
 import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
 import { SudokuGame } from './games/sudoku.js';
+import { ChessGame } from './games/chess.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -467,6 +468,23 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap cell to select, tap numpad to input', actionZh: '点击格子选择，点击数字键输入' },
+      ],
+    },
+  },
+  {
+    id: 'chess',
+    name: 'Chess',
+    nameZh: '国际象棋',
+    desc: 'Classic chess against AI. Click to select and move pieces.',
+    descZh: '经典国际象棋对战 AI。点击选择并移动棋子。',
+    cls: ChessGame,
+    canvasSize: { width: 480, height: 560 },
+    controls: {
+      keyboard: [
+        { keys: ['Escape'], action: 'Deselect', actionZh: '取消选择' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to select / move piece', actionZh: '点击选择/移动棋子' },
       ],
     },
   },
