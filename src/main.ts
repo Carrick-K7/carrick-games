@@ -18,6 +18,7 @@ import { DonkeyKongGame } from './games/donkeykong.js';
 import { CentipedeGame } from './games/centipede.js';
 import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
+import { SudokuGame } from './games/sudoku.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -444,6 +445,28 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap on-screen keys', actionZh: '点击屏幕键盘' },
+      ],
+    },
+  },
+  {
+    id: 'sudoku',
+    name: 'Sudoku',
+    nameZh: '数独',
+    desc: 'Fill the 9x9 grid so each row, column, and 3x3 box contains digits 1-9.',
+    descZh: '在9x9网格中填入1-9数字，使每行、每列、每个3x3宫格都不重复。',
+    cls: SudokuGame,
+    canvasSize: { width: 480, height: 560 },
+    controls: {
+      keyboard: [
+        { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], action: 'Input number', actionZh: '输入数字' },
+        { keys: ['←', '↑', '→', '↓'], action: 'Move selection', actionZh: '移动选择' },
+        { keys: ['N'], action: 'Toggle note mode', actionZh: '切换笔记模式' },
+        { keys: ['H'], action: 'Use hint', actionZh: '使用提示' },
+        { keys: ['Backspace', 'Delete', '0'], action: 'Clear cell', actionZh: '清除格子' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap cell to select, tap numpad to input', actionZh: '点击格子选择，点击数字键输入' },
       ],
     },
   },
