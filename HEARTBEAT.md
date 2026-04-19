@@ -48,5 +48,5 @@ Schedule: **03:00, 09:00, 15:00, 21:00** (Asia/Shanghai) — one game per slot.
 - Bubble Shooter (泡泡龙) ✅
 - Solitaire (纸牌) ✅
 - Wordle clone ✅ (2026-04-19)
-- Sudoku (数独)
+- Sudoku (数独) ✅ (2026-04-19)
 - Chess (国际象棋)
