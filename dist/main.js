@@ -18,6 +18,10 @@ import { DonkeyKongGame } from './games/donkeykong.js';
 import { CentipedeGame } from './games/centipede.js';
 import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
+import { SudokuGame } from './games/sudoku.js';
+import { ChessGame } from './games/chess.js';
+import { GalagaGame } from './games/galaga.js';
+import { StackerGame } from './games/stacker.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -420,6 +424,82 @@ export const GAMES = [
             ],
             touch: [
                 { icon: 'tap', action: 'Tap on-screen keys', actionZh: '点击屏幕键盘' },
+            ],
+        },
+    },
+    {
+        id: 'sudoku',
+        name: 'Sudoku',
+        nameZh: '数独',
+        desc: 'Fill the 9x9 grid so each row, column, and 3x3 box contains digits 1-9.',
+        descZh: '在9x9网格中填入1-9数字，使每行、每列、每个3x3宫格都不重复。',
+        cls: SudokuGame,
+        canvasSize: { width: 480, height: 560 },
+        controls: {
+            keyboard: [
+                { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], action: 'Input number', actionZh: '输入数字' },
+                { keys: ['←', '↑', '→', '↓'], action: 'Move selection', actionZh: '移动选择' },
+                { keys: ['N'], action: 'Toggle note mode', actionZh: '切换笔记模式' },
+                { keys: ['H'], action: 'Use hint', actionZh: '使用提示' },
+                { keys: ['Backspace', 'Delete', '0'], action: 'Clear cell', actionZh: '清除格子' },
+                { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap cell to select, tap numpad to input', actionZh: '点击格子选择，点击数字键输入' },
+            ],
+        },
+    },
+    {
+        id: 'chess',
+        name: 'Chess',
+        nameZh: '国际象棋',
+        desc: 'Classic chess against AI. Click to select and move pieces.',
+        descZh: '经典国际象棋对战 AI。点击选择并移动棋子。',
+        cls: ChessGame,
+        canvasSize: { width: 480, height: 560 },
+        controls: {
+            keyboard: [
+                { keys: ['Escape'], action: 'Deselect', actionZh: '取消选择' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap to select / move piece', actionZh: '点击选择/移动棋子' },
+            ],
+        },
+    },
+    {
+        id: 'galaga',
+        name: 'Galaga',
+        nameZh: '大战役',
+        desc: 'Classic vertical shooter — destroy enemy formations before they dive-bomb you!',
+        descZh: '经典垂直射击游戏——在敌人俯冲轰炸前消灭它们！',
+        cls: GalagaGame,
+        canvasSize: { width: 420, height: 620 },
+        controls: {
+            keyboard: [
+                { keys: ['←', 'A'], action: 'Move left', actionZh: '左移' },
+                { keys: ['→', 'D'], action: 'Move right', actionZh: '右移' },
+                { keys: ['Space'], action: 'Shoot', actionZh: '射击' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap to shoot', actionZh: '点击射击' },
+            ],
+        },
+    },
+    {
+        id: 'stacker',
+        name: 'Stacker',
+        nameZh: '堆叠方块',
+        desc: 'Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!',
+        descZh: '经典街机堆叠方块。精准时机，一路堆到顶端！',
+        cls: StackerGame,
+        canvasSize: { width: 320, height: 480 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '→', 'A', 'D', 'Space'], action: 'Lock block', actionZh: '锁定方块' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap to lock block', actionZh: '点击锁定方块' },
+                { icon: 'swipe-left', action: 'Swipe left / right', actionZh: '左右滑动' },
             ],
         },
     },

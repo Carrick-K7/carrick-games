@@ -21,6 +21,7 @@ import { WordleGame } from './games/wordle.js';
 import { SudokuGame } from './games/sudoku.js';
 import { ChessGame } from './games/chess.js';
 import { GalagaGame } from './games/galaga.js';
+import { StackerGame } from './games/stacker.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -505,6 +506,24 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap to shoot', actionZh: '点击射击' },
+      ],
+    },
+  },
+  {
+    id: 'stacker',
+    name: 'Stacker',
+    nameZh: '堆叠方块',
+    desc: 'Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!',
+    descZh: '经典街机堆叠方块。精准时机，一路堆到顶端！',
+    cls: StackerGame,
+    canvasSize: { width: 320, height: 480 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→', 'A', 'D', 'Space'], action: 'Lock block', actionZh: '锁定方块' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to lock block', actionZh: '点击锁定方块' },
+        { icon: 'swipe-left', action: 'Swipe left / right', actionZh: '左右滑动' },
       ],
     },
   },
