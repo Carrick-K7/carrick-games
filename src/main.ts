@@ -20,6 +20,7 @@ import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
 import { SudokuGame } from './games/sudoku.js';
 import { ChessGame } from './games/chess.js';
+import { GalagaGame } from './games/galaga.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -485,6 +486,25 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap to select / move piece', actionZh: '点击选择/移动棋子' },
+      ],
+    },
+  },
+  {
+    id: 'galaga',
+    name: 'Galaga',
+    nameZh: '大战役',
+    desc: 'Classic vertical shooter — destroy enemy formations before they dive-bomb you!',
+    descZh: '经典垂直射击游戏——在敌人俯冲轰炸前消灭它们！',
+    cls: GalagaGame,
+    canvasSize: { width: 420, height: 620 },
+    controls: {
+      keyboard: [
+        { keys: ['←', 'A'], action: 'Move left', actionZh: '左移' },
+        { keys: ['→', 'D'], action: 'Move right', actionZh: '右移' },
+        { keys: ['Space'], action: 'Shoot', actionZh: '射击' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to shoot', actionZh: '点击射击' },
       ],
     },
   },
