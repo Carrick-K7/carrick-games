@@ -149,7 +149,7 @@ export class ChessGame extends BaseGame {
           // En passant
           if (this.moveHistory.length > 0) {
             const last = this.moveHistory[this.moveHistory.length - 1];
-            if (last.piece.type === 'P' && Math.abs(last.from.r - last.to.r) === 2 && last.to.r === r && last.to.c === c) {
+            if (last.piece.type === 'P' && Math.abs(last.from.r - last.to.r) === 2 && last.to.r === r && last.to.c === nc) {
               moves.push({ r: nr, c: nc, flags: 'ep' });
             }
           }
@@ -678,6 +678,15 @@ export class ChessGame extends BaseGame {
 
     if (e.type === 'touchstart') {
       this.touchStart = { r, c };
+    }
+
+    if (e.type === 'mousedown') {
+      // Select a piece on mousedown
+      if (this.board[r][c] && this.board[r][c]!.color === this.turn && !this.aiThinking) {
+        this.selected = { r, c };
+        this.validMoves = this.getLegalMoves(this.board, r, c, this.castling);
+      }
+      return;
     }
 
     if (e.type === 'touchend' || e.type === 'mouseup') {

@@ -127,8 +127,23 @@ export class DonkeyKongGame extends BaseGame {
       });
     }
 
-    // Move boy (gravity)
-    if (!this.boyOnLadder && this.onGround) {
+    // Jump physics
+    if (this.jumping) {
+      this.boyY += this.jumpVy;
+      this.jumpVy += 0.5;
+      const groundY = this.getGroundY(this.boyX, this.boyX + BOY_W);
+      if (this.boyY + BOY_H >= groundY) {
+        this.boyY = groundY - BOY_H;
+        this.jumping = false;
+        this.onGround = true;
+        this.jumpVy = 0;
+      }
+    } else if (this.boyOnLadder) {
+      if (this.isOnLadder(this.boyX, this.boyY) < 0) {
+        this.boyOnLadder = false;
+        this.onGround = false;
+      }
+    } else if (this.onGround) {
       this.boyY = this.getGroundY(this.boyX, this.boyX + BOY_W) - BOY_H;
     }
 
@@ -395,5 +410,6 @@ export class DonkeyKongGame extends BaseGame {
 
   destroy() {
     this.gameOver = true;
+    super.destroy();
   }
 }

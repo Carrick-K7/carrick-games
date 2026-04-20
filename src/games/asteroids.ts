@@ -105,16 +105,16 @@ export class AsteroidsGame extends BaseGame {
   private spawnSaucer() {
     if (this.saucer) return;
     const large = this.level < 3;
+    const sx = Math.random() < 0.5 ? -30 : this.width + 30;
     const saucer: Saucer = {
-      x: Math.random() < 0.5 ? -30 : this.width + 30,
+      x: sx,
       y: 40 + Math.random() * (this.height - 80),
-      vx: (this.saucer!.x < 0 ? 1 : -1) * (large ? 80 : 120),
+      vx: (sx < 0 ? 1 : -1) * (large ? 80 : 120),
       vy: 0,
       shootTimer: large ? 1.5 : 0.6,
       active: true,
       large,
     };
-    // Fix: use saucer directly after creation
     const s = saucer;
     if (Math.random() < 0.5) s.vy = (Math.random() - 0.5) * 30;
     this.saucer = s;

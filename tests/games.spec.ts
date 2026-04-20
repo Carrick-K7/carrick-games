@@ -59,4 +59,15 @@ test.describe('Carrick Games - Game Lifecycle', () => {
     await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(200);
   });
+
+  test('asteroids runs 15s without page errors', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+
+    await page.locator('.game-list-item[data-id="asteroids"]').click();
+    await page.locator('#actionBtn').click();
+
+    await page.waitForTimeout(15000);
+    expect(errors).toHaveLength(0);
+  });
 });

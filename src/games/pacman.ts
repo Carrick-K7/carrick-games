@@ -298,8 +298,12 @@ export class PacManGame extends BaseGame {
     if (newPx < -TILE / 2) newPx = COLS * TILE + TILE / 2;
     if (newPx > COLS * TILE + TILE / 2) newPx = -TILE / 2;
 
-    const newCol = Math.floor(newPx / TILE);
+    let newCol = Math.floor(newPx / TILE);
     const newRow = Math.floor(newPy / TILE);
+
+    // Normalize tunnel coordinates for collision check
+    if (newCol < 0) newCol = COLS - 1;
+    if (newCol >= COLS) newCol = 0;
 
     // Wall collision check
     if (!tileBlocked(this.maze, newCol, newRow)) {

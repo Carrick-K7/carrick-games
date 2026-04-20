@@ -74,6 +74,8 @@ export class MissileCommandGame extends BaseGame {
     this.explosions = [];
     this.waveIncoming = 5 + this.wave * 3;
     this.missilesLeft = this.waveIncoming;
+    this.ammos = [];
+    for (let i = 0; i < this.maxAmmo; i++) this.ammos.push(1);
     this.spawnEnemyWave();
   }
 
@@ -400,5 +402,6 @@ export class MissileCommandGame extends BaseGame {
   destroy() {
     this.state = 'gameover';
     this.gameOver = true;
+    super.destroy();
   }
 }

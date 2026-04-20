@@ -36,7 +36,6 @@ export class SudokuGame extends BaseGame {
 
   init() {
     this.resetGame();
-    this.start();
   }
 
   private resetGame() {

@@ -68,6 +68,7 @@ export class CentipedeGame extends BaseGame {
   private fleaTimer = 0;
   private spiderTimer = 0;
   private waveTimer = 0;
+  private centiMoveTimer = 0;
 
   constructor() {
     super('gameCanvas', W, H);
@@ -89,6 +90,7 @@ export class CentipedeGame extends BaseGame {
     this.spiderTimer = 12;
     this.waveTimer = 0;
     this.shootCooldown = 0;
+    this.centiMoveTimer = 0;
     this.spawnMushrooms();
     this.spawnCentipede();
   }
@@ -193,70 +195,49 @@ export class CentipedeGame extends BaseGame {
     const aliveSegs = this.segs.filter(s => s);
     if (aliveSegs.length === 0) return;
 
-    // Speed scales with remaining segments
+    this.centiMoveTimer += dt;
     const speed = this.centiSpeed * (1 + (SEG_COUNT - aliveSegs.length) * 0.05);
+    const moveInterval = CELL / speed;
 
-    for (let i = 0; i < this.segs.length; i++) {
-      const s = this.segs[i];
-      if (!s) continue;
+    if (this.centiMoveTimer < moveInterval) return;
+    this.centiMoveTimer -= moveInterval;
 
-      // Follow the segment ahead (or head for index 0)
-      const prev = i === 0 ? null : this.segs[i - 1];
-      const targetX = prev ? prev.x : s.x;
-
-      // Move toward target X
-      const dx = targetX - s.x;
-      if (Math.abs(dx) > CELL * 0.5) {
-        s.x += Math.sign(dx) * speed * dt;
-      } else {
-        s.x = targetX;
-      }
-
-      // Clamp to screen
-      if (s.x < CELL / 2) { s.x = CELL / 2; s.dir = 1; this.turnDown(i); }
-      if (s.x > W - CELL / 2) { s.x = W - CELL / 2; s.dir = -1; this.turnDown(i); }
-    }
-
-    // Move head down if blocked
     const head = this.segs[0];
-    if (head) {
-      const hgx = Math.floor(head.x / CELL);
-      const hgy = Math.floor(head.y / CELL);
+    if (!head) return;
 
-      // Check if next step hits mushroom or wall
-      const nextGX = hgx + this.dir;
-      const blocked = nextGX < 0 || nextGX >= COLS || this.mushAt(nextGX, hgy);
+    // Determine head's next position
+    const hgx = Math.floor(head.x / CELL);
+    const hgy = Math.floor(head.y / CELL);
+    const nextGX = hgx + this.dir;
+    const blocked = nextGX < 0 || nextGX >= COLS || this.mushAt(nextGX, hgy);
 
-      if (blocked) {
-        // Try to go down
-        const below = hgy + 1;
-        const downBlocked = below >= ROWS || this.mushAt(hgx, below);
-        if (!downBlocked) {
-          // Move all segments down
-          for (const seg of this.segs) {
-            if (seg) seg.y += CELL;
-          }
-          // Reverse direction
-          this.dir = (this.dir === 1 ? -1 : 1) as Dir;
-          for (const seg of this.segs) {
-            if (seg) seg.dir = this.dir;
-          }
-        }
+    let newHeadX = head.x;
+    let newHeadY = head.y;
+
+    if (blocked) {
+      if (hgy + 1 < ROWS && !this.mushAt(hgx, hgy + 1)) {
+        newHeadY = head.y + CELL;
+        this.dir = (this.dir === 1 ? -1 : 1) as Dir;
+      }
+    } else {
+      newHeadX = head.x + this.dir * CELL;
+    }
+
+    // Body segments follow the segment ahead
+    for (let i = this.segs.length - 1; i > 0; i--) {
+      const s = this.segs[i];
+      const prev = this.segs[i - 1];
+      if (s && prev) {
+        s.x = prev.x;
+        s.y = prev.y;
+        s.dir = prev.dir;
       }
     }
-  }
 
-  private turnDown(idx: number) {
-    const seg = this.segs[idx];
-    if (!seg) return;
-    const gx = Math.floor(seg.x / CELL);
-    const gy = Math.floor(seg.y / CELL);
-    if (gy + 1 < ROWS && !this.mushAt(gx, gy + 1)) {
-      for (const s of this.segs) {
-        if (s) s.y += CELL;
-      }
-      this.dir = (this.dir === 1 ? -1 : 1) as Dir;
-    }
+    // Update head
+    head.x = newHeadX;
+    head.y = newHeadY;
+    head.dir = this.dir;
   }
 
   private updateFlea(dt: number) {

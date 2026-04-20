@@ -309,7 +309,7 @@ export class SolitaireGame extends BaseGame {
         if (this.selectedSrc.type === 'tab' && this.selectedSrc.col !== undefined) {
           const tab = this.tableau[this.selectedSrc.col];
           if (this.canPlaceOnTableau(card, tab)) {
-            tab.push(...tab.splice(this.selectedSrc.index!));
+            tab.push(card);
             this.waste.pop();
             this.moves++;
             this.selectedSrc = null;

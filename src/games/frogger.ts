@@ -172,6 +172,7 @@ export class FroggerGame extends BaseGame {
   }
 
   start() {
+    super.start();
     if (this.state === 'gameover') {
       this.score = 0;
       this.lives = 3;
@@ -184,6 +185,7 @@ export class FroggerGame extends BaseGame {
   }
 
   stop() {
+    super.stop();
     this.state = 'waiting';
     this.isDead = false;
   }
