@@ -703,9 +703,7 @@ function renderControls() {
       const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
       html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
     }
-    if (meta.controls.keyboardPanel?.length) {
-      html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
-    }
+    html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
     html += '</div>';
   }
 
