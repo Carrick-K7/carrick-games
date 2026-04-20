@@ -662,40 +662,63 @@ function renderRecords() {
   return html;
 }
 
+function renderSidebarRecords() {
+  const container = document.getElementById('sidebarRecords');
+  if (!container) return;
+  const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  let html = `<div class="sidebar-section-title">${zh ? '最高记录' : 'High Scores'}</div>`;
+  let hasAny = false;
+  for (const g of GAMES) {
+    const score = records[g.id];
+    if (score != null) {
+      hasAny = true;
+      html += `<div class="sidebar-record-row"><span>${zh ? g.nameZh : g.name}</span><span>${score}</span></div>`;
+    }
+  }
+  if (!hasAny) {
+    html += `<div style="font-size:0.8rem;color:var(--text-secondary);padding:4px 0">${zh ? '暂无记录' : 'No records yet'}</div>`;
+  }
+  container.innerHTML = html;
+}
+
 function renderControls() {
   const container = document.getElementById('controlsPanel');
   if (!container) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (!meta) {
-    container.innerHTML = renderRecords();
+    container.innerHTML = `<div class="empty-state">${zh ? '选择游戏查看操作说明' : 'Select a game to see controls'}</div>`;
     return;
   }
 
   const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
 
-  let html = renderRecords();
-  html += '<div class="control-section">';
-  html += `<div class="control-section-title">${zh ? '操作说明' : 'Controls'}</div>`;
+  let html = '';
 
   if (meta.controls.keyboard && meta.controls.keyboard.length) {
-    html += `<div class="control-group-title">${zh ? '键盘' : 'Keyboard'}</div>`;
+    html += '<div class="control-section">';
+    html += `<div class="control-section-title">${zh ? '键盘' : 'Keyboard'}</div>`;
     for (const row of meta.controls.keyboard) {
       const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
       html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
     }
-    html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+    if (meta.controls.keyboardPanel?.length) {
+      html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+    }
+    html += '</div>';
   }
 
   if (meta.controls.touch && meta.controls.touch.length) {
-    html += `<div class="control-group-title">${zh ? '触摸' : 'Touch'}</div>`;
+    html += '<div class="control-section">';
+    html += `<div class="control-section-title">${zh ? '触摸' : 'Touch'}</div>`;
     for (const row of meta.controls.touch) {
       html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
     }
+    html += '</div>';
   }
 
-  html += '</div>';
-  container.innerHTML = html;
+  container.innerHTML = html || `<div class="empty-state">${zh ? '无操作说明' : 'No controls'}</div>`;
   bindVirtualKeyboard();
 }
 
@@ -732,6 +755,7 @@ function saveRecord(gameId: string, score: number) {
     records[gameId] = score;
     localStorage.setItem('cg-records', JSON.stringify(records));
     renderControls();
+    renderSidebarRecords();
   }
 }
 (window as any).saveRecord = saveRecord;
@@ -836,6 +860,7 @@ export function prepareGame(name: string) {
   updateActionButton();
   updateGameTitle();
   renderControls();
+  renderSidebarRecords();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
     el.classList.toggle('active', el.getAttribute('data-id') === name);
@@ -901,6 +926,7 @@ function setLang(lang: 'en' | 'zh') {
   updateActionButton();
   updateGameTitle();
   renderControls();
+  renderSidebarRecords();
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
@@ -947,6 +973,7 @@ window.addEventListener('blur', () => {
   setLang(savedLang);
   setTheme(savedTheme);
 
+  renderSidebarRecords();
   renderGameList();
 
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
