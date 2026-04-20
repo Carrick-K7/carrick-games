@@ -5,8 +5,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e": "pkill -f 'chromium.*carrick-games' 2>/dev/null; pkill -f 'python3 -m http.server 8080' 2>/dev/null; sleep 1; playwright test --exit",
+    "test:e2e:ui": "playwright test --ui",
+    "test:clean": "pkill -f chromium; pkill -f 'http.server 8080'; echo 'Cleaned'",
+    "posttest:e2e": "pkill -f 'chromium.*carrick-games' 2>/dev/null; pkill -f 'python3 -m http.server 8080' 2>/dev/null; echo 'Post-test cleanup done'"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
