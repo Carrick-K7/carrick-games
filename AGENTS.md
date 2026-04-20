@@ -7,8 +7,12 @@ src/
   core/game.ts       # BaseGame abstract class - ALL games extend this
   games/             # One file per game (e.g., snake.ts, breakout.ts)
   main.ts            # Game registration, UI, controls rendering
+tests/
+  games.spec.ts      # Playwright e2e tests
 dist/                # Built output (JS files)
 index.html           # Main HTML page
+playwright.config.ts # Playwright configuration
+.kimi_session        # Stores last kimi session ID (auto-managed)
 ```
 
 ## Adding a New Game (3 steps)
@@ -84,6 +88,44 @@ Add ONE entry to the `GAMES` array (before the closing `];`):
 ```bash
 npm run build
 # Files go to dist/
+```
+
+## Development Workflow (kimi CLI)
+
+All game development is done via **kimi CLI** using Linus's dedicated `cg-dev` tmux session.
+
+### Session Reuse
+```bash
+# Read last session ID (stored in .kimi_session)
+cat .kimi_session  # e.g., "9e0d3b08-1c82-4253-8c2d-48b1b10ab971"
+
+# Resume with -r flag
+kimi -r <session-id>
+```
+
+### Sending a Game Task
+```bash
+# In cg-dev tmux session, send task:
+tmux send-keys -t cg-dev -l -- "cd /home/ubuntu/projects/carrick-games && kimi --work-dir /home/ubuntu/projects/carrick-games --print -r <session-id> -p 'Create a Breakout game... && echo DONE: Breakout'" && tmux send-keys -t cg-dev Enter
+
+# Monitor progress:
+tmux capture-pane -t cg-dev -p | tail -20
+
+# Extract new session ID from output:
+tmux capture-pane -t cg-dev -p | grep 'To resume this session'
+```
+
+### Testing
+```bash
+npm run build          # TypeScript compile
+npm run test:e2e       # Playwright e2e tests (headless)
+npm run test:e2e:ui    # Playwright with UI (for debugging)
+```
+
+### Deployment
+```bash
+# Sync to server:
+rsync -av --delete dist/ index.html fonts/ ubuntu@your-server:/var/www/carrick7.com/games/
 ```
 
 ## BaseGame Interface (from `src/core/game.ts`)
@@ -162,3 +204,15 @@ handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
 - Canvas sizes: anything that fits the game (common: 400×400, 480×400, 400×600)
 - Game over overlay: semi-transparent black bg + centered text
 - No external dependencies beyond BaseGame
+
+## Testing Requirements
+
+Every game must pass Playwright e2e tests before deployment. Core behaviors to verify:
+
+- Page loads without console errors
+- Canvas element is visible after game selection
+- Start button is clickable and game begins
+- Keyboard input does not cause crashes
+- Game can be stopped and restarted
+
+Add game-specific tests in `tests/games.spec.ts` if the game has unique mechanics.

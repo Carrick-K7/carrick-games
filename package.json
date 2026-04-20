@@ -4,9 +4,12 @@
   "description": "Retro game collection by Carrick - HTML5 Canvas games",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "typescript": "^5.4.0"
   }
 }
