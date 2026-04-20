@@ -22,6 +22,7 @@ import { SudokuGame } from './games/sudoku.js';
 import { ChessGame } from './games/chess.js';
 import { GalagaGame } from './games/galaga.js';
 import { StackerGame } from './games/stacker.js';
+import { BerzerkGame } from './games/berzerk.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -524,6 +525,26 @@ export const GAMES: GameMeta[] = [
       touch: [
         { icon: 'tap', action: 'Tap to lock block', actionZh: '点击锁定方块' },
         { icon: 'swipe-left', action: 'Swipe left / right', actionZh: '左右滑动' },
+      ],
+    },
+  },
+  {
+    id: 'berzerk',
+    name: 'Berzerk',
+    nameZh: '狂暴机器人',
+    desc: 'Classic 1980 maze chase. Shoot robots, avoid Evil Otto, and escape!',
+    descZh: '经典1980迷宫追逐。射击机器人，躲避邪恶奥托，逃出生天！',
+    cls: BerzerkGame,
+    canvasSize: { width: 480, height: 480 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '↑', '→', '↓'], action: 'Move', actionZh: '移动' },
+        { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+        { keys: ['Space'], action: 'Shoot / Start', actionZh: '射击 / 开始' },
+        { keys: ['R'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动，中心射击' },
       ],
     },
   },
