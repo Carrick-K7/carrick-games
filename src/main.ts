@@ -24,6 +24,7 @@ import { GalagaGame } from './games/galaga.js';
 import { StackerGame } from './games/stacker.js';
 import { BerzerkGame } from './games/berzerk.js';
 import { JoustGame } from './games/joust.js';
+import { MahjongGame } from './games/mahjong.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -567,6 +568,23 @@ export const GAMES: GameMeta[] = [
         { icon: 'tap', action: 'Tap to flap and start', actionZh: '点击飞翔 / 开始' },
         { icon: 'swipe-left', action: 'Swipe left', actionZh: '向左滑' },
         { icon: 'swipe-right', action: 'Swipe right', actionZh: '向右滑' },
+      ],
+    },
+  },
+  {
+    id: 'mahjong',
+    name: 'Mahjong',
+    nameZh: '麻将连连看',
+    desc: 'Match free tiles and clear the board before time runs out.',
+    descZh: '点击相同麻将牌消除，在时间耗尽前清空牌阵。',
+    cls: MahjongGame,
+    canvasSize: { width: 400, height: 500 },
+    controls: {
+      keyboard: [
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap tile to select / match', actionZh: '点击选牌 / 配对' },
       ],
     },
   },
