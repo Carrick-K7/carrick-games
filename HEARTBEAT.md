@@ -59,3 +59,10 @@ Schedule: **03:00, 09:00, 15:00, 21:00** (Asia/Shanghai) — one game per slot.
 - Chess (国际象棋) ✅ (2026-04-19)
 - Stacker (堆叠方块) ✅ (2026-04-20)
 - Berzerk (狂暴机器人) ✅ (2026-04-20)
+
+## New Batch (2026-04-21)
+- Mahjong (麻将) 🚀 next
+- Texas Hold'em (德扑)
+- Parking (停车小游戏)
+- Pinball (弹珠台)
+- Tower Defense (塔防)
