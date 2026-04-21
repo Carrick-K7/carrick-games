@@ -25,6 +25,7 @@ import { StackerGame } from './games/stacker.js';
 import { BerzerkGame } from './games/berzerk.js';
 import { JoustGame } from './games/joust.js';
 import { MahjongGame } from './games/mahjong.js';
+import { TexasHoldGame } from './games/texashold.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -585,6 +586,27 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap tile to select / match', actionZh: '点击选牌 / 配对' },
+      ],
+    },
+  },
+  {
+    id: 'texashold',
+    name: "Texas Hold'em",
+    nameZh: '德州扑克',
+    desc: 'Four-player Hold’em with betting rounds, AI opponents, and showdown scoring.',
+    descZh: '四人德州扑克，含下注轮、AI 对手与摊牌结算。',
+    cls: TexasHoldGame,
+    canvasSize: { width: 440, height: 520 },
+    controls: {
+      keyboard: [
+        { keys: ['F'], action: 'Fold', actionZh: '弃牌' },
+        { keys: ['C'], action: 'Call / Check', actionZh: '跟注 / 过牌' },
+        { keys: ['R'], action: 'Raise', actionZh: '加注' },
+        { keys: ['A'], action: 'All-in', actionZh: '全下' },
+        { keys: ['Space', 'Enter'], action: 'Advance next hand / restart', actionZh: '进入下一局 / 重开' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap Fold / Call / Raise / All-in buttons', actionZh: '点击弃牌 / 跟注 / 加注 / 全下按钮' },
       ],
     },
   },
