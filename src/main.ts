@@ -6,6 +6,7 @@ import { PongGame } from './games/pong.js';
 import { SpaceShooterGame } from './games/spaceshooter.js';
 import { FlappyBirdGame } from './games/flappybird.js';
 import { PacManGame } from './games/pacman.js';
+import { ParkingGame } from './games/parking.js';
 import { InvadersGame } from './games/invaders.js';
 import { AsteroidsGame } from './games/asteroids.js';
 import { MinesweeperGame } from './games/minesweeper.js';
@@ -95,7 +96,7 @@ export const GAMES: GameMeta[] = [
     name: 'Bubble Shooter',
     nameZh: '泡泡龙',
     desc: 'Aim from the bottom, match colors, and stop the bubble wall from reaching you.',
-    descZh: '从底部瞄准发射，消除同色泡泡，阻止泡泡墙压到底部。',
+    descZh: '从底部瞄准发射,消除同色泡泡,阻止泡泡墙压到底部。',
     cls: BubbleShooterGame,
     canvasSize: { width: 420, height: 620 },
     controls: {
@@ -177,7 +178,7 @@ export const GAMES: GameMeta[] = [
     name: 'Flappy Bird',
     nameZh: '像素鸟',
     desc: 'Tap to flap. Dodge the pipes and survive.',
-    descZh: '点击飞翔，躲避管道，尽可能存活。',
+    descZh: '点击飞翔,躲避管道,尽可能存活。',
     cls: FlappyBirdGame,
     canvasSize: { width: 400, height: 560 },
     controls: {
@@ -224,7 +225,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Space'], action: 'Shoot / Restart', actionZh: '射击 / 重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap upper half to shoot, lower half to move', actionZh: '点击上半部射击，下半部移动' },
+        { icon: 'tap', action: 'Tap upper half to shoot, lower half to move', actionZh: '点击上半部射击,下半部移动' },
       ],
     },
   },
@@ -244,7 +245,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Space'], action: 'Shoot / Restart', actionZh: '射击 / 重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap to shoot, swipe edges to rotate/thrust', actionZh: '点击射击，滑动边缘旋转/推进' },
+        { icon: 'tap', action: 'Tap to shoot, swipe edges to rotate/thrust', actionZh: '点击射击,滑动边缘旋转/推进' },
       ],
     },
   },
@@ -253,7 +254,7 @@ export const GAMES: GameMeta[] = [
     name: 'Minesweeper',
     nameZh: '扫雷',
     desc: 'Classic puzzle. Reveal cells, avoid mines, and use numbers to deduce safe paths.',
-    descZh: '经典益智游戏。翻开格子，避免地雷，用数字推理安全路径。',
+    descZh: '经典益智游戏。翻开格子,避免地雷,用数字推理安全路径。',
     cls: MinesweeperGame,
     canvasSize: { width: 328, height: 412 },
     controls: {
@@ -275,7 +276,7 @@ export const GAMES: GameMeta[] = [
     name: 'Doodle Jump',
     nameZh: '涂鸦跳跃',
     desc: 'Bounce higher and higher on platforms. Avoid falling!',
-    descZh: '在平台上越跳越高，千万别掉下去！',
+    descZh: '在平台上越跳越高,千万别掉下去!',
     cls: DoodleJumpGame,
     canvasSize: { width: 400, height: 600 },
     controls: {
@@ -285,7 +286,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Space', '↑', 'W'], action: 'Jump / Restart', actionZh: '跳跃 / 重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap left/right to move, tap to jump', actionZh: '点击左右移动，点击跳跃' },
+        { icon: 'tap', action: 'Tap left/right to move, tap to jump', actionZh: '点击左右移动,点击跳跃' },
       ],
     },
   },
@@ -294,7 +295,7 @@ export const GAMES: GameMeta[] = [
     name: '2048',
     nameZh: '2048',
     desc: 'Slide and merge tiles to reach 2048.',
-    descZh: '滑动合并数字方块，挑战 2048！',
+    descZh: '滑动合并数字方块,挑战 2048!',
     cls: Game2048,
     canvasSize: { width: 400, height: 400 },
     controls: {
@@ -313,7 +314,7 @@ export const GAMES: GameMeta[] = [
     name: 'Simon Says',
     nameZh: '西蒙记忆',
     desc: 'Memorize the color sequence, repeat it, and keep up as the playback speeds up.',
-    descZh: '记住颜色序列并快速重复，随着关卡提升节奏会越来越快。',
+    descZh: '记住颜色序列并快速重复,随着关卡提升节奏会越来越快。',
     cls: SimonGame,
     canvasSize: { width: 400, height: 500 },
     controls: {
@@ -339,7 +340,7 @@ export const GAMES: GameMeta[] = [
     name: 'Frogger',
     nameZh: '青蛙过河',
     desc: 'Guide the frog across busy roads and rivers to reach home.',
-    descZh: '控制青蛙穿越繁忙的公路和河流，安全回家。',
+    descZh: '控制青蛙穿越繁忙的公路和河流,安全回家。',
     cls: FroggerGame,
     canvasSize: { width: 480, height: 560 },
     controls: {
@@ -362,7 +363,7 @@ export const GAMES: GameMeta[] = [
     name: 'Missile Command',
     nameZh: '导弹指挥官',
     desc: 'Defend your cities from incoming missiles. Aim and fire counter-missiles.',
-    descZh: '防御来袭的导弹。瞄准并发射拦截导弹，保卫你的城市。',
+    descZh: '防御来袭的导弹。瞄准并发射拦截导弹,保卫你的城市。',
     cls: MissileCommandGame,
     canvasSize: { width: 400, height: 600 },
     controls: {
@@ -379,7 +380,7 @@ export const GAMES: GameMeta[] = [
     name: 'Donkey Kong',
     nameZh: '大金刚',
     desc: 'Jump across barrels and climb ladders to rescue the princess.',
-    descZh: '跳跃躲桶，攀爬梯子，营救公主。',
+    descZh: '跳跃躲桶,攀爬梯子,营救公主。',
     cls: DonkeyKongGame,
     canvasSize: { width: 480, height: 400 },
     controls: {
@@ -399,8 +400,8 @@ export const GAMES: GameMeta[] = [
     id: 'centipede',
     name: 'Centipede',
     nameZh: '蜈蚣',
-    desc: 'Blast the centipede before it reaches the bottom! Mushrooms block its path — shoot them to slow it down.',
-    descZh: '在蜈蚣到达底部之前消灭它！蘑菇会挡住它的去路——射击蘑菇让它减速。',
+    desc: 'Blast the centipede before it reaches the bottom! Mushrooms block its path - shoot them to slow it down.',
+    descZh: '在蜈蚣到达底部之前消灭它!蘑菇会挡住它的去路--射击蘑菇让它减速。',
     cls: CentipedeGame,
     canvasSize: { width: 320, height: 480 },
     controls: {
@@ -432,7 +433,7 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Select / move card', actionZh: '选择 / 移动牌' },
-        { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击：自动放牌' },
+        { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击:自动放牌' },
       ],
     },
   },
@@ -441,7 +442,7 @@ export const GAMES: GameMeta[] = [
     name: 'Wordle',
     nameZh: '猜单词',
     desc: 'Guess the 5-letter word in 6 tries. Green = correct, Yellow = wrong place, Gray = not in word.',
-    descZh: '在六次尝试内猜出五个字母的单词。绿色=正确，黄色=位置错，灰色=不存在。',
+    descZh: '在六次尝试内猜出五个字母的单词。绿色=正确,黄色=位置错,灰色=不存在。',
     cls: WordleGame,
     canvasSize: { width: 400, height: 520 },
     controls: {
@@ -460,7 +461,7 @@ export const GAMES: GameMeta[] = [
     name: 'Sudoku',
     nameZh: '数独',
     desc: 'Fill the 9x9 grid so each row, column, and 3x3 box contains digits 1-9.',
-    descZh: '在9x9网格中填入1-9数字，使每行、每列、每个3x3宫格都不重复。',
+    descZh: '在9x9网格中填入1-9数字,使每行、每列、每个3x3宫格都不重复。',
     cls: SudokuGame,
     canvasSize: { width: 480, height: 560 },
     controls: {
@@ -473,7 +474,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap cell to select, tap numpad to input', actionZh: '点击格子选择，点击数字键输入' },
+        { icon: 'tap', action: 'Tap cell to select, tap numpad to input', actionZh: '点击格子选择,点击数字键输入' },
       ],
     },
   },
@@ -498,8 +499,8 @@ export const GAMES: GameMeta[] = [
     id: 'galaga',
     name: 'Galaga',
     nameZh: '大战役',
-    desc: 'Classic vertical shooter — destroy enemy formations before they dive-bomb you!',
-    descZh: '经典垂直射击游戏——在敌人俯冲轰炸前消灭它们！',
+    desc: 'Classic vertical shooter - destroy enemy formations before they dive-bomb you!',
+    descZh: '经典垂直射击游戏--在敌人俯冲轰炸前消灭它们!',
     cls: GalagaGame,
     canvasSize: { width: 420, height: 620 },
     controls: {
@@ -518,7 +519,7 @@ export const GAMES: GameMeta[] = [
     name: 'Stacker',
     nameZh: '堆叠方块',
     desc: 'Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!',
-    descZh: '经典街机堆叠方块。精准时机，一路堆到顶端！',
+    descZh: '经典街机堆叠方块。精准时机,一路堆到顶端!',
     cls: StackerGame,
     canvasSize: { width: 320, height: 480 },
     controls: {
@@ -536,7 +537,7 @@ export const GAMES: GameMeta[] = [
     name: 'Berzerk',
     nameZh: '狂暴机器人',
     desc: 'Classic 1980 maze chase. Shoot robots, avoid Evil Otto, and escape!',
-    descZh: '经典1980迷宫追逐。射击机器人，躲避邪恶奥托，逃出生天！',
+    descZh: '经典1980迷宫追逐。射击机器人,躲避邪恶奥托,逃出生天!',
     cls: BerzerkGame,
     canvasSize: { width: 480, height: 480 },
     controls: {
@@ -547,7 +548,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['R'], action: 'Restart', actionZh: '重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动，中心射击' },
+        { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动,中心射击' },
       ],
     },
   },
@@ -556,7 +557,7 @@ export const GAMES: GameMeta[] = [
     name: 'Joust',
     nameZh: '角鹰骑士',
     desc: 'Classic 1982 arcade jousting. Flap to fly, strike enemies from above!',
-    descZh: '经典1982街机骑士对战。飞翔突袭，从上方撞击敌人！',
+    descZh: '经典1982街机骑士对战。飞翔突袭,从上方撞击敌人!',
     cls: JoustGame,
     canvasSize: { width: 480, height: 560 },
     controls: {
@@ -577,7 +578,7 @@ export const GAMES: GameMeta[] = [
     name: 'Mahjong',
     nameZh: '麻将连连看',
     desc: 'Match free tiles and clear the board before time runs out.',
-    descZh: '点击相同麻将牌消除，在时间耗尽前清空牌阵。',
+    descZh: '点击相同麻将牌消除,在时间耗尽前清空牌阵。',
     cls: MahjongGame,
     canvasSize: { width: 400, height: 500 },
     controls: {
@@ -593,8 +594,8 @@ export const GAMES: GameMeta[] = [
     id: 'texashold',
     name: "Texas Hold'em",
     nameZh: '德州扑克',
-    desc: 'Four-player Hold’em with betting rounds, AI opponents, and showdown scoring.',
-    descZh: '四人德州扑克，含下注轮、AI 对手与摊牌结算。',
+    desc: 'Four-player Hold\u2019em with betting rounds, AI opponents, and showdown scoring.',
+    descZh: '四人德州扑克,含下注轮、AI 对手与摊牌结算。',
     cls: TexasHoldGame,
     canvasSize: { width: 440, height: 520 },
     controls: {
@@ -607,6 +608,46 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap Fold / Call / Raise / All-in buttons', actionZh: '点击弃牌 / 跟注 / 加注 / 全下按钮' },
+      ],
+    },
+  },
+  {
+    id: 'parking',
+    name: 'Parking',
+    nameZh: '停车小游戏',
+    desc: 'Top-down parking challenge. Steer into the spot without crashing.',
+    descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
+    cls: ParkingGame,
+    canvasSize: { width: 400, height: 520 },
+    controls: {
+      keyboard: [
+        { keys: ['↑', 'W'], action: 'Accelerate', actionZh: '加速' },
+        { keys: ['↓', 'S'], action: 'Brake / Reverse', actionZh: '刹车 / 倒车' },
+        { keys: ['←', 'A'], action: 'Steer left', actionZh: '向左转' },
+        { keys: ['→', 'D'], action: 'Steer right', actionZh: '向右转' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap top/bottom/left/right zones to drive', actionZh: '点击上/下/左/右区域驾驶' },
+      ],
+    },
+  },
+  {
+    id: 'pinball',
+    name: 'Pinball',
+    nameZh: '弹珠台',
+    desc: 'Classic arcade pinball. Flip the flippers and keep the ball alive!',
+    descZh: '经典街机弹珠台。弹起球并在球落下前击回！',
+    cls: TexasHoldGame,
+    canvasSize: { width: 320, height: 480 },
+    controls: {
+      keyboard: [
+        { keys: ['Z'], action: 'Left flipper', actionZh: '左挡板' },
+        { keys: ['/'], action: 'Right flipper', actionZh: '右挡板' },
+        { keys: ['Space'], action: 'Launch ball', actionZh: '发射球' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap left/right to flip', actionZh: '点击左/右侧弹板' },
       ],
     },
   },
