@@ -23,6 +23,7 @@ import { ChessGame } from './games/chess.js';
 import { GalagaGame } from './games/galaga.js';
 import { StackerGame } from './games/stacker.js';
 import { BerzerkGame } from './games/berzerk.js';
+import { JoustGame } from './games/joust.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -545,6 +546,27 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动，中心射击' },
+      ],
+    },
+  },
+  {
+    id: 'joust',
+    name: 'Joust',
+    nameZh: '角鹰骑士',
+    desc: 'Classic 1982 arcade jousting. Flap to fly, strike enemies from above!',
+    descZh: '经典1982街机骑士对战。飞翔突袭，从上方撞击敌人！',
+    cls: JoustGame,
+    canvasSize: { width: 480, height: 560 },
+    controls: {
+      keyboard: [
+        { keys: ['←', '→'], action: 'Move left/right', actionZh: '左右移动' },
+        { keys: ['A', 'D'], action: 'Move left/right', actionZh: '左右移动' },
+        { keys: ['Space', '↑', 'W'], action: 'Flap / Start', actionZh: '飞翔 / 开始' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Tap to flap and start', actionZh: '点击飞翔 / 开始' },
+        { icon: 'swipe-left', action: 'Swipe left', actionZh: '向左滑' },
+        { icon: 'swipe-right', action: 'Swipe right', actionZh: '向右滑' },
       ],
     },
   },

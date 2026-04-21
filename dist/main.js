@@ -22,6 +22,7 @@ import { SudokuGame } from './games/sudoku.js';
 import { ChessGame } from './games/chess.js';
 import { GalagaGame } from './games/galaga.js';
 import { StackerGame } from './games/stacker.js';
+import { BerzerkGame } from './games/berzerk.js';
 export const GAMES = [
     {
         id: 'snake',
@@ -503,6 +504,26 @@ export const GAMES = [
             ],
         },
     },
+    {
+        id: 'berzerk',
+        name: 'Berzerk',
+        nameZh: '狂暴机器人',
+        desc: 'Classic 1980 maze chase. Shoot robots, avoid Evil Otto, and escape!',
+        descZh: '经典1980迷宫追逐。射击机器人，躲避邪恶奥托，逃出生天！',
+        cls: BerzerkGame,
+        canvasSize: { width: 480, height: 480 },
+        controls: {
+            keyboard: [
+                { keys: ['←', '↑', '→', '↓'], action: 'Move', actionZh: '移动' },
+                { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+                { keys: ['Space'], action: 'Shoot / Start', actionZh: '射击 / 开始' },
+                { keys: ['R'], action: 'Restart', actionZh: '重新开始' },
+            ],
+            touch: [
+                { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动，中心射击' },
+            ],
+        },
+    },
 ];
 let currentGameName = null;
 let currentGameInstance = null;
@@ -610,6 +631,26 @@ function renderRecords() {
     html += '</div>';
     return html;
 }
+function renderSidebarRecords() {
+    const container = document.getElementById('sidebarRecords');
+    if (!container)
+        return;
+    const records = JSON.parse(localStorage.getItem('cg-records') || '{}');
+    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    let html = `<div class="sidebar-section-title">${zh ? '最高记录' : 'High Scores'}</div>`;
+    let hasAny = false;
+    for (const g of GAMES) {
+        const score = records[g.id];
+        if (score != null) {
+            hasAny = true;
+            html += `<div class="sidebar-record-row"><span>${zh ? g.nameZh : g.name}</span><span>${score}</span></div>`;
+        }
+    }
+    if (!hasAny) {
+        html += `<div style="font-size:0.8rem;color:var(--text-secondary);padding:4px 0">${zh ? '暂无记录' : 'No records yet'}</div>`;
+    }
+    container.innerHTML = html;
+}
 function renderControls() {
     const container = document.getElementById('controlsPanel');
     if (!container)
@@ -617,29 +658,30 @@ function renderControls() {
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     const meta = GAMES.find((g) => g.id === currentGameName);
     if (!meta) {
-        container.innerHTML = renderRecords();
+        container.innerHTML = `<div class="empty-state">${zh ? '选择游戏查看操作说明' : 'Select a game to see controls'}</div>`;
         return;
     }
     const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
-    let html = renderRecords();
-    html += '<div class="control-section">';
-    html += `<div class="control-section-title">${zh ? '操作说明' : 'Controls'}</div>`;
+    let html = '';
     if (meta.controls.keyboard && meta.controls.keyboard.length) {
-        html += `<div class="control-group-title">${zh ? '键盘' : 'Keyboard'}</div>`;
+        html += '<div class="control-section">';
+        html += `<div class="control-section-title">${zh ? '键盘' : 'Keyboard'}</div>`;
         for (const row of meta.controls.keyboard) {
             const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
             html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
         }
         html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+        html += '</div>';
     }
     if (meta.controls.touch && meta.controls.touch.length) {
-        html += `<div class="control-group-title">${zh ? '触摸' : 'Touch'}</div>`;
+        html += '<div class="control-section">';
+        html += `<div class="control-section-title">${zh ? '触摸' : 'Touch'}</div>`;
         for (const row of meta.controls.touch) {
             html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
         }
+        html += '</div>';
     }
-    html += '</div>';
-    container.innerHTML = html;
+    container.innerHTML = html || `<div class="empty-state">${zh ? '无操作说明' : 'No controls'}</div>`;
     bindVirtualKeyboard();
 }
 function normalizeKey(label) {
@@ -676,6 +718,7 @@ function saveRecord(gameId, score) {
         records[gameId] = score;
         localStorage.setItem('cg-records', JSON.stringify(records));
         renderControls();
+        renderSidebarRecords();
     }
 }
 window.saveRecord = saveRecord;
@@ -780,6 +823,7 @@ export function prepareGame(name) {
     updateActionButton();
     updateGameTitle();
     renderControls();
+    renderSidebarRecords();
     document.querySelectorAll('.game-list-item').forEach((el) => {
         el.classList.toggle('active', el.getAttribute('data-id') === name);
     });
@@ -837,6 +881,7 @@ function setLang(lang) {
     updateActionButton();
     updateGameTitle();
     renderControls();
+    renderSidebarRecords();
     renderGameList(document.getElementById('searchInput')?.value || '');
     document.querySelectorAll('.lang-btn').forEach((b) => {
         const target = b.getAttribute('data-lang');
@@ -879,6 +924,7 @@ window.addEventListener('blur', () => {
     const savedTheme = localStorage.getItem('cg-theme') || 'system';
     setLang(savedLang);
     setTheme(savedTheme);
+    renderSidebarRecords();
     renderGameList();
     const search = document.getElementById('searchInput');
     if (search) {
