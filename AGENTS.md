@@ -92,7 +92,7 @@ npm run build
 
 ## Development Workflow (kimi CLI)
 
-All game development is done via **kimi CLI** using Linus's dedicated `cg-dev` tmux session.
+All game development is done via **kimi CLI** using Linus's dedicated `linus:games` tmux session.
 
 ### Session Reuse
 ```bash
@@ -105,14 +105,14 @@ kimi -r <session-id>
 
 ### Sending a Game Task
 ```bash
-# In cg-dev tmux session, send task:
-tmux send-keys -t cg-dev -l -- "cd /home/ubuntu/projects/carrick-games && kimi --work-dir /home/ubuntu/projects/carrick-games --print -r <session-id> -p 'Create a Breakout game... && echo DONE: Breakout'" && tmux send-keys -t cg-dev Enter
+# In linus:games tmux session, send task:
+tmux send-keys -t linus:games -l -- "cd /home/ubuntu/projects/carrick-games && kimi --work-dir /home/ubuntu/projects/carrick-games --print -r <session-id> -p 'Create a Breakout game... && echo DONE: Breakout'" && tmux send-keys -t linus:games Enter
 
 # Monitor progress:
-tmux capture-pane -t cg-dev -p | tail -20
+tmux capture-pane -t linus:games -p | tail -20
 
 # Extract new session ID from output:
-tmux capture-pane -t cg-dev -p | grep 'To resume this session'
+tmux capture-pane -t linus:games -p | grep 'To resume this session'
 ```
 
 ### Testing
