@@ -16,7 +16,7 @@ import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
 import { DonkeyKongGame } from './games/donkeykong.js';
-import { CentipedeGame } from './games/centipede.js';
+import { CheckersGame } from './games/checkers.js';
 import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
 import { SudokuGame } from './games/sudoku.js';
@@ -27,6 +27,7 @@ import { BerzerkGame } from './games/berzerk.js';
 import { JoustGame } from './games/joust.js';
 import { MahjongGame } from './games/mahjong.js';
 import { TexasHoldGame } from './games/texashold.js';
+import { ConnectFourGame } from './games/connectfour.js';
 
 interface VirtualKeySpec {
   label: string;
@@ -397,23 +398,19 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'centipede',
-    name: 'Centipede',
-    nameZh: '蜈蚣',
-    desc: 'Blast the centipede before it reaches the bottom! Mushrooms block its path - shoot them to slow it down.',
-    descZh: '在蜈蚣到达底部之前消灭它!蘑菇会挡住它的去路--射击蘑菇让它减速。',
-    cls: CentipedeGame,
-    canvasSize: { width: 320, height: 480 },
+    id: 'checkers',
+    name: 'Checkers',
+    nameZh: '跳棋',
+    desc: 'Classic checkers against AI. Capture all enemy pieces or block their moves to win.',
+    descZh: '经典跳棋对战 AI。吃掉所有敌方棋子或让其无路可走即可获胜。',
+    cls: CheckersGame,
+    canvasSize: { width: 500, height: 540 },
     controls: {
       keyboard: [
-        { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
-        { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
-        { keys: ['Space', 'Z'], action: 'Shoot', actionZh: '射击' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Shoot', actionZh: '射击' },
-        { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
-        { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
+        { icon: 'tap', action: 'Tap piece to select, tap square to move', actionZh: '点击棋子选择,点击格子移动' },
       ],
     },
   },
@@ -633,21 +630,20 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'pinball',
-    name: 'Pinball',
-    nameZh: '弹珠台',
-    desc: 'Classic arcade pinball. Flip the flippers and keep the ball alive!',
-    descZh: '经典街机弹珠台。弹起球并在球落下前击回！',
-    cls: TexasHoldGame,
-    canvasSize: { width: 320, height: 480 },
+    id: 'connectfour',
+    name: 'Connect Four',
+    nameZh: '四子连珠',
+    desc: 'Drop discs and connect four in a row before the computer does.',
+    descZh: '在电脑之前将四个棋子连成一线。',
+    cls: ConnectFourGame,
+    canvasSize: { width: 440, height: 440 },
     controls: {
       keyboard: [
-        { keys: ['Z'], action: 'Left flipper', actionZh: '左挡板' },
-        { keys: ['/'], action: 'Right flipper', actionZh: '右挡板' },
-        { keys: ['Space'], action: 'Launch ball', actionZh: '发射球' },
+        { keys: ['1', '2', '3', '4', '5', '6', '7'], action: 'Drop in column', actionZh: '在对应列落子' },
+        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap left/right to flip', actionZh: '点击左/右侧弹板' },
+        { icon: 'tap', action: 'Tap column to drop', actionZh: '点击列落子' },
       ],
     },
   },
@@ -694,6 +690,13 @@ function updateGameTitle() {
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
 }
 
+function updateGameDesc() {
+  const descEl = document.getElementById('gameDesc');
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  if (descEl) descEl.textContent = meta ? (zh ? meta.descZh : meta.desc) : '';
+}
+
 function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
   document.querySelectorAll('.vkey').forEach((el) => {
     const k = el.getAttribute('data-key') || '';
@@ -726,12 +729,11 @@ function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[
       <div class="vkeyboard-row">
         ${mk('Esc', 'Escape', isActive('Escape'), 'wide-1')}
         <div class="vkey inactive"></div>
-        ${mk('←', 'ArrowLeft', isActive('ArrowLeft'), '', 'M')}
-        ${mk('↑', 'ArrowUp', isActive('ArrowUp'), '', 'M')}
-        ${mk('↓', 'ArrowDown', isActive('ArrowDown'), '', 'M')}
-        ${mk('→', 'ArrowRight', isActive('ArrowRight'), '', 'M')}
         <div class="vkey inactive"></div>
-        ${mk('Space', 'Space', isActive(' '), 'grow', 'RST')}
+        ${mk('↑', 'ArrowUp', isActive('ArrowUp'), '', 'M')}
+        <div class="vkey inactive"></div>
+        <div class="vkey inactive"></div>
+        ${mk('Space', ' ', isActive(' '), 'wide-3', 'RST')}
       </div>
       <div class="vkeyboard-row">
         ${mk('Q', 'q', isActive('q'))} ${mk('W', 'w', isActive('w'), '', 'M')} ${mk('E', 'e', isActive('e'))} ${mk('R', 'r', isActive('r'))} ${mk('T', 't', isActive('t'))} ${mk('Y', 'y', isActive('y'))} ${mk('U', 'u', isActive('u'))} ${mk('I', 'i', isActive('i'))} ${mk('O', 'o', isActive('o'))} ${mk('P', 'p', isActive('p'))}
@@ -741,6 +743,15 @@ function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[
       </div>
       <div class="vkeyboard-row">
         ${mk('Z', 'z', isActive('z'), '', 'CCW')} ${mk('X', 'x', isActive('x'), '', 'CW')} ${mk('C', 'c', isActive('c'))} ${mk('V', 'v', isActive('v'))} ${mk('B', 'b', isActive('b'))} ${mk('N', 'n', isActive('n'))} ${mk('M', 'm', isActive('m'))}
+      </div>
+      <div class="vkeyboard-row">
+        <div class="vkey inactive"></div>
+        <div class="vkey inactive"></div>
+        ${mk('←', 'ArrowLeft', isActive('ArrowLeft'))}
+        ${mk('↓', 'ArrowDown', isActive('ArrowDown'))}
+        ${mk('→', 'ArrowRight', isActive('ArrowRight'))}
+        <div class="vkey inactive"></div>
+        <div class="vkey inactive"></div>
       </div>
     </div>
   `;
@@ -960,6 +971,7 @@ export function prepareGame(name: string) {
 
   updateActionButton();
   updateGameTitle();
+  updateGameDesc();
   renderControls();
   renderSidebarRecords();
 
@@ -1026,6 +1038,7 @@ function setLang(lang: 'en' | 'zh') {
   localStorage.setItem('cg-lang', lang);
   updateActionButton();
   updateGameTitle();
+  updateGameDesc();
   renderControls();
   renderSidebarRecords();
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
@@ -1055,6 +1068,10 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
 // Global keyboard highlight listener
 const pressedKeys = new Set<string>();
 window.addEventListener('keydown', (e) => {
+  // Prevent page scrolling from arrow keys and Space
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+    e.preventDefault();
+  }
   getKeysFromEvent(e).forEach((k) => pressedKeys.add(k));
   updateVirtualKeyboardHighlight(pressedKeys);
 });
