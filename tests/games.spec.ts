@@ -55,7 +55,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
   { id: 'berzerk', keys: ['ArrowLeft', 'ArrowUp', 'Space'], delayMs: 2000 },
   { id: 'joust', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'donkeykong', keys: ['ArrowRight', 'Space', 'ArrowLeft'], delayMs: 2000 },
+  { id: 'beachhead', keys: ['ArrowLeft', 'ArrowUp', 'Space', 'ArrowRight'], delayMs: 2000 },
   { id: 'missilecommand', keys: ['Space'], delayMs: 2000 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },

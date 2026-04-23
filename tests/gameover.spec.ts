@@ -151,9 +151,9 @@ async function suicideJoust(page: any) {
   await page.waitForTimeout(5000);
 }
 
-async function suicideDonkeykong(page: any) {
-  // Wait for barrel to roll down and hit
-  await page.waitForTimeout(8000);
+async function suicideBeachhead(page: any) {
+  // Let early waves land and fire back without defending
+  await page.waitForTimeout(9000);
 }
 
 async function suicideMissilecommand(page: any) {
@@ -336,7 +336,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'berzerk', suicide: suicideBerzerk, timeout: 15000 },
   { id: 'joust', suicide: suicideJoust, timeout: 15000 },
-  { id: 'donkeykong', suicide: suicideDonkeykong, timeout: 20000 },
+  { id: 'beachhead', suicide: suicideBeachhead, timeout: 20000 },
   { id: 'missilecommand', suicide: suicideMissilecommand, timeout: 25000 },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },

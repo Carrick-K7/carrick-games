@@ -15,7 +15,7 @@ import { Game2048 } from './games/game2048.js';
 import { SimonGame } from './games/simon.js';
 import { FroggerGame } from './games/frogger.js';
 import { MissileCommandGame } from './games/missilecommand.js';
-import { DonkeyKongGame } from './games/donkeykong.js';
+import { BeachHeadGame } from './games/beachhead.js';
 import { CheckersGame } from './games/checkers.js';
 import { SolitaireGame } from './games/solitaire.js';
 import { WordleGame } from './games/wordle.js';
@@ -377,23 +377,23 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'donkeykong',
-    name: 'Donkey Kong',
-    nameZh: '大金刚',
-    desc: 'Jump across barrels and climb ladders to rescue the princess.',
-    descZh: '跳跃躲桶,攀爬梯子,营救公主。',
-    cls: DonkeyKongGame,
+    id: 'beachhead',
+    name: 'Beach Head',
+    nameZh: '抢滩登陆战',
+    desc: 'Hold the shoreline, rotate the turret, and sink incoming landing waves.',
+    descZh: '坚守海岸炮台,旋转瞄准并击沉来袭的登陆波次。',
+    cls: BeachHeadGame,
     canvasSize: { width: 480, height: 400 },
     controls: {
       keyboard: [
-        { keys: ['←', '→'], action: 'Move', actionZh: '移动' },
-        { keys: ['↑', '↓'], action: 'Climb ladder', actionZh: '攀爬梯子' },
-        { keys: ['Space', 'Z'], action: 'Jump', actionZh: '跳跃' },
+        { keys: ['←', '→'], action: 'Rotate turret', actionZh: '旋转炮台' },
+        { keys: ['↑', '↓'], action: 'Adjust range', actionZh: '调整仰角' },
+        { keys: ['Space', 'Z'], action: 'Fire shell', actionZh: '开火' },
       ],
       touch: [
-        { icon: 'swipe-left', action: 'Move left', actionZh: '向左' },
-        { icon: 'swipe-right', action: 'Move right', actionZh: '向右' },
-        { icon: 'tap', action: 'Jump', actionZh: '跳跃' },
+        { icon: 'swipe-left', action: 'Rotate left', actionZh: '向左旋转' },
+        { icon: 'swipe-right', action: 'Rotate right', actionZh: '向右旋转' },
+        { icon: 'tap', action: 'Tap to fire', actionZh: '点击开火' },
       ],
     },
   },
@@ -648,6 +648,45 @@ export const GAMES: GameMeta[] = [
     },
   },
 ];
+
+// Group nearby genres in the sidebar: arcade movement, combat/shooters,
+// puzzle/word games, then tabletop/card games.
+const GAME_LIST_ORDER = [
+  'snake',
+  'pacman',
+  'frogger',
+  'flappybird',
+  'doodlejump',
+  'joust',
+  'breakout',
+  'pong',
+  'parking',
+  'stacker',
+  'spaceshooter',
+  'invaders',
+  'galaga',
+  'asteroids',
+  'missilecommand',
+  'beachhead',
+  'berzerk',
+  'bubbleshooter',
+  'tetris',
+  '2048',
+  'simon',
+  'minesweeper',
+  'wordle',
+  'sudoku',
+  'mahjong',
+  'checkers',
+  'chess',
+  'connectfour',
+  'solitaire',
+  'texashold',
+] as const;
+
+const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(
+  GAME_LIST_ORDER.map((id, index) => [id, index] as const)
+);
 
 let currentGameName: string | null = null;
 let currentGameInstance: { start(): void; stop(): void; init?(): void; destroy?(): void } | null = null;
@@ -1069,6 +1108,10 @@ function renderGameList(filter = '') {
       g.desc.toLowerCase().includes(term) ||
       g.descZh.includes(term)
     );
+  }).sort((a, b) => {
+    const aIndex = GAME_LIST_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = GAME_LIST_ORDER_INDEX.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    return aIndex - bIndex || a.name.localeCompare(b.name);
   });
 
   list.innerHTML = filtered
