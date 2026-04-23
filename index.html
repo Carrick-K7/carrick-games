@@ -287,6 +287,68 @@
       font-size: 0.875rem;
       color: var(--text-secondary);
       margin-top: 4px;
+      max-width: 480px;
+      line-height: 1.45;
+    }
+
+    /* Mobile sidebar toggle */
+    .sidebar-toggle {
+      display: none;
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 100;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar-toggle svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    body.sidebar-collapsed aside {
+      transform: translateX(-100%);
+    }
+
+    body.sidebar-collapsed main {
+      margin-left: 0;
+    }
+
+    @media (max-width: 960px) {
+      .sidebar-toggle {
+        display: flex;
+      }
+      aside {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 90;
+        transition: transform .25s ease;
+        box-shadow: var(--shadow);
+      }
+      body:not(.sidebar-collapsed) aside::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: -1;
+      }
+      main {
+        padding: 64px 16px 28px;
+      }
     }
 
     #gameCanvas {
@@ -602,6 +664,11 @@
   </style>
 </head>
 <body>
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 12h18M3 6h18M3 18h18"/>
+    </svg>
+  </button>
   <aside>
     <div class="brand">
       <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -653,6 +720,7 @@
       <div class="stage">
         <div class="game-meta">
           <h2 id="gameTitle">—</h2>
+          <p id="gameDesc"></p>
         </div>
         <canvas id="gameCanvas" width="400" height="500"></canvas>
         <div class="action-bar">
@@ -670,8 +738,30 @@
     (function(){
       document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', () => window.setLang(b.dataset.lang)));
       document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => window.setTheme(b.dataset.set)));
+
+      // Sidebar toggle
+      const toggle = document.getElementById('sidebarToggle');
+      const body = document.body;
+      if (toggle) {
+        toggle.addEventListener('click', () => {
+          body.classList.toggle('sidebar-collapsed');
+        });
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+          if (window.innerWidth > 960) return;
+          const aside = document.querySelector('aside');
+          if (!aside) return;
+          if (!body.classList.contains('sidebar-collapsed') && !aside.contains(e.target) && e.target !== toggle && !toggle.contains(e.target)) {
+            body.classList.add('sidebar-collapsed');
+          }
+        });
+        // Start collapsed on mobile
+        if (window.innerWidth <= 960) {
+          body.classList.add('sidebar-collapsed');
+        }
+      }
     })();
   </script>
-  <script type="module" src="./dist/main.js?v=4"></script>
+  <script type="module" src="./dist/main.js?v=5"></script>
 </body>
 </html>
