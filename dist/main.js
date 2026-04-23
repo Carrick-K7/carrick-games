@@ -24,7 +24,7 @@ import { ChessGame } from './games/chess.js';
 import { GalagaGame } from './games/galaga.js';
 import { StackerGame } from './games/stacker.js';
 import { BerzerkGame } from './games/berzerk.js';
-import { JoustGame } from './games/joust.js';
+import { IwannaGame } from './games/iwanna.js';
 import { MahjongGame } from './games/mahjong.js';
 import { TexasHoldGame } from './games/texashold.js';
 import { ConnectFourGame } from './games/connectfour.js';
@@ -526,21 +526,22 @@ export const GAMES = [
         },
     },
     {
-        id: 'joust',
-        name: 'Joust',
-        nameZh: '角鹰骑士',
-        desc: 'Classic 1982 arcade jousting. Flap to fly, strike enemies from above!',
-        descZh: '经典1982街机骑士对战。飞翔突袭,从上方撞击敌人!',
-        cls: JoustGame,
+        id: 'iwanna',
+        name: 'I Wanna',
+        nameZh: 'I Wanna',
+        desc: 'Pure precision platforming. Climb increasingly brutal jump chains with no trick traps.',
+        descZh: '纯技术向平台跳跃。没有阴人机关,只有逐步升级的跳跃难度。',
+        cls: IwannaGame,
         canvasSize: { width: 480, height: 560 },
         controls: {
             keyboard: [
                 { keys: ['←', '→'], action: 'Move left/right', actionZh: '左右移动' },
                 { keys: ['A', 'D'], action: 'Move left/right', actionZh: '左右移动' },
-                { keys: ['Space', '↑', 'W'], action: 'Flap / Start', actionZh: '飞翔 / 开始' },
+                { keys: ['Space', 'Z', '↑'], action: 'Jump / Restart', actionZh: '跳跃 / 重开' },
+                { keys: ['R'], action: 'Restart after death', actionZh: '死亡后重开' },
             ],
             touch: [
-                { icon: 'tap', action: 'Tap to flap and start', actionZh: '点击飞翔 / 开始' },
+                { icon: 'tap', action: 'Tap to jump / restart', actionZh: '点击跳跃 / 重开' },
                 { icon: 'swipe-left', action: 'Swipe left', actionZh: '向左滑' },
                 { icon: 'swipe-right', action: 'Swipe right', actionZh: '向右滑' },
             ],
@@ -632,7 +633,7 @@ const GAME_LIST_ORDER = [
     'frogger',
     'flappybird',
     'doodlejump',
-    'joust',
+    'iwanna',
     'breakout',
     'pong',
     'parking',

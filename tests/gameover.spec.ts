@@ -146,9 +146,12 @@ async function suicideBerzerk(page: any) {
   await page.waitForTimeout(4000);
 }
 
-async function suicideJoust(page: any) {
-  // Do nothing, fall or enemy hits
-  await page.waitForTimeout(5000);
+async function suicideIwanna(page: any) {
+  // Walk into the opening spike pit
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(1200);
+  await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(1200);
 }
 
 async function suicideBeachhead(page: any) {
@@ -335,7 +338,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'berzerk', suicide: suicideBerzerk, timeout: 15000 },
-  { id: 'joust', suicide: suicideJoust, timeout: 15000 },
+  { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
   { id: 'beachhead', suicide: suicideBeachhead, timeout: 20000 },
   { id: 'missilecommand', suicide: suicideMissilecommand, timeout: 25000 },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },

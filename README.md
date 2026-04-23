@@ -15,7 +15,7 @@ Live site: **https://games.carrick7.com/**
 | Frogger | Frogger | 青蛙过河 | Cross roads and rivers |
 | Flappy Bird | Flappy Bird | 像素鸟 | Tap to flap and dodge pipes |
 | Doodle Jump | Doodle Jump | 涂鸦跳跃 | Bounce higher on platforms |
-| Joust | Joust | 角鹰骑士 | Flap and strike from above |
+| I Wanna | I Wanna | I Wanna | Pure precision platforming with steadily harder jumps |
 | Breakout | Breakout | 打砖块 | Bounce and break bricks |
 | Pong | Pong | 乒乓 | Classic table tennis against AI |
 | Parking | Parking | 停车小游戏 | Top-down parking challenge |
