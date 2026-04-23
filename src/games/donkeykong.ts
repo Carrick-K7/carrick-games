@@ -160,7 +160,7 @@ export class DonkeyKongGame extends BaseGame {
       } else {
         // Fall / take ladder
         const lad = this.findLadder(b.x, b.y);
-        if (lad && !b.onLadder) {
+        if (lad >= 0 && !b.onLadder) {
           b.onLadder = true;
           b.ladderIndex = lad;
           b.x = this.ladders[lad].x;

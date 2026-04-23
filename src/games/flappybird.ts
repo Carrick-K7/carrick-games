@@ -33,6 +33,7 @@ export class FlappyBirdGame extends BaseGame {
     this.score = 0;
     this.gameOver = false;
     this.spawnTimer = 0;
+    (this as any)._recorded = false;
   }
 
   private spawnPipe() {
@@ -115,12 +116,15 @@ export class FlappyBirdGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Sky
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Background city silhouette (simple)
-    ctx.fillStyle = '#111827';
+    ctx.fillStyle = isDark ? '#111827' : '#e5e7eb';
     ctx.beginPath();
     ctx.moveTo(0, this.height - this.groundHeight);
     for (let i = 0; i <= this.width; i += 40) {
@@ -166,7 +170,7 @@ export class FlappyBirdGame extends BaseGame {
     ctx.arc(this.bird.x, this.bird.y, this.bird.radius, 0, Math.PI * 2);
     ctx.fill();
     // Eye
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0f172a' : '#1a1a2e';
     ctx.beginPath();
     ctx.arc(this.bird.x + 4, this.bird.y - 4, 3, 0, Math.PI * 2);
     ctx.fill();
@@ -185,7 +189,7 @@ export class FlappyBirdGame extends BaseGame {
     ctx.fill();
 
     // Score
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 12, 28);
@@ -198,7 +202,7 @@ export class FlappyBirdGame extends BaseGame {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '20px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);

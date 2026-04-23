@@ -181,13 +181,13 @@ export class SolitaireGame extends BaseGame {
         if (e.type === 'mousedown') {
           const clicked = this.getClickTarget(e.clientX, e.clientY);
           if (!clicked) return;
-          if (this.phase === 'ready') this.beginGame();
+          if (this.phase === 'ready' || this.phase === 'won') this.beginGame();
         }
       }
       if (e instanceof TouchEvent) {
         if (e.type === 'touchstart') {
           e.preventDefault();
-          if (this.phase === 'ready') this.beginGame();
+          if (this.phase === 'ready' || this.phase === 'won') this.beginGame();
         }
       }
       return;

@@ -145,6 +145,7 @@ export class PacManGame extends BaseGame {
     this.scatterTimer = 7;
     this.chaseTimer = 20;
     this.mode = 'scatter';
+    (this as any)._recorded = false;
   }
 
   update(dt: number) {
@@ -399,12 +400,15 @@ export class PacManGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Maze walls
-    ctx.strokeStyle = '#3b82f6';
+    ctx.strokeStyle = isDark ? '#3b82f6' : '#2563eb';
     ctx.lineWidth = 2;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -413,7 +417,7 @@ export class PacManGame extends BaseGame {
         const t = this.maze[r][c];
         if (t === 0) {
           // Draw wall block
-          ctx.fillStyle = '#1e3a5f';
+          ctx.fillStyle = isDark ? '#1e3a5f' : '#93c5fd';
           ctx.fillRect(x, y, TILE, TILE);
           ctx.strokeStyle = '#3b82f6';
           ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
@@ -425,14 +429,14 @@ export class PacManGame extends BaseGame {
     for (let c = 11; c <= 16; c++) {
       for (let r = 12; r <= 14; r++) {
         if (MAZE_TEMPLATE[r][c] === 4) {
-          ctx.fillStyle = '#1e293b';
+          ctx.fillStyle = isDark ? '#1e293b' : '#e5e7eb';
           ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
         }
       }
     }
 
     // Draw tunnel indicator
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 13 * TILE, TILE, TILE);
     ctx.fillRect((COLS - 1) * TILE, 13 * TILE, TILE, TILE);
 
@@ -442,7 +446,7 @@ export class PacManGame extends BaseGame {
         const x = c * TILE + TILE / 2;
         const y = r * TILE + TILE / 2;
         if (this.maze[r][c] === 1) {
-          ctx.fillStyle = '#f1f5f9';
+          ctx.fillStyle = isDark ? '#f1f5f9' : '#374151';
           ctx.beginPath();
           ctx.arc(x, y, 2, 0, Math.PI * 2);
           ctx.fill();
@@ -516,7 +520,7 @@ export class PacManGame extends BaseGame {
     }
 
     // HUD
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillText(`SCORE ${this.score}`, 8, 18);
 
@@ -557,6 +561,11 @@ export class PacManGame extends BaseGame {
         this.init();
         this.start();
       }
+      if (e instanceof TouchEvent) {
+        e.preventDefault();
+        this.init();
+        this.start();
+      }
       return;
     }
     if (e instanceof KeyboardEvent) {
@@ -565,7 +574,6 @@ export class PacManGame extends BaseGame {
         case 'ArrowRight': case 'd': this.nextDir = 'RIGHT'; break;
         case 'ArrowUp': case 'w': this.nextDir = 'UP'; break;
         case 'ArrowDown': case 's': this.nextDir = 'DOWN'; break;
-        case ' ': if (this.gameOver) { this.init(); this.start(); } break;
       }
     }
     if (e instanceof TouchEvent) {
@@ -573,11 +581,6 @@ export class PacManGame extends BaseGame {
       const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0];
       const x = touch.clientX - rect.left;
-      if (this.gameOver) {
-        this.init();
-        this.start();
-        return;
-      }
       if (x < rect.width / 3) this.nextDir = 'LEFT';
       else if (x > (rect.width * 2) / 3) this.nextDir = 'RIGHT';
       else this.nextDir = this.pacDir;

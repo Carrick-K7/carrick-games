@@ -230,6 +230,11 @@ export class SimonGame extends BaseGame {
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {
       if (e.type !== 'keydown' || e.repeat) return;
+      if (this.phase === 'gameover' && e.key === ' ') {
+        this.init();
+        this.beginGame();
+        return;
+      }
       const color = this.getColorFromKey(e.key);
       if (color) this.handlePlayerChoice(color);
       return;
@@ -238,6 +243,11 @@ export class SimonGame extends BaseGame {
     if (e instanceof TouchEvent) {
       if (e.type !== 'touchstart') return;
       e.preventDefault();
+      if (this.phase === 'gameover') {
+        this.init();
+        this.beginGame();
+        return;
+      }
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
       const color = this.getColorFromPoint(touch.clientX, touch.clientY);
@@ -247,6 +257,11 @@ export class SimonGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type !== 'mousedown') return;
+      if (this.phase === 'gameover') {
+        this.init();
+        this.beginGame();
+        return;
+      }
       const color = this.getColorFromPoint(e.clientX, e.clientY);
       if (color) this.handlePlayerChoice(color);
     }

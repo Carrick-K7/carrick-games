@@ -36,6 +36,7 @@ export class MissileCommandGame extends BaseGame {
   private scoreReported = false;
   private ammos: number[] = [];
   private maxAmmo = 30;
+  private waveClearTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private readonly CITY_Y = 520;
   private readonly BATTERY_X = 200;
@@ -56,6 +57,10 @@ export class MissileCommandGame extends BaseGame {
     this.explosions = [];
     this.ammos = [];
     for (let i = 0; i < this.maxAmmo; i++) this.ammos.push(1);
+    if (this.waveClearTimeout) {
+      clearTimeout(this.waveClearTimeout);
+      this.waveClearTimeout = null;
+    }
     this.initCities();
   }
 
@@ -180,7 +185,7 @@ export class MissileCommandGame extends BaseGame {
       const aliveCities = this.cities.filter(c => c.alive).length;
       this.score += aliveCities * 100;
       this.state = 'waveclear';
-      setTimeout(() => this.startWave(), 2000);
+      this.waveClearTimeout = setTimeout(() => this.startWave(), 2000);
     }
 
     // Check game over
@@ -400,6 +405,10 @@ export class MissileCommandGame extends BaseGame {
   }
 
   destroy() {
+    if (this.waveClearTimeout) {
+      clearTimeout(this.waveClearTimeout);
+      this.waveClearTimeout = null;
+    }
     this.state = 'gameover';
     this.gameOver = true;
     super.destroy();

@@ -449,7 +449,7 @@ export class ParkingGame extends BaseGame {
           if (this.gameState === 'crash' || this.gameState === 'timeout') {
             this.loadLevel(this.levelIndex);
           } else if (this.gameState === 'complete') {
-            this.loadLevel(this.levelIndex + 1);
+            this.loadLevel(0);
           }
         }
         return;
@@ -485,7 +485,7 @@ export class ParkingGame extends BaseGame {
 
         if (e.type === 'touchstart') {
           if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(this.levelIndex);
-          else if (this.gameState === 'complete') this.loadLevel(this.levelIndex + 1);
+          else if (this.gameState === 'complete') this.loadLevel(0);
         }
       }
       if (e.type === 'touchend' || e.type === 'touchcancel') {

@@ -532,57 +532,52 @@
       text-align: center;
     }
 
-    /* Virtual Keyboard */
+    /* Virtual Keyboard - Standard 60% ANSI Layout */
     .vkeyboard {
-      --vk-gap: 4px;
+      --vk-unit: 26px;
+      --vk-gap: 3px;
       display: flex;
       flex-direction: column;
       gap: var(--vk-gap);
-      margin-top: 10px;
+      margin-top: 14px;
       user-select: none;
+      padding: 12px;
+      background: var(--elevated);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      max-width: 100%;
+      overflow-x: auto;
     }
 
     .vkeyboard-row {
       display: flex;
       gap: var(--vk-gap);
       justify-content: center;
-    }
-
-    .vkeyboard-compact {
-      gap: 10px;
-    }
-
-    .vkeyboard-compact .vkeyboard-row {
-      gap: 10px;
+      min-width: max-content;
     }
 
     .vkey {
-      min-width: 22px;
-      height: 22px;
-      padding: 0 5px;
+      height: calc(var(--vk-unit) * 1.15);
+      min-width: var(--vk-unit);
+      padding: 0 4px;
       background: var(--key-bg);
       border: 1px solid var(--key-border);
       border-radius: 5px;
       color: var(--key-text);
-      font-size: 0.65rem;
+      font-size: 0.58rem;
       font-weight: 600;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: transform .05s ease, background .1s ease, border-color .1s ease, color .1s ease;
       box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+      flex: 1 1 var(--vk-unit);
+      cursor: default;
     }
 
     [data-theme="light"] .vkey {
       box-shadow: 0 2px 0 rgba(0,0,0,0.08);
     }
-
-    .vkey.wide-1 { min-width: 32px; }
-    .vkey.wide-2 { min-width: 42px; }
-    .vkey.wide-3 { min-width: 52px; }
-    .vkey.wide-4 { min-width: 76px; }
-    .vkey.wide-5 { min-width: 110px; }
-    .vkey.grow { flex: 1; min-width: 22px; }
 
     .vkey.pressed {
       background: var(--key-pressed);
@@ -592,30 +587,53 @@
       box-shadow: none;
     }
 
-    .vkey.inactive { opacity: 0.35; pointer-events: none; }
+    .vkey.inactive {
+      opacity: 0.25;
+      pointer-events: none;
+      box-shadow: none;
+    }
 
-    .vkey-hint {
-      font-size: 0.55rem;
-      color: var(--accent);
-      margin-left: 2px;
-      opacity: 0.9;
+    .vkey.spacer {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      pointer-events: none;
+      opacity: 0;
+      flex: 0.5;
+    }
+
+    /* Width modifiers based on ANSI standard proportions */
+    .vkey.w-1     { flex: 1; }
+    .vkey.w-1-25  { flex: 1.25; }
+    .vkey.w-1-5   { flex: 1.5; }
+    .vkey.w-1-75  { flex: 1.75; }
+    .vkey.w-2     { flex: 2; }
+    .vkey.w-2-25  { flex: 2.25; }
+    .vkey.w-2-5   { flex: 2.5; }
+    .vkey.w-2-75  { flex: 2.75; }
+    .vkey.w-6     { flex: 6; }
+    .vkey.w-6-25  { flex: 6.25; }
+
+    /* Compact panel (Simon etc) */
+    .vkeyboard-compact {
+      gap: 10px;
+      padding: 16px;
+      min-width: auto;
+    }
+
+    .vkeyboard-compact .vkeyboard-row {
+      gap: 10px;
+      min-width: auto;
     }
 
     .vkeyboard-compact .vkey {
-      min-width: 48px;
-      height: 48px;
-      border-radius: 8px;
-      position: relative;
+      min-width: 56px;
+      height: 56px;
+      border-radius: 10px;
       font-family: "Press Start 2P", monospace;
       font-size: 0.7rem;
-    }
-
-    .vkeyboard-compact .vkey-hint {
-      position: absolute;
-      right: 6px;
-      bottom: 5px;
-      margin-left: 0;
-      font-size: 0.46rem;
+      flex: 0 0 56px;
+      cursor: pointer;
     }
 
     .vkey.simon-red {
@@ -661,6 +679,145 @@
       border-color: #facc15;
       color: #1f2937;
     }
+
+    /* Canvas zoom */
+    .canvas-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .zoom-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .zoom-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    .zoom-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: none;
+    }
+
+    .zoom-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+      min-width: 36px;
+      text-align: center;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background .2s, color .2s, border-color .2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .icon-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Game record badge */
+    .game-record {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-top: 6px;
+    }
+
+    .game-record svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Fullscreen canvas */
+    .canvas-wrapper.fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 200;
+      background: var(--bg);
+      justify-content: center;
+      gap: 0;
+      padding: 20px;
+    }
+
+    .canvas-wrapper.fullscreen .canvas-toolbar {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 16px;
+      z-index: 201;
+      box-shadow: var(--shadow);
+    }
+
+    .canvas-wrapper.fullscreen #gameCanvas {
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 40px);
+      width: auto;
+      height: auto;
+    }
+
+    #gameCanvas {
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--bg);
+      max-width: 100%;
+      height: auto;
+      box-shadow: var(--shadow);
+      transition: width .1s ease, height .1s ease;
+    }
   </style>
 </head>
 <body>
@@ -685,7 +842,7 @@
       <input type="text" id="searchInput" placeholder="Search games / 搜索游戏">
     </div>
 
-    <div class="sidebar-section" id="sidebarRecords"></div>
+    <div class="sidebar-section" id="sidebarRecords" style="display:none"></div>
     <div class="game-list" id="gameList"></div>
   </aside>
 
@@ -720,9 +877,21 @@
       <div class="stage">
         <div class="game-meta">
           <h2 id="gameTitle">—</h2>
+          <div class="game-record" id="gameRecord"></div>
           <p id="gameDesc"></p>
         </div>
-        <canvas id="gameCanvas" width="400" height="500"></canvas>
+        <div class="canvas-wrapper" id="canvasWrapper">
+          <canvas id="gameCanvas" width="400" height="500"></canvas>
+          <div class="canvas-toolbar">
+            <span class="zoom-label" id="zoomLabel">100%</span>
+            <input type="range" class="zoom-slider" id="zoomSlider" min="50" max="150" value="100" step="10">
+            <button class="icon-btn" id="fullscreenBtn" title="Fullscreen">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
         <div class="action-bar">
           <button class="btn btn-primary" id="actionBtn">Start Game</button>
         </div>

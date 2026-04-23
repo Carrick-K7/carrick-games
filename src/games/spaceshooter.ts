@@ -63,6 +63,7 @@ export class SpaceShooterGame extends BaseGame {
     this.leftPressed = false;
     this.fireTimer = 0;
     this.spawnTimer = 0;
+    (this as any)._recorded = false;
   }
 
   private spawnBullet() {
@@ -167,12 +168,15 @@ export class SpaceShooterGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Draw stars (simple static stars)
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
     for (let i = 0; i < 60; i++) {
       const x = (i * 73) % this.width;
       const y = (i * 37) % this.height;
@@ -212,7 +216,7 @@ export class SpaceShooterGame extends BaseGame {
     }
 
     // Score
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 8, 20);
@@ -225,7 +229,7 @@ export class SpaceShooterGame extends BaseGame {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '20px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);

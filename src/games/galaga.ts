@@ -666,6 +666,7 @@ export class GalagaGame extends BaseGame {
           break;
       }
     } else {
+      if (e instanceof TouchEvent) e.preventDefault();
       // Touch / mouse: tap to start/restart, or shoot
       if (this.state === 'start' || this.state === 'gameover') {
         if (pressed) {

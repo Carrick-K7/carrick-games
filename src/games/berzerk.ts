@@ -102,6 +102,7 @@ export class BerzerkGame extends BaseGame {
     this.ottoTimer = Math.max(3, this.ottoBaseTime - this.room * 0.3);
     this.exitOpen = false;
     this.roomClearTimer = 0;
+    this.keysDown.clear();
     this.generateWalls();
     this.spawnRobots();
   }
@@ -247,12 +248,7 @@ export class BerzerkGame extends BaseGame {
   }
 
   update(dt: number) {
-    if (this.state === 'waiting') {
-      this.draw(this.ctx);
-      return;
-    }
-    if (this.state === 'gameover') {
-      this.draw(this.ctx);
+    if (this.state === 'waiting' || this.state === 'gameover') {
       return;
     }
     if (this.state === 'dying') {
@@ -268,7 +264,6 @@ export class BerzerkGame extends BaseGame {
         }
       }
       this.updateBullets(dt);
-      this.draw(this.ctx);
       return;
     }
     if (this.state === 'roomclear') {
@@ -276,7 +271,6 @@ export class BerzerkGame extends BaseGame {
       if (this.roomClearTimer <= 0) {
         this.nextRoom();
       }
-      this.draw(this.ctx);
       return;
     }
 
@@ -739,5 +733,6 @@ export class BerzerkGame extends BaseGame {
 
   destroy() {
     this.stop();
+    this.unbindInput();
   }
 }

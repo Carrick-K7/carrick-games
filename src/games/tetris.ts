@@ -110,6 +110,14 @@ export class TetrisGame extends BaseGame {
     this.bag = [];
     this.nextType = this.drawFromBag();
     this.spawnPiece();
+    (this as any)._recorded = false;
+    this.moveLeft = false;
+    this.moveRight = false;
+    this.softDrop = false;
+    this.hardDropPending = false;
+    this.rotateCWPending = false;
+    this.rotateCCWPending = false;
+    this.lastMoveTime = 0;
   }
 
   private drawFromBag(): TetrominoType {
@@ -313,8 +321,11 @@ export class TetrisGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#020617';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Draw board
@@ -327,7 +338,7 @@ export class TetrisGame extends BaseGame {
           ctx.fillStyle = color;
           ctx.fillRect(cx + 1, cy + 1, this.cellSize - 2, this.cellSize - 2);
         } else {
-          ctx.strokeStyle = '#1e293b';
+          ctx.strokeStyle = isDark ? '#1e293b' : '#d1d5db';
           ctx.lineWidth = 1;
           ctx.strokeRect(cx, cy, this.cellSize, this.cellSize);
         }
@@ -354,11 +365,11 @@ export class TetrisGame extends BaseGame {
     const previewX = this.cols * this.cellSize + 16;
     const previewY = 40;
     const previewSize = 24;
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0f172a' : '#e5e7eb';
     ctx.fillRect(previewX - 8, previewY - 24, 104, 120);
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isDark ? '#334155' : '#9ca3af';
     ctx.strokeRect(previewX - 8, previewY - 24, 104, 120);
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = isDark ? '#94a3b8' : '#4b5563';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText('NEXT', previewX, previewY - 8);
@@ -376,7 +387,7 @@ export class TetrisGame extends BaseGame {
     }
 
     // Draw UI
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, this.cols * this.cellSize + 16, 200);
@@ -390,7 +401,7 @@ export class TetrisGame extends BaseGame {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '16px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);

@@ -706,94 +706,146 @@ function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
 
 function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[]) {
   const enabledKeys = new Set(activeKeys);
-  const mk = (label: string, key: string, enabled: boolean, classes = '', hint = '') => {
-    const normalizedKey = normalizeKey(key);
-    const dataAttr = enabled ? ` data-key="${normalizedKey}"` : '';
-    const cls = `${classes} ${enabled ? '' : ' inactive'}`;
-    return `<div class="vkey ${cls}"${dataAttr}>${label}${hint && enabled ? `<span class="vkey-hint">${hint}</span>` : ''}</div>`;
-  };
 
   if (panelKeys?.length) {
     return `
       <div class="vkeyboard vkeyboard-compact" id="vkeyboard">
         <div class="vkeyboard-row">
-          ${panelKeys.map((key) => mk(key.label, key.key, true, key.classes || '', key.hint || '')).join('')}
+          ${panelKeys.map((key) => {
+            const normalizedKey = normalizeKey(key.key);
+            return `<div class="vkey ${key.classes || ''}" data-key="${normalizedKey}">${key.label}</div>`;
+          }).join('')}
         </div>
       </div>
     `;
   }
 
-  const isActive = (key: string) => enabledKeys.has(normalizeKey(key));
+  const mk = (label: string, key: string, wClass: string, enabled: boolean) => {
+    const normalizedKey = normalizeKey(key);
+    const dataAttr = enabled ? ` data-key="${normalizedKey}"` : '';
+    const cls = `${wClass} ${enabled ? '' : ' inactive'}`;
+    return `<div class="vkey ${cls}"${dataAttr}>${label}</div>`;
+  };
+
+  const a = (key: string) => enabledKeys.has(normalizeKey(key));
+
+  // Standard ANSI 60% layout (no numpad)
   return `
     <div class="vkeyboard" id="vkeyboard">
+      <!-- Row 1: Numbers -->
       <div class="vkeyboard-row">
-        ${mk('Esc', 'Escape', isActive('Escape'), 'wide-1')}
-        <div class="vkey inactive"></div>
-        <div class="vkey inactive"></div>
-        ${mk('↑', 'ArrowUp', isActive('ArrowUp'), '', 'M')}
-        <div class="vkey inactive"></div>
-        <div class="vkey inactive"></div>
-        ${mk('Space', ' ', isActive(' '), 'wide-3', 'RST')}
+        ${mk('`', '`', 'w-1', a('`'))}
+        ${mk('1', '1', 'w-1', a('1'))}
+        ${mk('2', '2', 'w-1', a('2'))}
+        ${mk('3', '3', 'w-1', a('3'))}
+        ${mk('4', '4', 'w-1', a('4'))}
+        ${mk('5', '5', 'w-1', a('5'))}
+        ${mk('6', '6', 'w-1', a('6'))}
+        ${mk('7', '7', 'w-1', a('7'))}
+        ${mk('8', '8', 'w-1', a('8'))}
+        ${mk('9', '9', 'w-1', a('9'))}
+        ${mk('0', '0', 'w-1', a('0'))}
+        ${mk('-', '-', 'w-1', a('-'))}
+        ${mk('=', '=', 'w-1', a('='))}
+        ${mk('←', 'Backspace', 'w-2', a('Backspace'))}
       </div>
+      <!-- Row 2: QWERTY -->
       <div class="vkeyboard-row">
-        ${mk('Q', 'q', isActive('q'))} ${mk('W', 'w', isActive('w'), '', 'M')} ${mk('E', 'e', isActive('e'))} ${mk('R', 'r', isActive('r'))} ${mk('T', 't', isActive('t'))} ${mk('Y', 'y', isActive('y'))} ${mk('U', 'u', isActive('u'))} ${mk('I', 'i', isActive('i'))} ${mk('O', 'o', isActive('o'))} ${mk('P', 'p', isActive('p'))}
+        ${mk('Tab', 'Tab', 'w-1-5', a('Tab'))}
+        ${mk('Q', 'q', 'w-1', a('q'))}
+        ${mk('W', 'w', 'w-1', a('w'))}
+        ${mk('E', 'e', 'w-1', a('e'))}
+        ${mk('R', 'r', 'w-1', a('r'))}
+        ${mk('T', 't', 'w-1', a('t'))}
+        ${mk('Y', 'y', 'w-1', a('y'))}
+        ${mk('U', 'u', 'w-1', a('u'))}
+        ${mk('I', 'i', 'w-1', a('i'))}
+        ${mk('O', 'o', 'w-1', a('o'))}
+        ${mk('P', 'p', 'w-1', a('p'))}
+        ${mk('[', '[', 'w-1', a('['))}
+        ${mk(']', ']', 'w-1', a(']'))}
+        ${mk('\\', '\\', 'w-1-5', a('\\'))}
       </div>
+      <!-- Row 3: ASDF -->
       <div class="vkeyboard-row">
-        ${mk('A', 'a', isActive('a'), '', 'M')} ${mk('S', 's', isActive('s'), '', 'M')} ${mk('D', 'd', isActive('d'), '', 'M')} ${mk('F', 'f', isActive('f'))} ${mk('G', 'g', isActive('g'))} ${mk('H', 'h', isActive('h'))} ${mk('J', 'j', isActive('j'))} ${mk('K', 'k', isActive('k'))} ${mk('L', 'l', isActive('l'))}
+        ${mk('Caps', 'CapsLock', 'w-1-75', a('CapsLock'))}
+        ${mk('A', 'a', 'w-1', a('a'))}
+        ${mk('S', 's', 'w-1', a('s'))}
+        ${mk('D', 'd', 'w-1', a('d'))}
+        ${mk('F', 'f', 'w-1', a('f'))}
+        ${mk('G', 'g', 'w-1', a('g'))}
+        ${mk('H', 'h', 'w-1', a('h'))}
+        ${mk('J', 'j', 'w-1', a('j'))}
+        ${mk('K', 'k', 'w-1', a('k'))}
+        ${mk('L', 'l', 'w-1', a('l'))}
+        ${mk(';', ';', 'w-1', a(';'))}
+        ${mk("'", "'", 'w-1', a("'"))}
+        ${mk('Enter', 'Enter', 'w-2-25', a('Enter'))}
       </div>
+      <!-- Row 4: ZXCV + ↑ -->
       <div class="vkeyboard-row">
-        ${mk('Z', 'z', isActive('z'), '', 'CCW')} ${mk('X', 'x', isActive('x'), '', 'CW')} ${mk('C', 'c', isActive('c'))} ${mk('V', 'v', isActive('v'))} ${mk('B', 'b', isActive('b'))} ${mk('N', 'n', isActive('n'))} ${mk('M', 'm', isActive('m'))}
+        ${mk('Shift', 'Shift', 'w-2-25', a('Shift'))}
+        ${mk('Z', 'z', 'w-1', a('z'))}
+        ${mk('X', 'x', 'w-1', a('x'))}
+        ${mk('C', 'c', 'w-1', a('c'))}
+        ${mk('V', 'v', 'w-1', a('v'))}
+        ${mk('B', 'b', 'w-1', a('b'))}
+        ${mk('N', 'n', 'w-1', a('n'))}
+        ${mk('M', 'm', 'w-1', a('m'))}
+        ${mk(',', ',', 'w-1', a(','))}
+        ${mk('.', '.', 'w-1', a('.'))}
+        ${mk('/', '/', 'w-1', a('/'))}
+        ${mk('↑', 'ArrowUp', 'w-1', a('ArrowUp'))}
+        ${mk('Shift', 'ShiftRight', 'w-1-75', a('Shift'))}
       </div>
+      <!-- Row 5: Bottom row + ←↓→ -->
       <div class="vkeyboard-row">
-        <div class="vkey inactive"></div>
-        <div class="vkey inactive"></div>
-        ${mk('←', 'ArrowLeft', isActive('ArrowLeft'))}
-        ${mk('↓', 'ArrowDown', isActive('ArrowDown'))}
-        ${mk('→', 'ArrowRight', isActive('ArrowRight'))}
-        <div class="vkey inactive"></div>
-        <div class="vkey inactive"></div>
+        ${mk('Ctrl', 'Control', 'w-1-25', a('Control'))}
+        ${mk('Win', 'Meta', 'w-1-25', a('Meta'))}
+        ${mk('Alt', 'Alt', 'w-1-25', a('Alt'))}
+        ${mk('Space', ' ', 'w-5-25', a(' '))}
+        ${mk('Alt', 'AltGraph', 'w-1', a('AltGraph'))}
+        ${mk('Fn', 'Fn', 'w-1', a('Fn'))}
+        ${mk('Ctrl', 'ControlRight', 'w-1', a('Control'))}
+        ${mk('←', 'ArrowLeft', 'w-1', a('ArrowLeft'))}
+        ${mk('↓', 'ArrowDown', 'w-1', a('ArrowDown'))}
+        ${mk('→', 'ArrowRight', 'w-1', a('ArrowRight'))}
       </div>
     </div>
   `;
 }
 
-function renderRecords() {
+function getRecord(gameId: string): number | null {
   const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
+  return records[gameId] ?? null;
+}
+
+function renderGameRecord() {
+  const el = document.getElementById('gameRecord');
+  if (!el) return;
+  if (!currentGameName) {
+    el.innerHTML = '';
+    return;
+  }
+  const score = getRecord(currentGameName);
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  let html = `<div class="records-section"><div class="records-title">${zh ? '最高记录' : 'High Scores'}</div>`;
-  let hasAny = false;
-  for (const g of GAMES) {
-    const score = records[g.id];
-    if (score != null) {
-      hasAny = true;
-      html += `<div class="records-row"><span>${zh ? g.nameZh : g.name}</span><span>${score}</span></div>`;
-    }
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  const name = meta ? (zh ? meta.nameZh : meta.name) : currentGameName;
+  if (score == null) {
+    el.innerHTML = '';
+    return;
   }
-  if (!hasAny) {
-    html += `<div style="font-size:0.8rem;color:var(--text-secondary);padding:6px 0">${zh ? '暂无记录' : 'No records yet'}</div>`;
-  }
-  html += '</div>';
-  return html;
+  el.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+      <circle cx="12" cy="9" r="5"/>
+    </svg>
+    <span>${zh ? '最高记录' : 'High Score'}: ${score}</span>
+  `;
 }
 
 function renderSidebarRecords() {
-  const container = document.getElementById('sidebarRecords');
-  if (!container) return;
-  const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  let html = `<div class="sidebar-section-title">${zh ? '最高记录' : 'High Scores'}</div>`;
-  let hasAny = false;
-  for (const g of GAMES) {
-    const score = records[g.id];
-    if (score != null) {
-      hasAny = true;
-      html += `<div class="sidebar-record-row"><span>${zh ? g.nameZh : g.name}</span><span>${score}</span></div>`;
-    }
-  }
-  if (!hasAny) {
-    html += `<div style="font-size:0.8rem;color:var(--text-secondary);padding:4px 0">${zh ? '暂无记录' : 'No records yet'}</div>`;
-  }
-  container.innerHTML = html;
+  // Records now shown per-game in the stage area
 }
 
 function renderControls() {
@@ -863,12 +915,13 @@ function getKeysFromEvent(e: KeyboardEvent): string[] {
 
 function saveRecord(gameId: string, score: number) {
   const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
-  if (records[gameId] == null || score > records[gameId]) {
+  const shouldUpdate = records[gameId] == null || score > records[gameId];
+  if (shouldUpdate) {
     records[gameId] = score;
     localStorage.setItem('cg-records', JSON.stringify(records));
-    renderControls();
-    renderSidebarRecords();
   }
+  // Always refresh display so the UI stays in sync (e.g. first record, or tied score)
+  setTimeout(() => renderGameRecord(), 0);
 }
 (window as any).saveRecord = saveRecord;
 (window as any).reportScore = (score: number) => {
@@ -955,6 +1008,10 @@ export function prepareGame(name: string) {
   canvas.width = meta.canvasSize.width;
   canvas.height = meta.canvasSize.height;
 
+  // Re-apply zoom so the displayed size matches the new canvas dimensions
+  const savedZoom = parseInt(localStorage.getItem('cg-zoom') || '100', 10);
+  applyCanvasZoom(savedZoom);
+
   currentGameInstance = new meta.cls();
 
   // Draw initial frame so canvas isn't blank
@@ -972,8 +1029,8 @@ export function prepareGame(name: string) {
   updateActionButton();
   updateGameTitle();
   updateGameDesc();
+  renderGameRecord();
   renderControls();
-  renderSidebarRecords();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
     el.classList.toggle('active', el.getAttribute('data-id') === name);
@@ -1039,8 +1096,8 @@ function setLang(lang: 'en' | 'zh') {
   updateActionButton();
   updateGameTitle();
   updateGameDesc();
+  renderGameRecord();
   renderControls();
-  renderSidebarRecords();
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
@@ -1084,6 +1141,34 @@ window.addEventListener('blur', () => {
   updateVirtualKeyboardHighlight(pressedKeys);
 });
 
+// Canvas zoom logic
+function applyCanvasZoom(percent: number) {
+  const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
+  const label = document.getElementById('zoomLabel');
+  if (!canvas) return;
+  const scale = percent / 100;
+  // Use width/height instead of transform so document flow adjusts correctly
+  canvas.style.width = `${canvas.width * scale}px`;
+  canvas.style.height = `${canvas.height * scale}px`;
+  if (label) label.textContent = `${percent}%`;
+  localStorage.setItem('cg-zoom', String(percent));
+}
+
+// Fullscreen toggle
+function toggleFullscreen() {
+  const wrapper = document.getElementById('canvasWrapper');
+  if (!wrapper) return;
+  wrapper.classList.toggle('fullscreen');
+  const isFullscreen = wrapper.classList.contains('fullscreen');
+  const btn = document.getElementById('fullscreenBtn');
+  if (btn) {
+    btn.title = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+    btn.innerHTML = isFullscreen
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
+  }
+}
+
 // Init UI
 (function init() {
   const savedLang = (localStorage.getItem('cg-lang') as 'en' | 'zh') || 'zh';
@@ -1091,7 +1176,6 @@ window.addEventListener('blur', () => {
   setLang(savedLang);
   setTheme(savedTheme);
 
-  renderSidebarRecords();
   renderGameList();
 
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
@@ -1102,6 +1186,23 @@ window.addEventListener('blur', () => {
   const actionBtn = document.getElementById('actionBtn') as HTMLButtonElement | null;
   if (actionBtn) {
     actionBtn.addEventListener('click', startPreparedGame);
+  }
+
+  // Zoom slider
+  const zoomSlider = document.getElementById('zoomSlider') as HTMLInputElement | null;
+  if (zoomSlider) {
+    const savedZoom = parseInt(localStorage.getItem('cg-zoom') || '100', 10);
+    zoomSlider.value = String(savedZoom);
+    applyCanvasZoom(savedZoom);
+    zoomSlider.addEventListener('input', () => {
+      applyCanvasZoom(parseInt(zoomSlider.value, 10));
+    });
+  }
+
+  // Fullscreen button
+  const fsBtn = document.getElementById('fullscreenBtn');
+  if (fsBtn) {
+    fsBtn.addEventListener('click', toggleFullscreen);
   }
 
   if (GAMES.length) {

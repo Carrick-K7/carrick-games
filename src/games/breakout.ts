@@ -59,6 +59,7 @@ export class BreakoutGame extends BaseGame {
         });
       }
     }
+    (this as any)._recorded = false;
   }
 
   update(dt: number) {
@@ -137,12 +138,15 @@ export class BreakoutGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Stars
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
     for (let i = 0; i < 40; i++) {
       const sx = (i * 97) % this.width;
       const sy = (i * 53) % this.height;
@@ -165,13 +169,13 @@ export class BreakoutGame extends BaseGame {
     ctx.fill();
 
     // Ball
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#f8fafc' : '#1a1a2e';
     ctx.beginPath();
     ctx.arc(this.ballX, this.ballY, this.ballRadius, 0, Math.PI * 2);
     ctx.fill();
 
     // Score
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 8, 20);
@@ -185,7 +189,7 @@ export class BreakoutGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '16px "Press Start 2P", monospace';
       ctx.fillText(this.won ? 'YOU WIN!' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
       ctx.font = '8px "Press Start 2P", monospace';

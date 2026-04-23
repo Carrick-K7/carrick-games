@@ -266,5 +266,6 @@ export class StackerGame extends BaseGame {
 
   destroy() {
     this.stop();
+    this.unbindInput();
   }
 }

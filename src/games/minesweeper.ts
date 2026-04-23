@@ -44,6 +44,7 @@ export class MinesweeperGame extends BaseGame {
     this.gameState = 'idle';
     this.cursorX = Math.floor(COLS / 2);
     this.cursorY = Math.floor(ROWS / 2);
+    (this as any)._recorded = false;
   }
 
   private placeMines() {
@@ -228,7 +229,10 @@ export class MinesweeperGame extends BaseGame {
       this.timer += dt;
     }
     if (this.gameState === 'won' || this.gameState === 'lost') {
-      (window as any).reportScore?.(this.gameState === 'won' ? Math.max(0, Math.floor(10000 - this.timer * 10)) : 0);
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.gameState === 'won' ? Math.max(0, Math.floor(10000 - this.timer * 10)) : 0);
+      }
     }
   }
 
@@ -236,13 +240,15 @@ export class MinesweeperGame extends BaseGame {
     const w = this.width;
     const h = this.height;
     const lang = document.documentElement.getAttribute('data-lang') === 'zh';
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
 
     // Background
-    ctx.fillStyle = '#0a0a0f';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, w, h);
 
     // Header bg
-    ctx.fillStyle = '#12121a';
+    ctx.fillStyle = isDark ? '#12121a' : '#e5e7eb';
     ctx.fillRect(0, 0, w, 48);
 
     // Border
@@ -281,15 +287,15 @@ export class MinesweeperGame extends BaseGame {
 
         // Cell background
         if (isRevealed) {
-          ctx.fillStyle = '#1a1a24';
+          ctx.fillStyle = isDark ? '#1a1a24' : '#e5e7eb';
         } else {
-          ctx.fillStyle = isCursor ? '#2a2a3a' : '#1e1e2a';
+          ctx.fillStyle = isCursor ? (isDark ? '#2a2a3a' : '#d1d5db') : (isDark ? '#1e1e2a' : '#f3f4f6');
         }
         ctx.fillRect(px, py, CELL - 1, CELL - 1);
 
         if (!isRevealed && !isFlagged) {
           // Unrevealed - border
-          ctx.strokeStyle = isCursor ? '#39C5BB' : '#2a2a3a';
+          ctx.strokeStyle = isCursor ? '#39C5BB' : (isDark ? '#2a2a3a' : '#d1d5db');
           ctx.lineWidth = isCursor ? 2 : 1;
           ctx.strokeRect(px + 0.5, py + 0.5, CELL - 2, CELL - 2);
         }

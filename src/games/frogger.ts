@@ -201,7 +201,8 @@ export class FroggerGame extends BaseGame {
       case 'RIGHT': newCol++; break;
     }
     if (newCol < 0 || newCol >= COLS) return;
-    if (newRow < 1) return; // Can't go above home row
+    if (newRow < 0) return; // Can't go above home row
+    if (newRow >= ROWS) return; // Can't go below start row
 
     this.frogDir = dir;
     this.frogCol = newCol;
@@ -301,6 +302,7 @@ export class FroggerGame extends BaseGame {
         if (this.lives <= 0) {
           this.state = 'gameover';
           this.isDead = false;
+          (window as any).reportScore?.(this.score);
         } else {
           this.resetFrog();
         }
@@ -579,38 +581,85 @@ export class FroggerGame extends BaseGame {
     ctx.textAlign = 'left';
   }
 
-  handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
-    if (e.type !== 'keydown') return;
-    const ke = e as KeyboardEvent;
-    const key = ke.key;
-
+  private handleAction() {
     if (this.state === 'waiting') {
-      if (key === ' ' || ke.code === 'Space') {
-        ke.preventDefault();
-        this.start();
-      }
+      this.start();
       return;
     }
-
     if (this.state === 'gameover') {
-      if (key === ' ' || ke.code === 'Space') {
-        ke.preventDefault();
-        this.start();
+      this.start();
+      return;
+    }
+  }
+
+  handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (e instanceof KeyboardEvent) {
+      if (e.type !== 'keydown') return;
+      const key = e.key;
+
+      if (this.state === 'waiting' || this.state === 'gameover') {
+        if (key === ' ' || e.code === 'Space') {
+          e.preventDefault();
+          this.handleAction();
+        }
+        return;
+      }
+
+      if (this.state !== 'playing') return;
+
+      switch (key) {
+        case 'ArrowUp': case 'w': case 'W':
+          e.preventDefault(); this.tryHop('UP'); break;
+        case 'ArrowDown': case 's': case 'S':
+          e.preventDefault(); this.tryHop('DOWN'); break;
+        case 'ArrowLeft': case 'a': case 'A':
+          e.preventDefault(); this.tryHop('LEFT'); break;
+        case 'ArrowRight': case 'd': case 'D':
+          e.preventDefault(); this.tryHop('RIGHT'); break;
       }
       return;
     }
 
-    if (this.state !== 'playing') return;
+    if (e instanceof TouchEvent) {
+      e.preventDefault();
+      if (e.type !== 'touchstart') return;
+      if (this.state === 'waiting' || this.state === 'gameover') {
+        this.handleAction();
+        return;
+      }
+      if (this.state !== 'playing') return;
+      const rect = this.canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      const x = (t.clientX - rect.left) * (this.width / rect.width);
+      const y = (t.clientY - rect.top) * (this.height / rect.height);
+      const cx = this.width / 2;
+      const cy = this.height / 2;
+      if (Math.abs(x - cx) > Math.abs(y - cy)) {
+        if (x > cx) this.tryHop('RIGHT'); else this.tryHop('LEFT');
+      } else {
+        if (y > cy) this.tryHop('DOWN'); else this.tryHop('UP');
+      }
+      return;
+    }
 
-    switch (key) {
-      case 'ArrowUp': case 'w': case 'W':
-        ke.preventDefault(); this.tryHop('UP'); break;
-      case 'ArrowDown': case 's': case 'S':
-        ke.preventDefault(); this.tryHop('DOWN'); break;
-      case 'ArrowLeft': case 'a': case 'A':
-        ke.preventDefault(); this.tryHop('LEFT'); break;
-      case 'ArrowRight': case 'd': case 'D':
-        ke.preventDefault(); this.tryHop('RIGHT'); break;
+    if (e instanceof MouseEvent) {
+      if (e.type !== 'mousedown') return;
+      if (this.state === 'waiting' || this.state === 'gameover') {
+        this.handleAction();
+        return;
+      }
+      if (this.state !== 'playing') return;
+      const rect = this.canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (this.width / rect.width);
+      const y = (e.clientY - rect.top) * (this.height / rect.height);
+      const cx = this.width / 2;
+      const cy = this.height / 2;
+      if (Math.abs(x - cx) > Math.abs(y - cy)) {
+        if (x > cx) this.tryHop('RIGHT'); else this.tryHop('LEFT');
+      } else {
+        if (y > cy) this.tryHop('DOWN'); else this.tryHop('UP');
+      }
+      return;
     }
   }
 }

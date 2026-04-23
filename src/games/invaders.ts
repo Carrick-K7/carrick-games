@@ -243,12 +243,15 @@ export class InvadersGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Draw ground line
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isDark ? '#334155' : '#9ca3af';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, this.height - 8);
@@ -306,7 +309,7 @@ export class InvadersGame extends BaseGame {
 
     // HUD
     const zh = this.isZh();
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(zh ? `得分 ${this.score}` : `SCORE ${this.score}`, 12, 22);
@@ -316,7 +319,7 @@ export class InvadersGame extends BaseGame {
     if (this.gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '20px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);

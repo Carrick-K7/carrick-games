@@ -410,7 +410,6 @@ export class JoustGame extends BaseGame {
           this.dropEggs(e.x, e.y, 1 + Math.floor(s.wave / 2));
           // Bounce player up
           p.vy = -150;
-          (window as any).reportScore?.(s.score);
         } else if (p.y > e.y + 2) {
           // Player is below — player dies
           p.alive = false;
@@ -442,7 +441,6 @@ export class JoustGame extends BaseGame {
       if (Math.sqrt(dx * dx + dy * dy) < p.size + 8) {
         egg.active = false;
         s.score += 50;
-        (window as any).reportScore?.(s.score);
       }
     }
 
@@ -684,6 +682,7 @@ export class JoustGame extends BaseGame {
 
     // Touch
     if (e.type === 'touchstart') {
+      e.preventDefault();
       const touch = (e as TouchEvent).touches[0];
       if (!touch) return;
       this.touchStartY = touch.clientY;

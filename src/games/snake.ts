@@ -27,6 +27,7 @@ export class SnakeGame extends BaseGame {
     this.gameOver = false;
     this.moveTimer = 0;
     this.spawnFood();
+    (this as any)._recorded = false;
   }
 
   private spawnFood() {
@@ -79,12 +80,15 @@ export class SnakeGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Subtle grid dots
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = isDark ? '#1e293b' : '#d1d5db';
     for (let x = 0; x < this.cols; x++) {
       for (let y = 0; y < this.rows; y++) {
         ctx.fillRect(x * this.tileSize + this.tileSize / 2 - 1, y * this.tileSize + this.tileSize / 2 - 1, 2, 2);
@@ -92,7 +96,7 @@ export class SnakeGame extends BaseGame {
     }
 
     // Grid border
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isDark ? '#334155' : '#9ca3af';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, this.cols * this.tileSize, this.rows * this.tileSize);
 
@@ -117,7 +121,7 @@ export class SnakeGame extends BaseGame {
     });
 
     // Score
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillText(`SCORE ${this.score}`, 8, this.height - 10);
 
@@ -129,7 +133,7 @@ export class SnakeGame extends BaseGame {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '16px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);

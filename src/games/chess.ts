@@ -83,6 +83,10 @@ export class ChessGame extends BaseGame {
     this.aiThinking = false;
     this.promotionPending = null;
     this.animTime = 0;
+    this.touchStart = null;
+    this.promotionResolve = null;
+    this.promotionCallback = null;
+    (this as any)._recorded = false;
   }
 
   private setupBoard() {
@@ -300,6 +304,10 @@ export class ChessGame extends BaseGame {
         this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
       } else {
         this.gameResult = 'stalemate';
+      }
+      if (!(this as any)._recorded) {
+        (this as any)._recorded = true;
+        (window as any).reportScore?.(this.moveHistory.length);
       }
     }
   }
@@ -606,6 +614,7 @@ export class ChessGame extends BaseGame {
     const rect = this.canvas.getBoundingClientRect();
     let clientX: number, clientY: number;
     if (e.type.startsWith('touch')) {
+      e.preventDefault();
       const te = e as TouchEvent;
       if (te.touches.length === 0) return;
       clientX = te.touches[0]?.clientX ?? te.changedTouches[0]?.clientX ?? 0;
@@ -661,6 +670,10 @@ export class ChessGame extends BaseGame {
           this.phase = 'gameover';
           if (this.isCheck) this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
           else this.gameResult = 'stalemate';
+          if (!(this as any)._recorded) {
+            (this as any)._recorded = true;
+            (window as any).reportScore?.(this.moveHistory.length);
+          }
         }
         if (this.turn === 'b') this.asyncAI();
       }

@@ -22,6 +22,8 @@ export class MahjongGame extends BaseGame {
   private shakeTimer = 0;
   private matchedIds: number[] = [];
   private matchAnimTimer = 0;
+  private scoreReported = false;
+  private noMovesTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private readonly cols = 6;
   private readonly rows = 4;
@@ -51,6 +53,8 @@ export class MahjongGame extends BaseGame {
     this.shakeTimer = 0;
     this.matchedIds = [];
     this.matchAnimTimer = 0;
+    this.scoreReported = false;
+    this.noMovesTimeout = null;
     this.generateTiles();
     // Ensure solvable
     this.ensureSolvable();
@@ -127,7 +131,10 @@ export class MahjongGame extends BaseGame {
     if (!this.hasAnyValidMove()) {
       this.gameOver = true;
       this.gameStarted = false;
-      (window as any).reportScore?.(this.score);
+      if (!this.scoreReported) {
+        this.scoreReported = true;
+        (window as any).reportScore?.(this.score);
+      }
     }
   }
 
@@ -142,7 +149,10 @@ export class MahjongGame extends BaseGame {
         this.timeLeft = 0;
         this.gameOver = true;
         this.gameStarted = false;
-        (window as any).reportScore?.(this.score);
+        if (!this.scoreReported) {
+          this.scoreReported = true;
+          (window as any).reportScore?.(this.score);
+        }
       }
     }
 
@@ -356,10 +366,13 @@ export class MahjongGame extends BaseGame {
         this.won = true;
         this.gameStarted = false;
         this.score += this.timeLeft; // time bonus
-        (window as any).reportScore?.(this.score);
+        if (!this.scoreReported) {
+          this.scoreReported = true;
+          (window as any).reportScore?.(this.score);
+        }
       } else {
         // Check no moves after a short delay (let anim finish)
-        setTimeout(() => this.checkNoMoves(), 300);
+        this.noMovesTimeout = setTimeout(() => this.checkNoMoves(), 300);
       }
     } else {
       // Mismatch
@@ -405,5 +418,9 @@ export class MahjongGame extends BaseGame {
 
   destroy() {
     this.stop();
+    if (this.noMovesTimeout !== null) {
+      clearTimeout(this.noMovesTimeout);
+      this.noMovesTimeout = null;
+    }
   }
 }

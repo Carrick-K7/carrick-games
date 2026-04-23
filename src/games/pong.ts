@@ -34,6 +34,7 @@ export class PongGame extends BaseGame {
     this.upPressed = false;
     this.downPressed = false;
     this.resetBall();
+    (this as any)._recorded = false;
   }
 
   private resetBall() {
@@ -136,18 +137,21 @@ export class PongGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Decorative background bars
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = isDark ? '#1e293b' : '#e5e7eb';
     for (let y = 0; y < this.height; y += 40) {
       ctx.fillRect(30, y + 10, this.width - 60, 4);
     }
 
     // Center dashed line
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isDark ? '#334155' : '#9ca3af';
     ctx.setLineDash([8, 8]);
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -157,7 +161,7 @@ export class PongGame extends BaseGame {
     ctx.setLineDash([]);
 
     // Paddles
-    ctx.fillStyle = '#39C5BB';
+    ctx.fillStyle = isDark ? '#39C5BB' : '#0d9488';
     const playerX = 20;
     const aiX = this.width - 20 - this.paddleWidth;
     ctx.fillRect(playerX, this.playerY, this.paddleWidth, this.paddleHeight);
@@ -169,7 +173,7 @@ export class PongGame extends BaseGame {
     ctx.fill();
 
     // Score
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '16px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(String(this.playerScore), this.width / 2 - 40, 40);
@@ -184,7 +188,7 @@ export class PongGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '20px "Press Start 2P", monospace';
       const text = this.winner === 'player' ? 'YOU WIN' : 'GAME OVER';
       ctx.fillText(text, this.width / 2, this.height / 2 - 10);

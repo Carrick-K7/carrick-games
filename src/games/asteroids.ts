@@ -174,6 +174,7 @@ export class AsteroidsGame extends BaseGame {
     this.shootPending = false;
     this.shootCooldown = 0;
     this.spawnWave(4);
+    (this as any)._recorded = false;
   }
 
   private shoot() {
@@ -393,11 +394,14 @@ export class AsteroidsGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#020617';
+    const isDark = !document.documentElement.hasAttribute('data-theme') ||
+      document.documentElement.getAttribute('data-theme') === 'dark';
+
+    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Stars
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
     for (let i = 0; i < 60; i++) {
       const sx = (i * 97 + 31) % this.width;
       const sy = (i * 53 + 17) % this.height;
@@ -419,7 +423,7 @@ export class AsteroidsGame extends BaseGame {
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.rotation);
-      ctx.strokeStyle = '#94a3b8';
+      ctx.strokeStyle = isDark ? '#94a3b8' : '#4b5563';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(a.vertices[0].x, a.vertices[0].y);
@@ -480,7 +484,7 @@ export class AsteroidsGame extends BaseGame {
     }
 
     // HUD
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 8, 20);
