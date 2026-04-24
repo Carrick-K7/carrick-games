@@ -1,9 +1,15 @@
 import { BaseGame } from '../core/game.js';
+import {
+  PARKING_MAX_FORWARD_SPEED,
+  createParkingCar,
+  updateParkingCar,
+  type ParkingCarState,
+} from './parkingPhysics.js';
 
 const W = 400;
 const H = 520;
-const CAR_W = 20;
-const CAR_H = 36;
+const CAR_W = 24;
+const CAR_H = 42;
 
 interface Obstacle {
   x: number;
@@ -101,7 +107,7 @@ const LEVELS: Level[] = [
 ];
 
 export class ParkingGame extends BaseGame {
-  private car = { x: 0, y: 0, angle: 0, vx: 0, vy: 0, steerAngle: 0 };
+  private car: ParkingCarState = createParkingCar(0, 0, 0);
   private levelIndex = 0;
   private level!: Level;
   private score = 0;
@@ -113,11 +119,6 @@ export class ParkingGame extends BaseGame {
   private touchDir: 'up' | 'down' | 'left' | 'right' | null = null;
   private lastScoreReported = false;
 
-  private readonly ACCEL = 260;
-  private readonly BRAKE = 340;
-  private readonly FRICTION = 0.88;
-  private readonly MAX_SPEED = 180;
-  private readonly TURN_SPEED = 2.8;
   private readonly PARK_TIME = 1.0;
 
   constructor() {
@@ -132,7 +133,7 @@ export class ParkingGame extends BaseGame {
     this.levelIndex = idx;
     this.level = LEVELS[idx % LEVELS.length];
     const start = this.level.playerStart;
-    this.car = { x: start.x, y: start.y, angle: start.angle, vx: 0, vy: 0, steerAngle: 0 };
+    this.car = createParkingCar(start.x, start.y, start.angle);
     this.score = 0;
     this.elapsed = 0;
     this.timeLeft = this.level.timeLimit;
@@ -216,45 +217,11 @@ export class ParkingGame extends BaseGame {
     const left = this.keys.left || this.touchDir === 'left';
     const right = this.keys.right || this.touchDir === 'right';
 
-    // Acceleration / braking
-    if (up) {
-      this.car.vx += Math.cos(this.car.angle) * this.ACCEL * dt;
-      this.car.vy += Math.sin(this.car.angle) * this.ACCEL * dt;
-    }
-    if (down) {
-      this.car.vx -= Math.cos(this.car.angle) * this.BRAKE * dt;
-      this.car.vy -= Math.sin(this.car.angle) * this.BRAKE * dt;
-    }
+    const oldCar = { ...this.car };
+    this.car = updateParkingCar(this.car, { up, down, left, right }, dt);
 
-    // Steering (only when moving)
-    const speed = Math.sqrt(this.car.vx * this.car.vx + this.car.vy * this.car.vy);
-    if (speed > 5) {
-      if (left) this.car.angle -= this.TURN_SPEED * dt * Math.sign(speed > 0 ? 1 : -1);
-      if (right) this.car.angle += this.TURN_SPEED * dt * Math.sign(speed > 0 ? 1 : -1);
-    }
-
-    // Friction
-    this.car.vx *= this.FRICTION;
-    this.car.vy *= this.FRICTION;
-
-    // Clamp speed
-    const currentSpeed = Math.sqrt(this.car.vx * this.car.vx + this.car.vy * this.car.vy);
-    if (currentSpeed > this.MAX_SPEED) {
-      const scale = this.MAX_SPEED / currentSpeed;
-      this.car.vx *= scale;
-      this.car.vy *= scale;
-    }
-
-    // Move
-    const nx = this.car.x + this.car.vx * dt;
-    const ny = this.car.y + this.car.vy * dt;
-
-    // Check collision before committing
-    const oldX = this.car.x, oldY = this.car.y;
-    this.car.x = nx; this.car.y = ny;
     if (this.checkCollisions()) {
-      this.car.x = oldX; this.car.y = oldY;
-      this.car.vx = 0; this.car.vy = 0;
+      this.car = { ...oldCar, speed: 0, vx: 0, vy: 0 };
       this.gameState = 'crash';
       if (!this.lastScoreReported) {
         this.lastScoreReported = true;
@@ -275,10 +242,12 @@ export class ParkingGame extends BaseGame {
     }
 
     // Check parking
-    if (this.checkParked() && currentSpeed < 30) {
+    if (this.checkParked() && Math.abs(this.car.speed) < 35) {
       this.gameState = 'parked';
       this.parkedTime = 0;
-      this.car.vx = 0; this.car.vy = 0;
+      this.car.speed = 0;
+      this.car.vx = 0;
+      this.car.vy = 0;
     }
   }
 
@@ -290,8 +259,8 @@ export class ParkingGame extends BaseGame {
     const accent = '#39C5BB';
     const spotColor = isDark ? 'rgba(57,197,187,0.25)' : 'rgba(13,148,136,0.15)';
     const spotBorder = isDark ? '#39C5BB' : '#0d9488';
-    const carBody = isDark ? '#e2e8f0' : '#1e293b';
-    const carRoof = isDark ? '#94a3b8' : '#475569';
+    const carBody = isDark ? '#f8fafc' : '#0f766e';
+    const carRoof = isDark ? '#38bdf8' : '#134e4a';
     const obstacleColor = isDark ? '#1e293b' : '#cbd5e1';
     const obstacleBorder = isDark ? '#475569' : '#94a3b8';
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
@@ -348,28 +317,41 @@ export class ParkingGame extends BaseGame {
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, CAR_W, CAR_H);
 
-    // Body
+    // Body with a clearer hood/cabin/trunk read.
+    ctx.fillStyle = isDark ? '#0f172a' : '#020617';
+    ctx.fillRect(-CAR_W / 2 - 1, -CAR_H / 2 + 1, CAR_W + 2, CAR_H - 2);
     ctx.fillStyle = carBody;
     ctx.fillRect(-CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
-
-    // Roof/cabin
+    ctx.fillStyle = isDark ? '#38bdf8' : '#0ea5e9';
+    ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, CAR_W - 4, 5);
     ctx.fillStyle = carRoof;
-    ctx.fillRect(-CAR_W / 2 + 3, -CAR_H / 2 + 8, CAR_W - 6, CAR_H * 0.45);
+    ctx.fillRect(-CAR_W / 2 + 4, -CAR_H / 2 + 11, CAR_W - 8, 16);
+    ctx.fillStyle = isDark ? 'rgba(125,211,252,0.68)' : 'rgba(186,230,253,0.8)';
+    ctx.fillRect(-CAR_W / 2 + 5, -CAR_H / 2 + 8, CAR_W - 10, 6);
+    ctx.fillRect(-CAR_W / 2 + 5, CAR_H / 2 - 13, CAR_W - 10, 6);
+    ctx.fillStyle = isDark ? '#f8fafc' : '#fef3c7';
+    ctx.fillRect(-CAR_W / 2 + 3, -CAR_H / 2 - 1, 5, 3);
+    ctx.fillRect(CAR_W / 2 - 8, -CAR_H / 2 - 1, 5, 3);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(-CAR_W / 2 + 3, CAR_H / 2 - 2, 5, 3);
+    ctx.fillRect(CAR_W / 2 - 8, CAR_H / 2 - 2, 5, 3);
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)';
+    ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, 2, CAR_H - 5);
 
-    // Windshield
-    ctx.fillStyle = isDark ? 'rgba(100,200,255,0.4)' : 'rgba(100,180,220,0.5)';
-    ctx.fillRect(-CAR_W / 2 + 3, -CAR_H / 2 + 3, CAR_W - 6, 6);
-
-    // Rear window
-    ctx.fillStyle = isDark ? 'rgba(100,200,255,0.3)' : 'rgba(100,180,220,0.4)';
-    ctx.fillRect(-CAR_W / 2 + 3, CAR_H / 2 - 10, CAR_W - 6, 6);
-
-    // Wheels
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(-CAR_W / 2 - 2, -CAR_H / 2 + 4, 4, 10);
-    ctx.fillRect(CAR_W / 2 - 2, -CAR_H / 2 + 4, 4, 10);
-    ctx.fillRect(-CAR_W / 2 - 2, CAR_H / 2 - 14, 4, 10);
-    ctx.fillRect(CAR_W / 2 - 2, CAR_H / 2 - 14, 4, 10);
+    const drawWheel = (x: number, y: number, steer: boolean) => {
+      ctx.save();
+      ctx.translate(x, y);
+      if (steer) ctx.rotate(this.car.steerAngle);
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(-2, -6, 4, 12);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(-1, -4, 2, 8);
+      ctx.restore();
+    };
+    drawWheel(-CAR_W / 2 - 2, -CAR_H / 2 + 9, true);
+    drawWheel(CAR_W / 2 + 2, -CAR_H / 2 + 9, true);
+    drawWheel(-CAR_W / 2 - 2, CAR_H / 2 - 11, false);
+    drawWheel(CAR_W / 2 + 2, CAR_H / 2 - 11, false);
 
     ctx.restore();
 
@@ -394,11 +376,11 @@ export class ParkingGame extends BaseGame {
     ctx.fillText(`${tScore} ${this.score}`, 12, 54);
 
     // Speed indicator
-    const speed = Math.sqrt(this.car.vx * this.car.vx + this.car.vy * this.car.vy);
+    const speed = Math.abs(this.car.speed);
     ctx.fillStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
     ctx.fillRect(W - 80, 12, 68, 14);
-    ctx.fillStyle = speed > this.MAX_SPEED * 0.8 ? '#ef4444' : accent;
-    ctx.fillRect(W - 80, 12, 68 * (speed / this.MAX_SPEED), 14);
+    ctx.fillStyle = speed > PARKING_MAX_FORWARD_SPEED * 0.8 ? '#ef4444' : accent;
+    ctx.fillRect(W - 80, 12, 68 * Math.min(1, speed / PARKING_MAX_FORWARD_SPEED), 14);
     ctx.fillStyle = text;
     ctx.font = '7px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
@@ -472,9 +454,7 @@ export class ParkingGame extends BaseGame {
       if (e.type === 'touchstart' || e.type === 'touchmove') {
         const t = e.touches[0];
         if (!t) return;
-        const canvasRect = this.canvas.getBoundingClientRect();
-        const cx = t.clientX - canvasRect.left;
-        const cy = t.clientY - canvasRect.top;
+        const { x: cx, y: cy } = this.canvasPoint(t.clientX, t.clientY);
         // Directional zones
         if (cy < H * 0.35) this.touchDir = 'up';
         else if (cy > H * 0.65) this.touchDir = 'down';

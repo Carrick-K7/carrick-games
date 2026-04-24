@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { getCanvasPoint } from '../src/core/render';
+import {
+  IWANNA_PLAYER_H,
+  IWANNA_PLAYER_W,
+  resolveIwannaHorizontalMove,
+} from '../src/games/iwannaPhysics';
+import { createParkingCar, updateParkingCar } from '../src/games/parkingPhysics';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -130,6 +136,48 @@ test.describe('Game rules', () => {
     } as HTMLCanvasElement;
 
     expect(getCanvasPoint(canvas, 400, 600, 500, 650)).toEqual({ x: 200, y: 300 });
+  });
+
+  test('iwanna horizontal movement stops at platform edges', () => {
+    const platform = { x: 100, y: 100, w: 80, h: 20 };
+    const player = {
+      x: platform.x - IWANNA_PLAYER_W - 1,
+      y: platform.y + 1,
+      vx: 154,
+      vy: 0,
+      onGround: false,
+    };
+
+    const moved = resolveIwannaHorizontalMove(player, [platform], 12, 480);
+
+    expect(moved.x + IWANNA_PLAYER_W).toBeLessThanOrEqual(platform.x);
+    expect(moved.y + IWANNA_PLAYER_H).toBeGreaterThan(platform.y);
+  });
+
+  test('parking car accelerates responsively with front-wheel steering', () => {
+    let straight = createParkingCar(200, 460, -Math.PI / 2);
+    for (let i = 0; i < 60; i++) {
+      straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
+    }
+
+    expect(straight.y).toBeLessThan(300);
+    expect(straight.speed).toBeGreaterThan(170);
+
+    let car = createParkingCar(200, 460, -Math.PI / 2);
+    for (let i = 0; i < 60; i++) {
+      car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
+    }
+
+    expect(car.x).toBeGreaterThan(210);
+    expect(car.angle).toBeGreaterThan(-Math.PI / 2);
+    expect(car.angle).toBeLessThan(-0.35);
+
+    const reverse = updateParkingCar(
+      { ...createParkingCar(200, 460, -Math.PI / 2), speed: -80 },
+      { up: false, down: false, left: false, right: true },
+      0.35
+    );
+    expect(reverse.angle).toBeLessThan(-Math.PI / 2);
   });
 });
 

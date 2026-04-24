@@ -1,21 +1,21 @@
 import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
+import {
+  IWANNA_PLAYER_H as PLAYER_H,
+  IWANNA_PLAYER_W as PLAYER_W,
+  rectsOverlap,
+  resolveIwannaHorizontalMove,
+  resolveIwannaVerticalMove,
+  type IwannaPlatform as Platform,
+  type IwannaPlayerState as Player,
+} from './iwannaPhysics.js';
 
 const W = 480;
 const H = 560;
 const WORLD_H = 1680;
-const PLAYER_W = 14;
-const PLAYER_H = 18;
 const MOVE_SPEED = 154;
 const JUMP_SPEED = 280;
 const GRAVITY = 700;
 const RESPAWN_TIME = 0.45;
-
-interface Platform {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 
 interface SpikeStrip {
   x: number;
@@ -31,14 +31,6 @@ interface SavePoint {
   spawnX: number;
   spawnY: number;
   score: number;
-}
-
-interface Player {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  onGround: boolean;
 }
 
 interface Particle {
@@ -116,19 +108,6 @@ function isDarkTheme() {
 
 function isZh() {
   return document.documentElement.getAttribute('data-lang') === 'zh';
-}
-
-function rectsOverlap(
-  ax: number,
-  ay: number,
-  aw: number,
-  ah: number,
-  bx: number,
-  by: number,
-  bw: number,
-  bh: number
-) {
-  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
 export class IwannaGame extends BaseGame {
@@ -325,7 +304,7 @@ export class IwannaGame extends BaseGame {
           this.player.vy = -JUMP_SPEED;
           this.player.onGround = false;
         } else if (Math.abs(dx) > Math.abs(dy)) {
-          this.player.x += dx > 0 ? 22 : -22;
+          this.player = resolveIwannaHorizontalMove(this.player, PLATFORMS, dx > 0 ? 22 : -22, W);
         }
         this.touchStart = null;
       }
@@ -353,26 +332,10 @@ export class IwannaGame extends BaseGame {
     if (this.keys.has('ArrowLeft') || this.keys.has('a')) dir -= 1;
     if (this.keys.has('ArrowRight') || this.keys.has('d')) dir += 1;
 
-    const prevX = this.player.x;
-    const prevY = this.player.y;
     this.player.vx = dir * MOVE_SPEED;
     this.player.vy += GRAVITY * dt;
-    this.player.x += this.player.vx * dt;
-    this.player.y += this.player.vy * dt;
-    this.player.onGround = false;
-
-    if (this.player.x < 0) this.player.x = 0;
-    if (this.player.x + PLAYER_W > W) this.player.x = W - PLAYER_W;
-
-    for (const plat of PLATFORMS) {
-      const wasAbove = prevY + PLAYER_H <= plat.y;
-      const horizontallyInside = this.player.x + PLAYER_W > plat.x && this.player.x < plat.x + plat.w;
-      if (wasAbove && horizontallyInside && this.player.y + PLAYER_H >= plat.y && this.player.y + PLAYER_H <= plat.y + plat.h + 12 && this.player.vy >= 0) {
-        this.player.y = plat.y - PLAYER_H;
-        this.player.vy = 0;
-        this.player.onGround = true;
-      }
-    }
+    this.player = resolveIwannaHorizontalMove(this.player, PLATFORMS, this.player.vx * dt, W);
+    this.player = resolveIwannaVerticalMove(this.player, PLATFORMS, this.player.vy * dt);
 
     if (this.player.y > WORLD_H + 40) {
       this.killPlayer();
@@ -386,10 +349,8 @@ export class IwannaGame extends BaseGame {
       }
     }
 
-    if (Math.abs(this.player.x - prevX) > 0 || Math.abs(this.player.y - prevY) > 0) {
-      const heightProgress = WORLD_H - this.player.y;
-      this.score = Math.max(this.score, Math.floor(heightProgress * 0.6));
-    }
+    const heightProgress = WORLD_H - this.player.y;
+    this.score = Math.max(this.score, Math.floor(heightProgress * 0.6));
   }
 
   private updateCamera(dt: number) {
