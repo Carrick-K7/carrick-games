@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
 
 const W = 480;
 const H = 560;
@@ -111,8 +111,7 @@ const SAVE_POINTS: SavePoint[] = [
 const GOAL = { x: 426, y: WORLD_H - 1658, w: 18, h: 32 };
 
 function isDarkTheme() {
-  return !document.documentElement.hasAttribute('data-theme') ||
-    document.documentElement.getAttribute('data-theme') === 'dark';
+  return getEffectiveDarkTheme();
 }
 
 function isZh() {
@@ -406,7 +405,7 @@ export class IwannaGame extends BaseGame {
         this.respawnY = savePoint.spawnY;
         this.score = Math.max(this.score, savePoint.score);
         this.saveIndex += 1;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       } else {
         break;
       }
@@ -419,7 +418,7 @@ export class IwannaGame extends BaseGame {
       this.score = Math.max(this.score, 1200);
       if (!this.reportedClear) {
         this.reportedClear = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }

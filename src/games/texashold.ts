@@ -654,7 +654,7 @@ export class TexasHoldGame extends BaseGame {
 
     if (!this.reportedScore) {
       this.reportedScore = true;
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     }
   }
 
@@ -989,8 +989,7 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private getTheme(): ThemePalette {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     return {
       bg: isDark ? '#0b0f19' : '#fafafa',

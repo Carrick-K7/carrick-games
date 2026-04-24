@@ -121,8 +121,7 @@ export class BeachHeadGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const sky = isDark ? '#08111f' : '#dbeafe';
     const skyGlow = isDark ? '#1d4ed8' : '#60a5fa';
     const sea = isDark ? '#0f3157' : '#60a5fa';
@@ -503,7 +502,7 @@ export class BeachHeadGame extends BaseGame {
     this.gameOver = true;
     if (!this.reportedGameOver) {
       this.reportedGameOver = true;
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     }
   }
 

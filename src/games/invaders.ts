@@ -215,7 +215,7 @@ export class InvadersGame extends BaseGame {
           b.y < playerRect.y + playerRect.h &&
           b.y + 8 > playerRect.y) {
         this.gameOver = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
         return;
       }
     }
@@ -224,7 +224,7 @@ export class InvadersGame extends BaseGame {
     for (const e of this.aliveEnemies) {
       if (e.y + this.enemyHeight >= this.playerY) {
         this.gameOver = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
         return;
       }
     }
@@ -243,8 +243,7 @@ export class InvadersGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';

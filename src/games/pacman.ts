@@ -145,7 +145,7 @@ export class PacManGame extends BaseGame {
     this.scatterTimer = 7;
     this.chaseTimer = 20;
     this.mode = 'scatter';
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   update(dt: number) {
@@ -217,10 +217,7 @@ export class PacManGame extends BaseGame {
       if (this.dotsEaten >= this.dotsTotal) {
         this.allDotsEaten = true;
         this.gameOver = true;
-        if (!(this as any)._recorded) {
-          (this as any)._recorded = true;
-          (window as any).reportScore?.(this.score);
-        }
+        this.submitScoreOnce(this.score);
         return;
       }
     }
@@ -248,10 +245,7 @@ export class PacManGame extends BaseGame {
           this.lives--;
           if (this.lives <= 0) {
             this.gameOver = true;
-            if (!(this as any)._recorded) {
-              (this as any)._recorded = true;
-              (window as any).reportScore?.(this.score);
-            }
+            this.submitScoreOnce(this.score);
           } else {
             // Reset positions
             this.pacPixelX = 14 * TILE + TILE / 2;
@@ -400,8 +394,7 @@ export class PacManGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';

@@ -205,7 +205,7 @@ export class ParkingGame extends BaseGame {
         this.score = Math.max(0, Math.round(this.timeLeft * 100));
         if (!this.lastScoreReported) {
           this.lastScoreReported = true;
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         }
       }
       return;
@@ -258,7 +258,7 @@ export class ParkingGame extends BaseGame {
       this.gameState = 'crash';
       if (!this.lastScoreReported) {
         this.lastScoreReported = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
       return;
     }
@@ -269,7 +269,7 @@ export class ParkingGame extends BaseGame {
       this.gameState = 'timeout';
       if (!this.lastScoreReported) {
         this.lastScoreReported = true;
-        (window as any).reportScore?.(0);
+        window.reportScore?.(0);
       }
       return;
     }
@@ -283,8 +283,7 @@ export class ParkingGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const primary = isDark ? '#39C5BB' : '#0d9488';
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const text = isDark ? '#f8fafc' : '#0f172a';

@@ -174,7 +174,7 @@ export class AsteroidsGame extends BaseGame {
     this.shootPending = false;
     this.shootCooldown = 0;
     this.spawnWave(4);
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private shoot() {
@@ -394,8 +394,7 @@ export class AsteroidsGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
@@ -509,10 +508,7 @@ export class AsteroidsGame extends BaseGame {
 
     // Game Over
     if (this.gameOver) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';

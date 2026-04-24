@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
 
 // Piece types
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
@@ -19,9 +19,7 @@ const PIECE_CHARS: Record<string, string> = {
 };
 
 function getTheme() {
-  const dark = !document.documentElement.getAttribute('data-theme')
-    ? true
-    : document.documentElement.getAttribute('data-theme') === 'dark';
+  const dark = getEffectiveDarkTheme();
   return {
     bg: dark ? '#0b0f19' : '#fafafa',
     accent: dark ? '#39C5BB' : '#0d9488',
@@ -86,7 +84,7 @@ export class ChessGame extends BaseGame {
     this.touchStart = null;
     this.promotionResolve = null;
     this.promotionCallback = null;
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private setupBoard() {
@@ -305,10 +303,7 @@ export class ChessGame extends BaseGame {
       } else {
         this.gameResult = 'stalemate';
       }
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.moveHistory.length);
-      }
+      this.submitScoreOnce(this.moveHistory.length);
     }
   }
 
@@ -624,8 +619,8 @@ export class ChessGame extends BaseGame {
       clientX = me.clientX;
       clientY = me.clientY;
     }
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+    const scaleX = this.width / rect.width;
+    const scaleY = this.height / rect.height;
     const cx = (clientX - rect.left) * scaleX;
     const cy = (clientY - rect.top) * scaleY;
 
@@ -670,10 +665,7 @@ export class ChessGame extends BaseGame {
           this.phase = 'gameover';
           if (this.isCheck) this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
           else this.gameResult = 'stalemate';
-          if (!(this as any)._recorded) {
-            (this as any)._recorded = true;
-            (window as any).reportScore?.(this.moveHistory.length);
-          }
+          this.submitScoreOnce(this.moveHistory.length);
         }
         if (this.turn === 'b') this.asyncAI();
       }

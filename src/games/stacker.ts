@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, getStoredRecord } from '../core/game.js';
 
 const COLS = 7;
 const ROWS = 16;
@@ -45,12 +45,7 @@ export class StackerGame extends BaseGame {
   }
 
   private loadHighScore() {
-    try {
-      const records = JSON.parse(localStorage.getItem('cg-records') || '{}');
-      this.highScore = records['stacker'] || 0;
-    } catch {
-      this.highScore = 0;
-    }
+    this.highScore = getStoredRecord('stacker') ?? 0;
   }
 
   update(dt: number) {
@@ -68,8 +63,7 @@ export class StackerGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
 
     const bg = isDark ? '#0b0f19' : '#fafafa';
@@ -261,7 +255,7 @@ export class StackerGame extends BaseGame {
     if (this.score > this.highScore) {
       this.highScore = this.score;
     }
-    (window as any).reportScore?.(this.score);
+    window.reportScore?.(this.score);
   }
 
   destroy() {

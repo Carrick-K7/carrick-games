@@ -44,7 +44,7 @@ export class MinesweeperGame extends BaseGame {
     this.gameState = 'idle';
     this.cursorX = Math.floor(COLS / 2);
     this.cursorY = Math.floor(ROWS / 2);
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private placeMines() {
@@ -147,8 +147,8 @@ export class MinesweeperGame extends BaseGame {
 
     const getCell = (clientX: number, clientY: number): { x: number; y: number } | null => {
       const rect = this.canvas.getBoundingClientRect();
-      const scaleX = this.canvas.width / rect.width;
-      const scaleY = this.canvas.height / rect.height;
+      const scaleX = this.width / rect.width;
+      const scaleY = this.height / rect.height;
       const tx = (clientX - rect.left) * scaleX;
       const ty = (clientY - rect.top) * scaleY;
       const cellX = Math.floor((tx - 2) / CELL);
@@ -229,10 +229,7 @@ export class MinesweeperGame extends BaseGame {
       this.timer += dt;
     }
     if (this.gameState === 'won' || this.gameState === 'lost') {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.gameState === 'won' ? Math.max(0, Math.floor(10000 - this.timer * 10)) : 0);
-      }
+      this.submitScoreOnce(this.gameState === 'won' ? Math.max(0, Math.floor(10000 - this.timer * 10)) : 0);
     }
   }
 
@@ -240,8 +237,7 @@ export class MinesweeperGame extends BaseGame {
     const w = this.width;
     const h = this.height;
     const lang = document.documentElement.getAttribute('data-lang') === 'zh';
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';

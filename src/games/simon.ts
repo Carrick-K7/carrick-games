@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, getStoredRecord } from '../core/game.js';
 
 const W = 400;
 const H = 500;
@@ -322,7 +322,7 @@ export class SimonGame extends BaseGame {
 
     if (!this.reportedScore) {
       this.reportedScore = true;
-      (window as Window & { reportScore?: (score: number) => void }).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     }
   }
 
@@ -430,8 +430,8 @@ export class SimonGame extends BaseGame {
 
   private getColorFromPoint(clientX: number, clientY: number): SimonColor | null {
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+    const scaleX = this.width / rect.width;
+    const scaleY = this.height / rect.height;
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top) * scaleY;
 
@@ -591,13 +591,7 @@ export class SimonGame extends BaseGame {
   }
 
   private getBestScore(): number {
-    try {
-      const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, unknown>;
-      const best = records[GAME_ID];
-      return Math.max(typeof best === 'number' && Number.isFinite(best) ? best : 0, this.score);
-    } catch {
-      return this.score;
-    }
+    return Math.max(getStoredRecord(GAME_ID) ?? 0, this.score);
   }
 
   private getTheme(): ThemePalette {
@@ -629,10 +623,7 @@ export class SimonGame extends BaseGame {
   }
 
   private isLightTheme(): boolean {
-    const explicit = document.documentElement.getAttribute('data-theme');
-    if (explicit === 'light') return true;
-    if (explicit === 'dark') return false;
-    return window.matchMedia('(prefers-color-scheme: light)').matches;
+    return !this.isDarkTheme();
   }
 
   private isZh(): boolean {

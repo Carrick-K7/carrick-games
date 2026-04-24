@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type EnemyKind = 'drone' | 'boss';
@@ -29,7 +29,7 @@ const ENEMY_FIRE_INTERVAL = 1.8;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getTheme(): { isDark: boolean; bg: string; primary: string; enemyDrone: string; enemyBoss: string } {
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const isDark = getEffectiveDarkTheme();
   return {
     isDark,
     bg: isDark ? '#0b1a2e' : '#e3f2fd',
@@ -427,7 +427,7 @@ export class GalagaGame extends BaseGame {
     this.addExplosion(this.playerX + PLAYER_W / 2, PLAYER_Y + PLAYER_H / 2);
     if (this.lives <= 0) {
       this.state = 'gameover';
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     } else {
       this.respawnTimer = this.respawnDelay;
       this.state = 'playing';

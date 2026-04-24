@@ -34,7 +34,7 @@ export class PongGame extends BaseGame {
     this.upPressed = false;
     this.downPressed = false;
     this.resetBall();
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private resetBall() {
@@ -137,8 +137,7 @@ export class PongGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
@@ -181,10 +180,7 @@ export class PongGame extends BaseGame {
 
     // Game over overlay
     if (this.gameOver) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.playerScore);
-      }
+      this.submitScoreOnce(this.playerScore);
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
@@ -215,7 +211,7 @@ export class PongGame extends BaseGame {
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
       const y = touch.clientY - rect.top;
-      const scaleY = this.canvas.height / rect.height;
+      const scaleY = this.height / rect.height;
       const canvasY = y * scaleY;
 
       if (this.gameOver) {

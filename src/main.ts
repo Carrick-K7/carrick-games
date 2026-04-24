@@ -1,33 +1,51 @@
-import { SnakeGame } from './games/snake.js';
-import { BreakoutGame } from './games/breakout.js';
-import { BubbleShooterGame } from './games/bubbleshooter.js';
-import { TetrisGame } from './games/tetris.js';
-import { PongGame } from './games/pong.js';
-import { SpaceShooterGame } from './games/spaceshooter.js';
-import { FlappyBirdGame } from './games/flappybird.js';
-import { PacManGame } from './games/pacman.js';
-import { ParkingGame } from './games/parking.js';
-import { InvadersGame } from './games/invaders.js';
-import { AsteroidsGame } from './games/asteroids.js';
-import { MinesweeperGame } from './games/minesweeper.js';
-import { DoodleJumpGame } from './games/doodlejump.js';
-import { Game2048 } from './games/game2048.js';
-import { SimonGame } from './games/simon.js';
-import { FroggerGame } from './games/frogger.js';
-import { MissileCommandGame } from './games/missilecommand.js';
-import { BeachHeadGame } from './games/beachhead.js';
-import { CheckersGame } from './games/checkers.js';
-import { SolitaireGame } from './games/solitaire.js';
-import { WordleGame } from './games/wordle.js';
-import { SudokuGame } from './games/sudoku.js';
-import { ChessGame } from './games/chess.js';
-import { GalagaGame } from './games/galaga.js';
-import { StackerGame } from './games/stacker.js';
-import { BerzerkGame } from './games/berzerk.js';
-import { IwannaGame } from './games/iwanna.js';
-import { MahjongGame } from './games/mahjong.js';
-import { TexasHoldGame } from './games/texashold.js';
-import { ConnectFourGame } from './games/connectfour.js';
+import type { Game } from './core/game.js';
+import { getStoredRecord, readStoredRecords } from './core/game.js';
+import { getLogicalCanvasSize } from './core/render.js';
+
+declare global {
+  interface Window {
+    setLang?: (lang: 'en' | 'zh') => void;
+    setTheme?: (mode: 'light' | 'dark' | 'system') => void;
+    startPreparedGame?: () => void;
+  }
+}
+
+type GameInstance = Game & { start(): void; stop(): void; destroy?(): void };
+type GameCtor = new () => GameInstance;
+type GameLoader = () => Promise<GameCtor>;
+
+const GAME_LOADERS = {
+  snake: () => import('./games/snake.js').then((m) => m.SnakeGame),
+  breakout: () => import('./games/breakout.js').then((m) => m.BreakoutGame),
+  bubbleshooter: () => import('./games/bubbleshooter.js').then((m) => m.BubbleShooterGame),
+  tetris: () => import('./games/tetris.js').then((m) => m.TetrisGame),
+  pong: () => import('./games/pong.js').then((m) => m.PongGame),
+  spaceshooter: () => import('./games/spaceshooter.js').then((m) => m.SpaceShooterGame),
+  flappybird: () => import('./games/flappybird.js').then((m) => m.FlappyBirdGame),
+  pacman: () => import('./games/pacman.js').then((m) => m.PacManGame),
+  parking: () => import('./games/parking.js').then((m) => m.ParkingGame),
+  invaders: () => import('./games/invaders.js').then((m) => m.InvadersGame),
+  asteroids: () => import('./games/asteroids.js').then((m) => m.AsteroidsGame),
+  minesweeper: () => import('./games/minesweeper.js').then((m) => m.MinesweeperGame),
+  doodlejump: () => import('./games/doodlejump.js').then((m) => m.DoodleJumpGame),
+  game2048: () => import('./games/game2048.js').then((m) => m.Game2048),
+  simon: () => import('./games/simon.js').then((m) => m.SimonGame),
+  frogger: () => import('./games/frogger.js').then((m) => m.FroggerGame),
+  missilecommand: () => import('./games/missilecommand.js').then((m) => m.MissileCommandGame),
+  beachhead: () => import('./games/beachhead.js').then((m) => m.BeachHeadGame),
+  checkers: () => import('./games/checkers.js').then((m) => m.CheckersGame),
+  solitaire: () => import('./games/solitaire.js').then((m) => m.SolitaireGame),
+  wordle: () => import('./games/wordle.js').then((m) => m.WordleGame),
+  sudoku: () => import('./games/sudoku.js').then((m) => m.SudokuGame),
+  chess: () => import('./games/chess.js').then((m) => m.ChessGame),
+  galaga: () => import('./games/galaga.js').then((m) => m.GalagaGame),
+  stacker: () => import('./games/stacker.js').then((m) => m.StackerGame),
+  berzerk: () => import('./games/berzerk.js').then((m) => m.BerzerkGame),
+  iwanna: () => import('./games/iwanna.js').then((m) => m.IwannaGame),
+  mahjong: () => import('./games/mahjong.js').then((m) => m.MahjongGame),
+  texashold: () => import('./games/texashold.js').then((m) => m.TexasHoldGame),
+  connectfour: () => import('./games/connectfour.js').then((m) => m.ConnectFourGame),
+} satisfies Record<string, GameLoader>;
 
 interface VirtualKeySpec {
   label: string;
@@ -43,7 +61,7 @@ export interface GameMeta {
   nameZh: string;
   desc: string;
   descZh: string;
-  cls: new () => { start(): void; stop(): void; init?(): void; destroy?(): void };
+  loader: GameLoader;
   controls: {
     keyboard?: { keys: string[]; action: string; actionZh: string }[];
     keyboardPanel?: VirtualKeySpec[];
@@ -59,7 +77,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '贪吃蛇',
     desc: 'Classic arcade snake. Eat, grow, and avoid the walls.',
     descZh: '经典街机贪吃蛇。吃东西、变长、别撞墙。',
-    cls: SnakeGame,
+    loader: GAME_LOADERS.snake,
     canvasSize: { width: 400, height: 400 },
     controls: {
       keyboard: [
@@ -78,7 +96,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '打砖块',
     desc: 'Bounce the ball and break all bricks.',
     descZh: '弹球击碎所有砖块。',
-    cls: BreakoutGame,
+    loader: GAME_LOADERS.breakout,
     canvasSize: { width: 480, height: 360 },
     controls: {
       keyboard: [
@@ -98,7 +116,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '泡泡龙',
     desc: 'Aim from the bottom, match colors, and stop the bubble wall from reaching you.',
     descZh: '从底部瞄准发射,消除同色泡泡,阻止泡泡墙压到底部。',
-    cls: BubbleShooterGame,
+    loader: GAME_LOADERS.bubbleshooter,
     canvasSize: { width: 420, height: 620 },
     controls: {
       keyboard: [
@@ -118,7 +136,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '俄罗斯方块',
     desc: 'The legendary falling blocks puzzle.',
     descZh: '传奇下落方块益智游戏。',
-    cls: TetrisGame,
+    loader: GAME_LOADERS.tetris,
     canvasSize: { width: 300, height: 600 },
     controls: {
       keyboard: [
@@ -142,7 +160,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '乒乓',
     desc: 'Classic arcade table tennis against AI.',
     descZh: '经典街机乒乓球对战 AI。',
-    cls: PongGame,
+    loader: GAME_LOADERS.pong,
     canvasSize: { width: 600, height: 400 },
     controls: {
       keyboard: [
@@ -161,7 +179,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '太空射击',
     desc: 'Vertical space shooter. Destroy enemies and avoid collisions.',
     descZh: '纵向太空射击游戏。消灭敌人并避免碰撞。',
-    cls: SpaceShooterGame,
+    loader: GAME_LOADERS.spaceshooter,
     canvasSize: { width: 480, height: 640 },
     controls: {
       keyboard: [
@@ -180,7 +198,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '像素鸟',
     desc: 'Tap to flap. Dodge the pipes and survive.',
     descZh: '点击飞翔,躲避管道,尽可能存活。',
-    cls: FlappyBirdGame,
+    loader: GAME_LOADERS.flappybird,
     canvasSize: { width: 400, height: 560 },
     controls: {
       keyboard: [
@@ -198,7 +216,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '吃豆人',
     desc: 'Classic maze chase. Eat all dots and avoid ghosts.',
     descZh: '经典迷宫追逐游戏。吃完所有豆子并躲避幽灵。',
-    cls: PacManGame,
+    loader: GAME_LOADERS.pacman,
     canvasSize: { width: 448, height: 496 },
     controls: {
       keyboard: [
@@ -217,7 +235,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '太空侵略者',
     desc: 'Classic horizontal shooter. Destroy waves of invaders before they reach you.',
     descZh: '经典横版射击。在侵略者抵达前消灭它们。',
-    cls: InvadersGame,
+    loader: GAME_LOADERS.invaders,
     canvasSize: { width: 640, height: 480 },
     controls: {
       keyboard: [
@@ -236,7 +254,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '小行星',
     desc: 'Classic vector arcade. Thrust and shoot your way through asteroid fields.',
     descZh: '经典矢量街机游戏。在小行星带中旋转、推进、射击。',
-    cls: AsteroidsGame,
+    loader: GAME_LOADERS.asteroids,
     canvasSize: { width: 600, height: 600 },
     controls: {
       keyboard: [
@@ -256,7 +274,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '扫雷',
     desc: 'Classic puzzle. Reveal cells, avoid mines, and use numbers to deduce safe paths.',
     descZh: '经典益智游戏。翻开格子,避免地雷,用数字推理安全路径。',
-    cls: MinesweeperGame,
+    loader: GAME_LOADERS.minesweeper,
     canvasSize: { width: 328, height: 412 },
     controls: {
       keyboard: [
@@ -278,7 +296,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '涂鸦跳跃',
     desc: 'Bounce higher and higher on platforms. Avoid falling!',
     descZh: '在平台上越跳越高,千万别掉下去!',
-    cls: DoodleJumpGame,
+    loader: GAME_LOADERS.doodlejump,
     canvasSize: { width: 400, height: 600 },
     controls: {
       keyboard: [
@@ -297,7 +315,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '2048',
     desc: 'Slide and merge tiles to reach 2048.',
     descZh: '滑动合并数字方块,挑战 2048!',
-    cls: Game2048,
+    loader: GAME_LOADERS.game2048,
     canvasSize: { width: 400, height: 400 },
     controls: {
       keyboard: [
@@ -316,7 +334,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '西蒙记忆',
     desc: 'Memorize the color sequence, repeat it, and keep up as the playback speeds up.',
     descZh: '记住颜色序列并快速重复,随着关卡提升节奏会越来越快。',
-    cls: SimonGame,
+    loader: GAME_LOADERS.simon,
     canvasSize: { width: 400, height: 500 },
     controls: {
       keyboard: [
@@ -342,7 +360,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '青蛙过河',
     desc: 'Guide the frog across busy roads and rivers to reach home.',
     descZh: '控制青蛙穿越繁忙的公路和河流,安全回家。',
-    cls: FroggerGame,
+    loader: GAME_LOADERS.frogger,
     canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
@@ -365,7 +383,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '导弹指挥官',
     desc: 'Defend your cities from incoming missiles. Aim and fire counter-missiles.',
     descZh: '防御来袭的导弹。瞄准并发射拦截导弹,保卫你的城市。',
-    cls: MissileCommandGame,
+    loader: GAME_LOADERS.missilecommand,
     canvasSize: { width: 400, height: 600 },
     controls: {
       keyboard: [
@@ -382,7 +400,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '抢滩登陆战',
     desc: 'Hold the shoreline, rotate the turret, and sink incoming landing waves.',
     descZh: '坚守海岸炮台,旋转瞄准并击沉来袭的登陆波次。',
-    cls: BeachHeadGame,
+    loader: GAME_LOADERS.beachhead,
     canvasSize: { width: 480, height: 400 },
     controls: {
       keyboard: [
@@ -403,7 +421,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '跳棋',
     desc: 'Classic checkers against AI. Capture all enemy pieces or block their moves to win.',
     descZh: '经典跳棋对战 AI。吃掉所有敌方棋子或让其无路可走即可获胜。',
-    cls: CheckersGame,
+    loader: GAME_LOADERS.checkers,
     canvasSize: { width: 500, height: 540 },
     controls: {
       keyboard: [
@@ -420,7 +438,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '纸牌',
     desc: 'Classic Klondike Solitaire. Move cards, build foundations, and clear the table.',
     descZh: '经典纸牌游戏。将所有纸牌移到王牌堆即可通关。',
-    cls: SolitaireGame,
+    loader: GAME_LOADERS.solitaire,
     canvasSize: { width: 480, height: 640 },
     controls: {
       keyboard: [
@@ -440,7 +458,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '猜单词',
     desc: 'Guess the 5-letter word in 6 tries. Green = correct, Yellow = wrong place, Gray = not in word.',
     descZh: '在六次尝试内猜出五个字母的单词。绿色=正确,黄色=位置错,灰色=不存在。',
-    cls: WordleGame,
+    loader: GAME_LOADERS.wordle,
     canvasSize: { width: 400, height: 520 },
     controls: {
       keyboard: [
@@ -459,7 +477,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '数独',
     desc: 'Fill the 9x9 grid so each row, column, and 3x3 box contains digits 1-9.',
     descZh: '在9x9网格中填入1-9数字,使每行、每列、每个3x3宫格都不重复。',
-    cls: SudokuGame,
+    loader: GAME_LOADERS.sudoku,
     canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
@@ -481,7 +499,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '国际象棋',
     desc: 'Classic chess against AI. Click to select and move pieces.',
     descZh: '经典国际象棋对战 AI。点击选择并移动棋子。',
-    cls: ChessGame,
+    loader: GAME_LOADERS.chess,
     canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
@@ -498,7 +516,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '大战役',
     desc: 'Classic vertical shooter - destroy enemy formations before they dive-bomb you!',
     descZh: '经典垂直射击游戏--在敌人俯冲轰炸前消灭它们!',
-    cls: GalagaGame,
+    loader: GAME_LOADERS.galaga,
     canvasSize: { width: 420, height: 620 },
     controls: {
       keyboard: [
@@ -517,7 +535,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '堆叠方块',
     desc: 'Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!',
     descZh: '经典街机堆叠方块。精准时机,一路堆到顶端!',
-    cls: StackerGame,
+    loader: GAME_LOADERS.stacker,
     canvasSize: { width: 320, height: 480 },
     controls: {
       keyboard: [
@@ -535,7 +553,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '狂暴机器人',
     desc: 'Classic 1980 maze chase. Shoot robots, avoid Evil Otto, and escape!',
     descZh: '经典1980迷宫追逐。射击机器人,躲避邪恶奥托,逃出生天!',
-    cls: BerzerkGame,
+    loader: GAME_LOADERS.berzerk,
     canvasSize: { width: 480, height: 480 },
     controls: {
       keyboard: [
@@ -555,7 +573,7 @@ export const GAMES: GameMeta[] = [
     nameZh: 'I Wanna',
     desc: 'Pure precision platforming. Climb increasingly brutal jump chains with no trick traps.',
     descZh: '纯技术向平台跳跃。没有阴人机关,只有逐步升级的跳跃难度。',
-    cls: IwannaGame,
+    loader: GAME_LOADERS.iwanna,
     canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
@@ -577,7 +595,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '麻将连连看',
     desc: 'Match free tiles and clear the board before time runs out.',
     descZh: '点击相同麻将牌消除,在时间耗尽前清空牌阵。',
-    cls: MahjongGame,
+    loader: GAME_LOADERS.mahjong,
     canvasSize: { width: 400, height: 500 },
     controls: {
       keyboard: [
@@ -594,7 +612,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '德州扑克',
     desc: 'Four-player Hold\u2019em with betting rounds, AI opponents, and showdown scoring.',
     descZh: '四人德州扑克,含下注轮、AI 对手与摊牌结算。',
-    cls: TexasHoldGame,
+    loader: GAME_LOADERS.texashold,
     canvasSize: { width: 440, height: 520 },
     controls: {
       keyboard: [
@@ -615,7 +633,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '停车小游戏',
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
     descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
-    cls: ParkingGame,
+    loader: GAME_LOADERS.parking,
     canvasSize: { width: 400, height: 520 },
     controls: {
       keyboard: [
@@ -636,7 +654,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '四子连珠',
     desc: 'Drop discs and connect four in a row before the computer does.',
     descZh: '在电脑之前将四个棋子连成一线。',
-    cls: ConnectFourGame,
+    loader: GAME_LOADERS.connectfour,
     canvasSize: { width: 440, height: 440 },
     controls: {
       keyboard: [
@@ -690,8 +708,10 @@ const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(
 );
 
 let currentGameName: string | null = null;
-let currentGameInstance: { start(): void; stop(): void; init?(): void; destroy?(): void } | null = null;
+let currentGameInstance: GameInstance | null = null;
 let isRunning = false;
+let isLoadingGame = false;
+let prepareGameToken = 0;
 
 function renderTouchIcon(icon: string): string {
   const icons: Record<string, string> = {
@@ -710,6 +730,11 @@ function updateActionButton() {
   const btn = document.getElementById('actionBtn') as HTMLButtonElement | null;
   if (!btn) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  if (isLoadingGame) {
+    btn.textContent = zh ? '加载中...' : 'Loading...';
+    btn.disabled = true;
+    return;
+  }
   if (!currentGameInstance) {
     btn.textContent = zh ? '选择游戏' : 'Select a game';
     btn.disabled = true;
@@ -855,29 +880,8 @@ function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[
   `;
 }
 
-function readRecords(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem('cg-records');
-    if (!raw) return {};
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-
-    const records: Record<string, number> = {};
-    for (const [gameId, score] of Object.entries(parsed)) {
-      if (typeof score === 'number' && Number.isFinite(score)) {
-        records[gameId] = score;
-      }
-    }
-    return records;
-  } catch {
-    return {};
-  }
-}
-
 function getRecord(gameId: string): number | null {
-  const records = readRecords();
-  return records[gameId] ?? null;
+  return getStoredRecord(gameId);
 }
 
 function renderGameRecord() {
@@ -974,7 +978,7 @@ function getKeysFromEvent(e: KeyboardEvent): string[] {
 }
 
 function saveRecord(gameId: string, score: number) {
-  const records = readRecords();
+  const records = readStoredRecords();
   const shouldUpdate = records[gameId] == null || score > records[gameId];
   if (shouldUpdate) {
     records[gameId] = score;
@@ -987,8 +991,8 @@ function saveRecord(gameId: string, score: number) {
   // Always refresh display so the UI stays in sync (e.g. first record, or tied score)
   setTimeout(() => renderGameRecord(), 0);
 }
-(window as any).saveRecord = saveRecord;
-(window as any).reportScore = (score: number) => {
+window.saveRecord = saveRecord;
+window.reportScore = (score: number) => {
   if (!currentGameName) return;
   saveRecord(currentGameName, score);
 };
@@ -1050,20 +1054,31 @@ function bindVirtualKeyboard() {
   vk.addEventListener('touchcancel', releaseKey);
 }
 
-export function prepareGame(name: string) {
+export async function prepareGame(name: string) {
   const meta = GAMES.find((g) => g.id === name);
   if (!meta) return;
+  const token = ++prepareGameToken;
 
   if (currentGameInstance) {
     if (currentGameInstance.destroy) {
       currentGameInstance.destroy();
     } else {
-      currentGameInstance.stop?.();
+      currentGameInstance.stop();
     }
     currentGameInstance = null;
   }
   isRunning = false;
+  isLoadingGame = true;
   currentGameName = name;
+  updateActionButton();
+  updateGameTitle();
+  updateGameDesc();
+  renderGameRecord();
+  renderControls();
+
+  document.querySelectorAll('.game-list-item').forEach((el) => {
+    el.classList.toggle('active', el.getAttribute('data-id') === name);
+  });
 
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d');
@@ -1071,19 +1086,44 @@ export function prepareGame(name: string) {
 
   canvas.width = meta.canvasSize.width;
   canvas.height = meta.canvasSize.height;
+  canvas.dataset.logicalWidth = String(meta.canvasSize.width);
+  canvas.dataset.logicalHeight = String(meta.canvasSize.height);
+  canvas.dataset.pixelRatio = '1';
 
   // Re-apply zoom so the displayed size matches the new canvas dimensions
   const savedZoom = parseInt(localStorage.getItem('cg-zoom') || '100', 10);
   applyCanvasZoom(savedZoom);
 
-  currentGameInstance = new meta.cls();
+  let GameClass: GameCtor;
+  try {
+    GameClass = await meta.loader();
+  } catch (e) {
+    if (token === prepareGameToken) {
+      isLoadingGame = false;
+      updateActionButton();
+    }
+    // eslint-disable-next-line no-console
+    console.error(e);
+    return;
+  }
+
+  const nextGameInstance = new GameClass();
+  applyCanvasZoom(savedZoom);
+  if (token !== prepareGameToken) {
+    nextGameInstance.destroy?.();
+    return;
+  }
+  currentGameInstance = nextGameInstance;
+  isLoadingGame = false;
 
   // Draw initial frame so canvas isn't blank
   try {
-    (currentGameInstance as any).init?.();
+    currentGameInstance.init();
     const ctx2 = canvas.getContext('2d');
-    if (ctx2 && (currentGameInstance as any).draw) {
-      (currentGameInstance as any).draw(ctx2);
+    if (currentGameInstance.renderFrame) {
+      currentGameInstance.renderFrame();
+    } else if (ctx2) {
+      currentGameInstance.draw(ctx2);
     }
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -1095,16 +1135,11 @@ export function prepareGame(name: string) {
   updateGameDesc();
   renderGameRecord();
   renderControls();
-
-  document.querySelectorAll('.game-list-item').forEach((el) => {
-    el.classList.toggle('active', el.getAttribute('data-id') === name);
-  });
 }
 
 function startPreparedGame() {
-  if (!currentGameInstance) return;
+  if (!currentGameInstance || isLoadingGame) return;
   try {
-    (currentGameInstance as any).stop?.();
     currentGameInstance.start();
     isRunning = true;
     updateActionButton();
@@ -1114,8 +1149,8 @@ function startPreparedGame() {
   }
 }
 
-export function loadGame(name: string) {
-  prepareGame(name);
+export async function loadGame(name: string) {
+  await prepareGame(name);
   startPreparedGame();
 }
 
@@ -1153,7 +1188,7 @@ function renderGameList(filter = '') {
   list.querySelectorAll('.game-list-item').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id')!;
-      prepareGame(id);
+      void prepareGame(id);
     });
   });
 }
@@ -1186,9 +1221,9 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
   });
 }
 
-(window as any).setLang = setLang;
-(window as any).setTheme = setTheme;
-(window as any).startPreparedGame = startPreparedGame;
+window.setLang = setLang;
+window.setTheme = setTheme;
+window.startPreparedGame = startPreparedGame;
 
 // Global keyboard highlight listener
 const pressedKeys = new Set<string>();
@@ -1215,9 +1250,10 @@ function applyCanvasZoom(percent: number) {
   const label = document.getElementById('zoomLabel');
   if (!canvas) return;
   const scale = percent / 100;
+  const size = getLogicalCanvasSize(canvas);
   // Use width/height instead of transform so document flow adjusts correctly
-  canvas.style.width = `${canvas.width * scale}px`;
-  canvas.style.height = `${canvas.height * scale}px`;
+  canvas.style.width = `${size.width * scale}px`;
+  canvas.style.height = `${size.height * scale}px`;
   if (label) label.textContent = `${percent}%`;
   localStorage.setItem('cg-zoom', String(percent));
 }
@@ -1274,6 +1310,6 @@ function toggleFullscreen() {
   }
 
   if (GAMES.length) {
-    prepareGame(GAMES[0].id);
+    void prepareGame(GAMES[0].id);
   }
 })();

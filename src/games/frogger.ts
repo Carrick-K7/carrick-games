@@ -302,7 +302,7 @@ export class FroggerGame extends BaseGame {
         if (this.lives <= 0) {
           this.state = 'gameover';
           this.isDead = false;
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         } else {
           this.resetFrog();
         }
@@ -381,8 +381,7 @@ export class FroggerGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      getComputedStyle(document.documentElement).getPropertyValue('--bg') !== '#f0f0f0';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#1a1a2e' : '#e8e8e8';

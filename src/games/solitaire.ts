@@ -1,4 +1,9 @@
 import { BaseGame } from '../core/game.js';
+import {
+  drawScanlines,
+  fillRoundedPanel,
+  getRetroPalette,
+} from '../core/render.js';
 
 const W = 480;
 const H = 640;
@@ -59,11 +64,15 @@ interface ThemePalette {
   cardFace: string;
   cardBack: string;
   cardBackPattern: string;
+  cardEdge: string;
+  cardShadow: string;
+  cardHighlight: string;
   border: string;
   accent: string;
   text: string;
   muted: string;
   emptySlot: string;
+  slotFill: string;
 }
 
 type Phase = 'ready' | 'playing' | 'won';
@@ -158,11 +167,13 @@ export class SolitaireGame extends BaseGame {
     grad.addColorStop(1, theme.bgBottom);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
+    this.drawTableTexture(ctx, theme);
 
     this.drawFoundations(ctx, theme);
     this.drawStockWaste(ctx, theme);
     this.drawTableau(ctx, theme, zh);
     this.drawHud(ctx, theme, zh);
+    drawScanlines(ctx, W, H, this.isDarkTheme());
 
     if (this.phase === 'ready' || this.phase === 'won') {
       this.drawOverlay(ctx, theme, zh);
@@ -362,11 +373,7 @@ export class SolitaireGame extends BaseGame {
   }
 
   private getClickTarget(clientX: number, clientY: number): { type: 'tab' | 'waste' | 'found' | 'stock'; col?: number; index?: number } | null {
-    const rect = this.canvas.getBoundingClientRect();
-    const sx = this.canvas.width / rect.width;
-    const sy = this.canvas.height / rect.height;
-    const x = (clientX - rect.left) * sx;
-    const y = (clientY - rect.top) * sy;
+    const { x, y } = this.canvasPoint(clientX, clientY);
 
     // Stock
     if (x >= STOCK_X && x <= STOCK_X + CW && y >= STOCK_Y && y <= STOCK_Y + CH) {
@@ -515,7 +522,7 @@ export class SolitaireGame extends BaseGame {
       this.phase = 'won';
       if (!this.reportedScore) {
         this.reportedScore = true;
-        (window as Window & { reportScore?: (score: number) => void }).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }
@@ -563,6 +570,25 @@ export class SolitaireGame extends BaseGame {
   }
 
   // ─── Drawing helpers ─────────────────────────────────────────────
+
+  private drawTableTexture(ctx: CanvasRenderingContext2D, theme: ThemePalette) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let y = 42; y < H; y += 18) {
+      for (let x = (y / 18) % 2 === 0 ? 0 : 9; x < W; x += 18) {
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+    ctx.strokeStyle = theme.emptySlot;
+    ctx.lineWidth = 1;
+    for (let x = 0.5; x < W; x += 32) {
+      ctx.beginPath();
+      ctx.moveTo(x, 36);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   private drawFoundations(ctx: CanvasRenderingContext2D, theme: ThemePalette) {
     for (let f = 0; f < 4; f++) {
@@ -664,20 +690,35 @@ export class SolitaireGame extends BaseGame {
     highlight: boolean,
     theme: ThemePalette
   ) {
-    const dark = this.isLightTheme() ? false : true;
+    const dark = !this.isLightTheme();
 
     // Card background
-    ctx.fillStyle = theme.cardFace;
+    ctx.save();
+    ctx.shadowColor = theme.cardShadow;
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+    const faceGrad = ctx.createLinearGradient(x, y, x, y + CH);
+    faceGrad.addColorStop(0, theme.cardHighlight);
+    faceGrad.addColorStop(0.18, theme.cardFace);
+    faceGrad.addColorStop(1, theme.cardEdge);
+    ctx.fillStyle = faceGrad;
     ctx.strokeStyle = highlight ? theme.accent : theme.border;
     ctx.lineWidth = highlight ? 2 : 1;
     ctx.beginPath();
     ctx.roundRect(x, y, CW, CH, CARD_R);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
     ctx.stroke();
+    ctx.restore();
 
     if (!card.faceUp) {
       // Card back
-      ctx.fillStyle = theme.cardBack;
+      const backGrad = ctx.createLinearGradient(x, y, x + CW, y + CH);
+      backGrad.addColorStop(0, theme.cardBack);
+      backGrad.addColorStop(0.55, theme.accent);
+      backGrad.addColorStop(1, theme.cardBack);
+      ctx.fillStyle = backGrad;
       ctx.beginPath();
       ctx.roundRect(x + 2, y + 2, CW - 4, CH - 4, CARD_R - 1);
       ctx.fill();
@@ -698,7 +739,7 @@ export class SolitaireGame extends BaseGame {
       ctx.restore();
 
       // Center emblem
-      ctx.fillStyle = theme.cardBackPattern;
+      ctx.fillStyle = 'rgba(255,255,255,0.24)';
       ctx.beginPath();
       ctx.roundRect(x + CW / 2 - 8, y + CH / 2 - 8, 16, 16, 3);
       ctx.fill();
@@ -711,7 +752,7 @@ export class SolitaireGame extends BaseGame {
     }
 
     // Face-up card
-    const color = suitColor(card.suit, !dark);
+    const color = suitColor(card.suit, dark);
     ctx.fillStyle = color;
 
     // Top-left rank + suit
@@ -727,6 +768,10 @@ export class SolitaireGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(suitSymbol(card.suit), x + CW / 2, y + CH / 2);
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = color;
+    ctx.fillText(suitSymbol(card.suit), x + CW / 2 + 7, y + CH / 2 + 8);
+    ctx.globalAlpha = 1;
 
     // Bottom-right rank + suit (rotated)
     ctx.save();
@@ -743,6 +788,10 @@ export class SolitaireGame extends BaseGame {
   }
 
   private drawEmptySlot(ctx: CanvasRenderingContext2D, x: number, y: number, theme: ThemePalette) {
+    ctx.fillStyle = theme.slotFill;
+    ctx.beginPath();
+    ctx.roundRect(x, y, CW, CH, CARD_R);
+    ctx.fill();
     ctx.strokeStyle = theme.emptySlot;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
@@ -811,13 +860,7 @@ export class SolitaireGame extends BaseGame {
     const cy = H / 2;
 
     // Panel
-    ctx.fillStyle = theme.surface;
-    ctx.strokeStyle = theme.border;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(cx - 160, cy - 110, 320, 220, 16);
-    ctx.fill();
-    ctx.stroke();
+    fillRoundedPanel(ctx, cx - 160, cy - 110, 320, 220, getRetroPalette(this.isDarkTheme()), 8);
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -880,14 +923,18 @@ export class SolitaireGame extends BaseGame {
         bgTop: '#08141b',
         bgBottom: '#040b10',
         surface: 'rgba(15,23,42,0.90)',
-        cardFace: '#1e293b',
+        cardFace: '#f8fafc',
         cardBack: '#0f3460',
-        cardBackPattern: 'rgba(57,197,187,0.20)',
+        cardBackPattern: 'rgba(226,232,240,0.22)',
+        cardEdge: '#dbe8ef',
+        cardShadow: 'rgba(0,0,0,0.38)',
+        cardHighlight: '#ffffff',
         border: 'rgba(57,197,187,0.30)',
         accent: '#39C5BB',
         text: '#f8fafc',
         muted: '#9fb3c8',
         emptySlot: 'rgba(57,197,187,0.20)',
+        slotFill: 'rgba(7,17,29,0.28)',
       };
     }
     return {
@@ -897,19 +944,20 @@ export class SolitaireGame extends BaseGame {
       cardFace: '#ffffff',
       cardBack: '#b8e0df',
       cardBackPattern: 'rgba(13,148,136,0.15)',
+      cardEdge: '#e2ecec',
+      cardShadow: 'rgba(15,23,42,0.16)',
+      cardHighlight: '#ffffff',
       border: 'rgba(13,148,136,0.30)',
       accent: '#0d9488',
       text: '#0f172a',
       muted: '#55727a',
       emptySlot: 'rgba(13,148,136,0.20)',
+      slotFill: 'rgba(255,255,255,0.34)',
     };
   }
 
   private isLightTheme(): boolean {
-    const explicit = document.documentElement.getAttribute('data-theme');
-    if (explicit === 'light') return true;
-    if (explicit === 'dark') return false;
-    return window.matchMedia('(prefers-color-scheme: light)').matches;
+    return !this.isDarkTheme();
   }
 
   private isZh(): boolean {

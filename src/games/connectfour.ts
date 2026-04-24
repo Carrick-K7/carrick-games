@@ -90,11 +90,11 @@ export class ConnectFourGame extends BaseGame {
         this.score = 1000 - this.moves * 10;
         if (this.score < 100) this.score = 100;
       }
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     } else if (this.board.every(col => col[0] !== null)) {
       this.gameOver = true;
       this.score = 0;
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     } else {
       this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
     }
@@ -120,8 +120,7 @@ export class ConnectFourGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const boardColor = isDark ? '#1e3a8a' : '#3b82f6';
     const holeColor = isDark ? '#0b0f19' : '#fafafa';

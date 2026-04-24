@@ -193,9 +193,7 @@ export class SudokuGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark =
-      !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
 
     const bg = isDark ? '#0b0f19' : '#fafafa';
@@ -676,7 +674,7 @@ export class SudokuGame extends BaseGame {
         this.mistakes++;
         if (this.mistakes >= this.maxMistakes) {
           this.gameOver = true;
-          (window as any).reportScore?.(0);
+          window.reportScore?.(0);
         }
       } else {
         cell.invalid = false;
@@ -729,7 +727,7 @@ export class SudokuGame extends BaseGame {
     }
     this.won = true;
     const score = Math.max(0, Math.floor(10000 - this.timer * 10 - this.mistakes * 500 + this.hints * 200));
-    (window as any).reportScore?.(score);
+    window.reportScore?.(score);
   }
 
   destroy() {

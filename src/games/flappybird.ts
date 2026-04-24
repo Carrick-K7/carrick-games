@@ -33,7 +33,7 @@ export class FlappyBirdGame extends BaseGame {
     this.score = 0;
     this.gameOver = false;
     this.spawnTimer = 0;
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private spawnPipe() {
@@ -116,8 +116,7 @@ export class FlappyBirdGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Sky
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
@@ -196,10 +195,7 @@ export class FlappyBirdGame extends BaseGame {
 
     // Game Over
     if (this.gameOver) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';

@@ -63,7 +63,7 @@ export class SpaceShooterGame extends BaseGame {
     this.leftPressed = false;
     this.fireTimer = 0;
     this.spawnTimer = 0;
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private spawnBullet() {
@@ -168,8 +168,7 @@ export class SpaceShooterGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
@@ -223,10 +222,7 @@ export class SpaceShooterGame extends BaseGame {
 
     // Game Over overlay
     if (this.gameOver) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
@@ -259,7 +255,7 @@ export class SpaceShooterGame extends BaseGame {
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
       const x = touch.clientX - rect.left;
-      const scaleX = this.canvas.width / rect.width;
+      const scaleX = this.width / rect.width;
       const canvasX = x * scaleX;
 
       if (this.gameOver) {

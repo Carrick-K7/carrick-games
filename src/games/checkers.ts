@@ -108,7 +108,7 @@ export class CheckersGame extends BaseGame {
       this.gameOver = true;
       this.winner = 1;
       this.score = 100;
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
       return;
     }
     // Pick best: prioritize captures with most pieces, then center control
@@ -156,13 +156,12 @@ export class CheckersGame extends BaseGame {
       if (this.winner === 1) {
         this.score = 100;
       }
-      (window as any).reportScore?.(this.score);
+      window.reportScore?.(this.score);
     }
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const darkSq = isDark ? '#1e293b' : '#94a3b8';
     const lightSq = isDark ? '#334155' : '#cbd5e1';

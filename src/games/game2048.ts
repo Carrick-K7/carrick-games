@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, getStoredRecord } from '../core/game.js';
 
 const W = 400;
 const H = 400;
@@ -180,7 +180,7 @@ export class Game2048 extends BaseGame {
       this.gameState = 'gameover';
       if (!this.lastScoreReported) {
         this.lastScoreReported = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }
@@ -208,8 +208,7 @@ export class Game2048 extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#faf8ef';
@@ -314,13 +313,7 @@ export class Game2048 extends BaseGame {
   }
 
   private getBest(): number {
-    try {
-      const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, unknown>;
-      const best = records['2048'];
-      return typeof best === 'number' && Number.isFinite(best) ? best : this.score;
-    } catch {
-      return this.score;
-    }
+    return getStoredRecord('2048') ?? this.score;
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {

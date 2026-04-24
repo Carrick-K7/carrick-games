@@ -194,7 +194,7 @@ export class MissileCommandGame extends BaseGame {
       this.state = 'gameover';
       if (!this.scoreReported) {
         this.scoreReported = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }
@@ -208,8 +208,7 @@ export class MissileCommandGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     ctx.fillStyle = isDark ? '#0b0f19' : '#1a1a2e';
     ctx.fillRect(0, 0, this.width, this.height);

@@ -17,6 +17,7 @@ async function selectGame(page: any, gameId: string) {
   await item.scrollIntoViewIfNeeded();
   await item.click();
   await expect(page.locator('#actionBtn')).toBeVisible();
+  await expect(page.locator('#actionBtn')).toBeEnabled();
 }
 
 async function startGame(page: any) {
@@ -28,6 +29,29 @@ async function startGame(page: any) {
 
 function filterFavicon(errors: string[]) {
   return errors.filter(e => !e.toLowerCase().includes('favicon'));
+}
+
+function gameModuleName(url: string): string | null {
+  const match = url.match(/\/dist\/games\/([^/?]+\.js)(?:\?|$)/);
+  return match?.[1] ?? null;
+}
+
+async function canvasColorCount(page: any, gridSize = 20): Promise<number> {
+  return page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement, size: number) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 0;
+    const colors = new Set<string>();
+    const stepX = Math.max(1, Math.floor(canvas.width / size));
+    const stepY = Math.max(1, Math.floor(canvas.height / size));
+    for (let y = 0; y < canvas.height; y += stepY) {
+      for (let x = 0; x < canvas.width; x += stepX) {
+        const [r, g, b, a] = Array.from(ctx.getImageData(x, y, 1, 1).data);
+        if (a === 0) continue;
+        colors.add(`${r},${g},${b}`);
+      }
+    }
+    return colors.size;
+  }, gridSize);
 }
 
 // ─── Game input profiles ────────────────────────────────────────────────────
@@ -92,6 +116,81 @@ test.describe('Carrick Games - Lifecycle', () => {
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
     expect(await gameItems.count()).toBeGreaterThan(0);
+  });
+
+  test('initial page load does not fetch unselected game modules', async ({ page }) => {
+    const gameModules: string[] = [];
+    page.on('request', (request) => {
+      const moduleName = gameModuleName(request.url());
+      if (moduleName) gameModules.push(moduleName);
+    });
+
+    await page.goto('/');
+    await expect(page.locator('.game-list-item').first()).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    expect([...new Set(gameModules)].sort()).toEqual(['snake.js']);
+  });
+
+  test('system light theme renders the canvas with light game colors', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/');
+    await expect(page.locator('#gameCanvas')).toBeVisible();
+
+    const topLeftPixel = await page.locator('#gameCanvas').evaluate((canvas) => {
+      const ctx = (canvas as HTMLCanvasElement).getContext('2d');
+      if (!ctx) return [];
+      return Array.from(ctx.getImageData(1, 1, 1, 1).data).slice(0, 3);
+    });
+
+    const [r, g, b] = topLeftPixel;
+    expect(r + g + b).toBeGreaterThan(360);
+    expect(g).toBeGreaterThan(120);
+  });
+
+  test('high density displays use a scaled backing canvas without changing logical size', async ({ browser }) => {
+    const context = await browser.newContext({
+      deviceScaleFactor: 2,
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto('/');
+      await selectGame(page, 'snake');
+
+      const metrics = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
+        const box = canvas.getBoundingClientRect();
+        return {
+          width: canvas.width,
+          height: canvas.height,
+          logicalWidth: Number(canvas.dataset.logicalWidth),
+          logicalHeight: Number(canvas.dataset.logicalHeight),
+          pixelRatio: Number(canvas.dataset.pixelRatio),
+          boxWidth: Math.round(box.width),
+          boxHeight: Math.round(box.height),
+        };
+      });
+
+      expect(metrics.logicalWidth).toBe(400);
+      expect(metrics.logicalHeight).toBe(400);
+      expect(metrics.pixelRatio).toBe(2);
+      expect(metrics.width).toBe(800);
+      expect(metrics.height).toBe(800);
+      expect(metrics.boxWidth).toBe(400);
+      expect(metrics.boxHeight).toBe(400);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('all games render HD Retro layered canvas scenes', async ({ page }) => {
+    for (const id of ALL_GAME_IDS) {
+      await selectGame(page, id);
+      await startGame(page);
+      const renderStyle = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.renderStyle);
+      expect(renderStyle).toBe('hd-retro');
+      expect(await canvasColorCount(page)).toBeGreaterThanOrEqual(8);
+    }
   });
 
   test('corrupted stored records do not break startup', async ({ page }) => {

@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Retro game collection by Carrick - HTML5 Canvas games",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.prod.json",
+    "postbuild": "find dist -name '*.map' -delete",
+    "build:dev": "tsc",
     "dev": "tsc --watch",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",

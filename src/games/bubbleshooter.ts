@@ -102,8 +102,7 @@ export class BubbleShooterGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const panel = isDark ? '#111827' : '#edf7f5';
@@ -601,7 +600,7 @@ export class BubbleShooterGame extends BaseGame {
   private reportScore() {
     if (this.scoreReported) return;
     this.scoreReported = true;
-    (window as { reportScore?: (score: number) => void }).reportScore?.(this.score);
+    window.reportScore?.(this.score);
   }
 
   private drawBubble(
@@ -724,8 +723,8 @@ export class BubbleShooterGame extends BaseGame {
 
   private toCanvasPoint(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+    const scaleX = this.width / rect.width;
+    const scaleY = this.height / rect.height;
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,

@@ -257,7 +257,7 @@ export class BerzerkGame extends BaseGame {
         if (this.lives <= 0) {
           this.state = 'gameover';
           this.hiScore = Math.max(this.hiScore, this.score);
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         } else {
           this.resetRoom();
           this.state = 'playing';
@@ -444,8 +444,7 @@ export class BerzerkGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const wallColor = isDark ? '#334155' : '#94a3b8';
     const primary = isDark ? '#39C5BB' : '#0d9488';
@@ -666,8 +665,8 @@ export class BerzerkGame extends BaseGame {
     if (e instanceof TouchEvent) {
       e.preventDefault();
       const rect = this.canvas.getBoundingClientRect();
-      const sx = this.canvas.width / rect.width;
-      const sy = this.canvas.height / rect.height;
+      const sx = this.width / rect.width;
+      const sy = this.height / rect.height;
 
       if (e.type === 'touchstart') {
         if (this.state === 'waiting') {

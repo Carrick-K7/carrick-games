@@ -150,7 +150,7 @@ export class WordleGame extends BaseGame {
         this.animating = false;
         if (this.gameOver && !this.reported) {
           this.reported = true;
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         }
       }
     }
@@ -226,8 +226,8 @@ export class WordleGame extends BaseGame {
 
   private handlePointer(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+    const scaleX = this.width / rect.width;
+    const scaleY = this.height / rect.height;
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top) * scaleY;
 
@@ -543,8 +543,7 @@ export class WordleGame extends BaseGame {
   }
 
   private getTheme(): Theme {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
 
     if (isDark) {
       return {

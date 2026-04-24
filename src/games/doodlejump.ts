@@ -163,7 +163,7 @@ export class DoodleJumpGame extends BaseGame {
       this.gameState = 'gameover';
       if (!this.lastScoreReported) {
         this.lastScoreReported = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }
@@ -171,8 +171,7 @@ export class DoodleJumpGame extends BaseGame {
   draw(ctx: CanvasRenderingContext2D) {
     // Sky gradient
     const grad = ctx.createLinearGradient(0, 0, 0, H);
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     if (isDark) {
       grad.addColorStop(0, '#0b0f19');
       grad.addColorStop(1, '#0f172a');
@@ -247,8 +246,7 @@ export class DoodleJumpGame extends BaseGame {
 
   private drawPlayer(ctx: CanvasRenderingContext2D) {
     const { x, y } = this.player;
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const bodyColor = isDark ? '#4ade80' : '#15803d';
     const eyeColor = '#0f172a';
 

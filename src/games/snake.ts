@@ -1,6 +1,14 @@
 import { BaseGame } from '../core/game.js';
+import {
+  drawGlowText,
+  drawPixelFrame,
+  drawRetroBackground,
+  drawScanlines,
+  getRetroPalette,
+} from '../core/render.js';
 
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 
 export class SnakeGame extends BaseGame {
   private tileSize = 20;
@@ -14,6 +22,7 @@ export class SnakeGame extends BaseGame {
   private moveInterval = 0.12; // seconds
   private score = 0;
   private gameOver = false;
+  private particles: Particle[] = [];
 
   constructor() {
     super('gameCanvas', 400, 400);
@@ -26,8 +35,9 @@ export class SnakeGame extends BaseGame {
     this.score = 0;
     this.gameOver = false;
     this.moveTimer = 0;
+    this.particles = [];
     this.spawnFood();
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   private spawnFood() {
@@ -42,6 +52,16 @@ export class SnakeGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles = this.particles
+      .map((p) => ({
+        ...p,
+        x: p.x + p.vx * dt,
+        y: p.y + p.vy * dt,
+        vy: p.vy + 110 * dt,
+        life: p.life - dt,
+      }))
+      .filter((p) => p.life > 0);
+
     if (this.gameOver) return;
     this.moveTimer += dt;
     if (this.moveTimer < this.moveInterval) return;
@@ -73,67 +93,114 @@ export class SnakeGame extends BaseGame {
     if (head.x === this.food.x && head.y === this.food.y) {
       this.score += 10;
       this.moveInterval = Math.max(0.05, this.moveInterval - 0.002);
+      this.burstFood(head.x, head.y);
       this.spawnFood();
     } else {
       this.snake.pop();
     }
   }
 
+  private burstFood(x: number, y: number) {
+    const cx = x * this.tileSize + this.tileSize / 2;
+    const cy = y * this.tileSize + this.tileSize / 2;
+    const colors = ['#fb7185', '#facc15', '#39C5BB', '#4ade80'];
+    for (let i = 0; i < 16; i++) {
+      const angle = (Math.PI * 2 * i) / 16;
+      const speed = 50 + (i % 5) * 12;
+      this.particles.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.35 + (i % 4) * 0.04,
+        color: colors[i % colors.length],
+      });
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
+    const palette = getRetroPalette(isDark);
+    const boardW = this.cols * this.tileSize;
+    const boardH = this.rows * this.tileSize;
 
-    // Background
-    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
-    ctx.fillRect(0, 0, this.width, this.height);
+    drawRetroBackground(ctx, this.width, this.height, palette, this.tileSize);
 
-    // Subtle grid dots
-    ctx.fillStyle = isDark ? '#1e293b' : '#d1d5db';
+    // Pixel board texture
     for (let x = 0; x < this.cols; x++) {
       for (let y = 0; y < this.rows; y++) {
+        ctx.fillStyle =
+          (x + y) % 2 === 0
+            ? (isDark ? 'rgba(57,197,187,0.035)' : 'rgba(13,148,136,0.040)')
+            : (isDark ? 'rgba(96,165,250,0.030)' : 'rgba(37,99,235,0.030)');
+        ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+        ctx.fillStyle = isDark ? 'rgba(148,163,184,0.22)' : 'rgba(15,23,42,0.12)';
         ctx.fillRect(x * this.tileSize + this.tileSize / 2 - 1, y * this.tileSize + this.tileSize / 2 - 1, 2, 2);
       }
     }
 
-    // Grid border
-    ctx.strokeStyle = isDark ? '#334155' : '#9ca3af';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, this.cols * this.tileSize, this.rows * this.tileSize);
+    drawPixelFrame(ctx, 0, 0, boardW, boardH, palette);
 
     // Food
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
     const fx = this.food.x * this.tileSize + this.tileSize / 2;
     const fy = this.food.y * this.tileSize + this.tileSize / 2;
-    ctx.arc(fx, fy, this.tileSize / 2 - 2, 0, Math.PI * 2);
+    const pulse = 1 + Math.sin(performance.now() / 140) * 0.08;
+    ctx.save();
+    ctx.shadowColor = palette.red;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = palette.red;
+    ctx.beginPath();
+    ctx.arc(fx, fy, (this.tileSize / 2 - 3) * pulse, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = palette.amber;
+    ctx.fillRect(fx - 3, fy - 6, 6, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillRect(fx - 4, fy - 5, 3, 3);
+    ctx.restore();
 
     // Snake
     this.snake.forEach((seg, i) => {
-      ctx.fillStyle = i === 0 ? '#22c55e' : '#16a34a';
-      const pad = 1;
+      const pad = i === 0 ? 1 : 2;
+      const x = seg.x * this.tileSize + pad;
+      const y = seg.y * this.tileSize + pad;
+      const size = this.tileSize - pad * 2;
+      ctx.fillStyle = i === 0 ? palette.primary : i % 2 === 0 ? palette.green : '#22c55e';
+      ctx.shadowColor = i === 0 ? palette.primary : palette.green;
+      ctx.shadowBlur = i === 0 ? 14 : 5;
       ctx.fillRect(
-        seg.x * this.tileSize + pad,
-        seg.y * this.tileSize + pad,
-        this.tileSize - pad * 2,
-        this.tileSize - pad * 2
+        x,
+        y,
+        size,
+        size
       );
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.fillRect(x + 3, y + 3, Math.max(2, size - 6), 3);
+      if (i === 0) {
+        ctx.fillStyle = isDark ? '#06111a' : '#ffffff';
+        ctx.fillRect(x + 5, y + 6, 3, 3);
+        ctx.fillRect(x + size - 8, y + 6, 3, 3);
+      }
     });
 
+    for (const p of this.particles) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+
     // Score
-    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText(`SCORE ${this.score}`, 8, this.height - 10);
+    drawGlowText(ctx, `SCORE ${this.score}`, 10, this.height - 10, palette.primary, '10px "Press Start 2P", monospace');
+    drawScanlines(ctx, this.width, this.height, isDark);
 
     // Game Over
     if (this.gameOver) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
+      ctx.fillStyle = '#f8fafc';
       ctx.font = '16px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);

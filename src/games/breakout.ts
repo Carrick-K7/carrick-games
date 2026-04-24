@@ -1,4 +1,14 @@
 import { BaseGame } from '../core/game.js';
+import {
+  drawGlowText,
+  drawNeonRect,
+  drawPixelFrame,
+  drawRetroBackground,
+  drawScanlines,
+  getRetroPalette,
+} from '../core/render.js';
+
+type HitParticle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 
 export class BreakoutGame extends BaseGame {
   private paddleWidth = 80;
@@ -24,6 +34,7 @@ export class BreakoutGame extends BaseGame {
   private rightPressed = false;
   private leftPressed = false;
   private destroyedCount = 0;
+  private hitParticles: HitParticle[] = [];
 
   constructor() {
     super('gameCanvas', 480, 360);
@@ -42,6 +53,7 @@ export class BreakoutGame extends BaseGame {
     this.destroyedCount = 0;
     this.rightPressed = false;
     this.leftPressed = false;
+    this.hitParticles = [];
 
     this.brickWidth =
       (this.width - (this.brickPadding * (this.brickCols + 1))) / this.brickCols;
@@ -59,10 +71,20 @@ export class BreakoutGame extends BaseGame {
         });
       }
     }
-    (this as any)._recorded = false;
+    this.resetScoreReport();
   }
 
   update(dt: number) {
+    this.hitParticles = this.hitParticles
+      .map((p) => ({
+        ...p,
+        x: p.x + p.vx * dt,
+        y: p.y + p.vy * dt,
+        vy: p.vy + 150 * dt,
+        life: p.life - dt,
+      }))
+      .filter((p) => p.life > 0);
+
     if (this.gameOver || this.won) return;
 
     // Paddle movement
@@ -100,6 +122,7 @@ export class BreakoutGame extends BaseGame {
       const hitPos = (this.ballX - (this.paddleX + this.paddleWidth / 2)) / (this.paddleWidth / 2);
       this.ballDx = hitPos * 300;
       this.ballY = this.paddleY - this.ballRadius - 0.5;
+      this.emitHit(this.ballX, this.paddleY, '#38bdf8');
     }
 
     // Floor collision -> game over
@@ -121,6 +144,7 @@ export class BreakoutGame extends BaseGame {
         brick.active = false;
         this.score += 10;
         this.destroyedCount++;
+        this.emitHit(this.ballX, this.ballY, brick.color);
         if (this.destroyedCount % 5 === 0) {
           const speed = Math.sqrt(this.ballDx ** 2 + this.ballDy ** 2);
           const newSpeed = Math.min(600, speed * 1.08);
@@ -137,59 +161,95 @@ export class BreakoutGame extends BaseGame {
     }
   }
 
+  private emitHit(x: number, y: number, color: string) {
+    for (let i = 0; i < 12; i++) {
+      const angle = -Math.PI + (Math.PI * 2 * i) / 12;
+      const speed = 60 + (i % 4) * 25;
+      this.hitParticles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.28 + (i % 3) * 0.06,
+        color,
+      });
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
+    const palette = getRetroPalette(isDark);
 
-    // Background
-    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
-    ctx.fillRect(0, 0, this.width, this.height);
+    drawRetroBackground(ctx, this.width, this.height, palette, 30);
+    drawPixelFrame(ctx, 0, 0, this.width, this.height, palette);
 
-    // Stars
-    ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-    for (let i = 0; i < 40; i++) {
+    // Parallax starfield
+    for (let i = 0; i < 54; i++) {
       const sx = (i * 97) % this.width;
       const sy = (i * 53) % this.height;
-      ctx.fillRect(sx, sy, 2, 2);
+      ctx.fillStyle = i % 3 === 0 ? palette.cyan : i % 3 === 1 ? palette.primary : palette.muted;
+      ctx.globalAlpha = isDark ? 0.45 : 0.25;
+      ctx.fillRect(sx, sy, i % 5 === 0 ? 3 : 2, i % 5 === 0 ? 3 : 2);
     }
+    ctx.globalAlpha = 1;
 
     // Bricks
     for (const brick of this.bricks) {
       if (!brick.active) continue;
-      ctx.fillStyle = brick.color;
-      ctx.beginPath();
-      ctx.roundRect(brick.x, brick.y, this.brickWidth, this.brickHeight, 4);
-      ctx.fill();
+      drawNeonRect(ctx, brick.x, brick.y, this.brickWidth, this.brickHeight, brick.color, 4);
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(brick.x + 1.5, brick.y + 1.5, this.brickWidth - 3, this.brickHeight - 3);
     }
 
     // Paddle
-    ctx.fillStyle = '#38bdf8';
+    const paddleGrad = ctx.createLinearGradient(this.paddleX, this.paddleY, this.paddleX, this.paddleY + this.paddleHeight);
+    paddleGrad.addColorStop(0, '#7dd3fc');
+    paddleGrad.addColorStop(0.5, '#38bdf8');
+    paddleGrad.addColorStop(1, palette.primary);
+    ctx.shadowColor = palette.cyan;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = paddleGrad;
     ctx.beginPath();
     ctx.roundRect(this.paddleX, this.paddleY, this.paddleWidth, this.paddleHeight, 4);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.fillRect(this.paddleX + 8, this.paddleY + 2, this.paddleWidth - 16, 2);
 
     // Ball
-    ctx.fillStyle = isDark ? '#f8fafc' : '#1a1a2e';
+    ctx.shadowColor = isDark ? '#ffffff' : palette.blue;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = isDark ? '#f8fafc' : '#ffffff';
     ctx.beginPath();
     ctx.arc(this.ballX, this.ballY, this.ballRadius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = palette.blue;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    for (const p of this.hitParticles) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 3));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
 
     // Score
-    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 8, 20);
+    drawGlowText(ctx, `SCORE ${this.score}`, 10, 22, palette.primary, '10px "Press Start 2P", monospace');
+    const liveBricks = this.bricks.length - this.destroyedCount;
+    drawGlowText(ctx, `BRICKS ${liveBricks}`, this.width - 10, 22, palette.amber, '10px "Press Start 2P", monospace', 'right');
+    drawScanlines(ctx, this.width, this.height, isDark);
 
     // Game Over / Win overlay
     if (this.gameOver || this.won) {
-      if (!(this as any)._recorded) {
-        (this as any)._recorded = true;
-        (window as any).reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
-      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
+      ctx.fillStyle = '#f8fafc';
       ctx.font = '16px "Press Start 2P", monospace';
       ctx.fillText(this.won ? 'YOU WIN!' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
       ctx.font = '8px "Press Start 2P", monospace';
@@ -211,12 +271,9 @@ export class BreakoutGame extends BaseGame {
 
     if (e instanceof TouchEvent) {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
-      const x = touch.clientX - rect.left;
-      const scaleX = this.canvas.width / rect.width;
-      const canvasX = x * scaleX;
+      const canvasX = this.canvasPoint(touch.clientX, touch.clientY).x;
 
       if (this.gameOver || this.won) {
         this.init();

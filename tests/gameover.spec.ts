@@ -17,6 +17,7 @@ async function selectGame(page: any, gameId: string) {
   await item.scrollIntoViewIfNeeded();
   await item.click();
   await expect(page.locator('#actionBtn')).toBeVisible();
+  await expect(page.locator('#actionBtn')).toBeEnabled();
 }
 
 async function startGame(page: any) {

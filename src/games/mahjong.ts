@@ -133,7 +133,7 @@ export class MahjongGame extends BaseGame {
       this.gameStarted = false;
       if (!this.scoreReported) {
         this.scoreReported = true;
-        (window as any).reportScore?.(this.score);
+        window.reportScore?.(this.score);
       }
     }
   }
@@ -151,7 +151,7 @@ export class MahjongGame extends BaseGame {
         this.gameStarted = false;
         if (!this.scoreReported) {
           this.scoreReported = true;
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         }
       }
     }
@@ -174,8 +174,7 @@ export class MahjongGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
 
     const bg = isDark ? '#0b0f19' : '#fafafa';
@@ -305,8 +304,7 @@ export class MahjongGame extends BaseGame {
   }
 
   private isDark(): boolean {
-    return !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    return this.isDarkTheme();
   }
 
   private onTileClick(px: number, py: number) {
@@ -368,7 +366,7 @@ export class MahjongGame extends BaseGame {
         this.score += this.timeLeft; // time bonus
         if (!this.scoreReported) {
           this.scoreReported = true;
-          (window as any).reportScore?.(this.score);
+          window.reportScore?.(this.score);
         }
       } else {
         // Check no moves after a short delay (let anim finish)
@@ -395,8 +393,8 @@ export class MahjongGame extends BaseGame {
     if (e instanceof MouseEvent) {
       if (e.type === 'mousedown') {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
+        const scaleX = this.width / rect.width;
+        const scaleY = this.height / rect.height;
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top) * scaleY;
         this.onTileClick(x, y);
@@ -406,8 +404,8 @@ export class MahjongGame extends BaseGame {
       e.preventDefault();
       if (e.type === 'touchstart') {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
+        const scaleX = this.width / rect.width;
+        const scaleY = this.height / rect.height;
         const touch = e.touches[0];
         const x = (touch.clientX - rect.left) * scaleX;
         const y = (touch.clientY - rect.top) * scaleY;
