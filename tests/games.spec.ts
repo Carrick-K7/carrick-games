@@ -6,6 +6,11 @@ import {
   resolveIwannaHorizontalMove,
 } from '../src/games/iwannaPhysics';
 import { createParkingCar, updateParkingCar } from '../src/games/parkingPhysics';
+import {
+  PACMAN_RADIUS,
+  PACMAN_TILE,
+  movePacmanBody,
+} from '../src/games/pacmanPhysics';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -178,6 +183,50 @@ test.describe('Game rules', () => {
       0.35
     );
     expect(reverse.angle).toBeLessThan(-Math.PI / 2);
+  });
+
+  test('pacman body stops before entering wall tiles', () => {
+    const centerY = PACMAN_TILE + PACMAN_TILE / 2;
+    const result = movePacmanBody({
+      maze: [[0, 0], [1, 0], [0, 0]],
+      cols: 2,
+      rows: 3,
+      tile: PACMAN_TILE,
+      radius: PACMAN_RADIUS,
+      x: PACMAN_TILE / 2,
+      y: centerY,
+      dir: 'RIGHT',
+      nextDir: 'RIGHT',
+      speed: PACMAN_TILE * 2,
+      dt: 1,
+    });
+
+    expect(result.x + PACMAN_RADIUS).toBeLessThanOrEqual(PACMAN_TILE);
+    expect(result.y).toBe(centerY);
+    expect(result.col).toBe(0);
+    expect(result.row).toBe(1);
+  });
+
+  test('pacman recenters on the lane axis when blocked by a wall', () => {
+    const centerY = PACMAN_TILE + PACMAN_TILE / 2;
+    const result = movePacmanBody({
+      maze: [[0, 0], [1, 0], [0, 0]],
+      cols: 2,
+      rows: 3,
+      tile: PACMAN_TILE,
+      radius: PACMAN_RADIUS,
+      x: PACMAN_TILE - PACMAN_RADIUS - 1,
+      y: centerY + 3,
+      dir: 'RIGHT',
+      nextDir: 'RIGHT',
+      speed: PACMAN_TILE,
+      dt: 1,
+    });
+
+    expect(result.x).toBeCloseTo(PACMAN_TILE - PACMAN_RADIUS, 5);
+    expect(result.y).toBe(centerY);
+    expect(result.col).toBe(0);
+    expect(result.row).toBe(1);
   });
 });
 

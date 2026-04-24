@@ -1,6 +1,14 @@
 import { BaseGame } from '../core/game.js';
+import {
+  PACMAN_DIR_DX as DIR_DX,
+  PACMAN_DIR_DY as DIR_DY,
+  PACMAN_RADIUS,
+  PACMAN_TILE as TILE,
+  getPacmanValidDirs,
+  movePacmanBody,
+  type PacmanDir as Dir,
+} from './pacmanPhysics.js';
 
-const TILE = 16;
 const COLS = 28;
 const ROWS = 31;
 
@@ -38,27 +46,6 @@ const MAZE_TEMPLATE: number[][] = [
   [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
-
-type Dir = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
-
-const DIR_DX = { LEFT: -1, RIGHT: 1, UP: 0, DOWN: 0 };
-const DIR_DY = { LEFT: 0, RIGHT: 0, UP: -1, DOWN: 1 };
-
-function dirToAngle(dir: Dir): number {
-  switch (dir) {
-    case 'RIGHT': return 0;
-    case 'DOWN': return Math.PI / 2;
-    case 'LEFT': return Math.PI;
-    case 'UP': return -Math.PI / 2;
-    default: return 0;
-  }
-}
-
-function tileBlocked(maze: number[][], col: number, row: number): boolean {
-  if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return true;
-  const t = maze[row][col];
-  return t === 0 || t === 4;
-}
 
 export class PacManGame extends BaseGame {
   private maze: number[][] = [];
@@ -270,57 +257,30 @@ export class PacManGame extends BaseGame {
   }
 
   private movePacMan(dt: number) {
-    // Try to turn
-    const targetCol = this.pacX + DIR_DX[this.nextDir];
-    const targetRow = this.pacY + DIR_DY[this.nextDir];
-    if (!tileBlocked(this.maze, targetCol, targetRow)) {
-      // At intersection?
-      const atIntersection = this.getValidDirs(this.pacX, this.pacY).length > 2;
-      if (atIntersection || this.pacDir === this.nextDir) {
-        this.pacDir = this.nextDir;
-      }
-    }
+    const moved = movePacmanBody({
+      maze: this.maze,
+      cols: COLS,
+      rows: ROWS,
+      tile: TILE,
+      radius: PACMAN_RADIUS,
+      x: this.pacPixelX,
+      y: this.pacPixelY,
+      dir: this.pacDir,
+      nextDir: this.nextDir,
+      speed: this.pacSpeed,
+      dt,
+    });
 
-    // Move
-    const spd = this.pacSpeed * dt;
-    this.pacAngle = dirToAngle(this.pacDir);
-
-    // Pixel-level movement with wall collision
-    let newPx = this.pacPixelX + DIR_DX[this.pacDir] * spd;
-    let newPy = this.pacPixelY + DIR_DY[this.pacDir] * spd;
-
-    // Tunnel wrap
-    if (newPx < -TILE / 2) newPx = COLS * TILE + TILE / 2;
-    if (newPx > COLS * TILE + TILE / 2) newPx = -TILE / 2;
-
-    let newCol = Math.floor(newPx / TILE);
-    const newRow = Math.floor(newPy / TILE);
-
-    // Normalize tunnel coordinates for collision check
-    if (newCol < 0) newCol = COLS - 1;
-    if (newCol >= COLS) newCol = 0;
-
-    // Wall collision check
-    if (!tileBlocked(this.maze, newCol, newRow)) {
-      this.pacPixelX = newPx;
-      this.pacPixelY = newPy;
-      this.pacX = newCol;
-      this.pacY = newRow;
-    } else {
-      // Snap to grid center
-      this.pacX = Math.round((this.pacPixelX - TILE / 2) / TILE);
-      this.pacY = Math.round((this.pacPixelY - TILE / 2) / TILE);
-    }
+    this.pacPixelX = moved.x;
+    this.pacPixelY = moved.y;
+    this.pacX = moved.col;
+    this.pacY = moved.row;
+    this.pacDir = moved.dir;
+    this.pacAngle = moved.angle;
   }
 
   private getValidDirs(col: number, row: number): Dir[] {
-    const dirs: Dir[] = [];
-    for (const d of ['UP', 'DOWN', 'LEFT', 'RIGHT'] as Dir[]) {
-      if (!tileBlocked(this.maze, col + DIR_DX[d], row + DIR_DY[d])) {
-        dirs.push(d);
-      }
-    }
-    return dirs;
+    return getPacmanValidDirs(this.maze, col, row, COLS, ROWS);
   }
 
   private moveGhost(idx: number, dt: number) {
@@ -460,7 +420,7 @@ export class PacManGame extends BaseGame {
     ctx.rotate(this.pacAngle);
     ctx.fillStyle = '#facc15';
     ctx.beginPath();
-    ctx.arc(0, 0, TILE / 2 - 1, this.mouthAngle, Math.PI * 2 - this.mouthAngle);
+    ctx.arc(0, 0, PACMAN_RADIUS, this.mouthAngle, Math.PI * 2 - this.mouthAngle);
     ctx.lineTo(0, 0);
     ctx.closePath();
     ctx.fill();
@@ -571,11 +531,11 @@ export class PacManGame extends BaseGame {
     }
     if (e instanceof TouchEvent) {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      if (x < rect.width / 3) this.nextDir = 'LEFT';
-      else if (x > (rect.width * 2) / 3) this.nextDir = 'RIGHT';
+      const touch = e.touches[0] ?? e.changedTouches[0];
+      if (!touch) return;
+      const { x } = this.canvasPoint(touch.clientX, touch.clientY);
+      if (x < this.width / 3) this.nextDir = 'LEFT';
+      else if (x > (this.width * 2) / 3) this.nextDir = 'RIGHT';
       else this.nextDir = this.pacDir;
     }
   }
