@@ -1,4 +1,5 @@
 import { BaseGame } from '../core/game.js';
+import { calculateSudokuScore } from './sudokuScore.js';
 
 interface Cell {
   value: number;
@@ -39,6 +40,7 @@ export class SudokuGame extends BaseGame {
   }
 
   private resetGame() {
+    this.resetScoreReport();
     this.board = [];
     this.solution = [];
     this.selectedRow = -1;
@@ -555,8 +557,6 @@ export class SudokuGame extends BaseGame {
 
     if (e instanceof MouseEvent || e instanceof TouchEvent) {
       let clientX: number, clientY: number;
-      const rect = this.canvas.getBoundingClientRect();
-
       if (e instanceof TouchEvent) {
         e.preventDefault();
         if (e.touches.length === 0) {
@@ -570,8 +570,7 @@ export class SudokuGame extends BaseGame {
         clientY = e.clientY;
       }
 
-      const x = (clientX - rect.left) * (this.width / rect.width);
-      const y = (clientY - rect.top) * (this.height / rect.height);
+      const { x, y } = this.canvasPoint(clientX, clientY);
 
       if (this.showMenu) {
         this.handleMenuClick(x, y, e.type);
@@ -674,7 +673,7 @@ export class SudokuGame extends BaseGame {
         this.mistakes++;
         if (this.mistakes >= this.maxMistakes) {
           this.gameOver = true;
-          window.reportScore?.(0);
+          this.submitScoreOnce(0);
         }
       } else {
         cell.invalid = false;
@@ -726,8 +725,8 @@ export class SudokuGame extends BaseGame {
       }
     }
     this.won = true;
-    const score = Math.max(0, Math.floor(10000 - this.timer * 10 - this.mistakes * 500 + this.hints * 200));
-    window.reportScore?.(score);
+    const score = calculateSudokuScore(this.timer, this.mistakes, this.hints);
+    this.submitScoreOnce(score);
   }
 
   destroy() {

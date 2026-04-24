@@ -33,7 +33,6 @@ export class MissileCommandGame extends BaseGame {
   private waveIncoming = 0;
   private state: 'waiting' | 'playing' | 'waveclear' | 'gameover' = 'waiting';
   private gameOver = false;
-  private scoreReported = false;
   private ammos: number[] = [];
   private maxAmmo = 30;
   private waveClearTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -47,11 +46,11 @@ export class MissileCommandGame extends BaseGame {
   }
 
   init() {
+    this.resetScoreReport();
     this.score = 0;
     this.wave = 1;
     this.state = 'waiting';
     this.gameOver = false;
-    this.scoreReported = false;
     this.playerMissiles = [];
     this.enemyMissiles = [];
     this.explosions = [];
@@ -192,10 +191,7 @@ export class MissileCommandGame extends BaseGame {
     if (this.cities.every(c => !c.alive) && !this.gameOver) {
       this.gameOver = true;
       this.state = 'gameover';
-      if (!this.scoreReported) {
-        this.scoreReported = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
     }
   }
 
@@ -357,12 +353,10 @@ export class MissileCommandGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type === 'mousemove') {
-        this.mouseX = e.clientX - (window.innerWidth - 400) / 2;
-        this.mouseY = e.clientY - 60;
-        this.mouseX = Math.max(0, Math.min(400, this.mouseX));
-        this.mouseY = Math.max(0, Math.min(600, this.mouseY));
+        this.setAimFromClient(e.clientX, e.clientY);
       }
       if (e.type === 'mousedown' && this.state === 'playing') {
+        this.setAimFromClient(e.clientX, e.clientY);
         this.fireMissile(this.mouseX, this.mouseY);
       }
       return;
@@ -372,8 +366,8 @@ export class MissileCommandGame extends BaseGame {
       e.preventDefault();
       if (e.type === 'touchstart' && this.state === 'playing') {
         const t = e.touches[0];
-        this.mouseX = t.clientX - (window.innerWidth - 400) / 2;
-        this.mouseY = t.clientY - 60;
+        if (!t) return;
+        this.setAimFromClient(t.clientX, t.clientY);
         this.fireMissile(this.mouseX, this.mouseY);
       }
       return;
@@ -384,6 +378,12 @@ export class MissileCommandGame extends BaseGame {
         this.fireMissile(this.mouseX, this.mouseY);
       }
     }
+  }
+
+  private setAimFromClient(clientX: number, clientY: number) {
+    const point = this.canvasPoint(clientX, clientY);
+    this.mouseX = Math.max(0, Math.min(this.width, point.x));
+    this.mouseY = Math.max(0, Math.min(this.height, point.y));
   }
 
   private fireMissile(tx: number, ty: number) {

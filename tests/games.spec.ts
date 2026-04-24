@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { getCanvasPoint } from '../src/core/render';
+import { calculateSudokuScore } from '../src/games/sudokuScore';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -105,6 +107,31 @@ const ALL_GAME_IDS = [
 ];
 
 // ─── Lifecycle tests ────────────────────────────────────────────────────────
+
+test.describe('Game rules', () => {
+  test('sudoku hints reduce final score', () => {
+    const cleanSolve = calculateSudokuScore(120, 0, 0);
+    const withHints = calculateSudokuScore(120, 0, 2);
+    const withMistake = calculateSudokuScore(120, 1, 0);
+
+    expect(withHints).toBeLessThan(cleanSolve);
+    expect(withMistake).toBeLessThan(cleanSolve);
+    expect(calculateSudokuScore(9999, 10, 10)).toBe(0);
+  });
+
+  test('canvas coordinates map through displayed size', () => {
+    const canvas = {
+      getBoundingClientRect: () => ({
+        left: 100,
+        top: 50,
+        width: 800,
+        height: 1200,
+      }),
+    } as HTMLCanvasElement;
+
+    expect(getCanvasPoint(canvas, 400, 600, 500, 650)).toEqual({ x: 200, y: 300 });
+  });
+});
 
 test.describe('Carrick Games - Lifecycle', () => {
   test.beforeEach(async ({ page }) => {

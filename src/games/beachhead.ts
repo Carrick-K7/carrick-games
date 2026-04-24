@@ -61,7 +61,6 @@ export class BeachHeadGame extends BaseGame {
   private wave = 1;
   private gameOver = false;
   private nextEnemyId = 1;
-  private reportedGameOver = false;
   private muzzleFlash = 0;
   private touchStart: { x: number; y: number } | null = null;
   private readonly keysDown = new Set<string>();
@@ -75,6 +74,7 @@ export class BeachHeadGame extends BaseGame {
   }
 
   init() {
+    this.resetScoreReport();
     this.aimAngle = -Math.PI / 2;
     this.shellPower = 330;
     this.shellCooldown = 0;
@@ -86,7 +86,6 @@ export class BeachHeadGame extends BaseGame {
     this.wave = 1;
     this.gameOver = false;
     this.nextEnemyId = 1;
-    this.reportedGameOver = false;
     this.muzzleFlash = 0;
     this.touchStart = null;
     this.keysDown.clear();
@@ -479,9 +478,7 @@ export class BeachHeadGame extends BaseGame {
   }
 
   private aimAtPoint(clientX: number, clientY: number) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const { x, y } = this.canvasPoint(clientX, clientY);
     this.aimAngle = Math.atan2(y - TURRET_Y, x - TURRET_X);
     this.clampAim();
   }
@@ -500,10 +497,7 @@ export class BeachHeadGame extends BaseGame {
   private triggerGameOver() {
     this.integrity = 0;
     this.gameOver = true;
-    if (!this.reportedGameOver) {
-      this.reportedGameOver = true;
-      window.reportScore?.(this.score);
-    }
+    this.submitScoreOnce(this.score);
   }
 
   private clampAim() {
