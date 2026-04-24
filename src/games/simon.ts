@@ -591,8 +591,13 @@ export class SimonGame extends BaseGame {
   }
 
   private getBestScore(): number {
-    const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
-    return Math.max(records[GAME_ID] ?? 0, this.score);
+    try {
+      const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, unknown>;
+      const best = records[GAME_ID];
+      return Math.max(typeof best === 'number' && Number.isFinite(best) ? best : 0, this.score);
+    } catch {
+      return this.score;
+    }
   }
 
   private getTheme(): ThemePalette {

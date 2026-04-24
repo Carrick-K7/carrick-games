@@ -314,8 +314,13 @@ export class Game2048 extends BaseGame {
   }
 
   private getBest(): number {
-    const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
-    return records['2048'] ?? this.score;
+    try {
+      const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, unknown>;
+      const best = records['2048'];
+      return typeof best === 'number' && Number.isFinite(best) ? best : this.score;
+    } catch {
+      return this.score;
+    }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {

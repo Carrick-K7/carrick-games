@@ -94,6 +94,19 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(await gameItems.count()).toBeGreaterThan(0);
   });
 
+  test('corrupted stored records do not break startup', async ({ page }) => {
+    const { consoleErrors, pageErrors } = await collectErrors(page);
+
+    await page.evaluate(() => localStorage.setItem('cg-records', '{bad json'));
+    await page.reload();
+
+    await expect(page.locator('.game-list-item').first()).toBeVisible();
+    await expect(page.locator('#actionBtn')).toBeVisible();
+
+    expect(filterFavicon(consoleErrors)).toHaveLength(0);
+    expect(pageErrors).toHaveLength(0);
+  });
+
   test('all 30 games are registered in the list', async ({ page }) => {
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);

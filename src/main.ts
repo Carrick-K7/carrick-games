@@ -855,8 +855,28 @@ function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[
   `;
 }
 
+function readRecords(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem('cg-records');
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+    const records: Record<string, number> = {};
+    for (const [gameId, score] of Object.entries(parsed)) {
+      if (typeof score === 'number' && Number.isFinite(score)) {
+        records[gameId] = score;
+      }
+    }
+    return records;
+  } catch {
+    return {};
+  }
+}
+
 function getRecord(gameId: string): number | null {
-  const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
+  const records = readRecords();
   return records[gameId] ?? null;
 }
 
@@ -869,8 +889,6 @@ function renderGameRecord() {
   }
   const score = getRecord(currentGameName);
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  const name = meta ? (zh ? meta.nameZh : meta.name) : currentGameName;
   if (score == null) {
     el.innerHTML = '';
     return;
@@ -880,8 +898,10 @@ function renderGameRecord() {
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
       <circle cx="12" cy="9" r="5"/>
     </svg>
-    <span>${zh ? '最高记录' : 'High Score'}: ${score}</span>
   `;
+  const label = document.createElement('span');
+  label.textContent = `${zh ? '最高记录' : 'High Score'}: ${score}`;
+  el.append(label);
 }
 
 function renderSidebarRecords() {
@@ -954,11 +974,15 @@ function getKeysFromEvent(e: KeyboardEvent): string[] {
 }
 
 function saveRecord(gameId: string, score: number) {
-  const records = JSON.parse(localStorage.getItem('cg-records') || '{}') as Record<string, number>;
+  const records = readRecords();
   const shouldUpdate = records[gameId] == null || score > records[gameId];
   if (shouldUpdate) {
     records[gameId] = score;
-    localStorage.setItem('cg-records', JSON.stringify(records));
+    try {
+      localStorage.setItem('cg-records', JSON.stringify(records));
+    } catch {
+      // Scores are a convenience feature; storage failures should not break play.
+    }
   }
   // Always refresh display so the UI stays in sync (e.g. first record, or tied score)
   setTimeout(() => renderGameRecord(), 0);

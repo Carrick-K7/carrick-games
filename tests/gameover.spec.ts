@@ -320,7 +320,7 @@ interface GameProfile {
   id: string;
   suicide: (page: any) => Promise<void>;
   timeout?: number;
-  expectScore?: boolean; // some puzzle games may not report score on loss
+  expectScore?: boolean; // true only when the strategy deterministically reaches a score-reporting end state
 }
 
 const GAMEOVER_PROFILES: GameProfile[] = [
@@ -346,14 +346,14 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: '2048', suicide: suicide2048, timeout: 20000 },
   { id: 'minesweeper', suicide: suicideMinesweeper, timeout: 15000 },
   { id: 'simon', suicide: suicideSimon, timeout: 15000 },
-  { id: 'checkers', suicide: suicideCheckers, timeout: 20000, expectScore: true },
-  { id: 'connectfour', suicide: suicideConnectfour, timeout: 20000, expectScore: true },
-  { id: 'chess', suicide: suicideChess, timeout: 25000, expectScore: true },
-  { id: 'mahjong', suicide: suicideMahjong, timeout: 20000, expectScore: true },
+  { id: 'checkers', suicide: suicideCheckers, timeout: 20000, expectScore: false },
+  { id: 'connectfour', suicide: suicideConnectfour, timeout: 20000, expectScore: false },
+  { id: 'chess', suicide: suicideChess, timeout: 25000, expectScore: false },
+  { id: 'mahjong', suicide: suicideMahjong, timeout: 20000, expectScore: false },
   { id: 'wordle', suicide: suicideWordle, timeout: 15000, expectScore: true },
   { id: 'sudoku', suicide: suicideSudoku, timeout: 15000, expectScore: false },
   { id: 'solitaire', suicide: suicideSolitaire, timeout: 20000, expectScore: false },
-  { id: 'texashold', suicide: suicideTexashold, timeout: 25000, expectScore: true },
+  { id: 'texashold', suicide: suicideTexashold, timeout: 25000, expectScore: false },
 ];
 
 // ─── Game Over Tests ────────────────────────────────────────────────────────
@@ -377,15 +377,8 @@ test.describe('Game Over - Arcade', () => {
       const scores = await getScores(page);
       const hasReported = scores.length > 0;
 
-      // For games that should report score on loss/gameover
-      if (profile.expectScore !== false) {
-        // Arcade games and competitive puzzle games should report something
-        // We log but don't hard-fail if they don't, because some games
-        // may have complex end conditions that don't trigger in our suicide window
-        if (!hasReported && profile.expectScore === true) {
-          // Soft assertion: log warning but still check restart works
-          console.warn(`[${profile.id}] reportScore was not called within test window`);
-        }
+      if (profile.expectScore === true) {
+        expect(hasReported, `[${profile.id}] should report score during deterministic game-over path`).toBe(true);
       }
 
       // Restart should always work
