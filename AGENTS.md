@@ -5,6 +5,7 @@
 ```
 src/
   core/game.ts       # BaseGame abstract class - ALL games extend this
+  core/render.ts     # Shared HD Retro rendering, HiDPI canvas, input mapping helpers
   games/             # One file per game (e.g., snake.ts, breakout.ts)
   main.ts            # Game registration, UI, controls rendering
 tests/
@@ -12,6 +13,7 @@ tests/
 dist/                # Built output (JS files)
 index.html           # Main HTML page
 playwright.config.ts # Playwright configuration
+DEPLOYMENT.md        # GitHub Actions + Caddy release deployment notes
 .kimi_session        # Stores last kimi session ID (auto-managed)
 ```
 
@@ -37,8 +39,7 @@ export class <GameName>Game extends BaseGame {
 
   // Draw the game on canvas
   draw(ctx: CanvasRenderingContext2D) {
-    const isDark = !document.documentElement.hasAttribute('data-theme') ||
-      document.documentElement.getAttribute('data-theme') === 'dark';
+    const isDark = this.isDarkTheme();
     // isDark = true → dark mode colors
     // isDark = false → light mode colors
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
@@ -57,9 +58,9 @@ export class <GameName>Game extends BaseGame {
 
 ### 2. Register in `src/main.ts`
 
-Add ONE import:
+Add ONE loader to `GAME_LOADERS`:
 ```typescript
-import { <GameName>Game } from './games/<gamename>.js';
+<gamename>: () => import('./games/<gamename>.js').then((m) => m.<GameName>Game),
 ```
 
 Add ONE entry to the `GAMES` array (before the closing `];`):
@@ -70,7 +71,7 @@ Add ONE entry to the `GAMES` array (before the closing `];`):
   nameZh: '<中文名>',
   desc: 'One sentence description.',
   descZh: '中文描述。',
-  cls: <GameName>Game,
+  loader: GAME_LOADERS.<gamename>,
   canvasSize: { width: WIDTH, height: HEIGHT },
   controls: {
     keyboard: [
@@ -83,12 +84,14 @@ Add ONE entry to the `GAMES` array (before the closing `];`):
 },
 ```
 
-### 3. Build and deploy
+### 3. Build and test
 
 ```bash
 npm run build
-# Files go to dist/
+npm run test:e2e
 ```
+
+Files go to `dist/`. Deployment is handled by GitHub Actions after pushing to `main`.
 
 ## Development Workflow (kimi CLI)
 
@@ -123,10 +126,18 @@ npm run test:e2e:ui    # Playwright with UI (for debugging)
 ```
 
 ### Deployment
-```bash
-# Sync to server:
-rsync -av --delete dist/ index.html fonts/ ubuntu@your-server:/var/www/carrick7.com/games/
-```
+
+Deployment is automatic on every push to `main` through `.github/workflows/deploy.yml`.
+
+The workflow:
+- installs with `npm ci`
+- builds with `npm run build`
+- runs `npm run test:e2e`
+- packages `index.html`, `dist/`, and `fonts/`
+- deploys to `/var/www/games.carrick7.com/releases/<git-sha>/`
+- atomically switches `/var/www/games.carrick7.com/current`
+
+Caddy serves `/var/www/games.carrick7.com/current`. See `DEPLOYMENT.md` for rollback and required GitHub secrets.
 
 ## BaseGame Interface (from `src/core/game.ts`)
 
@@ -152,8 +163,7 @@ Call `this.stop()` to stop game loop.
 
 Always check at the top of `draw()`:
 ```typescript
-const isDark = !document.documentElement.hasAttribute('data-theme') ||
-  document.documentElement.getAttribute('data-theme') === 'dark';
+const isDark = this.isDarkTheme();
 ```
 
 Use `isDark` to switch colors:
@@ -168,15 +178,26 @@ const text = isDark ? '#e0e0e0' : '#1a1a2e';
 
 Check `data-lang` attribute on `<html>`:
 ```typescript
-const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+const zh = this.isZhLang();
 ```
 
 ## Score Reporting
 
 When game ends, report the score:
 ```typescript
-(window as any).reportScore?.(this.score);
+this.submitScoreOnce(this.score);
 ```
+
+Use `this.submitScore(score)` only when the same game session intentionally reports more than once.
+
+## Canvas Coordinates
+
+For mouse and touch input, map screen coordinates to logical canvas coordinates:
+```typescript
+const point = this.canvasPoint(clientX, clientY);
+```
+
+Do not calculate from `canvas.width / rect.width`; canvases use a HiDPI backing store.
 
 ## Input Handling Pattern
 
@@ -201,6 +222,7 @@ handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
 - Primary color: `#39C5BB` (dark mode), `#0d9488` (light mode)
 - Background: `#0b0f19` (dark), `#fafafa` (light)
 - Font: `"Press Start 2P", monospace` — inside game canvas only
+- BaseGame applies the global HD Retro finish layer; individual games should draw their scene only.
 - Canvas sizes: anything that fits the game (common: 400×400, 480×400, 400×600)
 - Game over overlay: semi-transparent black bg + centered text
 - No external dependencies beyond BaseGame

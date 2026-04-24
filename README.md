@@ -70,17 +70,25 @@ A **live virtual keyboard** on the right side of the screen highlights the keys 
 - TypeScript + ES Modules
 - HTML5 Canvas (no external game engine)
 - Pure CSS variables for theming
-- Deployed via GitHub Actions + server-side sync
+- Deployed via GitHub Actions + Caddy atomic releases
 
 ---
 
 ## Local Development
 
 ```bash
-npm install
+npm ci
 npm run build
-# open index.html in a browser
+python3 -m http.server 8080
 ```
+
+Then open `http://localhost:8080`.
+
+## Deployment
+
+Pushes to `main` run GitHub Actions. The workflow builds, runs Playwright e2e tests, packages `index.html`, `dist/`, and `fonts/`, then switches Caddy to a new release under `/var/www/games.carrick7.com/current`.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for secrets, release layout, and rollback.
 
 ---
 

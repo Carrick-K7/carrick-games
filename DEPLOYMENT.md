@@ -1,6 +1,6 @@
 # Deployment
 
-Carrick Games deploys through GitHub Actions after every push to `main`.
+Carrick Games deploys through GitHub Actions after every push to `main`. The same workflow can also be started manually with `workflow_dispatch`.
 
 ## Production Flow
 
@@ -15,6 +15,8 @@ Carrick Games deploys through GitHub Actions after every push to `main`.
 6. Extract it into `/var/www/games.carrick7.com/releases/<git-sha>/`.
 7. Atomically update `/var/www/games.carrick7.com/current`.
 8. Smoke test the public URL.
+
+Pull requests run the build and e2e test gate but do not deploy.
 
 Caddy serves:
 
@@ -36,6 +38,24 @@ Repository or `production` environment secrets:
 - `DEPLOY_URL`: public URL, currently `https://games.carrick7.com`
 - `DEPLOY_SSH_KEY`: private key for the deploy user
 - `DEPLOY_KNOWN_HOSTS`: pinned SSH host key lines for `DEPLOY_HOST`
+
+The `production` environment currently has no required reviewers, so deployment is fully automatic.
+
+## Verification
+
+Check the latest workflow run:
+
+```bash
+gh run list --repo Carrick-K7/carrick-games --workflow deploy.yml --limit 3
+```
+
+Confirm Caddy is serving the latest release:
+
+```bash
+git rev-parse --short=12 HEAD
+ssh ubuntu@games.carrick7.com 'readlink /var/www/games.carrick7.com/current'
+curl -I https://games.carrick7.com/
+```
 
 ## Rollback
 
