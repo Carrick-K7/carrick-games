@@ -19,14 +19,11 @@ const MAX_STEER = 0.38;
 const STEER_RATE = 3.7;
 const STEER_RETURN_RATE = 5.2;
 const WHEEL_BASE = 72;
-export const PARKING_MAX_FORWARD_SPEED = 250;
-const MAX_REVERSE_SPEED = 110;
-const FORWARD_ACCEL = 560;
-const REVERSE_ACCEL = 300;
+export const PARKING_MAX_FORWARD_SPEED = 200;
+const MAX_REVERSE_SPEED = 90;
+const FORWARD_ACCEL = 320;
+const REVERSE_ACCEL = 180;
 const BRAKE_DECEL = 720;
-const ACTIVE_DRAG = 0.18;
-const COAST_DRAG = 1.35;
-const STOP_SPEED = 1.5;
 
 export function createParkingCar(x: number, y: number, angle: number): ParkingCarState {
   return {
@@ -59,10 +56,12 @@ export function updateParkingCar(
     }
   }
 
+  // Remove inertia: stop immediately when no input
+  if (!input.up && !input.down) {
+    speed = 0;
+  }
+
   speed = Math.max(-MAX_REVERSE_SPEED, Math.min(PARKING_MAX_FORWARD_SPEED, speed));
-  const drag = input.up || input.down ? ACTIVE_DRAG : COAST_DRAG;
-  speed *= Math.exp(-drag * dt);
-  if (Math.abs(speed) < STOP_SPEED && !input.up && !input.down) speed = 0;
 
   const steerTarget = input.left === input.right ? 0 : input.left ? -MAX_STEER : MAX_STEER;
   const steerRate = steerTarget === 0 ? STEER_RETURN_RATE : STEER_RATE;
@@ -71,7 +70,7 @@ export function updateParkingCar(
   const steerAngle = car.steerAngle + steerStep;
 
   let angle = car.angle;
-  if (Math.abs(speed) > STOP_SPEED && Math.abs(steerAngle) > 0.001) {
+  if (Math.abs(speed) > 1.5 && Math.abs(steerAngle) > 0.001) {
     angle += (speed / WHEEL_BASE) * Math.tan(steerAngle) * dt;
   }
 

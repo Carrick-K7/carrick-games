@@ -165,8 +165,8 @@ test.describe('Game rules', () => {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(straight.y).toBeLessThan(300);
-    expect(straight.speed).toBeGreaterThan(170);
+    expect(straight.y).toBeLessThan(340);
+    expect(straight.speed).toBeGreaterThan(150);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 60; i++) {
@@ -178,8 +178,8 @@ test.describe('Game rules', () => {
     expect(car.angle).toBeLessThan(-0.35);
 
     const reverse = updateParkingCar(
-      { ...createParkingCar(200, 460, -Math.PI / 2), speed: -80 },
-      { up: false, down: false, left: false, right: true },
+      { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
+      { up: false, down: true, left: false, right: true },
       0.35
     );
     expect(reverse.angle).toBeLessThan(-Math.PI / 2);

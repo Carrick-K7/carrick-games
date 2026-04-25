@@ -6,8 +6,10 @@ import {
   type ParkingCarState,
 } from './parkingPhysics.js';
 
-const W = 400;
-const H = 520;
+const GAME_W = 400;
+const GAME_H = 520;
+const DASH_W = 120;
+const TOTAL_W = 520;
 const CAR_W = 24;
 const CAR_H = 42;
 
@@ -32,77 +34,345 @@ interface Level {
   timeLimit: number;
 }
 
+function wall(x: number, y: number, w: number, h: number): Obstacle {
+  return { x, y, w, h };
+}
+
+function parkedCar(x: number, y: number, vertical = true): Obstacle {
+  return vertical ? { x, y, w: 26, h: 44 } : { x, y, w: 44, h: 26 };
+}
+
+// prettier-ignore
 const LEVELS: Level[] = [
-  // Level 1: simple lot
-  {
-    playerStart: { x: 60, y: 420, angle: -Math.PI / 2 },
-    obstacles: [
-      { x: 10, y: 10, w: 380, h: 12 },
-      { x: 10, y: H - 22, w: 380, h: 12 },
-      { x: 10, y: 10, w: 12, h: H - 20 },
-      { x: W - 22, y: 10, w: 12, h: H - 20 },
-      // Parked cars
-      { x: 130, y: 80, w: 26, h: 44 },
-      { x: 220, y: 80, w: 26, h: 44 },
-      { x: 300, y: 80, w: 26, h: 44 },
-      { x: 50, y: 180, w: 26, h: 44 },
-      { x: 310, y: 180, w: 26, h: 44 },
-      { x: 50, y: 300, w: 26, h: 44 },
-      { x: 310, y: 300, w: 26, h: 44 },
-    ],
-    spot: { x: 155, y: 160, w: 50, h: 76 },
-    timeLimit: 60,
-  },
-  // Level 2: tighter
+  // ===== 基础直停车 (1-5) =====
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
     obstacles: [
-      { x: 10, y: 10, w: 380, h: 12 },
-      { x: 10, y: H - 22, w: 380, h: 12 },
-      { x: 10, y: 10, w: 12, h: H - 20 },
-      { x: W - 22, y: 10, w: 12, h: H - 20 },
-      { x: 100, y: 60, w: 26, h: 44 },
-      { x: 180, y: 60, w: 26, h: 44 },
-      { x: 260, y: 60, w: 26, h: 44 },
-      { x: 50, y: 150, w: 26, h: 44 },
-      { x: 150, y: 150, w: 26, h: 44 },
-      { x: 230, y: 150, w: 26, h: 44 },
-      { x: 300, y: 150, w: 26, h: 44 },
-      { x: 10, y: 240, w: 380, h: 8 },
-      { x: 50, y: 300, w: 26, h: 44 },
-      { x: 130, y: 300, w: 26, h: 44 },
-      { x: 230, y: 300, w: 26, h: 44 },
-      { x: 300, y: 300, w: 26, h: 44 },
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
-    spot: { x: 155, y: 260, w: 50, h: 76 },
+    spot: { x: 162, y: 60, w: 50, h: 76 },
+    timeLimit: 60,
+  },
+  {
+    playerStart: { x: 200, y: 60, angle: Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 380), parkedCar(130, 380), parkedCar(220, 380), parkedCar(310, 380),
+    ],
+    spot: { x: 162, y: 380, w: 50, h: 76 },
+    timeLimit: 60,
+  },
+  {
+    playerStart: { x: 340, y: 260, angle: Math.PI },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 60), parkedCar(50, 140), parkedCar(50, 300), parkedCar(50, 400),
+    ],
+    spot: { x: 30, y: 210, w: 50, h: 76 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 60, y: 260, angle: 0 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(310, 60), parkedCar(310, 140), parkedCar(310, 300), parkedCar(310, 400),
+    ],
+    spot: { x: 310, y: 210, w: 50, h: 76 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
+    ],
+    spot: { x: 155, y: 60, w: 50, h: 76 },
     timeLimit: 50,
   },
-  // Level 3: expert
+
+  // ===== 侧方停车 (6-10) =====
   {
-    playerStart: { x: 40, y: 460, angle: 0 },
+    playerStart: { x: 340, y: 240, angle: Math.PI },
     obstacles: [
-      { x: 10, y: 10, w: 380, h: 12 },
-      { x: 10, y: H - 22, w: 380, h: 12 },
-      { x: 10, y: 10, w: 12, h: H - 20 },
-      { x: W - 22, y: 10, w: 12, h: H - 20 },
-      { x: 60, y: 60, w: 26, h: 44 },
-      { x: 120, y: 60, w: 26, h: 44 },
-      { x: 180, y: 60, w: 26, h: 44 },
-      { x: 240, y: 60, w: 26, h: 44 },
-      { x: 300, y: 60, w: 26, h: 44 },
-      { x: 10, y: 140, w: 380, h: 8 },
-      { x: 60, y: 200, w: 26, h: 44 },
-      { x: 140, y: 200, w: 26, h: 44 },
-      { x: 220, y: 200, w: 26, h: 44 },
-      { x: 300, y: 200, w: 26, h: 44 },
-      { x: 10, y: 280, w: 380, h: 8 },
-      { x: 60, y: 340, w: 26, h: 44 },
-      { x: 140, y: 340, w: 26, h: 44 },
-      { x: 220, y: 340, w: 26, h: 44 },
-      { x: 300, y: 340, w: 26, h: 44 },
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(20, 180, false), parkedCar(20, 280, false),
     ],
-    spot: { x: 155, y: 370, w: 50, h: 76 },
+    spot: { x: 10, y: 230, w: 76, h: 50 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 60, y: 280, angle: 0 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(330, 180, false), parkedCar(330, 280, false),
+    ],
+    spot: { x: 330, y: 230, w: 76, h: 50 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 200, y: 60, angle: Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(120, 450, false), parkedCar(220, 450, false),
+    ],
+    spot: { x: 170, y: 450, w: 76, h: 50 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(120, 10, false), parkedCar(220, 10, false),
+    ],
+    spot: { x: 170, y: 10, w: 76, h: 50 },
+    timeLimit: 55,
+  },
+  {
+    playerStart: { x: 340, y: 260, angle: Math.PI },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(10, 120, false), parkedCar(10, 360, false),
+    ],
+    spot: { x: 10, y: 235, w: 76, h: 50 },
+    timeLimit: 50,
+  },
+
+  // ===== 倒车入库 (11-15) =====
+  {
+    playerStart: { x: 200, y: 420, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8),
+      parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
+    ],
+    spot: { x: 162, y: 60, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 340, y: 420, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8),
+      parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80),
+    ],
+    spot: { x: 290, y: 60, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 60, y: 420, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8),
+      parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
+    ],
+    spot: { x: 50, y: 60, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 200, y: 100, angle: Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 320, 240, 8),
+      parkedCar(50, 380), parkedCar(130, 380), parkedCar(220, 380), parkedCar(310, 380),
+    ],
+    spot: { x: 162, y: 380, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8),
+      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
+    ],
+    spot: { x: 155, y: 60, w: 50, h: 76 },
+    timeLimit: 45,
+  },
+
+  // ===== 混合挑战 (16-20) =====
+  {
+    playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(140, 10, 8, 200), wall(140, 280, 8, 230),
+      parkedCar(180, 80), parkedCar(260, 80), parkedCar(340, 80),
+    ],
+    spot: { x: 30, y: 220, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 340, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(200, 180, 8, 160),
+      parkedCar(50, 180), parkedCar(50, 280), parkedCar(260, 180), parkedCar(260, 280),
+    ],
+    spot: { x: 130, y: 220, w: 50, h: 76 },
+    timeLimit: 50,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 200, 120, 8), wall(220, 280, 120, 8),
+      parkedCar(60, 80), parkedCar(140, 80), parkedCar(280, 80),
+    ],
+    spot: { x: 210, y: 60, w: 50, h: 76 },
+    timeLimit: 45,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(120, 160, 160, 8), wall(120, 320, 160, 8),
+      parkedCar(50, 160), parkedCar(50, 320), parkedCar(310, 160), parkedCar(310, 320),
+    ],
+    spot: { x: 165, y: 220, w: 50, h: 76 },
+    timeLimit: 45,
+  },
+  {
+    playerStart: { x: 340, y: 420, angle: Math.PI },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(120, 120, 8, 160), wall(260, 240, 8, 160),
+      parkedCar(20, 80, false), parkedCar(100, 80, false), parkedCar(180, 80, false),
+    ],
+    spot: { x: 30, y: 400, w: 76, h: 50 },
     timeLimit: 40,
+  },
+
+  // ===== 高难度 (21-25) =====
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 80), parkedCar(95, 80), parkedCar(255, 80), parkedCar(300, 80),
+    ],
+    spot: { x: 142, y: 60, w: 50, h: 76 },
+    timeLimit: 45,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
+      wall(80, 180, 240, 8),
+    ],
+    spot: { x: 162, y: 60, w: 50, h: 76 },
+    timeLimit: 30,
+  },
+  {
+    playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 8, 200), wall(200, 80, 8, 200), wall(320, 200, 8, 200),
+      parkedCar(110, 160), parkedCar(230, 280),
+    ],
+    spot: { x: 340, y: 100, w: 50, h: 76 },
+    timeLimit: 45,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8),
+      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
+    ],
+    spot: { x: 155, y: 60, w: 50, h: 76 },
+    timeLimit: 35,
+  },
+  {
+    playerStart: { x: 340, y: 240, angle: Math.PI },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(10, 140, false), parkedCar(10, 340, false),
+    ],
+    spot: { x: 10, y: 237, w: 76, h: 50 },
+    timeLimit: 35,
+  },
+
+  // ===== 极限挑战 (26-30) =====
+  {
+    playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(100, 120, 8, 200), wall(200, 200, 8, 200), wall(300, 80, 8, 200),
+      parkedCar(120, 120), parkedCar(220, 280), parkedCar(320, 120),
+    ],
+    spot: { x: 340, y: 400, w: 50, h: 76 },
+    timeLimit: 40,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(100, 160, 8, 200), wall(300, 160, 8, 200),
+      parkedCar(60, 80), parkedCar(140, 80), parkedCar(220, 80), parkedCar(340, 80),
+    ],
+    spot: { x: 165, y: 60, w: 50, h: 76 },
+    timeLimit: 25,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
+      wall(80, 180, 240, 8),
+    ],
+    spot: { x: 162, y: 60, w: 50, h: 76 },
+    timeLimit: 20,
+  },
+  {
+    playerStart: { x: 340, y: 420, angle: Math.PI },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 120, 8, 200), wall(200, 200, 8, 200),
+      parkedCar(100, 120), parkedCar(220, 200), parkedCar(340, 120),
+    ],
+    spot: { x: 30, y: 400, w: 76, h: 50 },
+    timeLimit: 35,
+  },
+  {
+    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    obstacles: [
+      wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
+      wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
+      wall(80, 160, 240, 8), wall(140, 280, 120, 8),
+      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
+      parkedCar(50, 300), parkedCar(310, 300),
+    ],
+    spot: { x: 155, y: 60, w: 50, h: 76 },
+    timeLimit: 30,
   },
 ];
 
@@ -111,18 +381,18 @@ export class ParkingGame extends BaseGame {
   private levelIndex = 0;
   private level!: Level;
   private score = 0;
+  private totalScore = 0;
   private elapsed = 0;
   private timeLeft = 0;
   private parkedTime = 0;
   private gameState: 'playing' | 'parked' | 'crash' | 'timeout' | 'complete' = 'playing';
   private keys = { up: false, down: false, left: false, right: false };
   private touchDir: 'up' | 'down' | 'left' | 'right' | null = null;
-  private lastScoreReported = false;
 
   private readonly PARK_TIME = 1.0;
 
   constructor() {
-    super('gameCanvas', W, H);
+    super('gameCanvas', TOTAL_W, GAME_H);
   }
 
   init() {
@@ -141,7 +411,7 @@ export class ParkingGame extends BaseGame {
     this.gameState = 'playing';
     this.keys = { up: false, down: false, left: false, right: false };
     this.touchDir = null;
-    this.lastScoreReported = false;
+    this.resetScoreReport();
   }
 
   private rectCollide(ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number): boolean {
@@ -164,11 +434,9 @@ export class ParkingGame extends BaseGame {
 
   private carCollidesRect(rx: number, ry: number, rw: number, rh: number): boolean {
     const corners = this.getCarCorners(this.car.x, this.car.y, this.car.angle, CAR_W, CAR_H);
-    // SAT-like: check if any corner is inside rect, or if car center projection intersects
     for (const c of corners) {
       if (this.pointInRect(c.x, c.y, rx, ry, rw, rh)) return true;
     }
-    // Also check rect corners inside car
     const carR = { x: this.car.x - CAR_W / 2, y: this.car.y - CAR_H / 2, w: CAR_W, h: CAR_H };
     return this.rectCollide(rx, ry, rw, rh, carR.x, carR.y, carR.w, carR.h);
   }
@@ -188,26 +456,28 @@ export class ParkingGame extends BaseGame {
     const s = this.level.spot;
     const carCenterX = this.car.x;
     const carCenterY = this.car.y;
-    // Car must be roughly centered in spot, and angle near upright (or spot-aligned)
     const inSpotX = carCenterX > s.x + 6 && carCenterX < s.x + s.w - 6;
     const inSpotY = carCenterY > s.y + 8 && carCenterY < s.y + s.h - 8;
-    const angleOk = Math.abs(((this.car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) - Math.PI / 2) < 0.35 ||
-                    Math.abs(((this.car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) - Math.PI * 3 / 2) < 0.35;
+    const angleNorm = ((this.car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const angleOk = Math.abs(angleNorm - Math.PI / 2) < 0.35 ||
+                    Math.abs(angleNorm - Math.PI * 3 / 2) < 0.35;
     return inSpotX && inSpotY && angleOk;
   }
 
   update(dt: number) {
-    if (this.gameState === 'crash' || this.gameState === 'timeout' || this.gameState === 'complete') return;
+    if (this.gameState === 'crash' || this.gameState === 'timeout') return;
+
+    if (this.gameState === 'complete') {
+      return;
+    }
 
     if (this.gameState === 'parked') {
       this.parkedTime += dt;
       if (this.parkedTime >= this.PARK_TIME) {
-        this.gameState = 'complete';
         this.score = Math.max(0, Math.round(this.timeLeft * 100));
-        if (!this.lastScoreReported) {
-          this.lastScoreReported = true;
-          window.reportScore?.(this.score);
-        }
+        this.gameState = 'complete';
+        this.submitScoreOnce(this.totalScore + this.score);
+        this.parkedTime = 0;
       }
       return;
     }
@@ -223,10 +493,7 @@ export class ParkingGame extends BaseGame {
     if (this.checkCollisions()) {
       this.car = { ...oldCar, speed: 0, vx: 0, vy: 0 };
       this.gameState = 'crash';
-      if (!this.lastScoreReported) {
-        this.lastScoreReported = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.totalScore);
       return;
     }
 
@@ -234,14 +501,10 @@ export class ParkingGame extends BaseGame {
     this.timeLeft = Math.max(0, this.level.timeLimit - this.elapsed);
     if (this.timeLeft <= 0) {
       this.gameState = 'timeout';
-      if (!this.lastScoreReported) {
-        this.lastScoreReported = true;
-        window.reportScore?.(0);
-      }
+      this.submitScoreOnce(this.totalScore);
       return;
     }
 
-    // Check parking
     if (this.checkParked() && Math.abs(this.car.speed) < 35) {
       this.gameState = 'parked';
       this.parkedTime = 0;
@@ -265,17 +528,17 @@ export class ParkingGame extends BaseGame {
     const obstacleBorder = isDark ? '#475569' : '#94a3b8';
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
 
-    // Background
+    // === Game Area Background ===
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
 
     // Draw parking lot lines
     ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
     ctx.lineWidth = 1;
-    for (let y = 60; y < H; y += 60) {
+    for (let y = 60; y < GAME_H; y += 60) {
       ctx.beginPath();
       ctx.moveTo(12, y);
-      ctx.lineTo(W - 12, y);
+      ctx.lineTo(GAME_W - 12, y);
       ctx.stroke();
     }
 
@@ -296,7 +559,6 @@ export class ParkingGame extends BaseGame {
       ctx.lineWidth = 1.5;
       ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
       ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
-      // Windshield lines
       if (obs.w < obs.h) {
         ctx.strokeStyle = isDark ? '#334155' : '#94a3b8';
         ctx.beginPath();
@@ -313,11 +575,9 @@ export class ParkingGame extends BaseGame {
     ctx.translate(this.car.x, this.car.y);
     ctx.rotate(this.car.angle + Math.PI / 2);
 
-    // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, CAR_W, CAR_H);
 
-    // Body with a clearer hood/cabin/trunk read.
     ctx.fillStyle = isDark ? '#0f172a' : '#020617';
     ctx.fillRect(-CAR_W / 2 - 1, -CAR_H / 2 + 1, CAR_W + 2, CAR_H - 2);
     ctx.fillStyle = carBody;
@@ -364,55 +624,194 @@ export class ParkingGame extends BaseGame {
       ctx.fillRect(sp.x, sp.y + sp.h + 4, sp.w * prog, 6);
     }
 
-    // HUD
+    // === Dashboard Area ===
+    const dx = GAME_W;
+    const dw = DASH_W;
+    const dashBg = isDark ? '#0f172a' : '#f1f5f9';
+    const dashBorder = isDark ? '#1e293b' : '#e2e8f0';
+
+    // Dashboard background
+    ctx.fillStyle = dashBg;
+    ctx.fillRect(dx, 0, dw, GAME_H);
+    ctx.strokeStyle = dashBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(dx, 0);
+    ctx.lineTo(dx, GAME_H);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = primary;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(zh ? '停车' : 'PARK', dx + dw / 2, 28);
+
+    // Level number (big)
+    ctx.fillStyle = text;
+    ctx.font = '18px "Press Start 2P", monospace';
+    ctx.fillText(`${this.levelIndex + 1}`, dx + dw / 2, 58);
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.fillText(`/ ${LEVELS.length}`, dx + dw / 2, 72);
+
+    // Speed gauge
+    const cx = dx + dw / 2;
+    const cy = 130;
+    const radius = 40;
+    const startAngle = Math.PI * 0.8;
+    const endAngle = Math.PI * 2.2;
+
+    // Gauge background arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle);
+    ctx.strokeStyle = isDark ? '#334155' : '#cbd5e1';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // Speed arc
+    const speedRatio = Math.abs(this.car.speed) / PARKING_MAX_FORWARD_SPEED;
+    const speedEndAngle = startAngle + speedRatio * (endAngle - startAngle);
+    if (speedRatio > 0) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, startAngle, speedEndAngle);
+      ctx.strokeStyle = this.car.speed > PARKING_MAX_FORWARD_SPEED * 0.8 ? '#ef4444' : primary;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+    }
+
+    // Needle
+    const needleAngle = startAngle + speedRatio * (endAngle - startAngle);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(needleAngle);
+    ctx.fillStyle = primary;
+    ctx.fillRect(-1, -radius + 4, 2, radius - 8);
+    ctx.restore();
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = primary;
+    ctx.fill();
+
+    // Speed value
     ctx.fillStyle = text;
     ctx.font = '10px "Press Start 2P", monospace';
-    ctx.textAlign = 'left';
-    const tScore = zh ? '分' : 'SCORE';
-    const tTime = zh ? '时间' : 'TIME';
-    const tLevel = zh ? '关卡' : 'LVL';
-    ctx.fillText(`${tLevel} ${this.levelIndex + 1}`, 12, 22);
-    ctx.fillText(`${tTime} ${Math.ceil(this.timeLeft)}`, 12, 38);
-    ctx.fillText(`${tScore} ${this.score}`, 12, 54);
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(Math.abs(this.car.speed))}`, cx, cy + 22);
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.fillText(zh ? '速度' : 'KM/H', cx, cy + 34);
 
-    // Speed indicator
-    const speed = Math.abs(this.car.speed);
-    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
-    ctx.fillRect(W - 80, 12, 68, 14);
-    ctx.fillStyle = speed > PARKING_MAX_FORWARD_SPEED * 0.8 ? '#ef4444' : accent;
-    ctx.fillRect(W - 80, 12, 68 * Math.min(1, speed / PARKING_MAX_FORWARD_SPEED), 14);
+    // Gear indicator
+    const gearY = 200;
+    const gear = this.car.speed > 2 ? 'D' : this.car.speed < -2 ? 'R' : 'N';
+    ctx.fillStyle = gear === 'R' ? '#ef4444' : gear === 'D' ? primary : isDark ? '#475569' : '#94a3b8';
+    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.fillText(gear, cx, gearY);
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.fillText(zh ? '档位' : 'GEAR', cx, gearY + 14);
+
+    // Time
+    const timeY = 260;
+    ctx.fillStyle = this.timeLeft <= 10 ? '#ef4444' : text;
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText(`${Math.ceil(this.timeLeft)}`, cx, timeY);
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.fillText(zh ? '秒' : 'SEC', cx, timeY + 14);
+
+    // Score
+    const scoreY = 320;
     ctx.fillStyle = text;
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText(`${this.totalScore + this.score}`, cx, scoreY);
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.fillText(zh ? '总分' : 'SCORE', cx, scoreY + 14);
+
+    // Level progress dots
+    const dotY = 380;
+    const dotSize = 5;
+    const gap = 8;
+    const cols = 5;
+    const rows = Math.ceil(LEVELS.length / cols);
+    const startX = cx - ((cols - 1) * gap) / 2;
+    for (let i = 0; i < LEVELS.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const px = startX + col * gap;
+      const py = dotY + row * (dotSize + 4);
+      ctx.beginPath();
+      ctx.arc(px, py, dotSize / 2, 0, Math.PI * 2);
+      if (i < this.levelIndex) {
+        ctx.fillStyle = primary;
+      } else if (i === this.levelIndex) {
+        ctx.fillStyle = accent;
+        ctx.strokeStyle = text;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
+      }
+      ctx.fill();
+    }
+
+    // Status text
+    const statusY = GAME_H - 60;
     ctx.font = '7px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('SPD', W - 46, 22);
+    if (this.gameState === 'parked') {
+      ctx.fillStyle = accent;
+      ctx.fillText(zh ? '停车中...' : 'PARKING...', cx, statusY);
+    } else if (this.gameState === 'playing') {
+      ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+      ctx.fillText(zh ? '驾驶中' : 'DRIVING', cx, statusY);
+    }
 
-    // Overlay: crash
+    // Controls hint at bottom
+    ctx.fillStyle = isDark ? '#475569' : '#94a3b8';
+    ctx.font = '5px "Press Start 2P", monospace';
+    if (this.gameState === 'playing') {
+      ctx.fillText(zh ? '↑加速 ↓倒车' : 'UP DWN', cx, GAME_H - 30);
+      ctx.fillText(zh ? '← →转向' : 'L R', cx, GAME_H - 18);
+    }
+
+    // === Overlays ===
     if (this.gameState === 'crash' || this.gameState === 'timeout') {
       ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, TOTAL_W, GAME_H);
       ctx.fillStyle = this.gameState === 'timeout' ? accent : '#ef4444';
       ctx.font = '14px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), W / 2, H / 2 - 20);
+      ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), TOTAL_W / 2, GAME_H / 2 - 30);
       ctx.fillStyle = text;
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText(`${zh ? '总分' : 'SCORE'} ${this.totalScore}`, TOTAL_W / 2, GAME_H / 2);
       ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(zh ? '点击或空格重新开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 20);
+      ctx.fillText(zh ? '点击或空格重新开始' : 'TAP OR SPACE', TOTAL_W / 2, GAME_H / 2 + 30);
     }
 
-    // Overlay: level complete
     if (this.gameState === 'complete') {
       ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, TOTAL_W, GAME_H);
       ctx.fillStyle = accent;
       ctx.font = '14px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('✅ ' + (zh ? '停车成功！' : 'PARKED!'), W / 2, H / 2 - 35);
+      const isLast = this.levelIndex + 1 >= LEVELS.length;
+      ctx.fillText('✅ ' + (zh ? '停车成功！' : 'PARKED!'), TOTAL_W / 2, GAME_H / 2 - 40);
       ctx.fillStyle = text;
       ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, W / 2, H / 2);
+      ctx.fillText(`${zh ? '本关' : 'LEVEL'} ${this.levelIndex + 1}  ${zh ? '得分' : 'SCORE'} ${this.score}`, TOTAL_W / 2, GAME_H / 2 - 10);
+      ctx.fillText(`${zh ? '总分' : 'TOTAL'} ${this.totalScore + this.score}`, TOTAL_W / 2, GAME_H / 2 + 10);
       ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(zh ? '空格进入下一关' : 'SPACE FOR NEXT LEVEL', W / 2, H / 2 + 25);
-      ctx.fillText(zh ? '点击返回第一关' : 'TAP TO RESTART', W / 2, H / 2 + 42);
+      if (isLast) {
+        ctx.fillText(zh ? '全部通关！点击重新开始' : 'ALL CLEARED! TAP TO RESTART', TOTAL_W / 2, GAME_H / 2 + 40);
+      } else {
+        ctx.fillText(zh ? '空格进入下一关' : 'SPACE FOR NEXT', TOTAL_W / 2, GAME_H / 2 + 35);
+        ctx.fillText(zh ? '点击返回第一关' : 'TAP TO RESTART', TOTAL_W / 2, GAME_H / 2 + 52);
+      }
     }
   }
 
@@ -428,9 +827,14 @@ export class ParkingGame extends BaseGame {
       if (e.key === ' ' || e.key === 'Enter') {
         if (e.type === 'keydown' && !e.repeat) {
           if (this.gameState === 'crash' || this.gameState === 'timeout') {
-            this.loadLevel(this.levelIndex);
-          } else if (this.gameState === 'complete') {
             this.loadLevel(0);
+          } else if (this.gameState === 'complete') {
+            if (this.levelIndex + 1 < LEVELS.length) {
+              this.totalScore += this.score;
+              this.loadLevel(this.levelIndex + 1);
+            } else {
+              this.loadLevel(0);
+            }
           }
         }
         return;
@@ -455,16 +859,21 @@ export class ParkingGame extends BaseGame {
         const t = e.touches[0];
         if (!t) return;
         const { x: cx, y: cy } = this.canvasPoint(t.clientX, t.clientY);
-        // Directional zones
-        if (cy < H * 0.35) this.touchDir = 'up';
-        else if (cy > H * 0.65) this.touchDir = 'down';
-        else if (cx < W * 0.4) this.touchDir = 'left';
-        else if (cx > W * 0.6) this.touchDir = 'right';
-        else this.touchDir = null;
+        if (cx < GAME_W) {
+          if (cy < GAME_H * 0.35) this.touchDir = 'up';
+          else if (cy > GAME_H * 0.65) this.touchDir = 'down';
+          else if (cx < GAME_W * 0.4) this.touchDir = 'left';
+          else if (cx > GAME_W * 0.6) this.touchDir = 'right';
+          else this.touchDir = null;
+        } else {
+          this.touchDir = null;
+        }
 
         if (e.type === 'touchstart') {
-          if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(this.levelIndex);
-          else if (this.gameState === 'complete') this.loadLevel(0);
+          if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(0);
+          else if (this.gameState === 'complete') {
+            this.loadLevel(0);
+          }
         }
       }
       if (e.type === 'touchend' || e.type === 'touchcancel') {
@@ -475,8 +884,13 @@ export class ParkingGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type === 'mousedown') {
-        if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(this.levelIndex);
-        else if (this.gameState === 'complete') this.loadLevel(0);
+        const { x: cx } = this.canvasPoint(e.clientX, e.clientY);
+        if (cx < GAME_W) {
+          if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(0);
+          else if (this.gameState === 'complete') {
+            this.loadLevel(0);
+          }
+        }
       }
     }
   }

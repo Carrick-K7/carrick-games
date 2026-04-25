@@ -459,7 +459,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Guess the 5-letter word in 6 tries. Green = correct, Yellow = wrong place, Gray = not in word.',
     descZh: '在六次尝试内猜出五个字母的单词。绿色=正确,黄色=位置错,灰色=不存在。',
     loader: GAME_LOADERS.wordle,
-    canvasSize: { width: 400, height: 520 },
+    canvasSize: { width: 520, height: 520 },
     controls: {
       keyboard: [
         { keys: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'], action: 'Type letter', actionZh: '输入字母' },
