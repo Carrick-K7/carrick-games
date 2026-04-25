@@ -189,7 +189,7 @@ export class FlappyBirdGame extends BaseGame {
 
     // Score
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 12, 28);
 
@@ -199,10 +199,10 @@ export class FlappyBirdGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-      ctx.font = '20px "Press Start 2P", monospace';
+      ctx.font = '24px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`SCORE ${this.score}`, this.width / 2, this.height / 2 + 10);
       ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 40);
       ctx.textAlign = 'left';

@@ -499,13 +499,13 @@ export class GalagaGame extends BaseGame {
     if (this.waveClearTimer > 0 && this.enemies.filter(e => e.alive).length === 0) {
       ctx.fillStyle = isDark ? 'rgba(57,197,187,0.2)' : 'rgba(13,148,136,0.15)';
       ctx.fillRect(0, 0, W, H);
-      ctx.font = "11px 'Press Start 2P', monospace";
+      ctx.font = "15px system-ui, sans-serif";
       ctx.fillStyle = primary;
       ctx.textAlign = 'center';
       const t = isZh ? `第 ${this.wave} 关完成!` : `WAVE ${this.wave} CLEAR!`;
       ctx.fillText(t, W / 2, H / 2);
       const nt = isZh ? `第 ${this.wave + 1} 关即将开始...` : `NEXT WAVE...`;
-      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.font = "12px system-ui, sans-serif";
       ctx.fillText(nt, W / 2, H / 2 + 20);
       ctx.textAlign = 'left';
     }
@@ -527,7 +527,7 @@ export class GalagaGame extends BaseGame {
   }
 
   private drawHUD(ctx: CanvasRenderingContext2D, isDark: boolean, isZh: boolean) {
-    ctx.font = "9px 'Press Start 2P', monospace";
+    ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = isDark ? '#fff' : '#111';
     ctx.fillText(`SCORE:${this.score}`, 8, 22);
     ctx.fillStyle = isDark ? '#ef5350' : '#c62828';
@@ -615,10 +615,10 @@ export class GalagaGame extends BaseGame {
     ctx.fillStyle = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
-    ctx.font = "13px 'Press Start 2P', monospace";
+    ctx.font = "17px system-ui, sans-serif";
     ctx.fillStyle = '#fff';
     ctx.fillText(en1, W / 2, H / 2 - 30);
-    ctx.font = "9px 'Press Start 2P', monospace";
+    ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = '#ccc';
     ctx.fillText(en2, W / 2, H / 2);
     ctx.fillStyle = '#39C5BB';

@@ -48,7 +48,7 @@ export function configureHiDpiCanvas(
   canvas.style.width = `${logicalWidth}px`;
   canvas.style.height = `${logicalHeight}px`;
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
   return pixelRatio;
 }
 
@@ -153,126 +153,6 @@ export function drawRetroBackground(
     const y = (i * 53) % height;
     ctx.fillRect(x, y, 2, 2);
   }
-  ctx.restore();
-}
-
-export function drawScanlines(ctx: CanvasRenderingContext2D, width: number, height: number, dark: boolean) {
-  ctx.save();
-  ctx.globalAlpha = dark ? 0.13 : 0.07;
-  ctx.fillStyle = dark ? '#000000' : '#ffffff';
-  for (let y = 0; y < height; y += 4) {
-    ctx.fillRect(0, y, width, 1);
-  }
-  ctx.restore();
-}
-
-export function drawRetroFinish(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  palette: RetroPalette,
-  dark: boolean
-) {
-  ctx.save();
-  drawScanlines(ctx, width, height, dark);
-
-  const vignette = ctx.createRadialGradient(
-    width / 2,
-    height / 2,
-    Math.min(width, height) * 0.28,
-    width / 2,
-    height / 2,
-    Math.max(width, height) * 0.72
-  );
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, dark ? 'rgba(0,0,0,0.28)' : 'rgba(13,148,136,0.08)');
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = palette.border;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, width - 2, height - 2);
-
-  ctx.strokeStyle = palette.gridStrong;
-  ctx.lineWidth = 1;
-  const tick = Math.min(28, Math.max(14, Math.floor(Math.min(width, height) * 0.06)));
-  const inset = 8.5;
-  ctx.beginPath();
-  ctx.moveTo(inset, inset + tick);
-  ctx.lineTo(inset, inset);
-  ctx.lineTo(inset + tick, inset);
-  ctx.moveTo(width - inset - tick, inset);
-  ctx.lineTo(width - inset, inset);
-  ctx.lineTo(width - inset, inset + tick);
-  ctx.moveTo(inset, height - inset - tick);
-  ctx.lineTo(inset, height - inset);
-  ctx.lineTo(inset + tick, height - inset);
-  ctx.moveTo(width - inset - tick, height - inset);
-  ctx.lineTo(width - inset, height - inset);
-  ctx.lineTo(width - inset, height - inset - tick);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-export function drawPixelFrame(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  palette: RetroPalette
-) {
-  ctx.save();
-  ctx.strokeStyle = palette.border;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, width - 2, height - 2);
-  ctx.strokeStyle = palette.gridStrong;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 5.5, y + 5.5, width - 11, height - 11);
-  ctx.restore();
-}
-
-export function drawNeonRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: string,
-  radius = 4
-) {
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, height, radius);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.fillRect(x + 2, y + 2, Math.max(0, width - 4), 2);
-  ctx.restore();
-}
-
-export function drawGlowText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  color: string,
-  font: string,
-  align: CanvasTextAlign = 'left'
-) {
-  ctx.save();
-  ctx.font = font;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
-  ctx.shadowBlur = 0;
   ctx.restore();
 }
 

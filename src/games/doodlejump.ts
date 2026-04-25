@@ -209,7 +209,7 @@ export class DoodleJumpGame extends BaseGame {
 
     // Score (HUD)
     ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'left';
     const t = document.documentElement.getAttribute('data-lang') === 'zh' ? '分数' : 'SCORE';
     ctx.fillText(`${t} ${this.score}`, 12, 28);
@@ -219,11 +219,11 @@ export class DoodleJumpGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText('DOODLE JUMP', W / 2, H / 2 - 50);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击或按空格开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 10);
       ctx.fillText(zh ? '← → 或 A D 移动' : '← → OR A D TO MOVE', W / 2, H / 2 + 35);
     }
@@ -233,13 +233,13 @@ export class DoodleJumpGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 40);
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击或按空格重新开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 40);
     }
   }

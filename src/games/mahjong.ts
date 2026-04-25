@@ -192,7 +192,7 @@ export class MahjongGame extends BaseGame {
 
     // HUD
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, 16, 24);
     ctx.textAlign = 'right';
@@ -212,11 +212,11 @@ export class MahjongGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = accent;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '通关!' : 'CLEARED!', this.width / 2, this.height / 2 - 24);
       ctx.fillStyle = text;
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`${zh ? '最终得分' : 'FINAL SCORE'} ${this.score}`, this.width / 2, this.height / 2 + 8);
       ctx.fillText(zh ? '点击重新开始' : 'TAP TO RESTART', this.width / 2, this.height / 2 + 32);
       ctx.textAlign = 'left';
@@ -224,11 +224,11 @@ export class MahjongGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#ef4444';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 16);
       ctx.fillStyle = text;
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, this.width / 2, this.height / 2 + 12);
       ctx.fillText(zh ? '点击重新开始' : 'TAP TO RESTART', this.width / 2, this.height / 2 + 32);
       ctx.textAlign = 'left';
@@ -295,7 +295,7 @@ export class MahjongGame extends BaseGame {
 
     // Character
     ctx.fillStyle = free ? (this.isDark() ? '#e0e0e0' : '#1a1a2e') : disabledText;
-    ctx.font = `28px "Press Start 2P", monospace`;
+    ctx.font = `212px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(tile.char, cx, cy + 2);

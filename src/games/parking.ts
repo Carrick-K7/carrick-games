@@ -710,11 +710,11 @@ export class ParkingGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.72)';
       ctx.fillRect(0, 0, TOTAL_W, GAME_H);
       ctx.fillStyle = this.gameState === 'timeout' ? accent : '#ef4444';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), TOTAL_W / 2, GAME_H / 2 - 40);
       ctx.fillStyle = text;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '按空格或点击重试' : 'SPACE OR TAP TO RETRY', TOTAL_W / 2, GAME_H / 2 + 10);
       ctx.fillText(zh ? '按 M 返回菜单' : 'PRESS M FOR MENU', TOTAL_W / 2, GAME_H / 2 + 30);
     }
@@ -736,13 +736,13 @@ export class ParkingGame extends BaseGame {
 
     // Title
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '选择关卡' : 'SELECT LEVEL', GAME_W / 2, 28);
 
     // Best record
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.fillText(`${zh ? '最高记录' : 'BEST'}: ${this.bestLevel}/${LEVELS.length}`, GAME_W / 2, 44);
 
     for (let i = 0; i < LEVELS.length; i++) {
@@ -776,28 +776,28 @@ export class ParkingGame extends BaseGame {
 
       // Level number
       ctx.fillStyle = unlocked ? text : (isDark ? '#475569' : '#94a3b8');
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`${i + 1}`, x + cellW / 2, y + cellH / 2 + 4);
 
       // Cleared checkmark
       if (cleared) {
         ctx.fillStyle = primary;
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = '12px system-ui, sans-serif';
         ctx.fillText('✓', x + cellW / 2, y + cellH - 6);
       }
 
       // Locked icon
       if (!unlocked) {
         ctx.fillStyle = isDark ? '#475569' : '#94a3b8';
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = '12px system-ui, sans-serif';
         ctx.fillText('🔒', x + cellW / 2, y + cellH - 6);
       }
     }
 
     // Hint
     ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '↑↓←→ 选择  空格开始' : 'ARROWS: SELECT  SPACE: START', GAME_W / 2, GAME_H - 16);
     ctx.fillText(zh ? '点击关卡直接开始' : 'TAP A LEVEL TO START', GAME_W / 2, GAME_H - 6);
@@ -820,15 +820,15 @@ export class ParkingGame extends BaseGame {
 
     // Title
     ctx.fillStyle = primary;
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '停车' : 'PARK', dx + dw / 2, 28);
 
     // Level number
     ctx.fillStyle = text;
-    ctx.font = '18px "Press Start 2P", monospace';
+    ctx.font = '112px system-ui, sans-serif';
     ctx.fillText(`${this.levelIndex + 1}`, dx + dw / 2, 58);
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
     ctx.fillText(`/ ${LEVELS.length}`, dx + dw / 2, 72);
 
@@ -869,10 +869,10 @@ export class ParkingGame extends BaseGame {
     ctx.fill();
 
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${Math.round(Math.abs(this.car.speed))}`, cx, cy + 22);
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
     ctx.fillText(zh ? '速度' : 'KM/H', cx, cy + 34);
 
@@ -880,28 +880,28 @@ export class ParkingGame extends BaseGame {
     const gearY = 200;
     const gear = this.car.speed > 2 ? 'D' : this.car.speed < -2 ? 'R' : 'N';
     ctx.fillStyle = gear === 'R' ? '#ef4444' : gear === 'D' ? primary : isDark ? '#475569' : '#94a3b8';
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '110px system-ui, sans-serif';
     ctx.fillText(gear, cx, gearY);
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.fillText(zh ? '档位' : 'GEAR', cx, gearY + 14);
 
     // Time
     const timeY = 260;
     ctx.fillStyle = this.timeLeft <= 10 ? '#ef4444' : text;
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.fillText(`${Math.ceil(this.timeLeft)}`, cx, timeY);
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.fillText(zh ? '秒' : 'SEC', cx, timeY + 14);
 
     // Best level
     const bestY = 320;
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(`${this.bestLevel}`, cx, bestY);
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.fillText(zh ? '最高' : 'BEST', cx, bestY + 14);
 
     // Level progress dots
@@ -932,7 +932,7 @@ export class ParkingGame extends BaseGame {
 
     // Status text
     const statusY = GAME_H - 60;
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'center';
     if (this.gameState === 'parked') {
       ctx.fillStyle = accent;
@@ -947,7 +947,7 @@ export class ParkingGame extends BaseGame {
 
     // Controls hint at bottom
     ctx.fillStyle = isDark ? '#475569' : '#94a3b8';
-    ctx.font = '5px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, sans-serif';
     if (this.gameState === 'playing') {
       ctx.fillText(zh ? '↑加速 ↓倒车' : 'UP DWN', cx, GAME_H - 30);
       ctx.fillText(zh ? '← →转向' : 'L R', cx, GAME_H - 18);
@@ -962,15 +962,15 @@ export class ParkingGame extends BaseGame {
     const isLast = this.levelIndex + 1 >= LEVELS.length;
 
     ctx.fillStyle = accent;
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '18px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('✅ ' + (zh ? '停车成功！' : 'PARKED!'), cx, GAME_H / 2 - 70);
 
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(`${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}  ${zh ? '完成' : 'CLEARED'}`, cx, GAME_H / 2 - 35);
 
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillText(`${zh ? '最高记录' : 'BEST'}: ${this.bestLevel}/${LEVELS.length}`, cx, GAME_H / 2 - 10);
 
     // Buttons
@@ -987,7 +987,7 @@ export class ParkingGame extends BaseGame {
       ctx.fillStyle = primary;
       ctx.fillRect(btnX, btnY, btnW, btnH);
       ctx.fillStyle = isDark ? '#0b0f19' : '#ffffff';
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '下一关 →' : 'NEXT LEVEL →', cx, btnY + 18);
       btnY += btnH + btnGap;
@@ -1000,7 +1000,7 @@ export class ParkingGame extends BaseGame {
     ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
     ctx.fillRect(btnX, btnY, btnW, btnH);
     ctx.fillStyle = text;
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '↻ 重玩本关' : '↻ REPLAY', cx, btnY + 18);
     btnY += btnH + btnGap;
@@ -1010,13 +1010,13 @@ export class ParkingGame extends BaseGame {
     ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
     ctx.fillRect(btnX, btnY, btnW, btnH);
     ctx.fillStyle = text;
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '☰ 关卡选择' : '☰ LEVEL SELECT', cx, btnY + 18);
 
     // Keyboard hints
     ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
-    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     if (!isLast) {
       ctx.fillText(zh ? '空格: 下一关  R: 重玩  M: 菜单' : 'SPACE: NEXT  R: REPLAY  M: MENU', cx, GAME_H - 18);

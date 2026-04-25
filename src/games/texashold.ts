@@ -1034,7 +1034,7 @@ export class TexasHoldGame extends BaseGame {
 
   private drawHeader(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
     ctx.fillStyle = theme.text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(zh ? '德州扑克' : 'Texas Holdem', 20, 20);
 
@@ -1044,7 +1044,7 @@ export class TexasHoldGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.text;
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '13px system-ui, sans-serif';
     const streetLabel = this.getStreetLabel(zh);
     const dealerName = zh ? this.players[this.dealerIndex]?.nameZh ?? '--' : this.players[this.dealerIndex]?.name ?? '--';
     ctx.fillText(`${streetLabel}  ${zh ? '庄' : 'D'}:${dealerName}`, W / 2, 158);
@@ -1074,7 +1074,7 @@ export class TexasHoldGame extends BaseGame {
     }
 
     ctx.textAlign = 'center';
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.fillText(zh ? '公共牌' : 'BOARD', W / 2, y - 10);
   }
@@ -1096,7 +1096,7 @@ export class TexasHoldGame extends BaseGame {
       ctx.globalAlpha = dim ? 0.55 : 1;
       ctx.textAlign = 'center';
       ctx.fillStyle = theme.text;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
 
       const name = zh ? player.nameZh : player.name;
       const labelY = player.isHuman ? cardY + CARD_H + 16 : cardY + CARD_H + 14;
@@ -1145,7 +1145,7 @@ export class TexasHoldGame extends BaseGame {
     if (markers.length === 0) return;
 
     ctx.save();
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.primary;
     ctx.fillText(markers.join(' '), x, y);
@@ -1160,7 +1160,7 @@ export class TexasHoldGame extends BaseGame {
     ctx.stroke();
 
     ctx.textAlign = 'center';
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = theme.text;
     const line = zh ? this.banner.zh : this.banner.en;
     ctx.fillText(line || (this.isHumanTurn() ? (zh ? '轮到你行动' : 'Your action') : (zh ? 'AI 思考中' : 'AI thinking')), W / 2, 464);
@@ -1181,7 +1181,7 @@ export class TexasHoldGame extends BaseGame {
       ctx.stroke();
 
       ctx.textAlign = 'center';
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '11px system-ui, sans-serif';
       ctx.fillStyle = button.enabled ? theme.text : theme.muted;
       ctx.fillText(zh ? button.labelZh : button.label, button.x + button.w / 2, button.y + 17);
       ctx.restore();
@@ -1202,10 +1202,10 @@ export class TexasHoldGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(zh ? '本局结束' : 'Round End', W / 2, 218);
 
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = theme.primary;
     ctx.fillText(zh ? `得分 ${this.score}` : `Score ${this.score}`, W / 2, 242);
 
@@ -1270,16 +1270,16 @@ export class TexasHoldGame extends BaseGame {
 
     ctx.fillStyle = color;
     ctx.textAlign = 'left';
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillText(rank, x + 4, y + 11);
     ctx.fillText(suit, x + 4, y + 22);
 
     ctx.textAlign = 'center';
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '18px system-ui, sans-serif';
     ctx.fillText(suit, x + CARD_W / 2, y + 32);
 
     ctx.textAlign = 'right';
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillText(rank, x + CARD_W - 4, y + CARD_H - 12);
     ctx.restore();
   }

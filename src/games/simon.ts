@@ -470,7 +470,7 @@ export class SimonGame extends BaseGame {
     ctx.stroke();
 
     ctx.fillStyle = theme.accent;
-    ctx.font = '8px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '12px system-ui, "Noto Sans SC", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(this.getStatusText(zh), W / 2, 82);
 
@@ -492,10 +492,10 @@ export class SimonGame extends BaseGame {
   ) {
     ctx.textAlign = align;
     ctx.fillStyle = theme.muted;
-    ctx.font = '8px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '12px system-ui, "Noto Sans SC", sans-serif';
     ctx.fillText(label, x, y);
     ctx.fillStyle = theme.text;
-    ctx.font = '12px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '16px system-ui, "Noto Sans SC", sans-serif';
     ctx.fillText(String(value), x, y + 20);
   }
 
@@ -519,13 +519,13 @@ export class SimonGame extends BaseGame {
 
     this.drawCard(ctx, pad.x + 12, pad.y + 12, 56, 26, 8, 'rgba(15,23,42,0.24)', 'rgba(255,255,255,0.22)');
     ctx.fillStyle = '#ffffff';
-    ctx.font = '8px "Press Start 2P", sans-serif';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${pad.keyLabel}/${pad.altKey}`, pad.x + 40, pad.y + 26);
 
     ctx.fillStyle = active ? '#0f172a' : '#ffffff';
-    ctx.font = '11px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '15px system-ui, "Noto Sans SC", sans-serif';
     ctx.fillText(zh ? pad.labelZh : pad.label, pad.x + pad.w / 2, pad.y + pad.h / 2 + 18);
   }
 
@@ -535,7 +535,7 @@ export class SimonGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = theme.text;
-    ctx.font = '16px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '110px system-ui, "Noto Sans SC", sans-serif';
     ctx.fillText(
       this.phase === 'ready' ? (zh ? '记忆游戏' : 'SIMON SAYS') : (zh ? '游戏结束' : 'GAME OVER'),
       W / 2,
@@ -543,7 +543,7 @@ export class SimonGame extends BaseGame {
     );
 
     ctx.fillStyle = theme.muted;
-    ctx.font = '8px "Press Start 2P", "Noto Sans SC", sans-serif';
+    ctx.font = '12px system-ui, "Noto Sans SC", sans-serif';
 
     if (this.phase === 'ready') {
       ctx.fillText(zh ? '点击下方开始按钮' : 'PRESS START BELOW', W / 2, 258);

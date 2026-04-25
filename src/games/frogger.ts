@@ -555,7 +555,7 @@ export class FroggerGame extends BaseGame {
   }
 
   private drawHUD(ctx: CanvasRenderingContext2D, isDark: boolean) {
-    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.font = "14px system-ui, sans-serif";
     const scoreCol = isDark ? '#fff' : '#111';
     const livesCol = isDark ? '#ef5350' : '#c62828';
     const levelCol = isDark ? '#f9a825' : '#e65100';
@@ -572,7 +572,7 @@ export class FroggerGame extends BaseGame {
     ctx.fillStyle = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    ctx.font = "11px 'Press Start 2P', monospace";
+    ctx.font = "15px system-ui, sans-serif";
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.fillText(en, CANVAS_W / 2, CANVAS_H / 2 - 10);

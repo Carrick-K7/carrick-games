@@ -1,8 +1,6 @@
 import {
   configureHiDpiCanvas,
-  drawRetroFinish,
   getCanvasPoint,
-  getRetroPalette,
   type CanvasPoint,
 } from './render.js';
 
@@ -142,8 +140,6 @@ export abstract class BaseGame implements Game {
     this.ctx.save();
     this.draw(this.ctx);
     this.ctx.restore();
-    const dark = this.isDarkTheme();
-    drawRetroFinish(this.ctx, this.width, this.height, getRetroPalette(dark), dark);
   }
 
   protected resetScoreReport() {

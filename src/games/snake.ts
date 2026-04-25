@@ -1,9 +1,5 @@
 import { BaseGame } from '../core/game.js';
 import {
-  drawGlowText,
-  drawPixelFrame,
-  drawRetroBackground,
-  drawScanlines,
   getRetroPalette,
 } from '../core/render.js';
 
@@ -124,7 +120,8 @@ export class SnakeGame extends BaseGame {
     const boardW = this.cols * this.tileSize;
     const boardH = this.rows * this.tileSize;
 
-    drawRetroBackground(ctx, this.width, this.height, palette, this.tileSize);
+    ctx.fillStyle = palette.bg;
+    ctx.fillRect(0, 0, this.width, this.height);
 
     // Pixel board texture
     for (let x = 0; x < this.cols; x++) {
@@ -139,7 +136,9 @@ export class SnakeGame extends BaseGame {
       }
     }
 
-    drawPixelFrame(ctx, 0, 0, boardW, boardH, palette);
+    ctx.strokeStyle = palette.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, boardW - 1, boardH - 1);
 
     // Food
     const fx = this.food.x * this.tileSize + this.tileSize / 2;
@@ -166,8 +165,8 @@ export class SnakeGame extends BaseGame {
       const y = seg.y * this.tileSize + pad;
       const size = this.tileSize - pad * 2;
       ctx.fillStyle = i === 0 ? palette.primary : i % 2 === 0 ? palette.green : '#22c55e';
-      ctx.shadowColor = i === 0 ? palette.primary : palette.green;
-      ctx.shadowBlur = i === 0 ? 14 : 5;
+      ctx.shadowColor = 'rgba(0,0,0,0.08)';
+      ctx.shadowBlur = 2;
       ctx.fillRect(
         x,
         y,
@@ -192,8 +191,11 @@ export class SnakeGame extends BaseGame {
     ctx.globalAlpha = 1;
 
     // Score
-    drawGlowText(ctx, `SCORE ${this.score}`, 10, this.height - 10, palette.primary, '10px "Press Start 2P", monospace');
-    drawScanlines(ctx, this.width, this.height, isDark);
+    ctx.fillStyle = palette.text;
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`SCORE ${this.score}`, 10, this.height - 10);
 
     // Game Over
     if (this.gameOver) {
@@ -201,10 +203,10 @@ export class SnakeGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = 'bold 18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
       ctx.textAlign = 'left';
     }

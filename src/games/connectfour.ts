@@ -170,7 +170,7 @@ export class ConnectFourGame extends BaseGame {
 
     // Turn text
     ctx.fillStyle = textColor;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     if (!this.gameOver) {
@@ -195,7 +195,7 @@ export class ConnectFourGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const overText = zh ? '按空格重新开始' : 'PRESS SPACE';
       ctx.fillText(overText, this.width / 2, this.height / 2 + 8);

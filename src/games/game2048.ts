@@ -249,7 +249,7 @@ export class Game2048 extends BaseGame {
         // Tile text
         const fontSize = tile.value >= 1000 ? 14 : tile.value >= 100 ? 18 : 22;
         ctx.fillStyle = color.fg;
-        ctx.font = `bold ${fontSize}px "Press Start 2P", monospace`;
+        ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(String(tile.value), x + cellSize / 2, y + cellSize / 2);
@@ -259,7 +259,7 @@ export class Game2048 extends BaseGame {
     // Score HUD
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, PADDING, 10);
@@ -272,11 +272,11 @@ export class Game2048 extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '20px "Press Start 2P", monospace';
+      ctx.font = '24px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('2048', W / 2, H / 2 - 40);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击或按方向键开始' : 'TAP OR PRESS ARROW KEYS', W / 2, H / 2 + 10);
       ctx.fillText(zh ? '按空格重新开始' : 'SPACE TO RESTART', W / 2, H / 2 + 35);
       return;
@@ -287,11 +287,11 @@ export class Game2048 extends BaseGame {
       ctx.fillStyle = 'rgba(237,194,46,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f9f6f2';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(zh ? '你赢了！' : 'YOU WIN!', W / 2, H / 2 - 30);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
       ctx.fillText(zh ? '点击继续' : 'TAP TO CONTINUE', W / 2, H / 2 + 35);
     }
@@ -301,13 +301,13 @@ export class Game2048 extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 30);
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击或按空格重新开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 40);
     }
   }

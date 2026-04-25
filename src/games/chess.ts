@@ -405,7 +405,7 @@ export class ChessGame extends BaseGame {
     ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, this.width, UI_TOP);
     ctx.fillStyle = theme.text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     const turnText = this.turn === 'w' ? langText('whiteTurn') : langText('blackTurn');
     const checkText = this.isCheck ? ' ' + langText('check') : '';
@@ -471,7 +471,7 @@ export class ChessGame extends BaseGame {
     }
 
     // File labels
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.textAlign = 'center';
     for (let c = 0; c < 8; c++) {
@@ -506,7 +506,7 @@ export class ChessGame extends BaseGame {
 
     // Title
     ctx.fillStyle = theme.accent;
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '110px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Chess', this.width / 2, this.height / 2 - 40);
@@ -532,7 +532,7 @@ export class ChessGame extends BaseGame {
     ctx.roundRect(bx, by, btnW, btnH, 6);
     ctx.fill();
     ctx.fillStyle = theme.bg;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(langText('start'), this.width / 2, by + btnH / 2);
@@ -546,7 +546,7 @@ export class ChessGame extends BaseGame {
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = theme.accent;
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const msgKey = this.gameResult || 'draw';
@@ -561,7 +561,7 @@ export class ChessGame extends BaseGame {
     ctx.roundRect(bx, by, btnW, btnH, 6);
     ctx.fill();
     ctx.fillStyle = theme.bg;
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '13px system-ui, sans-serif';
     ctx.fillText(langText('restart'), this.width / 2, by + btnH / 2);
     this.startBtnBounds = { x: bx, y: by, w: btnW, h: btnH };
   }

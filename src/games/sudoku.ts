@@ -222,7 +222,7 @@ export class SudokuGame extends BaseGame {
 
     // Top info bar
     const infoY = 18;
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = text;
@@ -301,7 +301,7 @@ export class SudokuGame extends BaseGame {
         const y = gridY + r * cellSize + cellSize / 2;
 
         if (cell.value !== 0) {
-          ctx.font = 'bold 20px "Press Start 2P", monospace';
+          ctx.font = 'bold 24px system-ui, sans-serif';
           if (cell.invalid) {
             ctx.fillStyle = invalidColor;
           } else if (cell.given) {
@@ -311,7 +311,7 @@ export class SudokuGame extends BaseGame {
           }
           ctx.fillText(String(cell.value), x, y + 1);
         } else if (cell.notes.size > 0) {
-          ctx.font = '8px "Press Start 2P", monospace';
+          ctx.font = '12px system-ui, sans-serif';
           ctx.fillStyle = noteColor;
           const notes = Array.from(cell.notes).sort();
           const noteSize = cellSize / 3;
@@ -364,7 +364,7 @@ export class SudokuGame extends BaseGame {
 
     // Note mode indicator
     if (this.noteMode) {
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillStyle = primary;
       ctx.textAlign = 'left';
       ctx.fillText(zh ? '笔记模式' : 'NOTE MODE', 16, this.height - 8);
@@ -376,10 +376,10 @@ export class SudokuGame extends BaseGame {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '24px "Press Start 2P", monospace';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.fillStyle = this.won ? primary : invalidColor;
       ctx.fillText(this.won ? (zh ? '胜利!' : 'YOU WON!') : zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       ctx.fillStyle = text;
       ctx.fillText(zh ? '按空格或点击重新开始' : 'Space or tap to restart', this.width / 2, this.height / 2 + 16);
     }
@@ -394,10 +394,10 @@ export class SudokuGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '20px "Press Start 2P", monospace';
+    ctx.font = '24px system-ui, sans-serif';
     ctx.fillStyle = primary;
     ctx.fillText('SUDOKU', this.width / 2, 120);
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.fillStyle = text;
     ctx.fillText(zh ? '选择难度' : 'Select Difficulty', this.width / 2, 170);
 
@@ -419,11 +419,11 @@ export class SudokuGame extends BaseGame {
       ctx.strokeRect(x, y, btnWidth, btnHeight);
 
       ctx.fillStyle = hovered ? (isDark ? '#0b0f19' : '#fafafa') : text;
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       ctx.fillText(zh ? d.labelZh : d.label, this.width / 2, y + btnHeight / 2 + 1);
     }
 
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillStyle = isDark ? '#5a6070' : '#a0a0a0';
     ctx.fillText(zh ? '点击选择难度开始游戏' : 'Click difficulty to start', this.width / 2, this.height - 40);
   }
@@ -464,7 +464,7 @@ export class SudokuGame extends BaseGame {
       ctx.lineWidth = 1;
       ctx.strokeRect(bx, y, btnW, btnH);
 
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = completed ? (isDark ? '#3a5060' : '#a0c0bc') : pressed ? (isDark ? '#0b0f19' : '#fafafa') : text;
@@ -478,7 +478,7 @@ export class SudokuGame extends BaseGame {
     ctx.fillRect(noteX, y, noteW, btnH);
     ctx.strokeStyle = isDark ? '#3a3f4e' : '#d0d0d0';
     ctx.strokeRect(noteX, y, noteW, btnH);
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = this.noteMode ? (isDark ? '#0b0f19' : '#fafafa') : text;
     ctx.fillText(zh ? '笔记' : 'NOTE', noteX + noteW / 2, y + btnH / 2 + 1);
   }

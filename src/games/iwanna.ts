@@ -245,7 +245,7 @@ export class IwannaGame extends BaseGame {
     ctx.restore();
 
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText('IWANNA', 12, 22);
     ctx.fillText(`${zh ? '死亡' : 'DEATH'} ${this.deaths}`, 12, 42);
     ctx.fillText(`${zh ? '进度' : 'SCORE'} ${this.score}`, 12, 62);
@@ -255,9 +255,9 @@ export class IwannaGame extends BaseGame {
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = text;
       ctx.textAlign = 'center';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText(zh ? '通关' : 'CLEAR', W / 2, H / 2 - 18);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '按空格重开' : 'PRESS SPACE', W / 2, H / 2 + 18);
       ctx.textAlign = 'left';
     }

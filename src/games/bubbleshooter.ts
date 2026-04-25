@@ -176,7 +176,7 @@ export class BubbleShooterGame extends BaseGame {
     this.drawBubble(ctx, SHOOTER_X + 56, SHOOTER_Y + 2, this.nextColor, 0.72);
 
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 12, 20);
     ctx.fillText(`${zh ? '下行' : 'ROW'} ${SHOTS_PER_ROW - this.shotsSinceRow}`, 12, 42);
@@ -697,16 +697,16 @@ export class BubbleShooterGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = primary;
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '110px system-ui, sans-serif';
     ctx.fillText(title, this.width / 2, this.height / 2 - 34);
 
     if (scoreLine) {
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(scoreLine, this.width / 2, this.height / 2 - 2);
     }
 
     ctx.fillStyle = text;
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillText(subtitle, this.width / 2, this.height / 2 + 28);
     ctx.textAlign = 'left';
   }

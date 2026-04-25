@@ -474,7 +474,7 @@ export class PacManGame extends BaseGame {
 
     // HUD
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(`SCORE ${this.score}`, 8, 18);
 
     // Lives
@@ -495,14 +495,14 @@ export class PacManGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       if (this.allDotsEaten) {
         ctx.fillText('YOU WIN!', this.width / 2, this.height / 2 - 20);
       } else {
         ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
       }
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
       ctx.textAlign = 'left';
     }

@@ -173,7 +173,7 @@ export class PongGame extends BaseGame {
 
     // Score
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '110px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(String(this.playerScore), this.width / 2 - 40, 40);
     ctx.fillText(String(this.aiScore), this.width / 2 + 40, 40);
@@ -185,10 +185,10 @@ export class PongGame extends BaseGame {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
       ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-      ctx.font = '20px "Press Start 2P", monospace';
+      ctx.font = '24px system-ui, sans-serif';
       const text = this.winner === 'player' ? 'YOU WIN' : 'GAME OVER';
       ctx.fillText(text, this.width / 2, this.height / 2 - 10);
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 24);
     }
   }

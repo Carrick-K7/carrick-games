@@ -1,7 +1,5 @@
 import { BaseGame } from '../core/game.js';
 import {
-  drawScanlines,
-  fillRoundedPanel,
   getRetroPalette,
 } from '../core/render.js';
 
@@ -173,7 +171,7 @@ export class SolitaireGame extends BaseGame {
     this.drawStockWaste(ctx, theme);
     this.drawTableau(ctx, theme, zh);
     this.drawHud(ctx, theme, zh);
-    drawScanlines(ctx, W, H, this.isDarkTheme());
+
 
     if (this.phase === 'ready' || this.phase === 'won') {
       this.drawOverlay(ctx, theme, zh);
@@ -601,7 +599,7 @@ export class SolitaireGame extends BaseGame {
       }
       // Suit label
       ctx.fillStyle = theme.muted;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(['H', 'D', 'C', 'S'][f], fx + CW / 2, FOUND_Y + CH / 2);
@@ -614,7 +612,7 @@ export class SolitaireGame extends BaseGame {
       this.drawCard(ctx, STOCK_X, STOCK_Y, { suit: 0, rank: 0, faceUp: false }, false, theme);
       // Count badge
       ctx.fillStyle = theme.accent;
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '11px system-ui, sans-serif';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
       ctx.fillText(String(this.stock.length), STOCK_X + CW - 3, STOCK_Y + 3);
@@ -622,7 +620,7 @@ export class SolitaireGame extends BaseGame {
       this.drawEmptySlot(ctx, STOCK_X, STOCK_Y, theme);
       // Refresh icon
       ctx.fillStyle = theme.muted;
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '11px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('⟳', STOCK_X + CW / 2, STOCK_Y + CH / 2);
@@ -744,7 +742,7 @@ export class SolitaireGame extends BaseGame {
       ctx.roundRect(x + CW / 2 - 8, y + CH / 2 - 8, 16, 16, 3);
       ctx.fill();
       ctx.fillStyle = theme.cardBack;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('♠', x + CW / 2, y + CH / 2);
@@ -756,7 +754,7 @@ export class SolitaireGame extends BaseGame {
     ctx.fillStyle = color;
 
     // Top-left rank + suit
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '13px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(rankLabel(card.rank), x + 4, y + 4);
@@ -782,7 +780,7 @@ export class SolitaireGame extends BaseGame {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(suitSymbol(card.suit), 0, 0);
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '13px system-ui, sans-serif';
     ctx.fillText(rankLabel(card.rank), 8, 0);
     ctx.restore();
   }
@@ -812,7 +810,7 @@ export class SolitaireGame extends BaseGame {
     ctx.lineTo(W, hudH);
     ctx.stroke();
 
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
 
     // Moves
@@ -820,34 +818,34 @@ export class SolitaireGame extends BaseGame {
     ctx.textAlign = 'left';
     ctx.fillText(zh ? '步数' : 'MOVES', 12, hudH / 2 - 7);
     ctx.fillStyle = theme.text;
-    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.font = '15px system-ui, sans-serif';
     ctx.fillText(String(this.moves), 12, hudH / 2 + 7);
 
     // Time
     const mins = Math.floor(this.elapsed / 60);
     const secs = Math.floor(this.elapsed % 60);
     const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '时间' : 'TIME', W / 2, hudH / 2 - 7);
     ctx.fillStyle = theme.text;
-    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.font = '15px system-ui, sans-serif';
     ctx.fillText(timeStr, W / 2, hudH / 2 + 7);
 
     // Score
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.textAlign = 'right';
     ctx.fillText(zh ? '得分' : 'SCORE', W - 12, hudH / 2 - 7);
     ctx.fillStyle = theme.accent;
-    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.font = '15px system-ui, sans-serif';
     ctx.fillText(String(this.score), W - 12, hudH / 2 + 7);
 
     // Foundations progress
     const totalFound = this.foundations.reduce((s, f) => s + f.length, 0);
     ctx.fillStyle = theme.muted;
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${totalFound}/52`, W / 2 + 80, hudH / 2);
   }
@@ -860,22 +858,29 @@ export class SolitaireGame extends BaseGame {
     const cy = H / 2;
 
     // Panel
-    fillRoundedPanel(ctx, cx - 160, cy - 110, 320, 220, getRetroPalette(this.isDarkTheme()), 8);
+    const p = getRetroPalette(this.isDarkTheme());
+    ctx.fillStyle = p.panel;
+    ctx.beginPath();
+    ctx.roundRect(cx - 160, cy - 110, 320, 220, 12);
+    ctx.fill();
+    ctx.strokeStyle = p.border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     if (this.phase === 'ready') {
       ctx.fillStyle = theme.accent;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText(zh ? '纸牌' : 'SOLITAIRE', cx, cy - 60);
 
       ctx.fillStyle = theme.muted;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('Klondike', cx, cy - 35);
 
       ctx.fillStyle = theme.text;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击任意位置开始' : 'TAP OR PRESS SPACE', cx, cy + 10);
       ctx.fillText(zh ? '空格：发牌  1-7：选列' : 'SPACE: draw  1-7: select col', cx, cy + 35);
       ctx.fillText(zh ? '双击：自动放到王牌' : 'Double-click: auto-move to foundation', cx, cy + 55);
@@ -891,11 +896,11 @@ export class SolitaireGame extends BaseGame {
     } else {
       // Won
       ctx.fillStyle = theme.accent;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText(zh ? '恭喜通关!' : 'YOU WIN!', cx, cy - 70);
 
       ctx.fillStyle = theme.text;
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`MOVES: ${this.moves}`, cx, cy - 30);
 
       const mins = Math.floor(this.elapsed / 60);
@@ -907,11 +912,11 @@ export class SolitaireGame extends BaseGame {
       );
 
       ctx.fillStyle = theme.accent;
-      ctx.font = '11px "Press Start 2P", monospace';
+      ctx.font = '15px system-ui, sans-serif';
       ctx.fillText(`SCORE: ${this.score}`, cx, cy + 35);
 
       ctx.fillStyle = theme.muted;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '点击或空格再来一局' : 'TAP OR SPACE TO PLAY AGAIN', cx, cy + 70);
     }
   }

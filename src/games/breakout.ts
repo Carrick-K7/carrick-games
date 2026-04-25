@@ -1,10 +1,5 @@
 import { BaseGame } from '../core/game.js';
 import {
-  drawGlowText,
-  drawNeonRect,
-  drawPixelFrame,
-  drawRetroBackground,
-  drawScanlines,
   getRetroPalette,
 } from '../core/render.js';
 
@@ -180,8 +175,8 @@ export class BreakoutGame extends BaseGame {
     const isDark = this.isDarkTheme();
     const palette = getRetroPalette(isDark);
 
-    drawRetroBackground(ctx, this.width, this.height, palette, 30);
-    drawPixelFrame(ctx, 0, 0, this.width, this.height, palette);
+    ctx.fillStyle = palette.bg;
+    ctx.fillRect(0, 0, this.width, this.height);
 
     // Parallax starfield
     for (let i = 0; i < 54; i++) {
@@ -196,7 +191,10 @@ export class BreakoutGame extends BaseGame {
     // Bricks
     for (const brick of this.bricks) {
       if (!brick.active) continue;
-      drawNeonRect(ctx, brick.x, brick.y, this.brickWidth, this.brickHeight, brick.color, 4);
+      ctx.fillStyle = brick.color;
+      ctx.beginPath();
+      ctx.roundRect(brick.x, brick.y, this.brickWidth, this.brickHeight, 4);
+      ctx.fill();
       ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.75)';
       ctx.lineWidth = 1;
       ctx.strokeRect(brick.x + 1.5, brick.y + 1.5, this.brickWidth - 3, this.brickHeight - 3);
@@ -207,8 +205,8 @@ export class BreakoutGame extends BaseGame {
     paddleGrad.addColorStop(0, '#7dd3fc');
     paddleGrad.addColorStop(0.5, '#38bdf8');
     paddleGrad.addColorStop(1, palette.primary);
-    ctx.shadowColor = palette.cyan;
-    ctx.shadowBlur = 16;
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 6;
     ctx.fillStyle = paddleGrad;
     ctx.beginPath();
     ctx.roundRect(this.paddleX, this.paddleY, this.paddleWidth, this.paddleHeight, 4);
@@ -218,8 +216,8 @@ export class BreakoutGame extends BaseGame {
     ctx.fillRect(this.paddleX + 8, this.paddleY + 2, this.paddleWidth - 16, 2);
 
     // Ball
-    ctx.shadowColor = isDark ? '#ffffff' : palette.blue;
-    ctx.shadowBlur = 18;
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 6;
     ctx.fillStyle = isDark ? '#f8fafc' : '#ffffff';
     ctx.beginPath();
     ctx.arc(this.ballX, this.ballY, this.ballRadius, 0, Math.PI * 2);
@@ -238,10 +236,14 @@ export class BreakoutGame extends BaseGame {
 
     // Score
     ctx.textAlign = 'left';
-    drawGlowText(ctx, `SCORE ${this.score}`, 10, 22, palette.primary, '10px "Press Start 2P", monospace');
+    ctx.fillStyle = palette.text;
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`SCORE ${this.score}`, 10, 22);
     const liveBricks = this.bricks.length - this.destroyedCount;
-    drawGlowText(ctx, `BRICKS ${liveBricks}`, this.width - 10, 22, palette.amber, '10px "Press Start 2P", monospace', 'right');
-    drawScanlines(ctx, this.width, this.height, isDark);
+    ctx.textAlign = 'right';
+    ctx.fillText(`BRICKS ${liveBricks}`, this.width - 10, 22);
 
     // Game Over / Win overlay
     if (this.gameOver || this.won) {
@@ -250,9 +252,9 @@ export class BreakoutGame extends BaseGame {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.textAlign = 'center';
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = 'bold 18px system-ui, sans-serif';
       ctx.fillText(this.won ? 'YOU WIN!' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
     }
   }

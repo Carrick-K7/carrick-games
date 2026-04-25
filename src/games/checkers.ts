@@ -228,7 +228,7 @@ export class CheckersGame extends BaseGame {
     // Turn text
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     ctx.fillStyle = textColor;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     if (!this.gameOver) {
       const txt = this.currentPlayer === 1 ? (zh ? '你的回合' : 'Your Turn') : (zh ? '电脑思考中...' : 'Computer thinking...');
@@ -246,7 +246,7 @@ export class CheckersGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '按空格重新开始' : 'PRESS SPACE', this.width / 2, this.height / 2);
     }

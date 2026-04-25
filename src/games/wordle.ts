@@ -404,7 +404,7 @@ export class WordleGame extends BaseGame {
 
         if (drawLetter) {
           ctx.fillStyle = textColor;
-          ctx.font = 'bold 28px "Press Start 2P", monospace';
+          ctx.font = 'bold 212px system-ui, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(drawLetter, x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 2);
@@ -477,7 +477,7 @@ export class WordleGame extends BaseGame {
     ctx.fill();
 
     ctx.fillStyle = textColor;
-    ctx.font = `10px "Press Start 2P", monospace`;
+    ctx.font = `14px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -489,7 +489,7 @@ export class WordleGame extends BaseGame {
 
   private drawMessage(ctx: CanvasRenderingContext2D, theme: Theme, message: string) {
     const padding = 12;
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     const textWidth = ctx.measureText(message).width;
     const boxW = textWidth + padding * 2;
     const boxH = 32;
@@ -521,24 +521,24 @@ export class WordleGame extends BaseGame {
 
     if (this.won) {
       ctx.fillStyle = theme.green;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText(zh ? '恭喜!' : 'YOU WIN!', W / 2, 220);
 
       ctx.fillStyle = theme.text;
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, 252);
     } else {
       ctx.fillStyle = theme.gray;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, 220);
 
       ctx.fillStyle = theme.text;
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       ctx.fillText(`${zh ? '单词' : 'WORD'}: ${this.targetWord}`, W / 2, 252);
     }
 
     ctx.fillStyle = theme.accent;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(zh ? '按 Enter 重新开始' : 'PRESS ENTER', W / 2, 290);
   }
 

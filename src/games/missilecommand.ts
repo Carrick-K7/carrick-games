@@ -284,7 +284,7 @@ export class MissileCommandGame extends BaseGame {
     // HUD
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     ctx.fillStyle = isDark ? '#39C5BB' : '#0d9488';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(`SCORE: ${this.score}`, 10, 20);
     ctx.fillText(`${zh ? '波' : 'WAVE'} ${this.wave}`, 300, 20);
 
@@ -316,7 +316,7 @@ export class MissileCommandGame extends BaseGame {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 200, 400, 200);
     ctx.fillStyle = isDark ? '#39C5BB' : '#0d9488';
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(textZh, 200, 290);
     ctx.fillText(text, 200, 320);

@@ -200,7 +200,7 @@ export class BeachHeadGame extends BaseGame {
     ctx.stroke();
 
     ctx.fillStyle = text;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 10, 22);
     ctx.fillText(`WAVE ${this.wave}`, 10, 42);
@@ -221,9 +221,9 @@ export class BeachHeadGame extends BaseGame {
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = text;
       ctx.textAlign = 'center';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.fillText('GAME OVER', W / 2, H / 2 - 18);
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', W / 2, H / 2 + 18);
       ctx.fillText(`FINAL ${this.score}`, W / 2, H / 2 + 38);
       ctx.textAlign = 'left';

@@ -468,7 +468,7 @@ export class BerzerkGame extends BaseGame {
       ctx.fillStyle = primary;
       ctx.fillRect(this.exitX, this.exitY, this.exitW, 6);
       ctx.fillStyle = textColor;
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '12px system-ui, sans-serif';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '出口' : 'EXIT', this.exitX + this.exitW / 2, this.exitY + 18);
@@ -506,7 +506,7 @@ export class BerzerkGame extends BaseGame {
 
     // HUD
     ctx.fillStyle = textColor;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE ${this.score}`, 10, 22);
     ctx.textAlign = 'right';
@@ -520,11 +520,11 @@ export class BerzerkGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(11,15,25,0.85)' : 'rgba(250,250,250,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = primary;
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText(zh ? 'BERZERK' : 'BERZERK', W / 2, H / 2 - 20);
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillStyle = textColor;
       ctx.fillText(zh ? '按空格或点击开始' : 'PRESS SPACE OR TAP', W / 2, H / 2 + 10);
     }
@@ -533,12 +533,12 @@ export class BerzerkGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(11,15,25,0.85)' : 'rgba(250,250,250,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#ef4444';
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '110px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 20);
       ctx.fillStyle = textColor;
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 10);
       ctx.fillText(zh ? '按 R 重新开始' : 'PRESS R TO RESTART', W / 2, H / 2 + 30);
     }

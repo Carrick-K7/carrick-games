@@ -111,7 +111,7 @@ export class StackerGame extends BaseGame {
     }
 
     if (this.state === 'playing') {
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillStyle = textColor;
       const scoreLabel = zh ? `得分: ${this.score}` : `SCORE: ${this.score}`;
@@ -123,7 +123,7 @@ export class StackerGame extends BaseGame {
       ctx.fillRect(this.width / 2, this.height - 36, this.width / 2, 36);
       ctx.globalAlpha = 1.0;
 
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = isDark ? '#ffffff' : '#000000';
       ctx.fillText('◄', this.width / 4, this.height - 12);
@@ -131,13 +131,13 @@ export class StackerGame extends BaseGame {
     }
 
     if (this.state === 'idle') {
-      ctx.font = '20px "Press Start 2P", monospace';
+      ctx.font = '24px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = textColor;
       const title = zh ? '堆叠方块' : 'STACKER';
       ctx.fillText(title, this.width / 2, this.height / 2 - 30);
 
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       const hint = zh ? '点击或按键开始' : 'TAP OR PRESS TO START';
       ctx.fillText(hint, this.width / 2, this.height / 2 + 20);
     }
@@ -146,19 +146,19 @@ export class StackerGame extends BaseGame {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
 
-      ctx.font = '18px "Press Start 2P", monospace';
+      ctx.font = '112px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       const title = this.state === 'win' ? (zh ? '胜利!' : 'WIN!') : (zh ? '游戏结束' : 'GAME OVER');
       ctx.fillText(title, this.width / 2, this.height / 2 - 50);
 
-      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, sans-serif';
       const scoreText = zh ? `得分: ${this.score}` : `SCORE: ${this.score}`;
       ctx.fillText(scoreText, this.width / 2, this.height / 2 - 10);
       const hsText = zh ? `最高: ${this.highScore}` : `HIGH: ${this.highScore}`;
       ctx.fillText(hsText, this.width / 2, this.height / 2 + 20);
 
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '14px system-ui, sans-serif';
       const hint = zh ? '点击重试' : 'TAP TO RETRY';
       ctx.fillText(hint, this.width / 2, this.height / 2 + 55);
     }
