@@ -912,42 +912,61 @@ function renderSidebarRecords() {
   // Records now shown per-game in the stage area
 }
 
-function renderControls() {
-  const container = document.getElementById('controlsPanel');
+function renderStats() {
+  const container = document.getElementById('statsPanel');
   if (!container) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (!meta) {
-    container.innerHTML = `<div class="empty-state">${zh ? '选择游戏查看操作说明' : 'Select a game to see controls'}</div>`;
+    container.innerHTML = `<div class="stats-empty">${zh ? '选择游戏' : 'Select a game'}</div>`;
+    return;
+  }
+
+  if (!currentGameName) return;
+  const score = getRecord(currentGameName);
+  let html = '';
+
+  html += `<div class="stats-section">`;
+  html += `<div class="stats-title">${zh ? meta.nameZh : meta.name}</div>`;
+  if (score != null) {
+    html += `<div class="stats-row"><span>${zh ? '最高记录' : 'Best'}</span><span class="stats-value">${score}</span></div>`;
+  }
+  html += `</div>`;
+
+  if (meta.controls.touch && meta.controls.touch.length) {
+    html += `<div class="stats-section">`;
+    html += `<div class="stats-section-title">${zh ? '触摸操作' : 'Touch'}</div>`;
+    for (const row of meta.controls.touch) {
+      html += `<div class="stats-control-row"><div class="stats-icon">${renderTouchIcon(row.icon)}</div><div class="stats-label">${zh ? row.actionZh : row.action}</div></div>`;
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderKeyboard() {
+  const container = document.getElementById('keyboardPanel');
+  if (!container) return;
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  if (!meta) {
+    container.innerHTML = '';
     return;
   }
 
   const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
-
-  let html = '';
-
-  if (meta.controls.keyboard && meta.controls.keyboard.length) {
-    html += '<div class="control-section">';
-    html += `<div class="control-section-title">${zh ? '键盘' : 'Keyboard'}</div>`;
-    for (const row of meta.controls.keyboard) {
-      const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
-      html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
-    }
-    html += renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
-    html += '</div>';
+  if (!activeKeys.length) {
+    container.innerHTML = '';
+    return;
   }
 
-  if (meta.controls.touch && meta.controls.touch.length) {
-    html += '<div class="control-section">';
-    html += `<div class="control-section-title">${zh ? '触摸' : 'Touch'}</div>`;
-    for (const row of meta.controls.touch) {
-      html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
-    }
-    html += '</div>';
-  }
-
-  container.innerHTML = html || `<div class="empty-state">${zh ? '无操作说明' : 'No controls'}</div>`;
+  container.innerHTML = renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
   bindVirtualKeyboard();
+}
+
+function renderControls() {
+  renderStats();
+  renderKeyboard();
 }
 
 function normalizeKey(label: string): string {
