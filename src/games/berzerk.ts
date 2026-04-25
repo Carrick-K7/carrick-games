@@ -504,11 +504,8 @@ export class BerzerkGame extends BaseGame {
       this.drawOtto(ctx, this.otto.x, this.otto.y, ottoColor, this.otto.bounce);
     }
 
-    // HUD
     ctx.fillStyle = textColor;
     ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 10, 22);
     ctx.textAlign = 'right';
     ctx.fillText(`ROOM ${this.room}`, W - 10, 22);
     ctx.textAlign = 'center';

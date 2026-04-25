@@ -389,7 +389,6 @@ export class TetrisGame extends BaseGame {
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, this.cols * this.cellSize + 16, 200);
     ctx.fillText(`LINES ${this.lines}`, this.cols * this.cellSize + 16, 224);
     ctx.fillText(`LEVEL ${this.level}`, this.cols * this.cellSize + 16, 248);
 

@@ -111,12 +111,6 @@ export class StackerGame extends BaseGame {
     }
 
     if (this.state === 'playing') {
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = textColor;
-      const scoreLabel = zh ? `得分: ${this.score}` : `SCORE: ${this.score}`;
-      ctx.fillText(scoreLabel, 10, 24);
-
       ctx.globalAlpha = 0.1;
       ctx.fillStyle = textColor;
       ctx.fillRect(0, this.height - 36, this.width / 2, 36);

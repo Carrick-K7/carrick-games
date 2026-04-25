@@ -251,9 +251,9 @@
     .game-layout {
       display: flex;
       flex-direction: row;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      gap: 16px;
+      gap: 20px;
       width: 100%;
       max-width: 1400px;
       margin: 0 auto;
@@ -262,24 +262,25 @@
     .game-sidebar {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 14px;
+      padding: 20px;
       flex-shrink: 0;
+      align-self: center;
     }
 
     .game-sidebar.stats-panel {
-      width: 200px;
-      min-width: 180px;
-      max-width: 220px;
+      width: 260px;
+      min-width: 240px;
+      max-width: 280px;
     }
 
     .game-sidebar.keyboard-panel {
-      width: 280px;
-      min-width: 260px;
-      max-width: 300px;
+      width: 380px;
+      min-width: 360px;
+      max-width: 420px;
       overflow-x: auto;
     }
 
@@ -297,15 +298,15 @@
     .stats-section {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
     .stats-title {
-      font-size: 0.95rem;
+      font-size: 1.1rem;
       font-weight: 700;
       color: var(--text);
     }
     .stats-section-title {
-      font-size: 0.7rem;
+      font-size: 0.8rem;
       font-weight: 700;
       color: var(--accent);
       text-transform: uppercase;
@@ -315,9 +316,9 @@
     .stats-row {
       display: flex;
       justify-content: space-between;
-      font-size: 0.85rem;
+      font-size: 1rem;
       color: var(--text-secondary);
-      padding: 4px 0;
+      padding: 6px 0;
       border-bottom: 1px solid var(--border);
     }
     .stats-row:last-child {
@@ -327,41 +328,26 @@
       color: var(--accent);
       font-weight: 600;
     }
-    .stats-control-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-    }
-    .stats-icon {
-      width: 20px;
-      height: 20px;
-      color: var(--accent);
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .stats-icon svg {
-      width: 16px;
-      height: 16px;
-    }
-    .stats-label {
-      line-height: 1.3;
-    }
     .stats-empty {
-      font-size: 0.8rem;
+      font-size: 0.95rem;
       color: var(--text-secondary);
       text-align: center;
-      padding: 12px 0;
+      padding: 16px 0;
+    }
+    .stats-live-score {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-align: center;
+      padding: 8px 0;
+      font-variant-numeric: tabular-nums;
     }
 
     /* Side panel keyboard sizing */
     .keyboard-panel .vkeyboard {
-      --vk-unit: 16px;
-      --vk-gap: 2px;
-      padding: 8px;
+      --vk-unit: 22px;
+      --vk-gap: 3px;
+      padding: 10px;
       margin: 0;
       min-width: auto;
     }
@@ -369,11 +355,11 @@
       min-width: auto;
     }
     .keyboard-panel .vkey {
-      font-size: 0.5rem;
+      font-size: 0.7rem;
     }
 
     /* Responsive: hide side panels on narrow screens */
-    @media (max-width: 1100px) {
+    @media (max-width: 1450px) {
       .game-sidebar {
         display: none;
       }

@@ -472,11 +472,6 @@ export class PacManGame extends BaseGame {
       ctx.restore();
     }
 
-    // HUD
-    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText(`SCORE ${this.score}`, 8, 18);
-
     // Lives
     for (let i = 0; i < this.lives - 1; i++) {
       ctx.save();

@@ -207,13 +207,6 @@ export class DoodleJumpGame extends BaseGame {
 
     ctx.restore();
 
-    // Score (HUD)
-    ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-    ctx.font = '16px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    const t = document.documentElement.getAttribute('data-lang') === 'zh' ? '分数' : 'SCORE';
-    ctx.fillText(`${t} ${this.score}`, 12, 28);
-
     // Idle screen
     if (this.gameState === 'idle') {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';

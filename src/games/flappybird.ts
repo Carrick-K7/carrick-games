@@ -191,8 +191,6 @@ export class FlappyBirdGame extends BaseGame {
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '16px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 12, 28);
-
     // Game Over
     if (this.gameOver) {
       this.submitScoreOnce(this.score);

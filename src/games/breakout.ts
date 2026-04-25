@@ -240,7 +240,6 @@ export class BreakoutGame extends BaseGame {
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`SCORE ${this.score}`, 10, 22);
     const liveBricks = this.bricks.length - this.destroyedCount;
     ctx.textAlign = 'right';
     ctx.fillText(`BRICKS ${liveBricks}`, this.width - 10, 22);

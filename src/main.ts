@@ -923,26 +923,60 @@ function renderStats() {
   }
 
   if (!currentGameName) return;
-  const score = getRecord(currentGameName);
+  const best = getRecord(currentGameName);
+  const live = readGameScore();
   let html = '';
 
   html += `<div class="stats-section">`;
   html += `<div class="stats-title">${zh ? meta.nameZh : meta.name}</div>`;
-  if (score != null) {
-    html += `<div class="stats-row"><span>${zh ? '最高记录' : 'Best'}</span><span class="stats-value">${score}</span></div>`;
+  if (best != null) {
+    html += `<div class="stats-row"><span>${zh ? '最高记录' : 'Best'}</span><span class="stats-value">${best}</span></div>`;
   }
   html += `</div>`;
 
-  if (meta.controls.touch && meta.controls.touch.length) {
-    html += `<div class="stats-section">`;
-    html += `<div class="stats-section-title">${zh ? '触摸操作' : 'Touch'}</div>`;
-    for (const row of meta.controls.touch) {
-      html += `<div class="stats-control-row"><div class="stats-icon">${renderTouchIcon(row.icon)}</div><div class="stats-label">${zh ? row.actionZh : row.action}</div></div>`;
-    }
-    html += `</div>`;
-  }
+  html += `<div class="stats-section" id="liveScoreSection" style="display:${live != null ? 'flex' : 'none'}">`;
+  html += `<div class="stats-section-title">${zh ? '当前分数' : 'Score'}</div>`;
+  html += `<div class="stats-live-score" id="liveScore">${live ?? 0}</div>`;
+  html += `</div>`;
 
   container.innerHTML = html;
+}
+
+function readGameScore(): number | null {
+  if (!currentGameInstance) return null;
+  const raw = (currentGameInstance as any).score;
+  if (typeof raw === 'number') return raw;
+  return null;
+}
+
+let scorePollTimer: number | null = null;
+
+function updateLiveScoreDisplay() {
+  const section = document.getElementById('liveScoreSection');
+  const el = document.getElementById('liveScore');
+  if (!section || !el) return;
+  const score = readGameScore();
+  if (score != null) {
+    section.style.display = 'flex';
+    el.textContent = String(score);
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+function startScorePolling() {
+  stopScorePolling();
+  updateLiveScoreDisplay();
+  scorePollTimer = window.setInterval(() => {
+    updateLiveScoreDisplay();
+  }, 200);
+}
+
+function stopScorePolling() {
+  if (scorePollTimer != null) {
+    clearInterval(scorePollTimer);
+    scorePollTimer = null;
+  }
 }
 
 function renderKeyboard() {
@@ -1078,6 +1112,7 @@ export async function prepareGame(name: string) {
   if (!meta) return;
   const token = ++prepareGameToken;
 
+  stopScorePolling();
   if (currentGameInstance) {
     if (currentGameInstance.destroy) {
       currentGameInstance.destroy();
@@ -1149,6 +1184,7 @@ export async function prepareGame(name: string) {
     console.error(e);
   }
 
+  startScorePolling();
   updateActionButton();
   updateGameTitle();
   updateGameDesc();
@@ -1162,6 +1198,7 @@ function startPreparedGame() {
     currentGameInstance.start();
     isRunning = true;
     updateActionButton();
+    startScorePolling();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);

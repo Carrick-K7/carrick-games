@@ -256,15 +256,11 @@ export class Game2048 extends BaseGame {
       }
     }
 
-    // Score HUD
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
     ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, PADDING, 10);
-
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
     ctx.fillText(`${zh ? '最高' : 'BEST'} ${this.getBest()}`, W - PADDING, 10);
 
     // Idle overlay

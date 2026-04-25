@@ -306,12 +306,10 @@ export class InvadersGame extends BaseGame {
       ctx.fillRect(b.x, b.y, 6, 8);
     }
 
-    // HUD
     const zh = this.isZh();
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(zh ? `得分 ${this.score}` : `SCORE ${this.score}`, 12, 22);
     ctx.fillText(zh ? `波次 ${this.wave}` : `WAVE ${this.wave}`, this.width - 110, 22);
 
     // Game Over overlay

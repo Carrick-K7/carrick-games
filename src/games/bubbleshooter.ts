@@ -178,7 +178,6 @@ export class BubbleShooterGame extends BaseGame {
     ctx.fillStyle = text;
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 12, 20);
     ctx.fillText(`${zh ? '下行' : 'ROW'} ${SHOTS_PER_ROW - this.shotsSinceRow}`, 12, 42);
 
     ctx.textAlign = 'right';

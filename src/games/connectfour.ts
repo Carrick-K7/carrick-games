@@ -186,10 +186,6 @@ export class ConnectFourGame extends BaseGame {
       ctx.fillText(msg, this.width / 2, 24);
     }
 
-    // Score
-    ctx.textAlign = 'left';
-    ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, 8, this.height - 8);
-
     // Game over overlay
     if (this.gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';

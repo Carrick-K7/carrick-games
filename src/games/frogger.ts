@@ -556,12 +556,9 @@ export class FroggerGame extends BaseGame {
 
   private drawHUD(ctx: CanvasRenderingContext2D, isDark: boolean) {
     ctx.font = "14px system-ui, sans-serif";
-    const scoreCol = isDark ? '#fff' : '#111';
     const livesCol = isDark ? '#ef5350' : '#c62828';
     const levelCol = isDark ? '#f9a825' : '#e65100';
 
-    ctx.fillStyle = scoreCol;
-    ctx.fillText(`SCORE:${this.score}`, 8, 26);
     ctx.fillStyle = livesCol;
     ctx.fillText(`LIVES:${this.lives}`, 180, 26);
     ctx.fillStyle = levelCol;

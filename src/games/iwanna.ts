@@ -248,7 +248,7 @@ export class IwannaGame extends BaseGame {
     ctx.font = '14px system-ui, sans-serif';
     ctx.fillText('IWANNA', 12, 22);
     ctx.fillText(`${zh ? '死亡' : 'DEATH'} ${this.deaths}`, 12, 42);
-    ctx.fillText(`${zh ? '进度' : 'SCORE'} ${this.score}`, 12, 62);
+    // Score shown in side panel
 
     if (this.cleared) {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';

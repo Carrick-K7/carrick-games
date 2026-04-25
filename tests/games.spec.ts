@@ -275,7 +275,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('high density displays use a scaled backing canvas without changing logical size', async ({ browser }) => {
     const context = await browser.newContext({
       deviceScaleFactor: 2,
-      viewport: { width: 1280, height: 900 },
+      viewport: { width: 1600, height: 900 },
     });
     const page = await context.newPage();
     try {

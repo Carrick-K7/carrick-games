@@ -281,11 +281,9 @@ export class MissileCommandGame extends BaseGame {
       ctx.fill();
     }
 
-    // HUD
     const zh = document.documentElement.getAttribute('data-lang') === 'zh';
     ctx.fillStyle = isDark ? '#39C5BB' : '#0d9488';
     ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText(`SCORE: ${this.score}`, 10, 20);
     ctx.fillText(`${zh ? '波' : 'WAVE'} ${this.wave}`, 300, 20);
 
     // City count

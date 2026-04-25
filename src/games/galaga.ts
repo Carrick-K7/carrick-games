@@ -528,8 +528,6 @@ export class GalagaGame extends BaseGame {
 
   private drawHUD(ctx: CanvasRenderingContext2D, isDark: boolean, isZh: boolean) {
     ctx.font = "13px system-ui, sans-serif";
-    ctx.fillStyle = isDark ? '#fff' : '#111';
-    ctx.fillText(`SCORE:${this.score}`, 8, 22);
     ctx.fillStyle = isDark ? '#ef5350' : '#c62828';
     ctx.fillText(`LIVES:${this.lives}`, 155, 22);
     ctx.fillStyle = isDark ? '#f9a825' : '#e65100';

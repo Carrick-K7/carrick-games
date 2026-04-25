@@ -202,7 +202,6 @@ export class BeachHeadGame extends BaseGame {
     ctx.fillStyle = text;
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 10, 22);
     ctx.fillText(`WAVE ${this.wave}`, 10, 42);
     ctx.fillText(`RANGE ${Math.round(this.shellPower)}`, 10, 62);
 

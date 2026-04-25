@@ -218,8 +218,6 @@ export class SpaceShooterGame extends BaseGame {
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE ${this.score}`, 8, 20);
-
     // Game Over overlay
     if (this.gameOver) {
       this.submitScoreOnce(this.score);

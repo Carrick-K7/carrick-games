@@ -195,8 +195,6 @@ export class SnakeGame extends BaseGame {
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`SCORE ${this.score}`, 10, this.height - 10);
-
     // Game Over
     if (this.gameOver) {
       this.submitScoreOnce(this.score);

@@ -193,8 +193,6 @@ export class MahjongGame extends BaseGame {
     // HUD
     ctx.fillStyle = text;
     ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, 16, 24);
     ctx.textAlign = 'right';
     ctx.fillText(`${zh ? '时间' : 'TIME'} ${this.timeLeft}`, this.width - 16, 24);
     ctx.textAlign = 'left';

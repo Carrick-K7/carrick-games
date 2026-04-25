@@ -833,15 +833,6 @@ export class SolitaireGame extends BaseGame {
     ctx.font = '15px system-ui, sans-serif';
     ctx.fillText(timeStr, W / 2, hudH / 2 + 7);
 
-    // Score
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = theme.muted;
-    ctx.textAlign = 'right';
-    ctx.fillText(zh ? '得分' : 'SCORE', W - 12, hudH / 2 - 7);
-    ctx.fillStyle = theme.accent;
-    ctx.font = '15px system-ui, sans-serif';
-    ctx.fillText(String(this.score), W - 12, hudH / 2 + 7);
-
     // Foundations progress
     const totalFound = this.foundations.reduce((s, f) => s + f.length, 0);
     ctx.fillStyle = theme.muted;
