@@ -344,7 +344,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('clicking a game shows its controls and canvas', async ({ page }) => {
     await page.locator('.game-list-item').first().click();
     await expect(page.locator('#actionBtn')).toBeVisible();
-    await expect(page.locator('#controlsPanel')).toBeVisible();
+    await expect(page.locator('#gameCanvas')).toBeVisible();
   });
 
   test('snake can be started and restarted without errors', async ({ page }) => {
