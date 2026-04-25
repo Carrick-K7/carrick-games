@@ -42,7 +42,7 @@ export function configureHiDpiCanvas(
   canvas.dataset.logicalWidth = String(logicalWidth);
   canvas.dataset.logicalHeight = String(logicalHeight);
   canvas.dataset.pixelRatio = String(pixelRatio);
-  canvas.dataset.renderStyle = 'hd-retro';
+  canvas.dataset.renderStyle = 'minimal-hd';
   canvas.width = Math.round(logicalWidth * pixelRatio);
   canvas.height = Math.round(logicalHeight * pixelRatio);
   canvas.style.width = `${logicalWidth}px`;

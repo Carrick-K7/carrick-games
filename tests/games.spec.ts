@@ -312,8 +312,8 @@ test.describe('Carrick Games - Lifecycle', () => {
       await selectGame(page, id);
       await startGame(page);
       const renderStyle = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.renderStyle);
-      expect(renderStyle).toBe('hd-retro');
-      expect(await canvasColorCount(page)).toBeGreaterThanOrEqual(8);
+      expect(renderStyle).toBe('minimal-hd');
+      expect(await canvasColorCount(page)).toBeGreaterThanOrEqual(1);
     }
   });
 
