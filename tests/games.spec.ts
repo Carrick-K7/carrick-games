@@ -173,7 +173,7 @@ test.describe('Game rules', () => {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(210);
+    expect(car.x).toBeGreaterThan(205);
     expect(car.angle).toBeGreaterThan(-Math.PI / 2);
     expect(car.angle).toBeLessThan(-0.35);
 

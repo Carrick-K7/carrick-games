@@ -13,6 +13,8 @@ const TOTAL_W = 520;
 const CAR_W = 24;
 const CAR_H = 42;
 
+const STORAGE_KEY = 'carrick-parking-progress';
+
 interface Obstacle {
   x: number;
   y: number;
@@ -380,31 +382,68 @@ export class ParkingGame extends BaseGame {
   private car: ParkingCarState = createParkingCar(0, 0, 0);
   private levelIndex = 0;
   private level!: Level;
-  private score = 0;
-  private totalScore = 0;
   private elapsed = 0;
   private timeLeft = 0;
   private parkedTime = 0;
-  private gameState: 'playing' | 'parked' | 'crash' | 'timeout' | 'complete' = 'playing';
+  private gameState: 'menu' | 'playing' | 'parked' | 'crash' | 'timeout' | 'complete' = 'menu';
   private keys = { up: false, down: false, left: false, right: false };
   private touchDir: 'up' | 'down' | 'left' | 'right' | null = null;
 
   private readonly PARK_TIME = 1.0;
+
+  // Progress
+  private unlockedLevel = 0;
+  private bestLevel = 0;
+  private selectedLevel = 0;
+
+  // UI button rects for complete screen
+  private nextBtnRect: { x: number; y: number; w: number; h: number } | null = null;
+  private retryBtnRect: { x: number; y: number; w: number; h: number } | null = null;
+  private menuBtnRect: { x: number; y: number; w: number; h: number } | null = null;
 
   constructor() {
     super('gameCanvas', TOTAL_W, GAME_H);
   }
 
   init() {
-    this.loadLevel(0);
+    this.loadProgress();
+    this.gameState = 'menu';
+    this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+  }
+
+  private loadProgress() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        this.unlockedLevel = Math.max(0, Math.min(LEVELS.length - 1, p.unlocked || 0));
+        this.bestLevel = Math.max(0, Math.min(LEVELS.length, p.bestLevel || 0));
+      } else {
+        this.unlockedLevel = 0;
+        this.bestLevel = 0;
+      }
+    } catch {
+      this.unlockedLevel = 0;
+      this.bestLevel = 0;
+    }
+  }
+
+  private saveProgress() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        unlocked: this.unlockedLevel,
+        bestLevel: this.bestLevel,
+      }));
+    } catch {
+      // ignore
+    }
   }
 
   private loadLevel(idx: number) {
     this.levelIndex = idx;
-    this.level = LEVELS[idx % LEVELS.length];
+    this.level = LEVELS[idx];
     const start = this.level.playerStart;
     this.car = createParkingCar(start.x, start.y, start.angle);
-    this.score = 0;
     this.elapsed = 0;
     this.timeLeft = this.level.timeLimit;
     this.parkedTime = 0;
@@ -464,24 +503,7 @@ export class ParkingGame extends BaseGame {
     return inSpotX && inSpotY && angleOk;
   }
 
-  update(dt: number) {
-    if (this.gameState === 'crash' || this.gameState === 'timeout') return;
-
-    if (this.gameState === 'complete') {
-      return;
-    }
-
-    if (this.gameState === 'parked') {
-      this.parkedTime += dt;
-      if (this.parkedTime >= this.PARK_TIME) {
-        this.score = Math.max(0, Math.round(this.timeLeft * 100));
-        this.gameState = 'complete';
-        this.submitScoreOnce(this.totalScore + this.score);
-        this.parkedTime = 0;
-      }
-      return;
-    }
-
+  private updateDriving(dt: number) {
     const up = this.keys.up || this.touchDir === 'up';
     const down = this.keys.down || this.touchDir === 'down';
     const left = this.keys.left || this.touchDir === 'left';
@@ -493,7 +515,7 @@ export class ParkingGame extends BaseGame {
     if (this.checkCollisions()) {
       this.car = { ...oldCar, speed: 0, vx: 0, vy: 0 };
       this.gameState = 'crash';
-      this.submitScoreOnce(this.totalScore);
+      this.submitScoreOnce(this.bestLevel);
       return;
     }
 
@@ -501,7 +523,7 @@ export class ParkingGame extends BaseGame {
     this.timeLeft = Math.max(0, this.level.timeLimit - this.elapsed);
     if (this.timeLeft <= 0) {
       this.gameState = 'timeout';
-      this.submitScoreOnce(this.totalScore);
+      this.submitScoreOnce(this.bestLevel);
       return;
     }
 
@@ -512,6 +534,56 @@ export class ParkingGame extends BaseGame {
       this.car.vx = 0;
       this.car.vy = 0;
     }
+  }
+
+  update(dt: number) {
+    if (this.gameState === 'crash' || this.gameState === 'timeout' || this.gameState === 'complete' || this.gameState === 'menu') {
+      return;
+    }
+
+    if (this.gameState === 'parked') {
+      // Still allow driving while in parking spot
+      const up = this.keys.up || this.touchDir === 'up';
+      const down = this.keys.down || this.touchDir === 'down';
+      const left = this.keys.left || this.touchDir === 'left';
+      const right = this.keys.right || this.touchDir === 'right';
+
+      const oldCar = { ...this.car };
+      this.car = updateParkingCar(this.car, { up, down, left, right }, dt);
+
+      if (this.checkCollisions()) {
+        this.car = { ...oldCar, speed: 0, vx: 0, vy: 0 };
+        this.gameState = 'crash';
+        this.submitScoreOnce(this.bestLevel);
+        return;
+      }
+
+      // If car leaves the spot or moves too fast, cancel parking
+      if (!this.checkParked() || Math.abs(this.car.speed) >= 35) {
+        this.gameState = 'playing';
+        this.parkedTime = 0;
+        return;
+      }
+
+      this.parkedTime += dt;
+      if (this.parkedTime >= this.PARK_TIME) {
+        this.gameState = 'complete';
+        // Update best level
+        if (this.levelIndex + 1 > this.bestLevel) {
+          this.bestLevel = this.levelIndex + 1;
+        }
+        // Unlock next level
+        if (this.levelIndex + 1 > this.unlockedLevel && this.levelIndex + 1 < LEVELS.length) {
+          this.unlockedLevel = this.levelIndex + 1;
+        }
+        this.saveProgress();
+        this.submitScoreOnce(this.bestLevel);
+        this.parkedTime = 0;
+      }
+      return;
+    }
+
+    this.updateDriving(dt);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -531,6 +603,12 @@ export class ParkingGame extends BaseGame {
     // === Game Area Background ===
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+    if (this.gameState === 'menu') {
+      this.drawMenu(ctx, isDark, primary, text, accent, zh);
+      this.drawDashboard(ctx, isDark, primary, text, accent, zh);
+      return;
+    }
 
     // Draw parking lot lines
     ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -625,12 +703,112 @@ export class ParkingGame extends BaseGame {
     }
 
     // === Dashboard Area ===
+    this.drawDashboard(ctx, isDark, primary, text, accent, zh);
+
+    // === Overlays ===
+    if (this.gameState === 'crash' || this.gameState === 'timeout') {
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(0, 0, TOTAL_W, GAME_H);
+      ctx.fillStyle = this.gameState === 'timeout' ? accent : '#ef4444';
+      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), TOTAL_W / 2, GAME_H / 2 - 40);
+      ctx.fillStyle = text;
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillText(zh ? '按空格或点击重试' : 'SPACE OR TAP TO RETRY', TOTAL_W / 2, GAME_H / 2 + 10);
+      ctx.fillText(zh ? '按 M 返回菜单' : 'PRESS M FOR MENU', TOTAL_W / 2, GAME_H / 2 + 30);
+    }
+
+    if (this.gameState === 'complete') {
+      this.drawCompleteOverlay(ctx, isDark, primary, text, accent, zh);
+    }
+  }
+
+  private drawMenu(ctx: CanvasRenderingContext2D, isDark: boolean, primary: string, text: string, accent: string, zh: boolean) {
+    const cols = 5;
+    const rows = 6;
+    const cellW = 56;
+    const cellH = 58;
+    const gapX = 12;
+    const gapY = 10;
+    const startX = (GAME_W - (cols * cellW + (cols - 1) * gapX)) / 2;
+    const startY = 50;
+
+    // Title
+    ctx.fillStyle = text;
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(zh ? '选择关卡' : 'SELECT LEVEL', GAME_W / 2, 28);
+
+    // Best record
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText(`${zh ? '最高记录' : 'BEST'}: ${this.bestLevel}/${LEVELS.length}`, GAME_W / 2, 44);
+
+    for (let i = 0; i < LEVELS.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * (cellW + gapX);
+      const y = startY + row * (cellH + gapY);
+      const unlocked = i <= this.unlockedLevel;
+      const cleared = i < this.bestLevel;
+      const selected = i === this.selectedLevel;
+
+      // Cell background
+      if (selected && unlocked) {
+        ctx.fillStyle = isDark ? 'rgba(57,197,187,0.25)' : 'rgba(13,148,136,0.2)';
+        ctx.fillRect(x - 2, y - 2, cellW + 4, cellH + 4);
+      }
+
+      if (!unlocked) {
+        ctx.fillStyle = isDark ? '#1e293b' : '#e2e8f0';
+      } else if (cleared) {
+        ctx.fillStyle = isDark ? 'rgba(57,197,187,0.15)' : 'rgba(13,148,136,0.1)';
+      } else {
+        ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
+      }
+      ctx.fillRect(x, y, cellW, cellH);
+
+      // Border
+      ctx.strokeStyle = selected && unlocked ? primary : (isDark ? '#334155' : '#cbd5e1');
+      ctx.lineWidth = selected && unlocked ? 2 : 1;
+      ctx.strokeRect(x, y, cellW, cellH);
+
+      // Level number
+      ctx.fillStyle = unlocked ? text : (isDark ? '#475569' : '#94a3b8');
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${i + 1}`, x + cellW / 2, y + cellH / 2 + 4);
+
+      // Cleared checkmark
+      if (cleared) {
+        ctx.fillStyle = primary;
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillText('✓', x + cellW / 2, y + cellH - 6);
+      }
+
+      // Locked icon
+      if (!unlocked) {
+        ctx.fillStyle = isDark ? '#475569' : '#94a3b8';
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillText('🔒', x + cellW / 2, y + cellH - 6);
+      }
+    }
+
+    // Hint
+    ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(zh ? '↑↓←→ 选择  空格开始' : 'ARROWS: SELECT  SPACE: START', GAME_W / 2, GAME_H - 16);
+    ctx.fillText(zh ? '点击关卡直接开始' : 'TAP A LEVEL TO START', GAME_W / 2, GAME_H - 6);
+  }
+
+  private drawDashboard(ctx: CanvasRenderingContext2D, isDark: boolean, primary: string, text: string, accent: string, zh: boolean) {
     const dx = GAME_W;
     const dw = DASH_W;
     const dashBg = isDark ? '#0f172a' : '#f1f5f9';
     const dashBorder = isDark ? '#1e293b' : '#e2e8f0';
 
-    // Dashboard background
     ctx.fillStyle = dashBg;
     ctx.fillRect(dx, 0, dw, GAME_H);
     ctx.strokeStyle = dashBorder;
@@ -646,7 +824,7 @@ export class ParkingGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '停车' : 'PARK', dx + dw / 2, 28);
 
-    // Level number (big)
+    // Level number
     ctx.fillStyle = text;
     ctx.font = '18px "Press Start 2P", monospace';
     ctx.fillText(`${this.levelIndex + 1}`, dx + dw / 2, 58);
@@ -661,14 +839,12 @@ export class ParkingGame extends BaseGame {
     const startAngle = Math.PI * 0.8;
     const endAngle = Math.PI * 2.2;
 
-    // Gauge background arc
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, endAngle);
     ctx.strokeStyle = isDark ? '#334155' : '#cbd5e1';
     ctx.lineWidth = 6;
     ctx.stroke();
 
-    // Speed arc
     const speedRatio = Math.abs(this.car.speed) / PARKING_MAX_FORWARD_SPEED;
     const speedEndAngle = startAngle + speedRatio * (endAngle - startAngle);
     if (speedRatio > 0) {
@@ -679,7 +855,6 @@ export class ParkingGame extends BaseGame {
       ctx.stroke();
     }
 
-    // Needle
     const needleAngle = startAngle + speedRatio * (endAngle - startAngle);
     ctx.save();
     ctx.translate(cx, cy);
@@ -688,13 +863,11 @@ export class ParkingGame extends BaseGame {
     ctx.fillRect(-1, -radius + 4, 2, radius - 8);
     ctx.restore();
 
-    // Center dot
     ctx.beginPath();
     ctx.arc(cx, cy, 5, 0, Math.PI * 2);
     ctx.fillStyle = primary;
     ctx.fill();
 
-    // Speed value
     ctx.fillStyle = text;
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
@@ -722,21 +895,20 @@ export class ParkingGame extends BaseGame {
     ctx.font = '6px "Press Start 2P", monospace';
     ctx.fillText(zh ? '秒' : 'SEC', cx, timeY + 14);
 
-    // Score
-    const scoreY = 320;
+    // Best level
+    const bestY = 320;
     ctx.fillStyle = text;
     ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText(`${this.totalScore + this.score}`, cx, scoreY);
+    ctx.fillText(`${this.bestLevel}`, cx, bestY);
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
     ctx.font = '6px "Press Start 2P", monospace';
-    ctx.fillText(zh ? '总分' : 'SCORE', cx, scoreY + 14);
+    ctx.fillText(zh ? '最高' : 'BEST', cx, bestY + 14);
 
     // Level progress dots
     const dotY = 380;
     const dotSize = 5;
     const gap = 8;
     const cols = 5;
-    const rows = Math.ceil(LEVELS.length / cols);
     const startX = cx - ((cols - 1) * gap) / 2;
     for (let i = 0; i < LEVELS.length; i++) {
       const col = i % cols;
@@ -745,9 +917,9 @@ export class ParkingGame extends BaseGame {
       const py = dotY + row * (dotSize + 4);
       ctx.beginPath();
       ctx.arc(px, py, dotSize / 2, 0, Math.PI * 2);
-      if (i < this.levelIndex) {
+      if (i < this.bestLevel) {
         ctx.fillStyle = primary;
-      } else if (i === this.levelIndex) {
+      } else if (i === this.levelIndex && this.gameState !== 'menu') {
         ctx.fillStyle = accent;
         ctx.strokeStyle = text;
         ctx.lineWidth = 1;
@@ -768,6 +940,9 @@ export class ParkingGame extends BaseGame {
     } else if (this.gameState === 'playing') {
       ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
       ctx.fillText(zh ? '驾驶中' : 'DRIVING', cx, statusY);
+    } else if (this.gameState === 'menu') {
+      ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+      ctx.fillText(zh ? '菜单' : 'MENU', cx, statusY);
     }
 
     // Controls hint at bottom
@@ -777,68 +952,139 @@ export class ParkingGame extends BaseGame {
       ctx.fillText(zh ? '↑加速 ↓倒车' : 'UP DWN', cx, GAME_H - 30);
       ctx.fillText(zh ? '← →转向' : 'L R', cx, GAME_H - 18);
     }
+  }
 
-    // === Overlays ===
-    if (this.gameState === 'crash' || this.gameState === 'timeout') {
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, TOTAL_W, GAME_H);
-      ctx.fillStyle = this.gameState === 'timeout' ? accent : '#ef4444';
-      ctx.font = '14px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), TOTAL_W / 2, GAME_H / 2 - 30);
-      ctx.fillStyle = text;
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillText(`${zh ? '总分' : 'SCORE'} ${this.totalScore}`, TOTAL_W / 2, GAME_H / 2);
+  private drawCompleteOverlay(ctx: CanvasRenderingContext2D, isDark: boolean, primary: string, text: string, accent: string, zh: boolean) {
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(0, 0, TOTAL_W, GAME_H);
+
+    const cx = TOTAL_W / 2;
+    const isLast = this.levelIndex + 1 >= LEVELS.length;
+
+    ctx.fillStyle = accent;
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('✅ ' + (zh ? '停车成功！' : 'PARKED!'), cx, GAME_H / 2 - 70);
+
+    ctx.fillStyle = text;
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText(`${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}  ${zh ? '完成' : 'CLEARED'}`, cx, GAME_H / 2 - 35);
+
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(`${zh ? '最高记录' : 'BEST'}: ${this.bestLevel}/${LEVELS.length}`, cx, GAME_H / 2 - 10);
+
+    // Buttons
+    const btnW = 140;
+    const btnH = 28;
+    const btnX = cx - btnW / 2;
+    const btnGap = 10;
+
+    let btnY = GAME_H / 2 + 15;
+
+    // Next Level button
+    if (!isLast) {
+      this.nextBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+      ctx.fillStyle = primary;
+      ctx.fillRect(btnX, btnY, btnW, btnH);
+      ctx.fillStyle = isDark ? '#0b0f19' : '#ffffff';
       ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(zh ? '点击或空格重新开始' : 'TAP OR SPACE', TOTAL_W / 2, GAME_H / 2 + 30);
+      ctx.textAlign = 'center';
+      ctx.fillText(zh ? '下一关 →' : 'NEXT LEVEL →', cx, btnY + 18);
+      btnY += btnH + btnGap;
+    } else {
+      this.nextBtnRect = null;
     }
 
-    if (this.gameState === 'complete') {
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, TOTAL_W, GAME_H);
-      ctx.fillStyle = accent;
-      ctx.font = '14px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      const isLast = this.levelIndex + 1 >= LEVELS.length;
-      ctx.fillText('✅ ' + (zh ? '停车成功！' : 'PARKED!'), TOTAL_W / 2, GAME_H / 2 - 40);
-      ctx.fillStyle = text;
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillText(`${zh ? '本关' : 'LEVEL'} ${this.levelIndex + 1}  ${zh ? '得分' : 'SCORE'} ${this.score}`, TOTAL_W / 2, GAME_H / 2 - 10);
-      ctx.fillText(`${zh ? '总分' : 'TOTAL'} ${this.totalScore + this.score}`, TOTAL_W / 2, GAME_H / 2 + 10);
-      ctx.font = '8px "Press Start 2P", monospace';
-      if (isLast) {
-        ctx.fillText(zh ? '全部通关！点击重新开始' : 'ALL CLEARED! TAP TO RESTART', TOTAL_W / 2, GAME_H / 2 + 40);
-      } else {
-        ctx.fillText(zh ? '空格进入下一关' : 'SPACE FOR NEXT', TOTAL_W / 2, GAME_H / 2 + 35);
-        ctx.fillText(zh ? '点击返回第一关' : 'TAP TO RESTART', TOTAL_W / 2, GAME_H / 2 + 52);
-      }
+    // Retry button
+    this.retryBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.fillStyle = text;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(zh ? '↻ 重玩本关' : '↻ REPLAY', cx, btnY + 18);
+    btnY += btnH + btnGap;
+
+    // Menu button
+    this.menuBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.fillStyle = text;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(zh ? '☰ 关卡选择' : '☰ LEVEL SELECT', cx, btnY + 18);
+
+    // Keyboard hints
+    ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    if (!isLast) {
+      ctx.fillText(zh ? '空格: 下一关  R: 重玩  M: 菜单' : 'SPACE: NEXT  R: REPLAY  M: MENU', cx, GAME_H - 18);
+    } else {
+      ctx.fillText(zh ? 'R: 重玩  M: 菜单' : 'R: REPLAY  M: MENU', cx, GAME_H - 18);
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {
       if (
-        e.key === ' ' || e.key === 'Enter' ||
+        e.key === ' ' || e.key === 'Enter' || e.key === 'm' || e.key === 'M' || e.key === 'r' || e.key === 'R' ||
         e.key === 'ArrowUp' || e.key === 'ArrowDown' ||
         e.key === 'ArrowLeft' || e.key === 'ArrowRight'
       ) {
         e.preventDefault();
       }
-      if (e.key === ' ' || e.key === 'Enter') {
-        if (e.type === 'keydown' && !e.repeat) {
-          if (this.gameState === 'crash' || this.gameState === 'timeout') {
-            this.loadLevel(0);
-          } else if (this.gameState === 'complete') {
-            if (this.levelIndex + 1 < LEVELS.length) {
-              this.totalScore += this.score;
-              this.loadLevel(this.levelIndex + 1);
-            } else {
-              this.loadLevel(0);
+
+      if (e.type === 'keydown' && !e.repeat) {
+        // Menu navigation
+        if (this.gameState === 'menu') {
+          if (e.key === 'ArrowUp') this.moveSelection(-5);
+          if (e.key === 'ArrowDown') this.moveSelection(5);
+          if (e.key === 'ArrowLeft') this.moveSelection(-1);
+          if (e.key === 'ArrowRight') this.moveSelection(1);
+          if (e.key === ' ' || e.key === 'Enter') {
+            if (this.selectedLevel <= this.unlockedLevel) {
+              this.loadLevel(this.selectedLevel);
             }
           }
+          return;
         }
-        return;
+
+        // Complete screen shortcuts
+        if (this.gameState === 'complete') {
+          if (e.key === ' ' || e.key === 'Enter') {
+            if (this.levelIndex + 1 < LEVELS.length) {
+              this.loadLevel(this.levelIndex + 1);
+            } else {
+              this.loadLevel(this.levelIndex);
+            }
+            return;
+          }
+          if (e.key === 'r' || e.key === 'R') {
+            this.loadLevel(this.levelIndex);
+            return;
+          }
+          if (e.key === 'm' || e.key === 'M') {
+            this.gameState = 'menu';
+            this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+            return;
+          }
+        }
+
+        // Crash / timeout restart
+        if (this.gameState === 'crash' || this.gameState === 'timeout') {
+          if (e.key === ' ' || e.key === 'Enter') {
+            this.loadLevel(this.levelIndex);
+            return;
+          }
+          if (e.key === 'm' || e.key === 'M') {
+            this.gameState = 'menu';
+            this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+            return;
+          }
+        }
       }
+
       if (e.type === 'keydown') {
         if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') this.keys.up = true;
         if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') this.keys.down = true;
@@ -859,6 +1105,17 @@ export class ParkingGame extends BaseGame {
         const t = e.touches[0];
         if (!t) return;
         const { x: cx, y: cy } = this.canvasPoint(t.clientX, t.clientY);
+
+        if (this.gameState === 'menu') {
+          this.handleMenuClick(cx, cy);
+          return;
+        }
+
+        if (this.gameState === 'complete') {
+          this.handleCompleteClick(cx, cy);
+          return;
+        }
+
         if (cx < GAME_W) {
           if (cy < GAME_H * 0.35) this.touchDir = 'up';
           else if (cy > GAME_H * 0.65) this.touchDir = 'down';
@@ -870,9 +1127,8 @@ export class ParkingGame extends BaseGame {
         }
 
         if (e.type === 'touchstart') {
-          if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(0);
-          else if (this.gameState === 'complete') {
-            this.loadLevel(0);
+          if (this.gameState === 'crash' || this.gameState === 'timeout') {
+            this.loadLevel(this.levelIndex);
           }
         }
       }
@@ -884,14 +1140,73 @@ export class ParkingGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type === 'mousedown') {
-        const { x: cx } = this.canvasPoint(e.clientX, e.clientY);
+        const { x: cx, y: cy } = this.canvasPoint(e.clientX, e.clientY);
+
+        if (this.gameState === 'menu') {
+          this.handleMenuClick(cx, cy);
+          return;
+        }
+
+        if (this.gameState === 'complete') {
+          this.handleCompleteClick(cx, cy);
+          return;
+        }
+
         if (cx < GAME_W) {
-          if (this.gameState === 'crash' || this.gameState === 'timeout') this.loadLevel(0);
-          else if (this.gameState === 'complete') {
-            this.loadLevel(0);
+          if (this.gameState === 'crash' || this.gameState === 'timeout') {
+            this.loadLevel(this.levelIndex);
           }
         }
       }
+    }
+  }
+
+  private moveSelection(delta: number) {
+    const newLevel = this.selectedLevel + delta;
+    if (newLevel >= 0 && newLevel < LEVELS.length) {
+      this.selectedLevel = newLevel;
+    }
+  }
+
+  private handleMenuClick(cx: number, cy: number) {
+    const cols = 5;
+    const rows = 6;
+    const cellW = 56;
+    const cellH = 58;
+    const gapX = 12;
+    const gapY = 10;
+    const startX = (GAME_W - (cols * cellW + (cols - 1) * gapX)) / 2;
+    const startY = 50;
+
+    for (let i = 0; i < LEVELS.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * (cellW + gapX);
+      const y = startY + row * (cellH + gapY);
+      if (cx >= x && cx <= x + cellW && cy >= y && cy <= y + cellH) {
+        if (i <= this.unlockedLevel) {
+          this.loadLevel(i);
+        }
+        return;
+      }
+    }
+  }
+
+  private handleCompleteClick(cx: number, cy: number) {
+    if (this.nextBtnRect && this.pointInRect(cx, cy, this.nextBtnRect.x, this.nextBtnRect.y, this.nextBtnRect.w, this.nextBtnRect.h)) {
+      if (this.levelIndex + 1 < LEVELS.length) {
+        this.loadLevel(this.levelIndex + 1);
+      }
+      return;
+    }
+    if (this.retryBtnRect && this.pointInRect(cx, cy, this.retryBtnRect.x, this.retryBtnRect.y, this.retryBtnRect.w, this.retryBtnRect.h)) {
+      this.loadLevel(this.levelIndex);
+      return;
+    }
+    if (this.menuBtnRect && this.pointInRect(cx, cy, this.menuBtnRect.x, this.menuBtnRect.y, this.menuBtnRect.w, this.menuBtnRect.h)) {
+      this.gameState = 'menu';
+      this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+      return;
     }
   }
 }
