@@ -292,9 +292,10 @@
     }
 
     .game-sidebar.keyboard-panel {
-      width: 380px;
-      min-width: 280px;
-      max-width: 420px;
+      width: auto;
+      flex: 0 1 440px;
+      min-width: 320px;
+      max-width: 540px;
       overflow-x: auto;
     }
 
@@ -359,17 +360,20 @@
 
     /* Side panel keyboard sizing */
     .keyboard-panel .vkeyboard {
-      --vk-unit: 22px;
-      --vk-gap: 3px;
-      padding: 10px;
+      --vk-unit: 26px;
+      --vk-gap: 4px;
+      padding: 8px 6px;
       margin: 0;
-      min-width: auto;
+      min-width: 0;
+      width: 100%;
     }
     .keyboard-panel .vkeyboard-row {
-      min-width: auto;
+      min-width: 0;
     }
     .keyboard-panel .vkey {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
+      min-width: 0;
+      flex-shrink: 1;
     }
 
     /* Responsive: side panels stack below on narrow screens */
