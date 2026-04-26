@@ -668,39 +668,39 @@ export const GAMES: GameMeta[] = [
   },
 ];
 
-// Group nearby genres in the sidebar: arcade movement, combat/shooters,
-// puzzle/word games, then tabletop/card games.
+interface GameGroup {
+  id: string;
+  name: string;
+  nameZh: string;
+}
+
+const GAME_GROUPS: GameGroup[] = [
+  { id: 'arcade', name: 'Arcade Movement', nameZh: '街机动作' },
+  { id: 'combat', name: 'Combat & Shooters', nameZh: '射击战斗' },
+  { id: 'puzzle', name: 'Puzzles & Word', nameZh: '益智解谜' },
+  { id: 'tabletop', name: 'Tabletop & Cards', nameZh: '桌面卡牌' },
+];
+
+const GAME_GROUP_MAP: Record<string, string> = {
+  snake: 'arcade', pacman: 'arcade', frogger: 'arcade',
+  flappybird: 'arcade', doodlejump: 'arcade', iwanna: 'arcade',
+  parking: 'arcade', breakout: 'arcade', pong: 'arcade', stacker: 'arcade',
+  spaceshooter: 'combat', invaders: 'combat', galaga: 'combat',
+  asteroids: 'combat', missilecommand: 'combat', beachhead: 'combat', berzerk: 'combat',
+  bubbleshooter: 'puzzle', tetris: 'puzzle', '2048': 'puzzle',
+  simon: 'puzzle', minesweeper: 'puzzle', wordle: 'puzzle',
+  sudoku: 'puzzle', mahjong: 'puzzle',
+  checkers: 'tabletop', chess: 'tabletop', connectfour: 'tabletop',
+  solitaire: 'tabletop', texashold: 'tabletop',
+};
+
 const GAME_LIST_ORDER = [
-  'snake',
-  'pacman',
-  'frogger',
-  'flappybird',
-  'doodlejump',
-  'iwanna',
-  'breakout',
-  'pong',
-  'parking',
-  'stacker',
-  'spaceshooter',
-  'invaders',
-  'galaga',
-  'asteroids',
-  'missilecommand',
-  'beachhead',
-  'berzerk',
-  'bubbleshooter',
-  'tetris',
-  '2048',
-  'simon',
-  'minesweeper',
-  'wordle',
-  'sudoku',
-  'mahjong',
-  'checkers',
-  'chess',
-  'connectfour',
-  'solitaire',
-  'texashold',
+  'snake', 'pacman', 'frogger', 'flappybird', 'doodlejump', 'iwanna',
+  'parking', 'breakout', 'pong', 'stacker',
+  'spaceshooter', 'invaders', 'galaga', 'asteroids', 'missilecommand', 'beachhead', 'berzerk',
+  'bubbleshooter', 'tetris', '2048', 'simon',
+  'minesweeper', 'wordle', 'sudoku', 'mahjong',
+  'checkers', 'chess', 'connectfour', 'solitaire', 'texashold',
 ] as const;
 
 const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(
@@ -884,34 +884,6 @@ function getRecord(gameId: string): number | null {
   return getStoredRecord(gameId);
 }
 
-function renderGameRecord() {
-  const el = document.getElementById('gameRecord');
-  if (!el) return;
-  if (!currentGameName) {
-    el.innerHTML = '';
-    return;
-  }
-  const score = getRecord(currentGameName);
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  if (score == null) {
-    el.innerHTML = '';
-    return;
-  }
-  el.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-      <circle cx="12" cy="9" r="5"/>
-    </svg>
-  `;
-  const label = document.createElement('span');
-  label.textContent = `${zh ? '最高记录' : 'High Score'}: ${score}`;
-  el.append(label);
-}
-
-function renderSidebarRecords() {
-  // Records now shown per-game in the stage area
-}
-
 function renderStats() {
   const container = document.getElementById('statsPanel');
   if (!container) return;
@@ -940,6 +912,11 @@ function renderStats() {
   html += `</div>`;
 
   container.innerHTML = html;
+}
+
+function setLoadingOverlay(active: boolean) {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.classList.toggle('active', active);
 }
 
 function readGameScore(): number | null {
@@ -1041,8 +1018,6 @@ function saveRecord(gameId: string, score: number) {
       // Scores are a convenience feature; storage failures should not break play.
     }
   }
-  // Always refresh display so the UI stays in sync (e.g. first record, or tied score)
-  setTimeout(() => renderGameRecord(), 0);
 }
 window.saveRecord = saveRecord;
 window.reportScore = (score: number) => {
@@ -1125,9 +1100,9 @@ export async function prepareGame(name: string) {
   isLoadingGame = true;
   currentGameName = name;
   updateActionButton();
+  setLoadingOverlay(true);
   updateGameTitle();
   updateGameDesc();
-  renderGameRecord();
   renderControls();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
@@ -1154,6 +1129,7 @@ export async function prepareGame(name: string) {
   } catch (e) {
     if (token === prepareGameToken) {
       isLoadingGame = false;
+      setLoadingOverlay(false);
       updateActionButton();
     }
     // eslint-disable-next-line no-console
@@ -1169,6 +1145,7 @@ export async function prepareGame(name: string) {
   }
   currentGameInstance = nextGameInstance;
   isLoadingGame = false;
+  setLoadingOverlay(false);
 
   // Draw initial frame so canvas isn't blank
   try {
@@ -1188,7 +1165,6 @@ export async function prepareGame(name: string) {
   updateActionButton();
   updateGameTitle();
   updateGameDesc();
-  renderGameRecord();
   renderControls();
 }
 
@@ -1215,6 +1191,7 @@ function renderGameList(filter = '') {
   if (!list) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const term = filter.trim().toLowerCase();
+  const isSearching = term.length > 0;
 
   const filtered = GAMES.filter((g) => {
     if (!term) return true;
@@ -1224,27 +1201,50 @@ function renderGameList(filter = '') {
       g.desc.toLowerCase().includes(term) ||
       g.descZh.includes(term)
     );
-  }).sort((a, b) => {
+  });
+
+  // Sort by group order, then by list order within each group
+  const groupOrder = new Map(GAME_GROUPS.map((g, i) => [g.id, i]));
+  filtered.sort((a, b) => {
+    const ga = groupOrder.get(GAME_GROUP_MAP[a.id]) ?? 999;
+    const gb = groupOrder.get(GAME_GROUP_MAP[b.id]) ?? 999;
+    if (ga !== gb) return ga - gb;
     const aIndex = GAME_LIST_ORDER_INDEX.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const bIndex = GAME_LIST_ORDER_INDEX.get(b.id) ?? Number.MAX_SAFE_INTEGER;
     return aIndex - bIndex || a.name.localeCompare(b.name);
   });
 
-  list.innerHTML = filtered
-    .map(
-      (g) => `
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="search-empty">${zh ? '没有匹配的游戏' : 'No games found'}</div>`;
+    return;
+  }
+
+  // Build grouped HTML
+  let lastGroup = '';
+  let html = '';
+  for (const g of filtered) {
+    const groupId = GAME_GROUP_MAP[g.id] || '';
+    if (groupId && groupId !== lastGroup) {
+      const group = GAME_GROUPS.find((gr) => gr.id === groupId);
+      if (!isSearching && group) {
+        html += `<div class="game-list-group">${zh ? group.nameZh : group.name}</div>`;
+      }
+      lastGroup = groupId;
+    }
+    html += `
       <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}">
         <div class="game-list-name">${zh ? g.nameZh : g.name}</div>
         <div class="game-list-desc">${zh ? g.descZh : g.desc}</div>
       </button>
-    `
-    )
-    .join('');
+    `;
+  }
+
+  list.innerHTML = html;
 
   list.querySelectorAll('.game-list-item').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id')!;
-      void prepareGame(id);
+      void loadGame(id);
     });
   });
 }
@@ -1255,7 +1255,6 @@ function setLang(lang: 'en' | 'zh') {
   updateActionButton();
   updateGameTitle();
   updateGameDesc();
-  renderGameRecord();
   renderControls();
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
   document.querySelectorAll('.lang-btn').forEach((b) => {
@@ -1366,6 +1365,6 @@ function toggleFullscreen() {
   }
 
   if (GAMES.length) {
-    void prepareGame(GAMES[0].id);
+    void loadGame(GAMES[0].id);
   }
 })();
