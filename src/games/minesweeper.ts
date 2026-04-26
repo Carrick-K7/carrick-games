@@ -352,13 +352,6 @@ export class MinesweeperGame extends BaseGame {
       ctx.fillText(lang ? '💥 游戏结束' : '💥 GAME OVER', w / 2, h / 2 - 10);
       ctx.font = "14px system-ui, sans-serif";
       ctx.fillText(lang ? '按 R 或空格重新开始' : 'Press R or Space to restart', w / 2, h / 2 + 20);
-    } else if (this.gameState === 'idle') {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#39C5BB';
-      ctx.font = "14px system-ui, sans-serif";
-      ctx.textAlign = 'center';
-      ctx.fillText(lang ? '← → ↑ ↓ 移动 | 空格 翻开 | F 标记' : '← → ↑ ↓ Move | Space Reveal | F Flag', w / 2, h / 2);
     }
   }
 }

@@ -515,14 +515,14 @@ export class GalagaGame extends BaseGame {
       this.drawOverlay(ctx, isDark, isZh,
         'GALAGA',
         isZh ? '大战役' : '',
-        'PRESS SPACE TO START',
-        isZh ? '空格键开始' : '');
+        '',
+        '');
     } else if (this.state === 'gameover') {
       this.drawOverlay(ctx, isDark, isZh,
         `GAME OVER`,
         isZh ? `游戏结束  得分: ${this.score}` : `SCORE: ${this.score}`,
-        'PRESS SPACE TO RESTART',
-        isZh ? '空格键重新开始' : '');
+        '',
+        '');
     }
   }
 
@@ -615,12 +615,12 @@ export class GalagaGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.font = "17px system-ui, sans-serif";
     ctx.fillStyle = '#fff';
-    ctx.fillText(en1, W / 2, H / 2 - 30);
+    if (en1) ctx.fillText(en1, W / 2, H / 2 - 30);
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = '#ccc';
-    ctx.fillText(en2, W / 2, H / 2);
+    if (en2) ctx.fillText(en2, W / 2, H / 2);
     ctx.fillStyle = '#39C5BB';
-    ctx.fillText(en3, W / 2, H / 2 + 30);
+    if (en3) ctx.fillText(en3, W / 2, H / 2 + 30);
     if (zh) {
       ctx.fillStyle = '#aaa';
       ctx.fillText(zh, W / 2, H / 2 + 48);

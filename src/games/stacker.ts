@@ -120,8 +120,7 @@ export class StackerGame extends BaseGame {
       ctx.font = '14px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = isDark ? '#ffffff' : '#000000';
-      ctx.fillText('◄', this.width / 4, this.height - 12);
-      ctx.fillText('►', (this.width * 3) / 4, this.height - 12);
+
     }
 
     if (this.state === 'idle') {
@@ -131,9 +130,7 @@ export class StackerGame extends BaseGame {
       const title = zh ? '堆叠方块' : 'STACKER';
       ctx.fillText(title, this.width / 2, this.height / 2 - 30);
 
-      ctx.font = '14px system-ui, sans-serif';
-      const hint = zh ? '点击或按键开始' : 'TAP OR PRESS TO START';
-      ctx.fillText(hint, this.width / 2, this.height / 2 + 20);
+
     }
 
     if (this.state === 'gameover' || this.state === 'win') {

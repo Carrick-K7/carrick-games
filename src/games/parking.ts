@@ -98,44 +98,44 @@ const LEVELS: Level[] = [
 
   // ===== 侧方停车 (6-10) =====
   {
-    playerStart: { x: 340, y: 240, angle: Math.PI },
+    playerStart: { x: 340, y: 275, angle: Math.PI },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(20, 180, false), parkedCar(20, 280, false),
+      parkedCar(10, 160, false), parkedCar(10, 340, false),
     ],
-    spot: { x: 10, y: 230, w: 76, h: 50 },
-    timeLimit: 55,
+    spot: { x: 10, y: 250, w: 76, h: 50 },
+    timeLimit: 60,
   },
   {
-    playerStart: { x: 60, y: 280, angle: 0 },
+    playerStart: { x: 60, y: 275, angle: 0 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(330, 180, false), parkedCar(330, 280, false),
+      parkedCar(310, 160, false), parkedCar(310, 340, false),
     ],
-    spot: { x: 330, y: 230, w: 76, h: 50 },
-    timeLimit: 55,
+    spot: { x: 310, y: 250, w: 76, h: 50 },
+    timeLimit: 60,
   },
   {
-    playerStart: { x: 200, y: 60, angle: Math.PI / 2 },
+    playerStart: { x: 208, y: 100, angle: Math.PI / 2 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(120, 450, false), parkedCar(220, 450, false),
+      parkedCar(90, 370, false), parkedCar(260, 370, false),
     ],
-    spot: { x: 170, y: 450, w: 76, h: 50 },
-    timeLimit: 55,
+    spot: { x: 162, y: 430, w: 76, h: 50 },
+    timeLimit: 60,
   },
   {
-    playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
+    playerStart: { x: 208, y: 460, angle: -Math.PI / 2 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(120, 10, false), parkedCar(220, 10, false),
+      parkedCar(90, 120, false), parkedCar(260, 120, false),
     ],
-    spot: { x: 170, y: 10, w: 76, h: 50 },
-    timeLimit: 55,
+    spot: { x: 162, y: 40, w: 76, h: 50 },
+    timeLimit: 60,
   },
   {
     playerStart: { x: 340, y: 260, angle: Math.PI },
@@ -144,8 +144,8 @@ const LEVELS: Level[] = [
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
       parkedCar(10, 120, false), parkedCar(10, 360, false),
     ],
-    spot: { x: 10, y: 235, w: 76, h: 50 },
-    timeLimit: 50,
+    spot: { x: 10, y: 240, w: 76, h: 50 },
+    timeLimit: 55,
   },
 
   // ===== 倒车入库 (11-15) =====
@@ -521,8 +521,10 @@ export class ParkingGame extends BaseGame {
     const inSpotX = carCenterX > s.x + 6 && carCenterX < s.x + s.w - 6;
     const inSpotY = carCenterY > s.y + 8 && carCenterY < s.y + s.h - 8;
     const angleNorm = ((this.car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    const angleOk = Math.abs(angleNorm - Math.PI / 2) < 0.35 ||
-                    Math.abs(angleNorm - Math.PI * 3 / 2) < 0.35;
+    const isHorizontalSpot = s.w > s.h;
+    const angleOk = isHorizontalSpot
+      ? (angleNorm < 0.4 || angleNorm > Math.PI * 2 - 0.4 || Math.abs(angleNorm - Math.PI) < 0.4)
+      : (Math.abs(angleNorm - Math.PI / 2) < 0.35 || Math.abs(angleNorm - Math.PI * 3 / 2) < 0.35);
     return inSpotX && inSpotY && angleOk;
   }
 
@@ -620,11 +622,6 @@ export class ParkingGame extends BaseGame {
     // Background
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, GAME_W, GAME_H);
-
-    if (this.gameState === 'menu') {
-      this.drawMenuOverlay(ctx, isDark, primary, text);
-      return;
-    }
 
     // Parking lot lines
     ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -749,19 +746,7 @@ export class ParkingGame extends BaseGame {
     }
   }
 
-  private drawMenuOverlay(ctx: CanvasRenderingContext2D, isDark: boolean, primary: string, text: string) {
-    ctx.fillStyle = isDark ? 'rgba(11,15,25,0.6)' : 'rgba(250,250,250,0.7)';
-    ctx.fillRect(0, 0, GAME_W, GAME_H);
-    const zh = this.isZhLang();
-    ctx.fillStyle = text;
-    ctx.font = '16px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(zh ? '从右侧面板选择关卡' : 'SELECT A LEVEL', GAME_W / 2, GAME_H / 2 - 10);
-    ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText(zh ? '从右侧面板开始' : 'from the side panel', GAME_W / 2, GAME_H / 2 + 16);
-  }
+
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {

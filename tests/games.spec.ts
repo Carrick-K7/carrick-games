@@ -84,16 +84,16 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'spaceshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'flappybird', keys: ['Space', 'Space', 'Space'], delayMs: 2000 },
   { id: 'pacman', keys: ['ArrowRight', 'ArrowUp', 'ArrowLeft'], delayMs: 2000 },
-  { id: 'invaders', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
+
   { id: 'asteroids', keys: ['ArrowLeft', 'ArrowUp', 'Space'], delayMs: 2000 },
   { id: 'doodlejump', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'frogger', keys: ['ArrowUp', 'ArrowUp', 'ArrowLeft'], delayMs: 2000 },
   { id: 'galaga', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
-  { id: 'berzerk', keys: ['ArrowLeft', 'ArrowUp', 'Space'], delayMs: 2000 },
+
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'beachhead', keys: ['ArrowLeft', 'ArrowUp', 'Space', 'ArrowRight'], delayMs: 2000 },
-  { id: 'missilecommand', keys: ['Space'], delayMs: 2000 },
+  { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: '2048', keys: ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'], delayMs: 1500 },
@@ -104,7 +104,7 @@ const CLICK_GAMES: GameProfile[] = [
   { id: 'checkers', clicks: 2, delayMs: 1500 },
   { id: 'solitaire', clicks: 2, delayMs: 1500 },
   { id: 'chess', clicks: 2, delayMs: 1500 },
-  { id: 'mahjong', clicks: 3, delayMs: 1500 },
+
   { id: 'connectfour', clicks: 2, delayMs: 1500 },
   { id: 'texashold', clicks: 1, delayMs: 1500 },
   { id: 'simon', clicks: 2, delayMs: 2000 },
@@ -330,7 +330,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('all 30 games are registered in the list', async ({ page }) => {
+  test('all 27 games are registered in the list', async ({ page }) => {
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await expect(item).toBeVisible();

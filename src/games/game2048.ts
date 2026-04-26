@@ -273,8 +273,6 @@ export class Game2048 extends BaseGame {
       ctx.textBaseline = 'middle';
       ctx.fillText('2048', W / 2, H / 2 - 40);
       ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '点击或按方向键开始' : 'TAP OR PRESS ARROW KEYS', W / 2, H / 2 + 10);
-      ctx.fillText(zh ? '按空格重新开始' : 'SPACE TO RESTART', W / 2, H / 2 + 35);
       return;
     }
 

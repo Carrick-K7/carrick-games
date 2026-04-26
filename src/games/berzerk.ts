@@ -523,7 +523,6 @@ export class BerzerkGame extends BaseGame {
       ctx.fillText(zh ? 'BERZERK' : 'BERZERK', W / 2, H / 2 - 20);
       ctx.font = '14px system-ui, sans-serif';
       ctx.fillStyle = textColor;
-      ctx.fillText(zh ? '按空格或点击开始' : 'PRESS SPACE OR TAP', W / 2, H / 2 + 10);
     }
 
     if (this.state === 'gameover') {

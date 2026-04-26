@@ -546,8 +546,6 @@ export class SimonGame extends BaseGame {
     ctx.font = '12px system-ui, "Noto Sans SC", sans-serif';
 
     if (this.phase === 'ready') {
-      ctx.fillText(zh ? '点击下方开始按钮' : 'PRESS START BELOW', W / 2, 258);
-      ctx.fillText(zh ? '按 1 2 3 4 或 R B G Y' : 'USE 1 2 3 4 OR R B G Y', W / 2, 282);
       return;
     }
 

@@ -101,14 +101,6 @@ async function suicidePacman(page: any) {
   await page.waitForTimeout(8000);
 }
 
-async function suicideInvaders(page: any) {
-  // Move to edge and stay, invaders reach bottom quickly
-  await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(200);
-  await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(15000);
-}
-
 async function suicideAsteroids(page: any) {
   // No thrust, asteroid hits you
   await page.waitForTimeout(6000);
@@ -137,16 +129,6 @@ async function suicideStacker(page: any) {
   await page.waitForTimeout(2000);
 }
 
-async function suicideBerzerk(page: any) {
-  // Walk toward nearest robot
-  await page.evaluate(() => {
-    for (let i = 0; i < 20; i++) {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-    }
-  });
-  await page.waitForTimeout(4000);
-}
-
 async function suicideIwanna(page: any) {
   // Walk into the opening spike pit
   await page.keyboard.down('ArrowRight');
@@ -158,11 +140,6 @@ async function suicideIwanna(page: any) {
 async function suicideBeachhead(page: any) {
   // Let early waves land and fire back without defending
   await page.waitForTimeout(9000);
-}
-
-async function suicideMissilecommand(page: any) {
-  // Do nothing, missiles destroy cities
-  await page.waitForTimeout(12000);
 }
 
 async function suicideParking(page: any) {
@@ -249,20 +226,6 @@ async function suicideChess(page: any) {
   await page.waitForTimeout(4000);
 }
 
-async function suicideMahjong(page: any) {
-  const canvas = page.locator('#gameCanvas');
-  const box = await canvas.boundingBox();
-  if (!box) return;
-  // Rapidly click tiles to make matches or exhaust moves
-  for (let i = 0; i < 20; i++) {
-    const x = box.x + box.width * (0.2 + (i % 5) * 0.15);
-    const y = box.y + box.height * (0.2 + Math.floor(i / 5) * 0.15);
-    await page.mouse.click(x, y);
-    await page.waitForTimeout(200);
-  }
-  await page.waitForTimeout(3000);
-}
-
 async function suicideWordle(page: any) {
   // Type 6 wrong words rapidly
   await page.evaluate(() => {
@@ -291,6 +254,21 @@ async function suicideSudoku(page: any) {
   // Try to finish by pressing Space (restart)
   await page.keyboard.press('Space');
   await page.waitForTimeout(1000);
+}
+
+async function suicideAimlab(page: any) {
+  const canvas = page.locator('#gameCanvas');
+  const box = await canvas.boundingBox();
+  if (!box) return;
+  // Click randomly at various positions to try to hit targets
+  for (let i = 0; i < 15; i++) {
+    const x = box.x + box.width * (0.2 + Math.random() * 0.6);
+    const y = box.y + box.height * (0.2 + Math.random() * 0.6);
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(300);
+  }
+  // Wait for timer to expire
+  await page.waitForTimeout(6000);
 }
 
 async function suicideSolitaire(page: any) {
@@ -332,17 +310,15 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'spaceshooter', suicide: suicideSpaceshooter, timeout: 15000 },
   { id: 'flappybird', suicide: suicideFlappybird, timeout: 15000 },
   { id: 'pacman', suicide: suicidePacman, timeout: 20000 },
-  { id: 'invaders', suicide: suicideInvaders, timeout: 25000 },
   { id: 'asteroids', suicide: suicideAsteroids, timeout: 15000 },
   { id: 'doodlejump', suicide: suicideDoodlejump, timeout: 15000 },
   { id: 'frogger', suicide: suicideFrogger, timeout: 15000 },
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
-  { id: 'berzerk', suicide: suicideBerzerk, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
   { id: 'beachhead', suicide: suicideBeachhead, timeout: 20000 },
-  { id: 'missilecommand', suicide: suicideMissilecommand, timeout: 25000 },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
+  { id: 'aimlab', suicide: suicideAimlab, timeout: 15000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
   { id: '2048', suicide: suicide2048, timeout: 20000 },
   { id: 'minesweeper', suicide: suicideMinesweeper, timeout: 15000 },
@@ -350,7 +326,6 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'checkers', suicide: suicideCheckers, timeout: 20000, expectScore: false },
   { id: 'connectfour', suicide: suicideConnectfour, timeout: 20000, expectScore: false },
   { id: 'chess', suicide: suicideChess, timeout: 25000, expectScore: false },
-  { id: 'mahjong', suicide: suicideMahjong, timeout: 20000, expectScore: false },
   { id: 'wordle', suicide: suicideWordle, timeout: 15000, expectScore: true },
   { id: 'sudoku', suicide: suicideSudoku, timeout: 15000, expectScore: false },
   { id: 'solitaire', suicide: suicideSolitaire, timeout: 20000, expectScore: false },

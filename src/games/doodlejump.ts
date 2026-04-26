@@ -217,8 +217,6 @@ export class DoodleJumpGame extends BaseGame {
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText('DOODLE JUMP', W / 2, H / 2 - 50);
       ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '点击或按空格开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 10);
-      ctx.fillText(zh ? '← → 或 A D 移动' : '← → OR A D TO MOVE', W / 2, H / 2 + 35);
     }
 
     // Game over

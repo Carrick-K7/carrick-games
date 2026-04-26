@@ -872,9 +872,6 @@ export class SolitaireGame extends BaseGame {
 
       ctx.fillStyle = theme.text;
       ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '点击任意位置开始' : 'TAP OR PRESS SPACE', cx, cy + 10);
-      ctx.fillText(zh ? '空格：发牌  1-7：选列' : 'SPACE: draw  1-7: select col', cx, cy + 35);
-      ctx.fillText(zh ? '双击：自动放到王牌' : 'Double-click: auto-move to foundation', cx, cy + 55);
 
       // Suit icons
       ctx.font = '18px serif';

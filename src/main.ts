@@ -25,14 +25,12 @@ const GAME_LOADERS = {
   flappybird: () => import('./games/flappybird.js').then((m) => m.FlappyBirdGame),
   pacman: () => import('./games/pacman.js').then((m) => m.PacManGame),
   parking: () => import('./games/parking.js').then((m) => m.ParkingGame),
-  invaders: () => import('./games/invaders.js').then((m) => m.InvadersGame),
   asteroids: () => import('./games/asteroids.js').then((m) => m.AsteroidsGame),
   minesweeper: () => import('./games/minesweeper.js').then((m) => m.MinesweeperGame),
   doodlejump: () => import('./games/doodlejump.js').then((m) => m.DoodleJumpGame),
   game2048: () => import('./games/game2048.js').then((m) => m.Game2048),
   simon: () => import('./games/simon.js').then((m) => m.SimonGame),
   frogger: () => import('./games/frogger.js').then((m) => m.FroggerGame),
-  missilecommand: () => import('./games/missilecommand.js').then((m) => m.MissileCommandGame),
   beachhead: () => import('./games/beachhead.js').then((m) => m.BeachHeadGame),
   checkers: () => import('./games/checkers.js').then((m) => m.CheckersGame),
   solitaire: () => import('./games/solitaire.js').then((m) => m.SolitaireGame),
@@ -41,9 +39,8 @@ const GAME_LOADERS = {
   chess: () => import('./games/chess.js').then((m) => m.ChessGame),
   galaga: () => import('./games/galaga.js').then((m) => m.GalagaGame),
   stacker: () => import('./games/stacker.js').then((m) => m.StackerGame),
-  berzerk: () => import('./games/berzerk.js').then((m) => m.BerzerkGame),
   iwanna: () => import('./games/iwanna.js').then((m) => m.IwannaGame),
-  mahjong: () => import('./games/mahjong.js').then((m) => m.MahjongGame),
+  aimlab: () => import('./games/aimlab.js').then((m) => m.AimLabGame),
   texashold: () => import('./games/texashold.js').then((m) => m.TexasHoldGame),
   connectfour: () => import('./games/connectfour.js').then((m) => m.ConnectFourGame),
 } satisfies Record<string, GameLoader>;
@@ -231,25 +228,6 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'invaders',
-    name: 'Space Invaders',
-    nameZh: '太空侵略者',
-    desc: 'Classic horizontal shooter. Destroy waves of invaders before they reach you.',
-    descZh: '经典横版射击。在侵略者抵达前消灭它们。',
-    loader: GAME_LOADERS.invaders,
-    canvasSize: { width: 640, height: 480 },
-    controls: {
-      keyboard: [
-        { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
-        { keys: ['A', 'D'], action: 'Move ship', actionZh: '移动飞船' },
-        { keys: ['Space'], action: 'Shoot / Restart', actionZh: '射击 / 重新开始' },
-      ],
-      touch: [
-        { icon: 'tap', action: 'Tap upper half to shoot, lower half to move', actionZh: '点击上半部射击,下半部移动' },
-      ],
-    },
-  },
-  {
     id: 'asteroids',
     name: 'Asteroids',
     nameZh: '小行星',
@@ -375,23 +353,6 @@ export const GAMES: GameMeta[] = [
         { icon: 'swipe-left', action: 'Hop left', actionZh: '向左跳' },
         { icon: 'swipe-right', action: 'Hop right', actionZh: '向右跳' },
         { icon: 'tap', action: 'Tap to start / restart', actionZh: '点击开始 / 重新开始' },
-      ],
-    },
-  },
-  {
-    id: 'missilecommand',
-    name: 'Missile Command',
-    nameZh: '导弹指挥官',
-    desc: 'Defend your cities from incoming missiles. Aim and fire counter-missiles.',
-    descZh: '防御来袭的导弹。瞄准并发射拦截导弹,保卫你的城市。',
-    loader: GAME_LOADERS.missilecommand,
-    canvasSize: { width: 400, height: 600 },
-    controls: {
-      keyboard: [
-        { keys: ['Space'], action: 'Fire missile', actionZh: '发射导弹' },
-      ],
-      touch: [
-        { icon: 'tap', action: 'Tap to aim and fire', actionZh: '点击瞄准并发射' },
       ],
     },
   },
@@ -549,26 +510,6 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
-    id: 'berzerk',
-    name: 'Berzerk',
-    nameZh: '狂暴机器人',
-    desc: 'Classic 1980 maze chase. Shoot robots, avoid Evil Otto, and escape!',
-    descZh: '经典1980迷宫追逐。射击机器人,躲避邪恶奥托,逃出生天!',
-    loader: GAME_LOADERS.berzerk,
-    canvasSize: { width: 480, height: 480 },
-    controls: {
-      keyboard: [
-        { keys: ['←', '↑', '→', '↓'], action: 'Move', actionZh: '移动' },
-        { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
-        { keys: ['Space'], action: 'Shoot / Start', actionZh: '射击 / 开始' },
-        { keys: ['R'], action: 'Restart', actionZh: '重新开始' },
-      ],
-      touch: [
-        { icon: 'tap', action: 'Tap sides to move, center to shoot', actionZh: '点击边缘移动,中心射击' },
-      ],
-    },
-  },
-  {
     id: 'iwanna',
     name: 'I Wanna',
     nameZh: 'I Wanna',
@@ -587,23 +528,6 @@ export const GAMES: GameMeta[] = [
         { icon: 'tap', action: 'Tap to jump / restart', actionZh: '点击跳跃 / 重开' },
         { icon: 'swipe-left', action: 'Swipe left', actionZh: '向左滑' },
         { icon: 'swipe-right', action: 'Swipe right', actionZh: '向右滑' },
-      ],
-    },
-  },
-  {
-    id: 'mahjong',
-    name: 'Mahjong',
-    nameZh: '麻将连连看',
-    desc: 'Match free tiles and clear the board before time runs out.',
-    descZh: '点击相同麻将牌消除,在时间耗尽前清空牌阵。',
-    loader: GAME_LOADERS.mahjong,
-    canvasSize: { width: 400, height: 500 },
-    controls: {
-      keyboard: [
-        { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
-      ],
-      touch: [
-        { icon: 'tap', action: 'Tap tile to select / match', actionZh: '点击选牌 / 配对' },
       ],
     },
   },
@@ -631,7 +555,7 @@ export const GAMES: GameMeta[] = [
   {
     id: 'parking',
     name: 'Parking',
-    nameZh: '停车小游戏',
+    nameZh: '停车',
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
     descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
     loader: GAME_LOADERS.parking,
@@ -667,6 +591,21 @@ export const GAMES: GameMeta[] = [
       ],
     },
   },
+  {
+    id: 'aimlab',
+    name: 'Aim Lab',
+    nameZh: '瞄准实验室',
+    desc: 'Test your reaction speed. Click targets as fast and accurately as possible.',
+    descZh: '测试你的反应速度。尽可能快速准确地点击目标。',
+    loader: GAME_LOADERS.aimlab,
+    canvasSize: { width: 500, height: 400 },
+    controls: {
+      keyboard: [],
+      touch: [
+        { icon: 'tap', action: 'Tap target', actionZh: '点击目标' },
+      ],
+    },
+  },
 ];
 
 interface GameGroup {
@@ -686,11 +625,11 @@ const GAME_GROUP_MAP: Record<string, string> = {
   snake: 'arcade', pacman: 'arcade', frogger: 'arcade',
   flappybird: 'arcade', doodlejump: 'arcade', iwanna: 'arcade',
   parking: 'arcade', breakout: 'arcade', pong: 'arcade', stacker: 'arcade',
-  spaceshooter: 'combat', invaders: 'combat', galaga: 'combat',
-  asteroids: 'combat', missilecommand: 'combat', beachhead: 'combat', berzerk: 'combat',
+  spaceshooter: 'combat', galaga: 'combat',
+  asteroids: 'combat', beachhead: 'combat',
   bubbleshooter: 'puzzle', tetris: 'puzzle', '2048': 'puzzle',
   simon: 'puzzle', minesweeper: 'puzzle', wordle: 'puzzle',
-  sudoku: 'puzzle', mahjong: 'puzzle',
+  sudoku: 'puzzle',
   checkers: 'tabletop', chess: 'tabletop', connectfour: 'tabletop',
   solitaire: 'tabletop', texashold: 'tabletop',
 };
@@ -698,10 +637,11 @@ const GAME_GROUP_MAP: Record<string, string> = {
 const GAME_LIST_ORDER = [
   'snake', 'pacman', 'frogger', 'flappybird', 'doodlejump', 'iwanna',
   'parking', 'breakout', 'pong', 'stacker',
-  'spaceshooter', 'invaders', 'galaga', 'asteroids', 'missilecommand', 'beachhead', 'berzerk',
+  'spaceshooter', 'galaga', 'asteroids', 'beachhead',
   'bubbleshooter', 'tetris', '2048', 'simon',
-  'minesweeper', 'wordle', 'sudoku', 'mahjong',
+  'minesweeper', 'wordle', 'sudoku',
   'checkers', 'chess', 'connectfour', 'solitaire', 'texashold',
+  'aimlab',
 ] as const;
 
 const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(
@@ -1000,6 +940,18 @@ function setLoadingOverlay(active: boolean) {
   if (el) el.classList.toggle('active', active);
 }
 
+function setStartOverlay(active: boolean) {
+  const el = document.getElementById('startOverlay');
+  if (!el) return;
+  el.classList.toggle('active', active);
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  const titleEl = el.querySelector('.start-overlay-title') as HTMLElement | null;
+  const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
+  if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
+  if (hintEl) hintEl.textContent = zh ? '点击「开始游戏」按钮开始' : 'Click Start Game to begin';
+}
+
 function readGameScore(): number | null {
   if (!currentGameInstance) return null;
   const raw = (currentGameInstance as any).score;
@@ -1043,9 +995,41 @@ function renderKeyboard() {
   bindVirtualKeyboard();
 }
 
+function renderControlsInfo() {
+  const container = document.getElementById('controlsPanel');
+  if (!container) return;
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  if (!meta) {
+    container.innerHTML = '';
+    return;
+  }
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  let html = '';
+
+  if (meta.controls.keyboard?.length) {
+    html += `<div class="control-section"><div class="control-section-title">${zh ? '键盘' : 'KEYBOARD'}</div>`;
+    for (const row of meta.controls.keyboard) {
+      const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
+      html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (meta.controls.touch?.length) {
+    html += `<div class="control-section"><div class="control-section-title">${zh ? '触摸' : 'TOUCH'}</div>`;
+    for (const row of meta.controls.touch) {
+      html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
 function renderControls() {
   renderStats();
   renderKeyboard();
+  renderControlsInfo();
 }
 
 function normalizeKey(label: string): string {
@@ -1234,11 +1218,13 @@ export async function prepareGame(name: string) {
   updateGameTitle();
   updateGameDesc();
   renderControls();
+  setStartOverlay(true);
 }
 
 function startPreparedGame() {
   if (!currentGameInstance || isLoadingGame) return;
   try {
+    setStartOverlay(false);
     currentGameInstance.start();
     isRunning = true;
     updateActionButton();
@@ -1251,7 +1237,6 @@ function startPreparedGame() {
 
 export async function loadGame(name: string) {
   await prepareGame(name);
-  startPreparedGame();
 }
 
 function renderGameList(filter = '') {

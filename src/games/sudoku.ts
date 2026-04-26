@@ -381,7 +381,6 @@ export class SudokuGame extends BaseGame {
       ctx.fillText(this.won ? (zh ? '胜利!' : 'YOU WON!') : zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
       ctx.font = '16px system-ui, sans-serif';
       ctx.fillStyle = text;
-      ctx.fillText(zh ? '按空格或点击重新开始' : 'Space or tap to restart', this.width / 2, this.height / 2 + 16);
     }
   }
 
@@ -423,9 +422,7 @@ export class SudokuGame extends BaseGame {
       ctx.fillText(zh ? d.labelZh : d.label, this.width / 2, y + btnHeight / 2 + 1);
     }
 
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillStyle = isDark ? '#5a6070' : '#a0a0a0';
-    ctx.fillText(zh ? '点击选择难度开始游戏' : 'Click difficulty to start', this.width / 2, this.height - 40);
+
   }
 
   private drawNumpad(

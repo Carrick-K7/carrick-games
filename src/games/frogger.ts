@@ -512,7 +512,7 @@ export class FroggerGame extends BaseGame {
 
     // Overlay states
     if (this.state === 'waiting') {
-      this.drawOverlay(ctx, isDark, 'PRESS SPACE TO START', 'PRESS SPACE TO START');
+      this.drawOverlay(ctx, isDark, '', '');
     } else if (this.state === 'gameover') {
       this.drawOverlay(ctx, isDark, `GAME OVER  SCORE: ${this.score}`, `游戏结束  得分: ${this.score}`);
     } else if (this.state === 'levelcomplete') {
@@ -572,8 +572,8 @@ export class FroggerGame extends BaseGame {
     ctx.font = "15px system-ui, sans-serif";
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText(en, CANVAS_W / 2, CANVAS_H / 2 - 10);
-    ctx.fillText(zh, CANVAS_W / 2, CANVAS_H / 2 + 12);
+    if (en) ctx.fillText(en, CANVAS_W / 2, CANVAS_H / 2 - 10);
+    if (zh) ctx.fillText(zh, CANVAS_W / 2, CANVAS_H / 2 + 12);
     ctx.textAlign = 'left';
   }
 
