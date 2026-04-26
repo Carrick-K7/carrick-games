@@ -634,7 +634,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
     descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
     loader: GAME_LOADERS.parking,
-    canvasSize: { width: 400, height: 520 },
+    canvasSize: { width: 520, height: 520 },
     controls: {
       keyboard: [
         { keys: ['↑', 'W'], action: 'Accelerate', actionZh: '加速' },
