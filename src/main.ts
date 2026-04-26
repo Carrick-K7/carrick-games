@@ -1,6 +1,7 @@
 import type { Game } from './core/game.js';
 import { getStoredRecord, readStoredRecords } from './core/game.js';
 import { getLogicalCanvasSize } from './core/render.js';
+import { renderLevelGridHTML, renderDrivingStateHTML, renderMenuHint, type LevelSelectState } from './core/levelselect.js';
 
 declare global {
   interface Window {
@@ -634,7 +635,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
     descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
     loader: GAME_LOADERS.parking,
-    canvasSize: { width: 520, height: 520 },
+    canvasSize: { width: 400, height: 520 },
     controls: {
       keyboard: [
         { keys: ['↑', 'W'], action: 'Accelerate', actionZh: '加速' },
@@ -884,6 +885,28 @@ function getRecord(gameId: string): number | null {
   return getStoredRecord(gameId);
 }
 
+function getLevelSelectState(): LevelSelectState | null {
+  const g = currentGameInstance as any;
+  if (!g || typeof g.totalLevels !== 'number') return null;
+  return {
+    totalLevels: g.totalLevels,
+    currentLevel: typeof g.levelIndexEx === 'number' ? g.levelIndexEx : 0,
+    bestLevel: typeof g.bestLevelEx === 'number' ? g.bestLevelEx : 0,
+    unlockedLevel: typeof g.unlockedLevelEx === 'number' ? g.unlockedLevelEx : 0,
+    speed: typeof g.speed === 'number' ? g.speed : 0,
+    maxSpeed: typeof g.maxSpeed === 'number' ? g.maxSpeed : 200,
+    timeLeft: typeof g.timeLeftEx === 'number' ? g.timeLeftEx : 0,
+    gear: typeof g.gear === 'string' ? g.gear : 'N',
+    gameState: typeof g.gameStateEx === 'string' ? g.gameStateEx : 'menu',
+  };
+}
+
+function getSelectedLevel(): number {
+  const g = currentGameInstance as any;
+  if (g && typeof g.selectedLevelEx === 'number') return g.selectedLevelEx;
+  return 0;
+}
+
 function renderStats() {
   const container = document.getElementById('statsPanel');
   if (!container) return;
@@ -896,9 +919,10 @@ function renderStats() {
 
   if (!currentGameName) return;
   const best = getRecord(currentGameName);
-  const live = readGameScore();
+  const ls = getLevelSelectState();
   let html = '';
 
+  // Title
   html += `<div class="stats-section">`;
   html += `<div class="stats-title">${zh ? meta.nameZh : meta.name}</div>`;
   if (best != null) {
@@ -906,12 +930,69 @@ function renderStats() {
   }
   html += `</div>`;
 
-  html += `<div class="stats-section" id="liveScoreSection" style="display:${live != null ? 'flex' : 'none'}">`;
-  html += `<div class="stats-section-title">${zh ? '当前分数' : 'Score'}</div>`;
-  html += `<div class="stats-live-score" id="liveScore">${live ?? 0}</div>`;
-  html += `</div>`;
+  // Driving state (replaces in-canvas dashboard)
+  if (ls && ls.gameState !== 'menu') {
+    html += renderDrivingStateHTML(ls, zh);
+  }
+
+  // Level grid
+  if (ls) {
+    const selected = getSelectedLevel();
+    html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVELS'}</div>`;
+    html += renderLevelGridHTML(ls, selected, zh);
+    html += `</div>`;
+
+    if (ls.gameState === 'menu') {
+      html += renderMenuHint(zh);
+    }
+  }
 
   container.innerHTML = html;
+
+  // Bind level cell clicks
+  if (ls) {
+    container.querySelectorAll('.level-cell').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-level') || '', 10);
+        if (isNaN(idx)) return;
+        const g = currentGameInstance as any;
+        if (g && typeof g.selectLevel === 'function') {
+          g.selectLevel(idx);
+        }
+      });
+    });
+  }
+}
+
+function updateLiveScoreDisplay() {
+  // Update score if game has it
+  const scoreEl = document.getElementById('liveScore');
+  if (scoreEl) {
+    const score = readGameScore();
+    if (score != null) scoreEl.textContent = String(score);
+  }
+
+  // Update driving state if applicable
+  const ls = getLevelSelectState();
+  if (!ls || ls.gameState === 'menu') return;
+
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const speedEl = document.getElementById('ds-speed-val');
+  const gearEl = document.getElementById('ds-gear-val');
+  const timeEl = document.getElementById('ds-time-val');
+  const dotsEl = document.getElementById('levelDots');
+
+  if (speedEl) speedEl.textContent = String(Math.round(ls.speed));
+  if (gearEl) {
+    gearEl.textContent = ls.gear;
+    gearEl.style.color = ls.gear === 'R' ? '#ef4444' : ls.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
+  }
+  if (timeEl) {
+    timeEl.textContent = String(Math.ceil(ls.timeLeft));
+    timeEl.style.color = ls.timeLeft <= 10 ? '#ef4444' : '';
+  }
+
+  // Re-render level dots occasionally (not every tick - level changes are rare)
 }
 
 function setLoadingOverlay(active: boolean) {
@@ -927,19 +1008,6 @@ function readGameScore(): number | null {
 }
 
 let scorePollTimer: number | null = null;
-
-function updateLiveScoreDisplay() {
-  const section = document.getElementById('liveScoreSection');
-  const el = document.getElementById('liveScore');
-  if (!section || !el) return;
-  const score = readGameScore();
-  if (score != null) {
-    section.style.display = 'flex';
-    el.textContent = String(score);
-  } else {
-    section.style.display = 'none';
-  }
-}
 
 function startScorePolling() {
   stopScorePolling();

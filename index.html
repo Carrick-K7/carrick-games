@@ -358,6 +358,161 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* Level grid in stats panel */
+    .level-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      margin: 6px 0 4px;
+    }
+    .level-cell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 3px;
+      transition: background .15s, border-color .15s;
+      min-width: 0;
+    }
+    .level-cell:hover {
+      background: var(--accent-dim);
+    }
+    .level-cell.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .level-cell.current {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .level-cell.cleared {
+      background: rgba(57,197,187,0.08);
+    }
+    .level-cell.locked {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .level-cell .lc-num {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1;
+    }
+    .level-cell.locked .lc-num {
+      color: var(--text-secondary);
+    }
+    .level-cell .lc-lock {
+      font-size: 0.6rem;
+      line-height: 1;
+      margin-top: 1px;
+    }
+    .level-cell .lc-check {
+      font-size: 0.7rem;
+      line-height: 1;
+      margin-top: 1px;
+      color: var(--accent);
+    }
+
+    /* Driving state in stats panel */
+    .driving-state {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .ds-speed {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 4px 0;
+    }
+    .ds-gauge-wrap {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      margin: 0 auto;
+    }
+    .ds-gauge {
+      width: 100%;
+      height: 100%;
+    }
+    .ds-speed-val {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .ds-speed-label {
+      font-size: 0.6rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+    .ds-gear, .ds-time, .ds-level {
+      text-align: center;
+      padding: 4px 0;
+    }
+    .ds-gear-val {
+      font-size: 1.6rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ds-time-val, .ds-level-val {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .ds-gear-label, .ds-time-label, .ds-level-label {
+      font-size: 0.55rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+
+    .level-dots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      justify-content: center;
+      padding: 6px 0;
+    }
+    .level-dots .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border-strong);
+    }
+    .level-dots .dot.cleared {
+      background: var(--accent);
+    }
+    .level-dots .dot.current {
+      background: var(--text);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .ds-hint {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-align: center;
+      padding: 6px 0;
+    }
+
     /* Side panel keyboard sizing */
     .keyboard-panel .vkeyboard {
       --vk-unit: 26px;

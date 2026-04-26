@@ -1,0 +1,102 @@
+export interface LevelSelectState {
+  totalLevels: number;
+  currentLevel: number;
+  bestLevel: number;
+  unlockedLevel: number;
+  speed: number;
+  maxSpeed: number;
+  timeLeft: number;
+  gear: string;
+  gameState: string;
+}
+
+export function renderLevelGridHTML(state: LevelSelectState, selectedLevel: number, zh: boolean): string {
+  const cols = 5;
+  let html = `<div class="level-grid">`;
+  for (let i = 0; i < state.totalLevels; i++) {
+    const unlocked = i <= state.unlockedLevel;
+    const cleared = i < state.bestLevel;
+    const current = i === state.currentLevel && state.gameState !== 'menu';
+    const selected = i === selectedLevel && state.gameState === 'menu';
+    const locked = !unlocked;
+
+    let cls = 'level-cell';
+    if (selected) cls += ' selected';
+    if (current) cls += ' current';
+    if (cleared) cls += ' cleared';
+    if (locked) cls += ' locked';
+    if ((i % cols) === 0) cls += ' col-first';
+
+    let badge = '';
+    if (locked) badge = '<span class="lc-lock">🔒</span>';
+    else if (cleared) badge = '<span class="lc-check">✓</span>';
+    else badge = '';
+
+    html += `<button class="${cls}" data-level="${i}">
+      <span class="lc-num">${i + 1}</span>
+      ${badge}
+    </button>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+export function renderDrivingStateHTML(state: LevelSelectState, zh: boolean): string {
+  const isRacing = state.gameState === 'playing' || state.gameState === 'parked';
+  if (!isRacing) return '';
+
+  const speedRatio = Math.abs(state.speed) / state.maxSpeed;
+  const gearColor = state.gear === 'R' ? '#ef4444' : state.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
+  const timeColor = state.timeLeft <= 10 ? '#ef4444' : 'var(--text)';
+
+  let html = `<div class="driving-state">`;
+
+  // Speed gauge
+  html += `<div class="ds-speed">
+    <div class="ds-gauge-wrap">
+      <svg viewBox="0 0 100 100" class="ds-gauge">
+        <path d="M 15 85 A 40 40 0 1 1 85 85" fill="none" stroke="var(--border-strong)" stroke-width="6" stroke-linecap="round"/>
+        <path id="ds-speed-arc" d="M 15 85 A 40 40 0 1 1 85 85" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="${251 * speedRatio} 251" stroke-dashoffset="0"/>
+      </svg>
+      <div class="ds-speed-val" id="ds-speed-val">${Math.round(Math.abs(state.speed))}</div>
+    </div>
+    <div class="ds-speed-label">${zh ? '速度' : 'SPEED'}</div>
+  </div>`;
+
+  // Gear
+  html += `<div class="ds-gear">
+    <div class="ds-gear-val" id="ds-gear-val" style="color:${gearColor}">${state.gear}</div>
+    <div class="ds-gear-label">${zh ? '档位' : 'GEAR'}</div>
+  </div>`;
+
+  // Time
+  html += `<div class="ds-time">
+    <div class="ds-time-val" id="ds-time-val" style="color:${timeColor}">${Math.ceil(state.timeLeft)}</div>
+    <div class="ds-time-label">${zh ? '时间' : 'TIME'}</div>
+  </div>`;
+
+  // Level
+  html += `<div class="ds-level">
+    <div class="ds-level-val" id="ds-level-val">${state.currentLevel + 1}</div>
+    <div class="ds-level-label">${zh ? '关卡' : 'LEVEL'}</div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+export function renderLevelDotsHTML(state: LevelSelectState): string {
+  let html = `<div class="level-dots" id="levelDots">`;
+  for (let i = 0; i < state.totalLevels; i++) {
+    const cls = i < state.bestLevel ? 'dot cleared' :
+      i === state.currentLevel ? 'dot current' : 'dot';
+    html += `<span class="${cls}"></span>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+export function renderMenuHint(zh: boolean): string {
+  return `<div class="ds-hint">${zh ? '点击关卡开始' : 'Click a level to start'}</div>`;
+}
