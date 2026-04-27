@@ -139,21 +139,50 @@
       pointer-events: none;
     }
 
-    .game-list {
+    .brand-toggle {
+      margin-left: auto;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s, color .15s;
+    }
+    .brand-toggle:hover {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .brand-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .game-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
       overflow-y: auto;
     }
 
     .game-list-item {
-      text-align: left;
+      text-align: center;
       background: transparent;
       border: 1px solid transparent;
-      border-radius: 10px;
-      padding: 12px 14px;
+      border-radius: 8px;
+      padding: 6px 2px;
       cursor: pointer;
       transition: background .15s ease, border-color .15s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .game-list-item:hover {
@@ -161,12 +190,13 @@
     }
 
     .game-list-group {
-      font-size: 0.7rem;
+      grid-column: 1 / -1;
+      font-size: 0.65rem;
       font-weight: 700;
       color: var(--accent);
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      padding: 16px 14px 4px;
+      padding: 12px 0 4px;
     }
 
     .game-list-item:focus-visible {
@@ -181,15 +211,14 @@
 
     .game-list-name {
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 0.72rem;
       color: var(--text);
+      line-height: 1.2;
+      word-break: break-word;
     }
 
     .game-list-desc {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      margin-top: 2px;
-      line-height: 1.35;
+      display: none;
     }
 
     /* Main */
@@ -620,6 +649,41 @@
 
     body.sidebar-collapsed main {
       margin-left: 0;
+    }
+
+    @media (min-width: 961px) {
+      body.sidebar-collapsed aside {
+        transform: none;
+        width: 72px;
+        min-width: 72px;
+        padding: 16px 8px;
+        align-items: center;
+      }
+      body.sidebar-collapsed main {
+        margin-left: 0;
+      }
+      body.sidebar-collapsed .brand {
+        justify-content: center;
+      }
+      body.sidebar-collapsed .brand-text {
+        display: none;
+      }
+      body.sidebar-collapsed .brand-toggle {
+        display: none;
+      }
+      body.sidebar-collapsed .search-wrap {
+        display: none;
+      }
+      body.sidebar-collapsed .game-list {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      body.sidebar-collapsed .game-list-group {
+        display: none;
+      }
+      body.sidebar-collapsed .game-list-name {
+        font-size: 0.6rem;
+      }
     }
 
     @media (max-width: 960px) {
@@ -1191,7 +1255,15 @@
       <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
       </svg>
-      Carrick Games
+      <span class="brand-text">Carrick Games</span>
+      <button class="brand-toggle" id="sidebarToggleBtn" aria-label="Toggle sidebar">
+        <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+        </svg>
+        <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+          <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+        </svg>
+      </button>
     </div>
 
     <div class="search-wrap">
@@ -1274,25 +1346,56 @@
 
       // Sidebar toggle
       const toggle = document.getElementById('sidebarToggle');
+      const brandToggle = document.getElementById('sidebarToggleBtn');
       const body = document.body;
+
+      function setSidebarCollapsed(collapsed) {
+        body.classList.toggle('sidebar-collapsed', collapsed);
+        if (brandToggle) {
+          const collapseIcon = brandToggle.querySelector('.icon-collapse');
+          const expandIcon = brandToggle.querySelector('.icon-expand');
+          if (collapseIcon) collapseIcon.style.display = collapsed ? 'none' : 'block';
+          if (expandIcon) expandIcon.style.display = collapsed ? 'block' : 'none';
+        }
+        try {
+          localStorage.setItem('cg-sidebar-collapsed', collapsed ? '1' : '0');
+        } catch {}
+      }
+
+      function isSidebarCollapsed() {
+        try {
+          const v = localStorage.getItem('cg-sidebar-collapsed');
+          if (v !== null) return v === '1';
+        } catch {}
+        return window.innerWidth <= 960;
+      }
+
       if (toggle) {
         toggle.addEventListener('click', () => {
-          body.classList.toggle('sidebar-collapsed');
+          setSidebarCollapsed(!body.classList.contains('sidebar-collapsed'));
         });
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', (e) => {
-          if (window.innerWidth > 960) return;
-          const aside = document.querySelector('aside');
-          if (!aside) return;
-          if (!body.classList.contains('sidebar-collapsed') && !aside.contains(e.target) && e.target !== toggle && !toggle.contains(e.target)) {
-            body.classList.add('sidebar-collapsed');
-          }
-        });
-        // Start collapsed on mobile
-        if (window.innerWidth <= 960) {
-          body.classList.add('sidebar-collapsed');
-        }
       }
+
+      if (brandToggle) {
+        brandToggle.addEventListener('click', () => {
+          setSidebarCollapsed(!body.classList.contains('sidebar-collapsed'));
+        });
+      }
+
+      // Close sidebar when clicking outside on mobile
+      document.addEventListener('click', (e) => {
+        if (window.innerWidth > 960) return;
+        const aside = document.querySelector('aside');
+        if (!aside) return;
+        const clickToggle = toggle && (e.target === toggle || toggle.contains(e.target));
+        const clickBrandToggle = brandToggle && (e.target === brandToggle || brandToggle.contains(e.target));
+        if (!body.classList.contains('sidebar-collapsed') && !aside.contains(e.target) && !clickToggle && !clickBrandToggle) {
+          setSidebarCollapsed(true);
+        }
+      });
+
+      // Initialize sidebar state
+      setSidebarCollapsed(isSidebarCollapsed());
     })();
   </script>
   <script type="module" src="./dist/main.js?v=8"></script>
