@@ -15,10 +15,10 @@ export interface ParkingDriveInput {
   right: boolean;
 }
 
-const MAX_STEER = 0.20;
-const STEER_RATE = 3.7;
-const STEER_RETURN_RATE = 5.2;
-const WHEEL_BASE = 100;
+const MAX_STEER = 0.32;
+const STEER_RATE = 4.8;
+const STEER_RETURN_RATE = 6.0;
+const WHEEL_BASE = 78;
 export const PARKING_MAX_FORWARD_SPEED = 200;
 const MAX_REVERSE_SPEED = 90;
 const FORWARD_ACCEL = 320;

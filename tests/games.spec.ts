@@ -180,7 +180,7 @@ test.describe('Game rules', () => {
     expect(moved.y + IWANNA_PLAYER_H).toBeGreaterThan(platform.y);
   });
 
-  test('parking car accelerates responsively with front-wheel steering', () => {
+  test('parking car accelerates responsively with a tight parking turn radius', () => {
     let straight = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 60; i++) {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
@@ -194,9 +194,9 @@ test.describe('Game rules', () => {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(205);
-    expect(car.angle).toBeGreaterThan(-Math.PI / 2);
-    expect(car.angle).toBeLessThan(-0.35);
+    expect(car.x).toBeGreaterThan(238);
+    expect(car.angle).toBeGreaterThan(-1.02);
+    expect(car.angle).toBeLessThan(-0.55);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
