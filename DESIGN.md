@@ -1,142 +1,142 @@
-# Carrick Games — Design System
+# Carrick Games Design System
 
-> Minimal, crisp, and smooth. No retro pixels. No scanlines. No glow.
+This is the repository's design authority. `README.md` is for external readers; `AGENTS.md` is for development workflow and deployment closure.
 
-## Philosophy
+## Direction
 
-Every game renders as a **clean, high-resolution Canvas 2D surface** with **system typography** and **flat, intentional color**. The visual language is:
+Carrick Games uses a clean HD arcade style: classic game shapes and readable arcade layouts, rendered with modern high-density Canvas 2D.
 
-- **Minimal** — only what's necessary to play and understand.
-- **Crisp** — HiDPI canvas with `imageSmoothingEnabled = true`, sharp vectors, no pixelation.
-- **Smooth** — subtle easing, rounded geometry, consistent spacing, no jagged edges.
-- **Flat** — no skeuomorphism, no 3D chrome, no decorative chrome beyond thin borders.
+The target feel is:
 
-## Color
+- Crisp: HiDPI backing canvases, sharp geometry, stable logical coordinates.
+- Playable: controls, scores, hazards, and game state must read instantly.
+- Lightweight: Canvas-native drawing, no heavy asset pipeline.
+- Bilingual: English and Chinese UI must both fit without overlap.
+- Theme-aware: dark, light, and system modes should all look intentional.
 
-Two theme palettes derived from a single primary hue. Games must use these tokens; never hard-code one-off colors.
+Do not use a separate visual-style document. Put durable visual decisions here.
 
-| Token | Dark | Light | Usage |
-|-------|------|-------|-------|
-| `bg` | `#0b0f19` | `#fafafa` | Canvas background |
-| `surface` | `#111827` | `#ffffff` | HUD panels, overlays |
-| `surface-elevated` | `#1f2937` | `#f1f5f9` | Buttons, cards |
-| `border` | `rgba(57,197,187,0.25)` | `rgba(13,148,136,0.22)` | Dividers, outlines |
-| `text` | `#f8fafc` | `#0f172a` | Primary text |
-| `text-secondary` | `#94a3b8` | `#64748b` | Labels, hints |
-| `primary` | `#39C5BB` | `#0d9488` | Accent, active states |
-| `success` | `#4ade80` | `#16a34a` | Win, correct |
-| `danger` | `#fb7185` | `#dc2626` | Lose, crash, error |
-| `warning` | `#facc15` | `#ca8a04` | Caution, timer low |
+## Core UI
 
-Prefer `this.isDarkTheme()` at the top of `draw()` to branch colors.
+The shell UI is an application surface, not a marketing landing page.
+
+- Keep the game as the primary first-screen experience.
+- Keep navigation dense enough for repeated use.
+- Use compact controls and predictable panels.
+- Avoid nested cards and decorative page sections.
+- Do not let sidebars, keyboard panels, or overlays intercept unrelated clicks.
+- Text must fit in buttons, cards, sidebars, and canvas overlays at mobile and desktop sizes.
+
+## Palette
+
+Use the app theme tokens for page UI and `getRetroPalette()` from `src/core/render.ts` for canvas scenes.
+
+| Purpose | Dark | Light |
+|---------|------|-------|
+| App background | `#0b0f14` | `#f8fafc` |
+| Canvas background | `#0b0f19` | `#fafafa` |
+| Primary accent | `#39C5BB` | `#0d9488` |
+| Text | `#f8fafc` | `#0f172a` |
+| Muted text | `#94a3af` | `#64748b` |
+| Danger | `#fb7185` | `#dc2626` |
+| Warning | `#facc15` | `#ca8a04` |
+| Success | `#4ade80` | `#16a34a` |
+
+Rules:
+
+- Branch game colors with `this.isDarkTheme()`.
+- Prefer shared palette helpers over one-off colors.
+- Do not rely on color alone for critical state; pair color with shape, position, text, or motion.
 
 ## Typography
 
-All canvas text uses **system-ui stack**:
+Canvas text should use the system UI stack unless a specific symbol font is needed:
 
 ```typescript
 ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
 ```
 
 Rules:
-- **Never** use `"Press Start 2P"`, pixel fonts, or monospace for UI text.
-- Use `ui-monospace, SFMono-Regular, monospace` **only** for numeric readouts (scores, timers) when a fixed-width column is required.
-- Minimum readable size: `10px` on canvas.
-- Labels and scores: `12px–14px`.
-- Titles and game-over text: `18px–24px`, **bold** if needed.
-- Always set `ctx.textBaseline = 'middle'` for vertically-centered single-line text.
+
+- Use system fonts for HUDs, labels, instructions, and overlays.
+- Use `ui-monospace, SFMono-Regular, monospace` only for aligned numeric readouts.
+- Use symbol fonts only for board-game pieces or card suits where needed.
+- Minimum readable canvas text size is `10px`.
+- Typical HUD text is `12px-14px`.
+- Game-over and title text is usually `18px-28px`.
+- Set `ctx.textBaseline = 'middle'` for vertically centered single-line text.
 
 ## Canvas Rendering
 
-### HiDPI Setup
+`BaseGame` configures the HiDPI backing canvas through `configureHiDpiCanvas()`. Games draw in logical coordinates with `this.width` and `this.height`.
 
-`BaseGame` configures the backing store automatically. Games draw in logical coordinates (`this.width`, `this.height`).
+Use:
 
-```typescript
-// In BaseGame — already handled
-ctx.imageSmoothingEnabled = true;
-```
-
-### No Post-Process Layer
-
-`BaseGame.renderFrame()` **does not** apply scanlines, vignette, glow, or decorative corner brackets. Games draw their own clean overlays when needed.
-
-### Background Pattern (Optional)
-
-If a game needs a grid, use a **subtle dot grid** or **faint line grid** at 10–15% opacity. No scanlines. No radial vignette.
-
-```typescript
-ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-ctx.lineWidth = 1;
-// draw grid lines...
-```
-
-## Spacing & Shape
-
-- **Border radius**: `6px` for UI panels, `999px` for pills, `4px` for small tags.
-- **Padding**: `8px` minimum inside panels; `12px` for larger cards.
-- **Shadow**: single soft shadow only for floating panels:
-  ```typescript
-  ctx.shadowColor = isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)';
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 4;
-  ```
-- **Borders**: `1px` solid at `border` token opacity. No double borders, no glow strokes.
-
-## In-Game UI (HUD)
-
-Keep HUD **outside the playfield** when possible, or in a compact top bar.
-
-```typescript
-// Top bar example
-ctx.fillStyle = isDark ? 'rgba(17,24,39,0.8)' : 'rgba(255,255,255,0.85)';
-ctx.fillRect(0, 0, this.width, 36);
-ctx.fillStyle = text;
-ctx.font = '12px system-ui, sans-serif';
-ctx.textAlign = 'left';
-ctx.textBaseline = 'middle';
-ctx.fillText(`Score: ${this.score}`, 12, 18);
-```
+- `drawRetroBackground()` for subtle arcade grids or background texture.
+- `fillRoundedPanel()` for HUD panels, menus, and overlays.
+- `getCanvasPoint()` or `this.canvasPoint()` for input mapping.
 
 Avoid:
-- Corner bracket decorations.
-- Neon glow on text.
-- Scanline overlays.
-- Heavy drop shadows on every element.
 
-## Game Over / Pause Overlays
+- Manually scaling pointer coordinates from `canvas.width / rect.width`.
+- Decorative overlays that reduce readability.
+- Full-screen scanline/vignette effects by default.
+- Canvas text or controls that depend on browser viewport-scaled font sizes.
 
-Use a **semi-transparent dim** + **centered card**:
+Game-specific glow, particles, gradients, and texture are acceptable when they improve readability or game feel. Keep them restrained.
 
-```typescript
-// Dim
-ctx.fillStyle = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)';
-ctx.fillRect(0, 0, this.width, this.height);
+## Layout
 
-// Card
-const cw = 280, ch = 160, cx = (this.width - cw) / 2, cy = (this.height - ch) / 2;
-ctx.fillStyle = isDark ? '#111827' : '#ffffff';
-ctx.beginPath();
-ctx.roundRect(cx, cy, cw, ch, 12);
-ctx.fill();
+Common canvas sizes:
 
-// Border
-ctx.strokeStyle = isDark ? 'rgba(57,197,187,0.3)' : 'rgba(13,148,136,0.3)';
-ctx.lineWidth = 1;
-ctx.stroke();
-```
+- Square arcade: `400x400`, `480x480`, `600x600`.
+- Wide arcade: `480x360`, `600x400`.
+- Tall arcade: `400x560`, `480x640`.
+- Puzzle/tabletop: whatever preserves a readable board and touch targets.
 
-## Motion & Animation
+Rules:
 
-- Use `requestAnimationFrame` delta time (`dt`) for all motion.
-- Easing: `ease-out` for UI transitions, linear for gameplay physics.
-- Particle effects: small circles or rounded rects, `2–6px`, fading opacity. No pixel blocks.
+- Use stable dimensions for boards, tiles, buttons, HUD rows, and side panels.
+- Avoid layout shifts caused by hover states, dynamic labels, loading states, or translated text.
+- Mobile sidebars must not overlap game-list items in a way that changes click targets.
+- Touch targets should be at least `40px` where the game allows it.
+
+## In-Game HUD
+
+HUDs should be compact and close to the action:
+
+- Prefer a top bar, side strip, or small anchored panel.
+- Keep score, timer, level, and state readable at a glance.
+- Keep HUD outside the playfield when it would obscure gameplay.
+- Use translucent panels only when the content behind them does not matter.
+
+## Overlays
+
+Game-over, pause, win, and start overlays should use:
+
+- a semi-transparent dim layer,
+- centered text or a compact panel,
+- clear score/result state,
+- concise restart/start instruction.
+
+Do not create large explanatory screens inside games. The app already renders controls outside the canvas.
+
+## Game Families
+
+- Arcade movement: Snake, Pac-Man, Frogger, Flappy Bird, Doodle Jump, I Wanna, Parking, Breakout, Pong, Stacker.
+- Combat and shooters: Space Shooter, Galaga, Asteroids, Beach Head.
+- Puzzles and word games: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku, Aim Lab.
+- Tabletop and cards: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
+
+Each family can vary in mood, but all games should share the same clarity, theming, and HiDPI expectations.
 
 ## Acceptance Checklist
 
-Before any visual change is merged:
-- [ ] `npm run build` passes with zero TypeScript errors.
-- [ ] Playwright smoke tests pass for every touched game.
-- [ ] Canvas renders crisply at 2× DPR (no pixelation on Retina).
-- [ ] Dark and light themes both look intentional (no accidental hard-coded colors).
-- [ ] No `"Press Start 2P"` references remain in new or changed code.
+Before a design or UI change is done:
+
+- `npm run build` passes.
+- Relevant Playwright tests pass; full `npm run test:e2e` is required before Agent closure.
+- Canvas is nonblank in dark and light themes.
+- Text fits in English and Chinese.
+- Keyboard, mouse, and touch input remain correctly mapped after canvas scaling.
+- The UI has no incoherent overlaps at mobile and desktop widths.
