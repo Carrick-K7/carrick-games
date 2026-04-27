@@ -347,6 +347,33 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('#gameCanvas')).toBeVisible();
   });
 
+  test('mobile game list selects different games reliably', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto('/');
+    const isCollapsed = await page.locator('body').evaluate((el) => el.classList.contains('sidebar-collapsed'));
+    if (isCollapsed) {
+      await page.locator('#sidebarToggle').click();
+      await page.waitForTimeout(180);
+    }
+
+    const idToNameZh: Record<string, string> = {
+      breakout: '打砖块',
+      pong: '乒乓',
+      snake: '贪吃蛇',
+      flappybird: '像素鸟',
+    };
+
+    for (const id of ['breakout', 'pong', 'snake', 'flappybird']) {
+      const item = page.locator(`.game-list-item[data-id="${id}"]`);
+      await item.scrollIntoViewIfNeeded();
+      await item.click();
+      await expect(page.locator('#gameTitle')).toHaveText(idToNameZh[id]);
+      await expect(page.locator('#actionBtn')).toHaveText('开始游戏');
+      const hash = await page.evaluate(() => location.hash);
+      expect(hash).toBe(`#/${id}`);
+    }
+  });
+
   test('snake can be started and restarted without errors', async ({ page }) => {
     const { consoleErrors, pageErrors } = await collectErrors(page);
 

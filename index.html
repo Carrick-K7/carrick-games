@@ -78,7 +78,7 @@
     }
 
     /* Sidebar */
-    aside {
+    .main-sidebar {
       width: 300px;
       min-width: 260px;
       background: var(--surface);
@@ -165,6 +165,7 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 6px;
+      grid-auto-rows: minmax(44px, auto);
       overflow-y: auto;
     }
 
@@ -180,8 +181,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      aspect-ratio: 1;
-      min-height: 0;
+      aspect-ratio: auto;
+      min-height: 44px;
       overflow: hidden;
     }
 
@@ -584,7 +585,7 @@
     }
 
     @media (max-width: 960px) {
-      aside {
+      .main-sidebar {
         width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--border);
@@ -643,7 +644,7 @@
       height: 20px;
     }
 
-    body.sidebar-collapsed aside {
+    body.sidebar-collapsed .main-sidebar {
       transform: translateX(-100%);
     }
 
@@ -652,7 +653,7 @@
     }
 
     @media (min-width: 961px) {
-      body.sidebar-collapsed aside {
+      body.sidebar-collapsed .main-sidebar {
         transform: none;
         width: 72px;
         min-width: 72px;
@@ -690,7 +691,7 @@
       .sidebar-toggle {
         display: flex;
       }
-      aside {
+      .main-sidebar {
         position: fixed;
         top: 0;
         left: 0;
@@ -699,7 +700,7 @@
         transition: transform .25s ease;
         box-shadow: var(--shadow);
       }
-      body:not(.sidebar-collapsed) aside::after {
+      body:not(.sidebar-collapsed) .main-sidebar::after {
         content: '';
         position: fixed;
         top: 0;
@@ -1250,7 +1251,7 @@
       <path d="M3 12h18M3 6h18M3 18h18"/>
     </svg>
   </button>
-  <aside>
+  <aside class="main-sidebar">
     <div class="brand">
       <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
@@ -1385,7 +1386,7 @@
       // Close sidebar when clicking outside on mobile
       document.addEventListener('click', (e) => {
         if (window.innerWidth > 960) return;
-        const aside = document.querySelector('aside');
+        const aside = document.querySelector('.main-sidebar');
         if (!aside) return;
         const clickToggle = toggle && (e.target === toggle || toggle.contains(e.target));
         const clickBrandToggle = brandToggle && (e.target === brandToggle || brandToggle.contains(e.target));
