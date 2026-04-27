@@ -88,7 +88,9 @@ Then open `http://localhost:8080`.
 
 Pushes to `main` run GitHub Actions. The workflow builds, runs Playwright e2e tests, packages `index.html`, `dist/`, and `fonts/`, then switches Caddy to a new release under `/var/www/games.carrick7.com/current`.
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for secrets, release layout, and rollback.
+For Agent-developed changes, closure requires a commit, push to `main`, monitoring the GitHub Actions run to success, and smoke testing https://games.carrick7.com/.
+
+Operational deployment details live in [AGENTS.md](AGENTS.md).
 
 ---
 

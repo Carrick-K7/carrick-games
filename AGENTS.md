@@ -13,7 +13,7 @@ tests/
 dist/                # Built output (JS files)
 index.html           # Main HTML page
 playwright.config.ts # Playwright configuration
-DEPLOYMENT.md        # GitHub Actions + Caddy release deployment notes
+.github/workflows/   # GitHub Actions build/test/deploy workflow
 .kimi_session        # Stores last kimi session ID (auto-managed)
 ```
 
@@ -91,7 +91,7 @@ npm run build
 npm run test:e2e
 ```
 
-Files go to `dist/`. Deployment is handled by GitHub Actions after pushing to `main`.
+Files go to `dist/`. For Agent-developed work, local tests are not the end of the task; follow the Agent Development Closure section below.
 
 ## Development Workflow (kimi CLI)
 
@@ -125,7 +125,33 @@ npm run test:e2e       # Playwright e2e tests (headless)
 npm run test:e2e:ui    # Playwright with UI (for debugging)
 ```
 
-### Deployment
+### Agent Development Closure
+
+When this repository is developed by an Agent, the work is not complete until every step below is finished:
+
+1. Local verification passes:
+   ```bash
+   npm run build
+   npm run test:e2e
+   ```
+2. The intended changes are committed. Do not include unrelated user changes in the commit.
+3. The commit is pushed to `main`.
+4. The GitHub Actions (GA) deployment for that pushed commit is monitored until it reaches a completed successful state. Always filter by the pushed commit SHA:
+   ```bash
+   sha=$(git rev-parse HEAD)
+   gh run list --repo Carrick-K7/carrick-games --workflow deploy.yml --commit "$sha" --limit 3
+   gh run watch <run-id> --repo Carrick-K7/carrick-games --exit-status
+   ```
+5. Production smoke tests pass against the public site:
+   ```bash
+   curl -fsSL https://games.carrick7.com/ -o /tmp/carrick-games-index.html
+   curl -fsSL https://games.carrick7.com/dist/main.js?v=8 -o /dev/null
+   ```
+6. The final report states the commit SHA, GA run status, and production smoke-test result.
+
+Do not call Agent-developed work done after only editing files, running local tests, committing, or pushing. Deployment completion and production smoke testing are required for closure.
+
+### Deployment Reference
 
 Deployment is automatic on every push to `main` through `.github/workflows/deploy.yml`.
 
@@ -136,8 +162,40 @@ The workflow:
 - packages `index.html`, `dist/`, and `fonts/`
 - deploys to `/var/www/games.carrick7.com/releases/<git-sha>/`
 - atomically switches `/var/www/games.carrick7.com/current`
+- smoke tests the public URL and `dist/main.js`
 
-Caddy serves `/var/www/games.carrick7.com/current`. See `DEPLOYMENT.md` for rollback and required GitHub secrets.
+Caddy serves `/var/www/games.carrick7.com/current`.
+
+Required GitHub secrets, either repository-level or on the `production` environment:
+
+- `DEPLOY_HOST`: SSH host, currently `games.carrick7.com`
+- `DEPLOY_USER`: SSH user, currently `ubuntu`
+- `DEPLOY_PATH`: deploy root, currently `/var/www/games.carrick7.com`
+- `DEPLOY_URL`: public URL, currently `https://games.carrick7.com`
+- `DEPLOY_SSH_KEY`: private key for the deploy user
+- `DEPLOY_KNOWN_HOSTS`: pinned SSH host key lines for `DEPLOY_HOST`
+
+To confirm what Caddy is serving:
+
+```bash
+git rev-parse --short=12 HEAD
+ssh ubuntu@games.carrick7.com 'readlink /var/www/games.carrick7.com/current'
+curl -fsSI https://games.carrick7.com/
+```
+
+Rollback is an operational action. List releases, then switch `current` to the chosen release:
+
+```bash
+ssh ubuntu@games.carrick7.com 'ls -1dt /var/www/games.carrick7.com/releases/*'
+ssh ubuntu@games.carrick7.com '
+  set -euo pipefail
+  deploy_root=/var/www/games.carrick7.com
+  release=releases/<release-id>
+  test -f "$deploy_root/$release/index.html"
+  ln -sfn "$release" "$deploy_root/current.new"
+  mv -Tf "$deploy_root/current.new" "$deploy_root/current"
+'
+```
 
 ## BaseGame Interface (from `src/core/game.ts`)
 

@@ -29,6 +29,19 @@ Schedule: **03:00, 09:00, 15:00, 21:00** (Asia/Shanghai) — one game per slot.
    - [ ] Boundary coverage (start -> play -> game over -> restart)
    - [ ] Input coverage (keyboard + touch)
    - [ ] Playable: I must play a full round myself
-   - [ ] Deployed and curl 200 on https://games.carrick7.com/
-6. Commit with message: `feat(game): add <GameName>`
-7. Push to `main`, sync to server (`rsync dist/ + index.html` to `/var/www/carrick7.com/games/`), log result to daily memory file.
+6. Commit with message: `feat(game): add <GameName>`.
+7. Push to `main`.
+8. **Monitor GitHub Actions (GA) until deployment completes successfully for the pushed commit:**
+   ```
+   sha=$(git rev-parse HEAD)
+   gh run list --repo Carrick-K7/carrick-games --workflow deploy.yml --commit "$sha" --limit 3
+   gh run watch <run-id> --repo Carrick-K7/carrick-games --exit-status
+   ```
+9. **Smoke test production:**
+   ```
+   curl -fsSL https://games.carrick7.com/ -o /tmp/carrick-games-index.html
+   curl -fsSL https://games.carrick7.com/dist/main.js?v=8 -o /dev/null
+   ```
+10. Log the commit SHA, GA result, and production smoke-test result to the daily memory file.
+
+Agent work is not closed until commit, push, GA monitoring, and production smoke tests are all complete. Do not manually `rsync` production assets; deployment is owned by `.github/workflows/deploy.yml`.
