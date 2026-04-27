@@ -511,7 +511,7 @@ export class AsteroidsGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#f8fafc';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
       ctx.font = '12px system-ui, sans-serif';

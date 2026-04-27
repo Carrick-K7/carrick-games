@@ -210,7 +210,7 @@ export class MahjongGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = accent;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '通关!' : 'CLEARED!', this.width / 2, this.height / 2 - 24);
       ctx.fillStyle = text;
@@ -222,7 +222,7 @@ export class MahjongGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.8)';
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = '#ef4444';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 16);
       ctx.fillStyle = text;
@@ -293,7 +293,7 @@ export class MahjongGame extends BaseGame {
 
     // Character
     ctx.fillStyle = free ? (this.isDark() ? '#e0e0e0' : '#1a1a2e') : disabledText;
-    ctx.font = `212px system-ui, sans-serif`;
+    ctx.font = `34px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(tile.char, cx, cy + 2);

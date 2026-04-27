@@ -255,7 +255,7 @@ export class IwannaGame extends BaseGame {
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = text;
       ctx.textAlign = 'center';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.fillText(zh ? '通关' : 'CLEAR', W / 2, H / 2 - 18);
       ctx.font = '12px system-ui, sans-serif';
       ctx.fillText(zh ? '按空格重开' : 'PRESS SPACE', W / 2, H / 2 + 18);

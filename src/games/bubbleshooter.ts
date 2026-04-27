@@ -696,7 +696,7 @@ export class BubbleShooterGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = primary;
-    ctx.font = '110px system-ui, sans-serif';
+    ctx.font = '28px system-ui, sans-serif';
     ctx.fillText(title, this.width / 2, this.height / 2 - 34);
 
     if (scoreLine) {

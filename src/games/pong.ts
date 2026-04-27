@@ -173,7 +173,7 @@ export class PongGame extends BaseGame {
 
     // Score
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '110px system-ui, sans-serif';
+    ctx.font = '48px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(String(this.playerScore), this.width / 2 - 40, 40);
     ctx.fillText(String(this.aiScore), this.width / 2 + 40, 40);

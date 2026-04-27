@@ -863,7 +863,7 @@ export class SolitaireGame extends BaseGame {
 
     if (this.phase === 'ready') {
       ctx.fillStyle = theme.accent;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.fillText(zh ? '纸牌' : 'SOLITAIRE', cx, cy - 60);
 
       ctx.fillStyle = theme.muted;
@@ -884,7 +884,7 @@ export class SolitaireGame extends BaseGame {
     } else {
       // Won
       ctx.fillStyle = theme.accent;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '26px system-ui, sans-serif';
       ctx.fillText(zh ? '恭喜通关!' : 'YOU WIN!', cx, cy - 70);
 
       ctx.fillStyle = theme.text;

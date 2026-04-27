@@ -281,7 +281,7 @@ export class Game2048 extends BaseGame {
       ctx.fillStyle = 'rgba(237,194,46,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f9f6f2';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(zh ? '你赢了！' : 'YOU WIN!', W / 2, H / 2 - 30);

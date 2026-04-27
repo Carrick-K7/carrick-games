@@ -404,7 +404,7 @@ export class WordleGame extends BaseGame {
 
         if (drawLetter) {
           ctx.fillStyle = textColor;
-          ctx.font = 'bold 212px system-ui, sans-serif';
+          ctx.font = 'bold 28px system-ui, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(drawLetter, x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 2);
@@ -521,7 +521,7 @@ export class WordleGame extends BaseGame {
 
     if (this.won) {
       ctx.fillStyle = theme.green;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '26px system-ui, sans-serif';
       ctx.fillText(zh ? '恭喜!' : 'YOU WIN!', W / 2, 220);
 
       ctx.fillStyle = theme.text;
@@ -529,7 +529,7 @@ export class WordleGame extends BaseGame {
       ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, 252);
     } else {
       ctx.fillStyle = theme.gray;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '26px system-ui, sans-serif';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, 220);
 
       ctx.fillStyle = theme.text;

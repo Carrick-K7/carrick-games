@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getCanvasPoint } from '../src/core/render';
 import {
   IWANNA_PLAYER_H,
@@ -120,6 +122,25 @@ const ALL_GAME_IDS = [
 // ─── Lifecycle tests ────────────────────────────────────────────────────────
 
 test.describe('Game rules', () => {
+  test('canvas font literals stay within UI bounds', () => {
+    const gamesDir = join(process.cwd(), 'src/games');
+    const oversizedFonts: string[] = [];
+    const fontRegex = /ctx\.font\s*=\s*(['"`])(?:[^'"`]*?\s)?(\d+)px\b/g;
+
+    for (const file of readdirSync(gamesDir)) {
+      if (!file.endsWith('.ts')) continue;
+      const source = readFileSync(join(gamesDir, file), 'utf8');
+      for (const match of source.matchAll(fontRegex)) {
+        const size = Number(match[2]);
+        if (size > 56) {
+          oversizedFonts.push(`${file}: ${size}px`);
+        }
+      }
+    }
+
+    expect(oversizedFonts).toEqual([]);
+  });
+
   test('sudoku hints reduce final score', () => {
     const cleanSolve = calculateSudokuScore(120, 0, 0);
     const withHints = calculateSudokuScore(120, 0, 2);

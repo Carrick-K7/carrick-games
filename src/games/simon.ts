@@ -535,7 +535,7 @@ export class SimonGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = theme.text;
-    ctx.font = '110px system-ui, "Noto Sans SC", sans-serif';
+    ctx.font = '26px system-ui, "Noto Sans SC", sans-serif';
     ctx.fillText(
       this.phase === 'ready' ? (zh ? '记忆游戏' : 'SIMON SAYS') : (zh ? '游戏结束' : 'GAME OVER'),
       W / 2,

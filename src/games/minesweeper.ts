@@ -310,7 +310,7 @@ export class MinesweeperGame extends BaseGame {
           } else if (this.grid[y][x] > 0) {
             const colors = ['', '#39C5BB', '#4ade80', '#f97316', '#a855f7', '#ef4444', '#06b6d4', '#1a1a2e', '#6b7280'];
             ctx.fillStyle = colors[this.grid[y][x]] || '#fff';
-            ctx.font = "bold 110px system-ui, sans-serif";
+            ctx.font = "bold 22px system-ui, sans-serif";
             ctx.textAlign = 'center';
             ctx.fillText(String(this.grid[y][x]), px + CELL / 2, py + CELL / 2 + 6);
           }
@@ -338,7 +338,7 @@ export class MinesweeperGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = '#39C5BB';
-      ctx.font = "110px system-ui, sans-serif";
+      ctx.font = "24px system-ui, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText(lang ? '🎉 你赢了!' : '🎉 YOU WIN!', w / 2, h / 2 - 10);
       ctx.font = "14px system-ui, sans-serif";
@@ -347,7 +347,7 @@ export class MinesweeperGame extends BaseGame {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = '#ef4444';
-      ctx.font = "110px system-ui, sans-serif";
+      ctx.font = "24px system-ui, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText(lang ? '💥 游戏结束' : '💥 GAME OVER', w / 2, h / 2 - 10);
       ctx.font = "14px system-ui, sans-serif";

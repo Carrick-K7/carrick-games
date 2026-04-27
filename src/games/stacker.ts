@@ -137,7 +137,7 @@ export class StackerGame extends BaseGame {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
 
-      ctx.font = '112px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       const title = this.state === 'win' ? (zh ? '胜利!' : 'WIN!') : (zh ? '游戏结束' : 'GAME OVER');

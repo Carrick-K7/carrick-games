@@ -517,7 +517,7 @@ export class BerzerkGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(11,15,25,0.85)' : 'rgba(250,250,250,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = primary;
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '30px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText(zh ? 'BERZERK' : 'BERZERK', W / 2, H / 2 - 20);
@@ -529,7 +529,7 @@ export class BerzerkGame extends BaseGame {
       ctx.fillStyle = isDark ? 'rgba(11,15,25,0.85)' : 'rgba(250,250,250,0.85)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#ef4444';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
       const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 20);

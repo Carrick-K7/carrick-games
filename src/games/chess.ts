@@ -506,7 +506,7 @@ export class ChessGame extends BaseGame {
 
     // Title
     ctx.fillStyle = theme.accent;
-    ctx.font = '110px system-ui, sans-serif';
+    ctx.font = '30px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Chess', this.width / 2, this.height / 2 - 40);

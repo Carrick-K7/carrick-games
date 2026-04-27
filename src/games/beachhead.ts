@@ -220,7 +220,7 @@ export class BeachHeadGame extends BaseGame {
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = text;
       ctx.textAlign = 'center';
-      ctx.font = '110px system-ui, sans-serif';
+      ctx.font = '28px system-ui, sans-serif';
       ctx.fillText('GAME OVER', W / 2, H / 2 - 18);
       ctx.font = '12px system-ui, sans-serif';
       ctx.fillText('PRESS SPACE', W / 2, H / 2 + 18);
