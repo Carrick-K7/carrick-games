@@ -15,7 +15,7 @@ export interface ParkingDriveInput {
   right: boolean;
 }
 
-const MAX_STEER = 0.30;
+const MAX_STEER = 0.20;
 const STEER_RATE = 3.7;
 const STEER_RETURN_RATE = 5.2;
 const WHEEL_BASE = 100;

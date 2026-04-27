@@ -654,6 +654,21 @@ let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
 
+// Routing helpers
+function getHashGame(): string | null {
+  const hash = window.location.hash;
+  if (!hash) return null;
+  const match = hash.match(/^#\/([a-z0-9-]+)$/);
+  return match ? match[1] : null;
+}
+
+function setHashGame(name: string) {
+  const target = `#/${name}`;
+  if (window.location.hash !== target) {
+    window.location.hash = target;
+  }
+}
+
 function renderTouchIcon(icon: string): string {
   const icons: Record<string, string> = {
     tap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.2"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>',
@@ -932,7 +947,12 @@ function updateLiveScoreDisplay() {
     timeEl.style.color = ls.timeLeft <= 10 ? '#ef4444' : '';
   }
 
-  // Re-render level dots occasionally (not every tick - level changes are rare)
+  // Re-render level grid when progress changes (e.g. after completing a level)
+  const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.gameState}`;
+  if (snapshot !== lastLevelSelectSnapshot) {
+    lastLevelSelectSnapshot = snapshot;
+    renderStats();
+  }
 }
 
 function setLoadingOverlay(active: boolean) {
@@ -960,9 +980,11 @@ function readGameScore(): number | null {
 }
 
 let scorePollTimer: number | null = null;
+let lastLevelSelectSnapshot = '';
 
 function startScorePolling() {
   stopScorePolling();
+  lastLevelSelectSnapshot = '';
   updateLiveScoreDisplay();
   scorePollTimer = window.setInterval(() => {
     updateLiveScoreDisplay();
@@ -1237,6 +1259,7 @@ function startPreparedGame() {
 
 export async function loadGame(name: string) {
   await prepareGame(name);
+  setHashGame(name);
 }
 
 function renderGameList(filter = '') {
@@ -1417,7 +1440,20 @@ function toggleFullscreen() {
     fsBtn.addEventListener('click', toggleFullscreen);
   }
 
-  if (GAMES.length) {
-    void loadGame(GAMES[0].id);
+  // Hash-based routing
+  window.addEventListener('hashchange', () => {
+    const hashGame = getHashGame();
+    if (hashGame && hashGame !== currentGameName && GAMES.some((g) => g.id === hashGame)) {
+      void loadGame(hashGame);
+    }
+  });
+
+  const hashGame = getHashGame();
+  const initialGame = hashGame && GAMES.some((g) => g.id === hashGame) ? hashGame : GAMES[0]?.id;
+  if (initialGame) {
+    void prepareGame(initialGame);
+    if (!hashGame) {
+      setHashGame(initialGame);
+    }
   }
 })();

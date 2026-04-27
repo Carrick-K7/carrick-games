@@ -610,22 +610,25 @@ export class ParkingGame extends BaseGame {
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
     const primary = isDark ? '#39C5BB' : '#0d9488';
-    const bg = isDark ? '#0b0f19' : '#fafafa';
+    const asphalt = isDark ? '#13161f' : '#e8e9ec';
     const text = isDark ? '#f8fafc' : '#0f172a';
-    const spotColor = isDark ? 'rgba(57,197,187,0.25)' : 'rgba(13,148,136,0.15)';
-    const spotBorder = isDark ? '#39C5BB' : '#0d9488';
-    const carBody = isDark ? '#f8fafc' : '#0f766e';
-    const carRoof = isDark ? '#38bdf8' : '#134e4a';
-    const obstacleColor = isDark ? '#1e293b' : '#cbd5e1';
-    const obstacleBorder = isDark ? '#475569' : '#94a3b8';
 
-    // Background
-    ctx.fillStyle = bg;
+    // Background - asphalt
+    ctx.fillStyle = asphalt;
     ctx.fillRect(0, 0, GAME_W, GAME_H);
 
-    // Parking lot lines
-    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-    ctx.lineWidth = 1;
+    // Asphalt texture - subtle speckles
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)';
+    for (let i = 0; i < 200; i++) {
+      const sx = ((i * 137.5) % GAME_W);
+      const sy = ((i * 73.3) % GAME_H);
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+
+    // Parking lot lane lines
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
     for (let y = 60; y < GAME_H; y += 60) {
       ctx.beginPath();
       ctx.moveTo(12, y);
@@ -635,28 +638,49 @@ export class ParkingGame extends BaseGame {
 
     // Parking spot
     const sp = this.level.spot;
-    ctx.fillStyle = spotColor;
-    ctx.fillRect(sp.x, sp.y, sp.w, sp.h);
-    ctx.strokeStyle = spotBorder;
+    // Spot fill with subtle primary tint
+    ctx.fillStyle = isDark ? 'rgba(57,197,187,0.08)' : 'rgba(13,148,136,0.06)';
+    ctx.fillRect(sp.x - 2, sp.y - 2, sp.w + 4, sp.h + 4);
+
+    // Spot border - dashed with rounded caps
+    ctx.strokeStyle = primary;
     ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(sp.x, sp.y, sp.w, sp.h);
+    ctx.lineCap = 'round';
+    ctx.setLineDash([6, 5]);
+    ctx.strokeRect(sp.x + 1, sp.y + 1, sp.w - 2, sp.h - 2);
     ctx.setLineDash([]);
+
+    // Target center dot
+    const cx = sp.x + sp.w / 2;
+    const cy = sp.y + sp.h / 2;
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+    ctx.fill();
 
     // Obstacles
     for (const obs of this.level.obstacles) {
-      ctx.fillStyle = obstacleColor;
-      ctx.strokeStyle = obstacleBorder;
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-      ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
-      if (obs.w < obs.h) {
-        ctx.strokeStyle = isDark ? '#334155' : '#94a3b8';
+      const isCarLike = (obs.w < obs.h && obs.w > 20 && obs.h > 30) || (obs.w > obs.h && obs.h > 20 && obs.w > 30);
+      if (isCarLike) {
+        this.drawParkedCar(ctx, obs.x, obs.y, obs.w, obs.h, isDark);
+      } else {
+        // Wall / barrier
+        ctx.fillStyle = isDark ? '#1f2937' : '#d1d5db';
+        ctx.strokeStyle = isDark ? '#374151' : '#9ca3af';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(obs.x + 4, obs.y + obs.h * 0.25);
-        ctx.lineTo(obs.x + obs.w - 4, obs.y + obs.h * 0.25);
-        ctx.moveTo(obs.x + 4, obs.y + obs.h * 0.45);
-        ctx.lineTo(obs.x + obs.w - 4, obs.y + obs.h * 0.45);
+        ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Wall detail lines
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + 4, obs.y + obs.h * 0.3);
+        ctx.lineTo(obs.x + obs.w - 4, obs.y + obs.h * 0.3);
+        ctx.moveTo(obs.x + 4, obs.y + obs.h * 0.6);
+        ctx.lineTo(obs.x + obs.w - 4, obs.y + obs.h * 0.6);
         ctx.stroke();
       }
     }
@@ -665,84 +689,282 @@ export class ParkingGame extends BaseGame {
     ctx.save();
     ctx.translate(this.car.x, this.car.y);
     ctx.rotate(this.car.angle + Math.PI / 2);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, CAR_W, CAR_H);
-
-    ctx.fillStyle = isDark ? '#0f172a' : '#020617';
-    ctx.fillRect(-CAR_W / 2 - 1, -CAR_H / 2 + 1, CAR_W + 2, CAR_H - 2);
-    ctx.fillStyle = carBody;
-    ctx.fillRect(-CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
-    ctx.fillStyle = isDark ? '#38bdf8' : '#0ea5e9';
-    ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, CAR_W - 4, 5);
-    ctx.fillStyle = carRoof;
-    ctx.fillRect(-CAR_W / 2 + 4, -CAR_H / 2 + 11, CAR_W - 8, 16);
-    ctx.fillStyle = isDark ? 'rgba(125,211,252,0.68)' : 'rgba(186,230,253,0.8)';
-    ctx.fillRect(-CAR_W / 2 + 5, -CAR_H / 2 + 8, CAR_W - 10, 6);
-    ctx.fillRect(-CAR_W / 2 + 5, CAR_H / 2 - 13, CAR_W - 10, 6);
-    ctx.fillStyle = isDark ? '#f8fafc' : '#fef3c7';
-    ctx.fillRect(-CAR_W / 2 + 3, -CAR_H / 2 - 1, 5, 3);
-    ctx.fillRect(CAR_W / 2 - 8, -CAR_H / 2 - 1, 5, 3);
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(-CAR_W / 2 + 3, CAR_H / 2 - 2, 5, 3);
-    ctx.fillRect(CAR_W / 2 - 8, CAR_H / 2 - 2, 5, 3);
-    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)';
-    ctx.fillRect(-CAR_W / 2 + 2, -CAR_H / 2 + 2, 2, CAR_H - 5);
-
-    const drawWheel = (x: number, y: number, steer: boolean) => {
-      ctx.save();
-      ctx.translate(x, y);
-      if (steer) ctx.rotate(this.car.steerAngle);
-      ctx.fillStyle = '#020617';
-      ctx.fillRect(-2, -6, 4, 12);
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(-1, -4, 2, 8);
-      ctx.restore();
-    };
-    drawWheel(-CAR_W / 2 - 2, -CAR_H / 2 + 9, true);
-    drawWheel(CAR_W / 2 + 2, -CAR_H / 2 + 9, true);
-    drawWheel(-CAR_W / 2 - 2, CAR_H / 2 - 11, false);
-    drawWheel(CAR_W / 2 + 2, CAR_H / 2 - 11, false);
-
+    this.drawPlayerCar(ctx, isDark);
     ctx.restore();
 
     // Parked progress bar
     if (this.gameState === 'parked') {
       const prog = Math.min(1, this.parkedTime / this.PARK_TIME);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(sp.x, sp.y + sp.h + 4, sp.w, 6);
-      ctx.fillStyle = isDark ? '#39C5BB' : '#0d9488';
-      ctx.fillRect(sp.x, sp.y + sp.h + 4, sp.w * prog, 6);
+      const barY = sp.y + sp.h + 8;
+      const barH = 5;
+      // Track
+      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+      ctx.beginPath();
+      ctx.roundRect(sp.x, barY, sp.w, barH, barH / 2);
+      ctx.fill();
+      // Fill
+      ctx.fillStyle = primary;
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.roundRect(sp.x, barY, Math.max(barH, sp.w * prog), barH, barH / 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
     }
 
     // Overlays
     if (this.gameState === 'crash' || this.gameState === 'timeout') {
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, GAME_W, GAME_H);
-      ctx.fillStyle = this.gameState === 'timeout' ? primary : '#ef4444';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
       const zh = this.isZhLang();
-      ctx.fillText(this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'), GAME_W / 2, GAME_H / 2 - 20);
-      ctx.fillStyle = text;
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '空格/点击 重试  ·  M 菜单' : 'SPACE/TAP RETRY  ·  M MENU', GAME_W / 2, GAME_H / 2 + 15);
+      this.drawOverlay(
+        ctx,
+        isDark,
+        this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'),
+        zh ? '空格/点击 重试  ·  M 菜单' : 'SPACE/TAP RETRY  ·  M MENU',
+        this.gameState === 'timeout' ? primary : '#ef4444'
+      );
     }
 
     if (this.gameState === 'complete') {
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, GAME_W, GAME_H);
       const zh = this.isZhLang();
-      ctx.fillStyle = primary;
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(zh ? '停车成功！' : 'PARKED!', GAME_W / 2, GAME_H / 2 - 40);
-      ctx.fillStyle = text;
-      ctx.font = '14px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}`, GAME_W / 2, GAME_H / 2 - 5);
-      ctx.font = '11px system-ui, sans-serif';
+      this.drawOverlay(
+        ctx,
+        isDark,
+        zh ? '停车成功！' : 'PARKED!',
+        `${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}`,
+        primary,
+        zh ? '空格: 下一关  ·  R: 重玩  ·  M: 菜单' : 'SPACE: NEXT  ·  R: REPLAY  ·  M: MENU'
+      );
+    }
+  }
+
+  private drawParkedCar(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    isDark: boolean
+  ) {
+    const vertical = h > w;
+    ctx.save();
+    ctx.translate(x + w / 2, y + h / 2);
+    if (!vertical) ctx.rotate(Math.PI / 2);
+
+    const bw = vertical ? w : h;
+    const bh = vertical ? h : w;
+
+    // Drop shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+
+    // Body
+    ctx.fillStyle = isDark ? '#4b5563' : '#9ca3af';
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 3);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Roof / cabin
+    ctx.fillStyle = isDark ? '#374151' : '#6b7280';
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2 + 2, -bh / 2 + 8, bw - 4, bh - 16, 2);
+    ctx.fill();
+
+    // Windshield / rear window
+    ctx.fillStyle = isDark ? 'rgba(148,163,184,0.35)' : 'rgba(209,213,219,0.45)';
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2 + 3, -bh / 2 + 9, bw - 6, 5, 1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2 + 3, bh / 2 - 13, bw - 6, 5, 1);
+    ctx.fill();
+
+    // Headlights
+    ctx.fillStyle = 'rgba(253,224,71,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2 + 2, -bh / 2 - 0.5, 4, 1.5, 0.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(bw / 2 - 6, -bh / 2 - 0.5, 4, 1.5, 0.5);
+    ctx.fill();
+
+    // Taillights
+    ctx.fillStyle = 'rgba(239,68,68,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2 + 2, bh / 2 - 1, 4, 1.5, 0.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(bw / 2 - 6, bh / 2 - 1, 4, 1.5, 0.5);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawPlayerCar(ctx: CanvasRenderingContext2D, isDark: boolean) {
+    const w = CAR_W;
+    const h = CAR_H;
+
+    // Drop shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 3;
+
+    // Body gradient for depth
+    const grad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, -h / 2);
+    if (isDark) {
+      grad.addColorStop(0, '#e2e8f0');
+      grad.addColorStop(0.5, '#f8fafc');
+      grad.addColorStop(1, '#e2e8f0');
+    } else {
+      grad.addColorStop(0, '#0f766e');
+      grad.addColorStop(0.5, '#14b8a6');
+      grad.addColorStop(1, '#0f766e');
+    }
+
+    // Main body
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, 4);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Cabin / roof
+    ctx.fillStyle = isDark ? '#0ea5e9' : '#0d9488';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 3, -h / 2 + 10, w - 6, h - 20, 3);
+    ctx.fill();
+
+    // Windshield (front)
+    ctx.fillStyle = isDark ? 'rgba(186,230,253,0.55)' : 'rgba(204,251,241,0.55)';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 4, -h / 2 + 11, w - 8, 5, 2);
+    ctx.fill();
+
+    // Rear window
+    ctx.fillStyle = isDark ? 'rgba(186,230,253,0.45)' : 'rgba(204,251,241,0.45)';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 4, h / 2 - 15, w - 8, 5, 2);
+    ctx.fill();
+
+    // Side mirrors
+    ctx.fillStyle = isDark ? '#cbd5e1' : '#115e59';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 - 2, -h / 2 + 12, 2.5, 4, 1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - 0.5, -h / 2 + 12, 2.5, 4, 1);
+    ctx.fill();
+
+    // Headlights with glow
+    ctx.fillStyle = isDark ? 'rgba(254,240,138,0.95)' : 'rgba(253,224,71,0.95)';
+    ctx.shadowColor = 'rgba(253,224,71,0.5)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 2, -h / 2 - 1, 5, 2, 1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - 7, -h / 2 - 1, 5, 2, 1);
+    ctx.fill();
+
+    // Taillights with glow
+    ctx.fillStyle = 'rgba(239,68,68,0.95)';
+    ctx.shadowColor = 'rgba(239,68,68,0.5)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 2, h / 2 - 1, 5, 2, 1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - 7, h / 2 - 1, 5, 2, 1);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+
+    // Side stripe detail
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 + 2, -h / 2 + 26, 2, h - 34, 1);
+    ctx.fill();
+
+    // Wheels
+    const drawWheel = (wx: number, wy: number, steer: boolean) => {
+      ctx.save();
+      ctx.translate(wx, wy);
+      if (steer) ctx.rotate(this.car.steerAngle);
+      // Tire
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(-2.5, -5.5, 5, 11, 2);
+      ctx.fill();
+      // Rim
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.roundRect(-1.5, -3.5, 3, 7, 1);
+      ctx.fill();
+      ctx.restore();
+    };
+    drawWheel(-w / 2 - 2.5, -h / 2 + 9, true);
+    drawWheel(w / 2 + 2.5, -h / 2 + 9, true);
+    drawWheel(-w / 2 - 2.5, h / 2 - 11, false);
+    drawWheel(w / 2 + 2.5, h / 2 - 11, false);
+  }
+
+  private drawOverlay(
+    ctx: CanvasRenderingContext2D,
+    isDark: boolean,
+    title: string,
+    subtitle: string,
+    accent: string,
+    hint?: string
+  ) {
+    // Backdrop
+    ctx.fillStyle = isDark ? 'rgba(11,15,25,0.82)' : 'rgba(248,250,252,0.88)';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+    // Card panel
+    const cardW = 280;
+    const cardH = hint ? 130 : 100;
+    const cardX = (GAME_W - cardW) / 2;
+    const cardY = (GAME_H - cardH) / 2;
+
+    ctx.fillStyle = isDark ? 'rgba(30,41,59,0.7)' : 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 14);
+    ctx.fill();
+
+    ctx.strokeStyle = isDark ? 'rgba(57,197,187,0.25)' : 'rgba(13,148,136,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 14);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = accent;
+    ctx.font = 'bold 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, GAME_W / 2, cardY + 36);
+
+    // Subtitle
+    ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+    ctx.font = '15px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(subtitle, GAME_W / 2, cardY + 68);
+
+    // Hint
+    if (hint) {
       ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-      ctx.fillText(zh ? '空格: 下一关  ·  R: 重玩  ·  M: 菜单' : 'SPACE: NEXT  ·  R: REPLAY  ·  M: MENU', GAME_W / 2, GAME_H / 2 + 25);
+      ctx.font = '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillText(hint, GAME_W / 2, cardY + 96);
     }
   }
 
