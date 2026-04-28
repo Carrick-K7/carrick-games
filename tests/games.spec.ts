@@ -11,8 +11,10 @@ import {
 import {
   PARKING_CAR_LENGTH,
   PARKING_CAR_WIDTH,
+  PARKING_FORWARD_ACCEL,
   PARKING_MAX_STEER,
   PARKING_MIN_TURN_RADIUS,
+  PARKING_PIXELS_PER_METER,
   PARKING_WHEEL_BASE,
   createParkingCar,
   updateParkingCar,
@@ -228,19 +230,32 @@ test.describe('Game rules', () => {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(straight.y).toBeLessThan(340);
-    expect(straight.speed).toBeGreaterThan(150);
+    expect(straight.y).toBeGreaterThan(440);
+    expect(straight.y).toBeLessThan(448);
+    expect(straight.speed).toBeGreaterThan(30);
+    expect(straight.speed).toBeLessThan(35);
+
+    let cruising = createParkingCar(200, 460, -Math.PI / 2);
+    for (let i = 0; i < 180; i++) {
+      cruising = updateParkingCar(cruising, { up: true, down: false, left: false, right: false }, 1 / 60);
+    }
+
+    expect(cruising.y).toBeGreaterThan(305);
+    expect(cruising.y).toBeLessThan(325);
+    expect(cruising.speed).toBeGreaterThan(92);
+    expect(cruising.speed).toBeLessThan(101);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 30; i++) {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(213);
-    expect(car.x).toBeLessThan(218);
-    expect(car.y).toBeLessThan(430);
-    expect(car.angle).toBeGreaterThan(-0.9);
-    expect(car.angle).toBeLessThan(-0.75);
+    expect(car.x).toBeGreaterThan(200.1);
+    expect(car.x).toBeLessThan(200.4);
+    expect(car.y).toBeGreaterThan(455);
+    expect(car.y).toBeLessThan(459);
+    expect(car.angle).toBeGreaterThan(-1.52);
+    expect(car.angle).toBeLessThan(-1.47);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -248,14 +263,45 @@ test.describe('Game rules', () => {
       0.35
     );
     expect(reverse.angle).toBeLessThan(-Math.PI / 2);
+
+    let analog = createParkingCar(200, 460, -Math.PI / 2);
+    for (let i = 0; i < 30; i++) {
+      analog = updateParkingCar(analog, { up: true, down: false, left: false, right: false, steer: 0.5 }, 1 / 60);
+    }
+    expect(analog.steerAngle).toBeGreaterThan(PARKING_MAX_STEER * 0.45);
+    expect(analog.steerAngle).toBeLessThan(PARKING_MAX_STEER * 0.55);
   });
 
   test('parking car model follows Tank 500 proportions', () => {
     expect(PARKING_CAR_LENGTH).toBe(50);
+    expect(PARKING_PIXELS_PER_METER).toBeCloseTo(50 / 5.078, 5);
     expect(PARKING_CAR_WIDTH / PARKING_CAR_LENGTH).toBeCloseTo(1934 / 5078, 5);
     expect(PARKING_WHEEL_BASE / PARKING_CAR_LENGTH).toBeCloseTo(2850 / 5078, 5);
     expect(PARKING_MIN_TURN_RADIUS / PARKING_CAR_LENGTH).toBeCloseTo(5600 / 5078, 5);
     expect(PARKING_MAX_STEER).toBeCloseTo(Math.atan(2850 / 5600), 5);
+    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER, 5);
+  });
+
+  test('parking ships 100 non-repeating levels with planned technique coverage', () => {
+    expect(PARKING_LEVELS).toHaveLength(100);
+    expect(new Set(PARKING_LEVELS.map((level) => level.id)).size).toBe(100);
+
+    const signatures = PARKING_LEVELS.map((level) => JSON.stringify({
+      start: level.playerStart,
+      spot: level.spot,
+      obstacles: level.obstacles,
+    }));
+    expect(new Set(signatures).size).toBe(100);
+
+    expect(new Set(PARKING_LEVELS.map((level) => level.technique))).toEqual(new Set([
+      'front-bay',
+      'parallel-park',
+      'bay-realign',
+      'offset-gate',
+      'alley-dock',
+      'slalom-aisle',
+      'precision-curb',
+    ]));
   });
 
   test('parking levels all have a theoretical demo route', () => {
@@ -546,6 +592,57 @@ test.describe('Carrick Games - Lifecycle', () => {
 
     await expect(page.locator('#ds-speed-val')).toBeVisible();
     await expect(page.locator('.ds-time')).toHaveCount(0);
+  });
+
+  test('parking best record is completed level count and migrates stale score records', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('cg-records', JSON.stringify({ parking: 999 }));
+      localStorage.setItem('carrick-parking-progress', JSON.stringify({ unlocked: 6, bestLevel: 7 }));
+    });
+    await page.reload();
+
+    await selectGame(page, 'parking');
+
+    const bestRow = page.locator('#statsPanel .stats-row').filter({ hasText: '最高关卡' });
+    await expect(bestRow.locator('.stats-value')).toHaveText('7');
+    const migratedRecord = await page.evaluate(() => JSON.parse(localStorage.getItem('cg-records') || '{}').parking);
+    expect(migratedRecord).toBe(7);
+
+    await page.evaluate(() => {
+      localStorage.removeItem('carrick-parking-progress');
+      localStorage.setItem('cg-records', JSON.stringify({ parking: 999 }));
+    });
+    await page.reload();
+    await selectGame(page, 'parking');
+
+    await expect(bestRow.locator('.stats-value')).toHaveText('0');
+    const discardedStaleRecord = await page.evaluate(() => JSON.parse(localStorage.getItem('cg-records') || '{}').parking);
+    expect(discardedStaleRecord).toBe(0);
+  });
+
+  test('parking shows steering wheel and mouse steering updates it', async ({ page }) => {
+    await selectGame(page, 'parking');
+    await startGame(page);
+
+    await expect(page.locator('#parkingSteeringWheel')).toBeVisible();
+    await page.locator('#gameCanvas').scrollIntoViewIfNeeded();
+    const box = await page.locator('#gameCanvas').boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.move(box.x + box.width * 0.86, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.waitForTimeout(350);
+
+    await expect(page.locator('#parkingSteerMode')).toHaveText('鼠标');
+    const wheelRotation = await page.locator('#parkingSteeringWheel').evaluate((el: HTMLElement) =>
+      parseFloat(el.style.getPropertyValue('--wheel-rotation') || '0')
+    );
+    expect(wheelRotation).toBeGreaterThan(80);
+
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    await expect(page.locator('#parkingSteerMode')).toHaveText('键盘');
   });
 
   test('parking demo completes without unlocking the next level', async ({ page }) => {

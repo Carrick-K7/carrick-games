@@ -7,11 +7,15 @@ export interface LevelSelectState {
   maxSpeed: number;
   gear: string;
   gameState: string;
+  steerAngle?: number;
+  maxSteerAngle?: number;
+  steeringActive?: boolean;
 }
 
 export function renderLevelGridHTML(state: LevelSelectState, selectedLevel: number, zh: boolean): string {
-  const cols = 5;
-  let html = `<div class="level-grid">`;
+  const cols = state.totalLevels > 50 ? 10 : 5;
+  const largeClass = state.totalLevels > 50 ? ' level-grid-large' : '';
+  let html = `<div class="level-grid${largeClass}">`;
   for (let i = 0; i < state.totalLevels; i++) {
     const unlocked = i <= state.unlockedLevel;
     const cleared = i < state.bestLevel;
@@ -76,6 +80,32 @@ export function renderDrivingStateHTML(state: LevelSelectState, zh: boolean): st
 
   html += `</div>`;
   return html;
+}
+
+export function renderParkingSteeringHTML(state: LevelSelectState, zh: boolean): string {
+  const maxSteer = state.maxSteerAngle || 1;
+  const ratio = Math.max(-1, Math.min(1, (state.steerAngle || 0) / maxSteer));
+  const wheelRotation = ratio * 220;
+  const steerPercent = Math.round(ratio * 100);
+  const activeLabel = state.steeringActive ? (zh ? '鼠标' : 'MOUSE') : (zh ? '键盘' : 'KEYS');
+
+  return `<div class="parking-steering">
+    <div class="parking-steering-title">${zh ? '方向盘' : 'STEERING'}</div>
+    <div class="steering-wheel" id="parkingSteeringWheel" style="--wheel-rotation:${wheelRotation}deg">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="steering-rim" cx="50" cy="50" r="42"/>
+        <circle class="steering-hub" cx="50" cy="50" r="13"/>
+        <path class="steering-spoke" d="M50 50 L50 17"/>
+        <path class="steering-spoke" d="M50 50 L21 70"/>
+        <path class="steering-spoke" d="M50 50 L79 70"/>
+        <path class="steering-grip" d="M27 28 A33 33 0 0 1 73 28"/>
+      </svg>
+    </div>
+    <div class="steering-readout">
+      <span id="parkingSteerPercent">${steerPercent}%</span>
+      <span id="parkingSteerMode">${activeLabel}</span>
+    </div>
+  </div>`;
 }
 
 export function renderLevelDotsHTML(state: LevelSelectState): string {

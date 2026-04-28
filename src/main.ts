@@ -10,7 +10,13 @@ import {
 export { GAMES } from './games/catalog.js';
 import { getStoredRecord, readStoredRecords } from './core/game.js';
 import { getLogicalCanvasSize } from './core/render.js';
-import { renderLevelGridHTML, renderDrivingStateHTML, renderMenuHint, type LevelSelectState } from './core/levelselect.js';
+import {
+  renderLevelGridHTML,
+  renderDrivingStateHTML,
+  renderMenuHint,
+  renderParkingSteeringHTML,
+  type LevelSelectState,
+} from './core/levelselect.js';
 
 declare global {
   interface Window {
@@ -240,6 +246,9 @@ function getLevelSelectState(): LevelSelectState | null {
     maxSpeed: typeof g.maxSpeed === 'number' ? g.maxSpeed : 200,
     gear: typeof g.gear === 'string' ? g.gear : 'N',
     gameState: typeof g.gameStateEx === 'string' ? g.gameStateEx : 'menu',
+    steerAngle: typeof g.steerAngle === 'number' ? g.steerAngle : undefined,
+    maxSteerAngle: typeof g.maxSteerAngle === 'number' ? g.maxSteerAngle : undefined,
+    steeringActive: typeof g.mouseSteeringActiveEx === 'boolean' ? g.mouseSteeringActiveEx : undefined,
   };
 }
 
@@ -268,7 +277,8 @@ function renderStats() {
   html += `<div class="stats-section">`;
   html += `<div class="stats-title">${zh ? meta.nameZh : meta.name}</div>`;
   if (best != null) {
-    html += `<div class="stats-row"><span>${zh ? '最高记录' : 'Best'}</span><span class="stats-value">${best}</span></div>`;
+    const bestLabel = currentGameName === 'parking' ? (zh ? '最高关卡' : 'Best Level') : (zh ? '最高记录' : 'Best');
+    html += `<div class="stats-row"><span>${bestLabel}</span><span class="stats-value">${best}</span></div>`;
   }
   html += `</div>`;
 
@@ -326,6 +336,19 @@ function updateLiveScoreDisplay() {
     gearEl.textContent = ls.gear;
     gearEl.style.color = ls.gear === 'R' ? '#ef4444' : ls.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
   }
+
+  const steeringWheel = document.getElementById('parkingSteeringWheel') as HTMLElement | null;
+  if (steeringWheel && typeof ls.steerAngle === 'number' && typeof ls.maxSteerAngle === 'number') {
+    const ratio = Math.max(-1, Math.min(1, ls.steerAngle / ls.maxSteerAngle));
+    steeringWheel.style.setProperty('--wheel-rotation', `${ratio * 220}deg`);
+    const percentEl = document.getElementById('parkingSteerPercent');
+    if (percentEl) percentEl.textContent = `${Math.round(ratio * 100)}%`;
+    const modeEl = document.getElementById('parkingSteerMode');
+    if (modeEl) modeEl.textContent = ls.steeringActive
+      ? (document.documentElement.getAttribute('data-lang') === 'zh' ? '鼠标' : 'MOUSE')
+      : (document.documentElement.getAttribute('data-lang') === 'zh' ? '键盘' : 'KEYS');
+  }
+
   // Re-render level grid when progress changes (e.g. after completing a level)
   const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.gameState}`;
   if (snapshot !== lastLevelSelectSnapshot) {
@@ -392,7 +415,10 @@ function renderKeyboard() {
     return;
   }
 
-  container.innerHTML = renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const ls = getLevelSelectState();
+  const steeringPanel = ls ? renderParkingSteeringHTML(ls, zh) : '';
+  container.innerHTML = steeringPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
   bindVirtualKeyboard();
 }
 

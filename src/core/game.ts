@@ -89,6 +89,8 @@ export abstract class BaseGame implements Game {
     this.canvas.addEventListener('touchmove', this.boundHandleInput, { passive: false });
     this.canvas.addEventListener('mousedown', this.boundHandleInput);
     this.canvas.addEventListener('mouseup', this.boundHandleInput);
+    this.canvas.addEventListener('mousemove', this.boundHandleInput);
+    window.addEventListener('mouseup', this.boundHandleInput);
     this.inputBound = true;
   }
 
@@ -101,6 +103,8 @@ export abstract class BaseGame implements Game {
     this.canvas.removeEventListener('touchmove', this.boundHandleInput);
     this.canvas.removeEventListener('mousedown', this.boundHandleInput);
     this.canvas.removeEventListener('mouseup', this.boundHandleInput);
+    this.canvas.removeEventListener('mousemove', this.boundHandleInput);
+    window.removeEventListener('mouseup', this.boundHandleInput);
     this.inputBound = false;
   }
 
