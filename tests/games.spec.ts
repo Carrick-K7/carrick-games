@@ -201,7 +201,7 @@ test.describe('Game rules', () => {
     expect(moved.y + IWANNA_PLAYER_H).toBeGreaterThan(platform.y);
   });
 
-  test('parking car accelerates responsively with a balanced parking turn radius', () => {
+  test('parking car accelerates responsively with a tight parking turn radius', () => {
     let straight = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 60; i++) {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
@@ -215,10 +215,10 @@ test.describe('Game rules', () => {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(232);
-    expect(car.x).toBeLessThan(239);
-    expect(car.angle).toBeGreaterThan(-1.10);
-    expect(car.angle).toBeLessThan(-1.00);
+    expect(car.x).toBeGreaterThan(246);
+    expect(car.x).toBeLessThan(253);
+    expect(car.angle).toBeGreaterThan(-0.89);
+    expect(car.angle).toBeLessThan(-0.80);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -237,6 +237,24 @@ test.describe('Game rules', () => {
       .map(({ index }) => index + 1);
 
     expect(missingRoutes).toEqual([]);
+  });
+
+  test('parking demo routes drive into the spot without a final pivot', () => {
+    const badRoutes = PARKING_LEVELS
+      .map((level, index) => ({ index, route: createParkingDemoRoute(level) }))
+      .filter(({ route }) => {
+        if (!route || route.waypoints.length < 2) return true;
+        const prev = route.waypoints[route.waypoints.length - 2];
+        const last = route.waypoints[route.waypoints.length - 1];
+        const lastSegmentAngle = Math.atan2(last.y - prev.y, last.x - prev.x);
+        let delta = route.finalAngle - lastSegmentAngle;
+        while (delta <= -Math.PI) delta += Math.PI * 2;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        return Math.abs(delta) > 0.08;
+      })
+      .map(({ index }) => index + 1);
+
+    expect(badRoutes).toEqual([]);
   });
 
   test('pacman body stops before entering wall tiles', () => {
@@ -487,6 +505,29 @@ test.describe('Carrick Games - Lifecycle', () => {
       })
       .toBe('demoComplete');
     await expect(secondLevel).toHaveClass(/locked/);
+  });
+
+  test('parking level 11 demo completes without unlocking later levels', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('carrick-parking-progress', JSON.stringify({
+      unlocked: 10,
+      bestLevel: 10,
+    })));
+    await page.reload();
+
+    await selectGame(page, 'parking');
+    await page.locator('.level-cell[data-level="10"]').click();
+
+    await expect(page.locator('#demoBtn')).toBeVisible();
+    await page.locator('#demoBtn').click();
+    await expect
+      .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState), {
+        timeout: 15000,
+      })
+      .toBe('demoComplete');
+
+    const progress = await page.evaluate(() => localStorage.getItem('carrick-parking-progress'));
+    expect(progress).toBe(JSON.stringify({ unlocked: 10, bestLevel: 10 }));
+    await expect(page.locator('.level-cell[data-level="11"]')).toHaveClass(/locked/);
   });
 });
 

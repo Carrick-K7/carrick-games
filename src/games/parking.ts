@@ -360,6 +360,7 @@ export const PARKING_LEVELS: Level[] = [
 
 const ROUTE_GRID = 10;
 const ROUTE_CLEARANCES = [18, 14, 10, 6];
+const FINAL_APPROACH_DISTANCE = CAR_H;
 
 function parkingSpotCenter(level: Level): ParkingDemoWaypoint {
   return {
@@ -376,22 +377,19 @@ function routeLength(waypoints: ParkingDemoWaypoint[]): number {
   return total;
 }
 
-function normalizeAngle(angle: number): number {
-  let a = angle;
-  while (a <= -Math.PI) a += Math.PI * 2;
-  while (a > Math.PI) a -= Math.PI * 2;
-  return a;
+function parkingSpotAngles(level: Level): number[] {
+  return level.spot.w > level.spot.h ? [0, Math.PI] : [-Math.PI / 2, Math.PI / 2];
 }
 
-function angleDelta(from: number, to: number): number {
-  return normalizeAngle(to - from);
-}
-
-function closestSpotAngle(level: Level, reference: number): number {
-  const options = level.spot.w > level.spot.h ? [0, Math.PI] : [-Math.PI / 2, Math.PI / 2];
-  return options.reduce((best, angle) =>
-    Math.abs(angleDelta(reference, angle)) < Math.abs(angleDelta(reference, best)) ? angle : best
-  );
+function parkingFinalApproaches(level: Level): { approach: ParkingDemoWaypoint; finalAngle: number }[] {
+  const goal = parkingSpotCenter(level);
+  return parkingSpotAngles(level).map((finalAngle) => ({
+    finalAngle,
+    approach: {
+      x: goal.x - Math.cos(finalAngle) * FINAL_APPROACH_DISTANCE,
+      y: goal.y - Math.sin(finalAngle) * FINAL_APPROACH_DISTANCE,
+    },
+  }));
 }
 
 function isPointBlocked(level: Level, point: ParkingDemoWaypoint, clearance: number): boolean {
@@ -585,23 +583,26 @@ export function createParkingDemoRoute(level: Level): ParkingDemoRoute | null {
   const goal = parkingSpotCenter(level);
 
   for (const clearance of ROUTE_CLEARANCES) {
-    const gridRoute = findGridRoute(level, start, goal, clearance);
-    if (!gridRoute) continue;
+    for (const { approach, finalAngle } of parkingFinalApproaches(level)) {
+      if (isPointBlocked(level, approach, clearance)) continue;
+      if (isSegmentBlocked(level, approach, goal, clearance)) continue;
 
-    const rawRoute = compactRoute([start, ...gridRoute, goal]);
-    const waypoints = simplifyRoute(level, rawRoute, clearance);
-    if (waypoints.length < 2) continue;
-    const prev = waypoints[waypoints.length - 2];
-    const last = waypoints[waypoints.length - 1];
-    const arrivalAngle = Math.atan2(last.y - prev.y, last.x - prev.x);
-    const route: ParkingDemoRoute = {
-      waypoints,
-      finalAngle: closestSpotAngle(level, arrivalAngle),
-      arrivalAngle,
-      length: routeLength(waypoints),
-      clearance,
-    };
-    if (parkingRouteIsClear(level, route)) return route;
+      const gridRoute = findGridRoute(level, start, approach, clearance);
+      if (!gridRoute) continue;
+
+      const rawRoute = compactRoute([start, ...gridRoute, approach]);
+      const routeToApproach = simplifyRoute(level, rawRoute, clearance);
+      const waypoints = compactRoute([...routeToApproach, goal]);
+      if (waypoints.length < 2) continue;
+      const route: ParkingDemoRoute = {
+        waypoints,
+        finalAngle,
+        arrivalAngle: finalAngle,
+        length: routeLength(waypoints),
+        clearance,
+      };
+      if (parkingRouteIsClear(level, route)) return route;
+    }
   }
 
   return null;
@@ -620,8 +621,6 @@ export class ParkingGame extends BaseGame {
 
   private readonly PARK_TIME = 1.0;
   private readonly DEMO_SPEED = 92;
-  private readonly DEMO_ROTATE_TIME = 0.8;
-
   private unlockedLevel = 0;
   private bestLevel = 0;
   private selectedLevel = 0;
@@ -855,23 +854,17 @@ export class ParkingGame extends BaseGame {
     }
 
     const target = this.demoRoute.waypoints[this.demoRoute.waypoints.length - 1];
-    const rotateT = Math.min(1, (this.demoTime - driveTime) / this.DEMO_ROTATE_TIME);
-    const eased = rotateT * rotateT * (3 - 2 * rotateT);
-    const angle = this.demoRoute.arrivalAngle + angleDelta(this.demoRoute.arrivalAngle, this.demoRoute.finalAngle) * eased;
     this.car = {
       ...this.car,
       x: target.x,
       y: target.y,
-      angle,
+      angle: this.demoRoute.finalAngle,
       speed: 0,
       vx: 0,
       vy: 0,
       steerAngle: 0,
     };
-
-    if (rotateT >= 1) {
-      this.gameState = 'demoComplete';
-    }
+    this.gameState = 'demoComplete';
   }
 
   update(dt: number) {
