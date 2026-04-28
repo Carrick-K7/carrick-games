@@ -1,7 +1,10 @@
 import { BaseGame } from '../core/game.js';
 import {
+  PARKING_CAR_LENGTH,
+  PARKING_CAR_WIDTH,
   PARKING_MIN_TURN_RADIUS,
   PARKING_MAX_FORWARD_SPEED,
+  PARKING_WHEEL_BASE,
   createParkingCar,
   updateParkingCar,
   type ParkingCarState,
@@ -9,8 +12,8 @@ import {
 
 const GAME_W = 400;
 const GAME_H = 520;
-const CAR_W = 24;
-const CAR_H = 42;
+const CAR_W = PARKING_CAR_WIDTH;
+const CAR_H = PARKING_CAR_LENGTH;
 
 const STORAGE_KEY = 'carrick-parking-progress';
 
@@ -180,13 +183,13 @@ export const PARKING_LEVELS: Level[] = [
     spot: { x: 30, y: 210, w: 50, h: 76 },
   },
   {
-    playerStart: { x: 60, y: 260, angle: 0 },
+    playerStart: { x: 60, y: 320, angle: 0 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(310, 60), parkedCar(310, 90), parkedCar(310, 360), parkedCar(310, 420),
+      parkedCar(310, 60), parkedCar(310, 90), parkedCar(310, 390), parkedCar(310, 445),
     ],
-    spot: { x: 310, y: 210, w: 50, h: 76 },
+    spot: { x: 250, y: 210, w: 50, h: 76 },
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -292,7 +295,7 @@ export const PARKING_LEVELS: Level[] = [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
       wall(80, 220, 240, 8),
-      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
+      parkedCar(50, 80), parkedCar(85, 80), parkedCar(260, 80), parkedCar(315, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
   },
@@ -333,8 +336,8 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(120, 135, 160, 8), wall(120, 355, 160, 8),
-      parkedCar(40, 135), parkedCar(40, 355), parkedCar(320, 135), parkedCar(320, 355),
+      wall(120, 135, 160, 8), wall(120, 390, 160, 8),
+      parkedCar(40, 135), parkedCar(40, 400), parkedCar(320, 135), parkedCar(320, 400),
     ],
     spot: { x: 165, y: 220, w: 50, h: 76 },
   },
@@ -441,9 +444,6 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 225, 240, 8), wall(140, 350, 120, 8),
-      parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
-      parkedCar(40, 330), parkedCar(320, 330),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
   },
@@ -451,7 +451,7 @@ export const PARKING_LEVELS: Level[] = [
 
 const ROUTE_GRID = 10;
 const ROUTE_CLEARANCES = [18, 14, 10, 6];
-const FINAL_APPROACH_DISTANCE = 56;
+const FINAL_APPROACH_DISTANCE = 72;
 const DEMO_SAMPLE_STEP = 6;
 const DEMO_CORNER_MARGIN = 4;
 const DEMO_TURN_RADIUS = PARKING_MIN_TURN_RADIUS + 2;
@@ -1503,10 +1503,12 @@ export class ParkingGame extends BaseGame {
       ctx.fill();
       ctx.restore();
     };
-    drawWheel(-w / 2 - 2.5, -h / 2 + 9, true);
-    drawWheel(w / 2 + 2.5, -h / 2 + 9, true);
-    drawWheel(-w / 2 - 2.5, h / 2 - 11, false);
-    drawWheel(w / 2 + 2.5, h / 2 - 11, false);
+    const frontWheelY = -PARKING_WHEEL_BASE / 2;
+    const rearWheelY = PARKING_WHEEL_BASE / 2;
+    drawWheel(-w / 2 - 2.5, frontWheelY, true);
+    drawWheel(w / 2 + 2.5, frontWheelY, true);
+    drawWheel(-w / 2 - 2.5, rearWheelY, false);
+    drawWheel(w / 2 + 2.5, rearWheelY, false);
   }
 
   private drawOverlay(

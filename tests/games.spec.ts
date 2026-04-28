@@ -9,7 +9,11 @@ import {
   resolveIwannaHorizontalMove,
 } from '../src/games/iwannaPhysics';
 import {
+  PARKING_CAR_LENGTH,
+  PARKING_CAR_WIDTH,
+  PARKING_MAX_STEER,
   PARKING_MIN_TURN_RADIUS,
+  PARKING_WHEEL_BASE,
   createParkingCar,
   updateParkingCar,
 } from '../src/games/parkingPhysics';
@@ -232,11 +236,11 @@ test.describe('Game rules', () => {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(216);
-    expect(car.x).toBeLessThan(224);
-    expect(car.y).toBeLessThan(432);
-    expect(car.angle).toBeGreaterThan(-0.65);
-    expect(car.angle).toBeLessThan(-0.45);
+    expect(car.x).toBeGreaterThan(213);
+    expect(car.x).toBeLessThan(218);
+    expect(car.y).toBeLessThan(430);
+    expect(car.angle).toBeGreaterThan(-0.9);
+    expect(car.angle).toBeLessThan(-0.75);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -244,6 +248,14 @@ test.describe('Game rules', () => {
       0.35
     );
     expect(reverse.angle).toBeLessThan(-Math.PI / 2);
+  });
+
+  test('parking car model follows Tank 500 proportions', () => {
+    expect(PARKING_CAR_LENGTH).toBe(50);
+    expect(PARKING_CAR_WIDTH / PARKING_CAR_LENGTH).toBeCloseTo(1934 / 5078, 5);
+    expect(PARKING_WHEEL_BASE / PARKING_CAR_LENGTH).toBeCloseTo(2850 / 5078, 5);
+    expect(PARKING_MIN_TURN_RADIUS / PARKING_CAR_LENGTH).toBeCloseTo(5600 / 5078, 5);
+    expect(PARKING_MAX_STEER).toBeCloseTo(Math.atan(2850 / 5600), 5);
   });
 
   test('parking levels all have a theoretical demo route', () => {
