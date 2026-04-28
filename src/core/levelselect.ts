@@ -5,7 +5,6 @@ export interface LevelSelectState {
   unlockedLevel: number;
   speed: number;
   maxSpeed: number;
-  timeLeft: number;
   gear: string;
   gameState: string;
 }
@@ -47,7 +46,6 @@ export function renderDrivingStateHTML(state: LevelSelectState, zh: boolean): st
 
   const speedRatio = Math.abs(state.speed) / state.maxSpeed;
   const gearColor = state.gear === 'R' ? '#ef4444' : state.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
-  const timeColor = state.timeLeft <= 10 ? '#ef4444' : 'var(--text)';
 
   let html = `<div class="driving-state">`;
 
@@ -68,12 +66,6 @@ export function renderDrivingStateHTML(state: LevelSelectState, zh: boolean): st
   html += `<div class="ds-gear">
     <div class="ds-gear-val" id="ds-gear-val" style="color:${gearColor}">${state.gear}</div>
     <div class="ds-gear-label">${zh ? '档位' : 'GEAR'}</div>
-  </div>`;
-
-  // Time
-  html += `<div class="ds-time">
-    <div class="ds-time-val" id="ds-time-val" style="color:${timeColor}">${Math.ceil(state.timeLeft)}</div>
-    <div class="ds-time-label">${zh ? '时间' : 'TIME'}</div>
   </div>`;
 
   // Level

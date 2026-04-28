@@ -13,25 +13,37 @@ const CAR_H = 42;
 
 const STORAGE_KEY = 'carrick-parking-progress';
 
-interface Obstacle {
+export interface Obstacle {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-interface ParkingSpot {
+export interface ParkingSpot {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-interface Level {
+export interface Level {
   playerStart: { x: number; y: number; angle: number };
   obstacles: Obstacle[];
   spot: ParkingSpot;
-  timeLimit: number;
+}
+
+export interface ParkingDemoWaypoint {
+  x: number;
+  y: number;
+}
+
+export interface ParkingDemoRoute {
+  waypoints: ParkingDemoWaypoint[];
+  finalAngle: number;
+  arrivalAngle: number;
+  length: number;
+  clearance: number;
 }
 
 function wall(x: number, y: number, w: number, h: number): Obstacle {
@@ -43,7 +55,7 @@ function parkedCar(x: number, y: number, vertical = true): Obstacle {
 }
 
 // prettier-ignore
-const LEVELS: Level[] = [
+export const PARKING_LEVELS: Level[] = [
   // ===== 基础直停车 (1-5) =====
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -53,7 +65,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 200, y: 60, angle: Math.PI / 2 },
@@ -63,7 +74,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 380), parkedCar(130, 380), parkedCar(220, 380), parkedCar(310, 380),
     ],
     spot: { x: 162, y: 380, w: 50, h: 76 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 340, y: 260, angle: Math.PI },
@@ -73,7 +83,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 60), parkedCar(50, 140), parkedCar(50, 300), parkedCar(50, 400),
     ],
     spot: { x: 30, y: 210, w: 50, h: 76 },
-    timeLimit: 55,
   },
   {
     playerStart: { x: 60, y: 260, angle: 0 },
@@ -83,7 +92,6 @@ const LEVELS: Level[] = [
       parkedCar(310, 60), parkedCar(310, 140), parkedCar(310, 300), parkedCar(310, 400),
     ],
     spot: { x: 310, y: 210, w: 50, h: 76 },
-    timeLimit: 55,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -93,7 +101,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
-    timeLimit: 50,
   },
 
   // ===== 侧方停车 (6-10) =====
@@ -105,7 +112,6 @@ const LEVELS: Level[] = [
       parkedCar(10, 160, false), parkedCar(10, 340, false),
     ],
     spot: { x: 10, y: 250, w: 76, h: 50 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 60, y: 275, angle: 0 },
@@ -115,7 +121,6 @@ const LEVELS: Level[] = [
       parkedCar(310, 160, false), parkedCar(310, 340, false),
     ],
     spot: { x: 310, y: 250, w: 76, h: 50 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 208, y: 100, angle: Math.PI / 2 },
@@ -125,7 +130,6 @@ const LEVELS: Level[] = [
       parkedCar(90, 370, false), parkedCar(260, 370, false),
     ],
     spot: { x: 162, y: 430, w: 76, h: 50 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 208, y: 460, angle: -Math.PI / 2 },
@@ -135,7 +139,6 @@ const LEVELS: Level[] = [
       parkedCar(90, 120, false), parkedCar(260, 120, false),
     ],
     spot: { x: 162, y: 40, w: 76, h: 50 },
-    timeLimit: 60,
   },
   {
     playerStart: { x: 340, y: 260, angle: Math.PI },
@@ -145,7 +148,6 @@ const LEVELS: Level[] = [
       parkedCar(10, 120, false), parkedCar(10, 360, false),
     ],
     spot: { x: 10, y: 240, w: 76, h: 50 },
-    timeLimit: 55,
   },
 
   // ===== 倒车入库 (11-15) =====
@@ -158,7 +160,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 340, y: 420, angle: -Math.PI / 2 },
@@ -169,7 +170,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80),
     ],
     spot: { x: 290, y: 60, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 60, y: 420, angle: -Math.PI / 2 },
@@ -180,7 +180,6 @@ const LEVELS: Level[] = [
       parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
     spot: { x: 50, y: 60, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 200, y: 100, angle: Math.PI / 2 },
@@ -191,7 +190,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 380), parkedCar(130, 380), parkedCar(220, 380), parkedCar(310, 380),
     ],
     spot: { x: 162, y: 380, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -202,7 +200,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
-    timeLimit: 45,
   },
 
   // ===== 混合挑战 (16-20) =====
@@ -215,7 +212,6 @@ const LEVELS: Level[] = [
       parkedCar(180, 80), parkedCar(260, 80), parkedCar(340, 80),
     ],
     spot: { x: 30, y: 220, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 340, y: 460, angle: -Math.PI / 2 },
@@ -226,7 +222,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 180), parkedCar(50, 280), parkedCar(260, 180), parkedCar(260, 280),
     ],
     spot: { x: 130, y: 220, w: 50, h: 76 },
-    timeLimit: 50,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -237,7 +232,6 @@ const LEVELS: Level[] = [
       parkedCar(60, 80), parkedCar(140, 80), parkedCar(280, 80),
     ],
     spot: { x: 210, y: 60, w: 50, h: 76 },
-    timeLimit: 45,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -248,7 +242,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 160), parkedCar(50, 320), parkedCar(310, 160), parkedCar(310, 320),
     ],
     spot: { x: 165, y: 220, w: 50, h: 76 },
-    timeLimit: 45,
   },
   {
     playerStart: { x: 340, y: 420, angle: Math.PI },
@@ -259,7 +252,6 @@ const LEVELS: Level[] = [
       parkedCar(20, 80, false), parkedCar(100, 80, false), parkedCar(180, 80, false),
     ],
     spot: { x: 30, y: 400, w: 76, h: 50 },
-    timeLimit: 40,
   },
 
   // ===== 高难度 (21-25) =====
@@ -271,7 +263,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(95, 80), parkedCar(255, 80), parkedCar(300, 80),
     ],
     spot: { x: 142, y: 60, w: 50, h: 76 },
-    timeLimit: 45,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -282,7 +273,6 @@ const LEVELS: Level[] = [
       wall(80, 180, 240, 8),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
-    timeLimit: 30,
   },
   {
     playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
@@ -293,7 +283,6 @@ const LEVELS: Level[] = [
       parkedCar(110, 160), parkedCar(230, 280),
     ],
     spot: { x: 340, y: 100, w: 50, h: 76 },
-    timeLimit: 45,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -304,7 +293,6 @@ const LEVELS: Level[] = [
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
-    timeLimit: 35,
   },
   {
     playerStart: { x: 340, y: 240, angle: Math.PI },
@@ -314,7 +302,6 @@ const LEVELS: Level[] = [
       parkedCar(10, 140, false), parkedCar(10, 340, false),
     ],
     spot: { x: 10, y: 237, w: 76, h: 50 },
-    timeLimit: 35,
   },
 
   // ===== 极限挑战 (26-30) =====
@@ -327,7 +314,6 @@ const LEVELS: Level[] = [
       parkedCar(120, 120), parkedCar(220, 280), parkedCar(320, 120),
     ],
     spot: { x: 340, y: 400, w: 50, h: 76 },
-    timeLimit: 40,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -338,7 +324,6 @@ const LEVELS: Level[] = [
       parkedCar(60, 80), parkedCar(140, 80), parkedCar(220, 80), parkedCar(340, 80),
     ],
     spot: { x: 165, y: 60, w: 50, h: 76 },
-    timeLimit: 25,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -349,7 +334,6 @@ const LEVELS: Level[] = [
       wall(80, 180, 240, 8),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
-    timeLimit: 20,
   },
   {
     playerStart: { x: 340, y: 420, angle: Math.PI },
@@ -360,7 +344,6 @@ const LEVELS: Level[] = [
       parkedCar(100, 120), parkedCar(220, 200), parkedCar(340, 120),
     ],
     spot: { x: 30, y: 400, w: 76, h: 50 },
-    timeLimit: 35,
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -372,29 +355,279 @@ const LEVELS: Level[] = [
       parkedCar(50, 300), parkedCar(310, 300),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
-    timeLimit: 30,
   },
 ];
+
+const ROUTE_GRID = 10;
+const ROUTE_CLEARANCES = [18, 14, 10, 6];
+
+function parkingSpotCenter(level: Level): ParkingDemoWaypoint {
+  return {
+    x: level.spot.x + level.spot.w / 2,
+    y: level.spot.y + level.spot.h / 2,
+  };
+}
+
+function routeLength(waypoints: ParkingDemoWaypoint[]): number {
+  let total = 0;
+  for (let i = 1; i < waypoints.length; i++) {
+    total += Math.hypot(waypoints[i].x - waypoints[i - 1].x, waypoints[i].y - waypoints[i - 1].y);
+  }
+  return total;
+}
+
+function normalizeAngle(angle: number): number {
+  let a = angle;
+  while (a <= -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
+}
+
+function angleDelta(from: number, to: number): number {
+  return normalizeAngle(to - from);
+}
+
+function closestSpotAngle(level: Level, reference: number): number {
+  const options = level.spot.w > level.spot.h ? [0, Math.PI] : [-Math.PI / 2, Math.PI / 2];
+  return options.reduce((best, angle) =>
+    Math.abs(angleDelta(reference, angle)) < Math.abs(angleDelta(reference, best)) ? angle : best
+  );
+}
+
+function isPointBlocked(level: Level, point: ParkingDemoWaypoint, clearance: number): boolean {
+  if (
+    point.x < clearance ||
+    point.x > GAME_W - clearance ||
+    point.y < clearance ||
+    point.y > GAME_H - clearance
+  ) {
+    return true;
+  }
+
+  return level.obstacles.some((obs) =>
+    point.x >= obs.x - clearance &&
+    point.x <= obs.x + obs.w + clearance &&
+    point.y >= obs.y - clearance &&
+    point.y <= obs.y + obs.h + clearance
+  );
+}
+
+function isSegmentBlocked(
+  level: Level,
+  from: ParkingDemoWaypoint,
+  to: ParkingDemoWaypoint,
+  clearance: number
+): boolean {
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(dist / (ROUTE_GRID / 2)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const point = {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    };
+    if (isPointBlocked(level, point, clearance)) return true;
+  }
+  return false;
+}
+
+function gridKey(x: number, y: number): string {
+  return `${x},${y}`;
+}
+
+function gridPoint(x: number, y: number): ParkingDemoWaypoint {
+  return { x: x * ROUTE_GRID, y: y * ROUTE_GRID };
+}
+
+function nearestOpenGrid(level: Level, point: ParkingDemoWaypoint, clearance: number): string | null {
+  const maxX = Math.floor(GAME_W / ROUTE_GRID);
+  const maxY = Math.floor(GAME_H / ROUTE_GRID);
+  const sx = Math.max(0, Math.min(maxX, Math.round(point.x / ROUTE_GRID)));
+  const sy = Math.max(0, Math.min(maxY, Math.round(point.y / ROUTE_GRID)));
+  const maxRadius = Math.max(maxX, maxY);
+
+  for (let radius = 0; radius <= maxRadius; radius++) {
+    const candidates: { key: string; dist: number }[] = [];
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const gx = sx + dx;
+        const gy = sy + dy;
+        if (gx < 0 || gx > maxX || gy < 0 || gy > maxY) continue;
+        const p = gridPoint(gx, gy);
+        if (!isPointBlocked(level, p, clearance)) {
+          candidates.push({ key: gridKey(gx, gy), dist: Math.hypot(p.x - point.x, p.y - point.y) });
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => a.dist - b.dist);
+      return candidates[0].key;
+    }
+  }
+
+  return null;
+}
+
+function findGridRoute(
+  level: Level,
+  start: ParkingDemoWaypoint,
+  goal: ParkingDemoWaypoint,
+  clearance: number
+): ParkingDemoWaypoint[] | null {
+  const maxX = Math.floor(GAME_W / ROUTE_GRID);
+  const maxY = Math.floor(GAME_H / ROUTE_GRID);
+  const startKey = nearestOpenGrid(level, start, clearance);
+  const goalKey = nearestOpenGrid(level, goal, clearance);
+  if (!startKey || !goalKey) return null;
+
+  const open = new Set<string>([startKey]);
+  const cameFrom = new Map<string, string>();
+  const gScore = new Map<string, number>([[startKey, 0]]);
+  const goalPoint = (() => {
+    const [gx, gy] = goalKey.split(',').map(Number);
+    return gridPoint(gx, gy);
+  })();
+  const directions = [
+    [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -1], [1, -1], [-1, 1], [1, 1],
+  ];
+
+  while (open.size > 0) {
+    let current = '';
+    let currentScore = Infinity;
+    for (const key of open) {
+      const [gx, gy] = key.split(',').map(Number);
+      const p = gridPoint(gx, gy);
+      const score = (gScore.get(key) ?? Infinity) + Math.hypot(goalPoint.x - p.x, goalPoint.y - p.y);
+      if (score < currentScore) {
+        current = key;
+        currentScore = score;
+      }
+    }
+
+    if (current === goalKey) {
+      const nodes: ParkingDemoWaypoint[] = [];
+      let key = current;
+      while (key) {
+        const [gx, gy] = key.split(',').map(Number);
+        nodes.push(gridPoint(gx, gy));
+        const prev = cameFrom.get(key);
+        if (!prev) break;
+        key = prev;
+      }
+      return nodes.reverse();
+    }
+
+    open.delete(current);
+    const [cx, cy] = current.split(',').map(Number);
+    for (const [dx, dy] of directions) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || nx > maxX || ny < 0 || ny > maxY) continue;
+      const nextPoint = gridPoint(nx, ny);
+      if (isPointBlocked(level, nextPoint, clearance)) continue;
+      const currentPoint = gridPoint(cx, cy);
+      if (isSegmentBlocked(level, currentPoint, nextPoint, clearance)) continue;
+
+      const nextKey = gridKey(nx, ny);
+      const moveCost = Math.hypot(dx, dy) * ROUTE_GRID;
+      const tentative = (gScore.get(current) ?? Infinity) + moveCost;
+      if (tentative < (gScore.get(nextKey) ?? Infinity)) {
+        cameFrom.set(nextKey, current);
+        gScore.set(nextKey, tentative);
+        open.add(nextKey);
+      }
+    }
+  }
+
+  return null;
+}
+
+function simplifyRoute(level: Level, route: ParkingDemoWaypoint[], clearance: number): ParkingDemoWaypoint[] {
+  if (route.length <= 2) return route;
+  const simplified: ParkingDemoWaypoint[] = [route[0]];
+  let anchor = 0;
+  while (anchor < route.length - 1) {
+    let next = route.length - 1;
+    while (next > anchor + 1 && isSegmentBlocked(level, route[anchor], route[next], clearance)) {
+      next--;
+    }
+    simplified.push(route[next]);
+    anchor = next;
+  }
+  return simplified;
+}
+
+function compactRoute(route: ParkingDemoWaypoint[]): ParkingDemoWaypoint[] {
+  const compact: ParkingDemoWaypoint[] = [];
+  for (const point of route) {
+    const prev = compact[compact.length - 1];
+    if (!prev || Math.hypot(prev.x - point.x, prev.y - point.y) > 1) {
+      compact.push(point);
+    }
+  }
+  return compact;
+}
+
+export function parkingRouteIsClear(level: Level, route: ParkingDemoRoute): boolean {
+  if (route.waypoints.length < 2) return false;
+  for (let i = 1; i < route.waypoints.length; i++) {
+    if (isSegmentBlocked(level, route.waypoints[i - 1], route.waypoints[i], route.clearance)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function createParkingDemoRoute(level: Level): ParkingDemoRoute | null {
+  const start = { x: level.playerStart.x, y: level.playerStart.y };
+  const goal = parkingSpotCenter(level);
+
+  for (const clearance of ROUTE_CLEARANCES) {
+    const gridRoute = findGridRoute(level, start, goal, clearance);
+    if (!gridRoute) continue;
+
+    const rawRoute = compactRoute([start, ...gridRoute, goal]);
+    const waypoints = simplifyRoute(level, rawRoute, clearance);
+    if (waypoints.length < 2) continue;
+    const prev = waypoints[waypoints.length - 2];
+    const last = waypoints[waypoints.length - 1];
+    const arrivalAngle = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const route: ParkingDemoRoute = {
+      waypoints,
+      finalAngle: closestSpotAngle(level, arrivalAngle),
+      arrivalAngle,
+      length: routeLength(waypoints),
+      clearance,
+    };
+    if (parkingRouteIsClear(level, route)) return route;
+  }
+
+  return null;
+}
 
 export class ParkingGame extends BaseGame {
   private car: ParkingCarState = createParkingCar(0, 0, 0);
   private levelIndex = 0;
   private level!: Level;
-  private elapsed = 0;
-  private timeLeft = 0;
   private parkedTime = 0;
-  private gameState: 'menu' | 'playing' | 'parked' | 'crash' | 'timeout' | 'complete' = 'menu';
+  private gameState: 'menu' | 'playing' | 'parked' | 'crash' | 'complete' | 'demo' | 'demoComplete' = 'menu';
   private keys = { up: false, down: false, left: false, right: false };
   private touchDir: 'up' | 'down' | 'left' | 'right' | null = null;
+  private demoRoute: ParkingDemoRoute | null = null;
+  private demoTime = 0;
 
   private readonly PARK_TIME = 1.0;
+  private readonly DEMO_SPEED = 92;
+  private readonly DEMO_ROTATE_TIME = 0.8;
 
   private unlockedLevel = 0;
   private bestLevel = 0;
   private selectedLevel = 0;
 
   // Exposed for side panel
-  readonly totalLevels = LEVELS.length;
+  readonly totalLevels = PARKING_LEVELS.length;
   get levelIndexEx(): number { return this.levelIndex; }
   get bestLevelEx(): number { return this.bestLevel; }
   get unlockedLevelEx(): number { return this.unlockedLevel; }
@@ -402,7 +635,6 @@ export class ParkingGame extends BaseGame {
   get gameStateEx(): string { return this.gameState; }
   get speed(): number { return Math.abs(this.car.speed); }
   get maxSpeed(): number { return PARKING_MAX_FORWARD_SPEED; }
-  get timeLeftEx(): number { return this.timeLeft; }
   get gear(): string {
     const s = this.car.speed;
     return s > 2 ? 'D' : s < -2 ? 'R' : 'N';
@@ -414,15 +646,35 @@ export class ParkingGame extends BaseGame {
 
   init() {
     this.loadProgress();
-    this.gameState = 'menu';
-    this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+    this.selectedLevel = Math.max(0, Math.min(this.selectedLevel, this.unlockedLevel, PARKING_LEVELS.length - 1));
     this.loadLevel(this.selectedLevel);
     this.gameState = 'menu';
   }
 
+  start() {
+    super.start();
+    this.loadLevel(this.selectedLevel);
+  }
+
+  startDemo() {
+    super.start();
+    const route = createParkingDemoRoute(this.level);
+    if (!route) {
+      this.loadLevel(this.selectedLevel);
+      return;
+    }
+    this.demoRoute = route;
+    this.demoTime = 0;
+    this.parkedTime = 0;
+    this.keys = { up: false, down: false, left: false, right: false };
+    this.touchDir = null;
+    this.car = createParkingCar(route.waypoints[0].x, route.waypoints[0].y, this.level.playerStart.angle);
+    this.gameState = 'demo';
+  }
+
   /** Called from side panel to select a level in menu */
   selectLevel(index: number) {
-    if (index < 0 || index >= LEVELS.length) return;
+    if (index < 0 || index >= PARKING_LEVELS.length) return;
     if (index > this.unlockedLevel) return;
     this.selectedLevel = index;
     this.loadLevel(index);
@@ -431,7 +683,7 @@ export class ParkingGame extends BaseGame {
   /** Called from side panel to select a level and enter menu mode */
   goToMenu() {
     this.gameState = 'menu';
-    this.selectedLevel = Math.min(this.unlockedLevel, LEVELS.length - 1);
+    this.selectedLevel = Math.min(this.unlockedLevel, PARKING_LEVELS.length - 1);
   }
 
   private loadProgress() {
@@ -439,8 +691,8 @@ export class ParkingGame extends BaseGame {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const p = JSON.parse(raw);
-        this.unlockedLevel = Math.max(0, Math.min(LEVELS.length - 1, p.unlocked || 0));
-        this.bestLevel = Math.max(0, Math.min(LEVELS.length, p.bestLevel || 0));
+        this.unlockedLevel = Math.max(0, Math.min(PARKING_LEVELS.length - 1, p.unlocked || 0));
+        this.bestLevel = Math.max(0, Math.min(PARKING_LEVELS.length, p.bestLevel || 0));
       } else {
         this.unlockedLevel = 0;
         this.bestLevel = 0;
@@ -464,12 +716,12 @@ export class ParkingGame extends BaseGame {
 
   private loadLevel(idx: number) {
     this.levelIndex = idx;
-    this.level = LEVELS[idx];
+    this.level = PARKING_LEVELS[idx];
     const start = this.level.playerStart;
     this.car = createParkingCar(start.x, start.y, start.angle);
-    this.elapsed = 0;
-    this.timeLeft = this.level.timeLimit;
     this.parkedTime = 0;
+    this.demoRoute = null;
+    this.demoTime = 0;
     this.gameState = 'playing';
     this.keys = { up: false, down: false, left: false, right: false };
     this.touchDir = null;
@@ -544,14 +796,6 @@ export class ParkingGame extends BaseGame {
       return;
     }
 
-    this.elapsed += dt;
-    this.timeLeft = Math.max(0, this.level.timeLimit - this.elapsed);
-    if (this.timeLeft <= 0) {
-      this.gameState = 'timeout';
-      this.submitScoreOnce(this.bestLevel);
-      return;
-    }
-
     if (this.checkParked() && Math.abs(this.car.speed) < 35) {
       this.gameState = 'parked';
       this.parkedTime = 0;
@@ -561,8 +805,82 @@ export class ParkingGame extends BaseGame {
     }
   }
 
+  private sampleDemoRoute(distance: number): { x: number; y: number; angle: number } {
+    if (!this.demoRoute) {
+      return { x: this.car.x, y: this.car.y, angle: this.car.angle };
+    }
+
+    const route = this.demoRoute.waypoints;
+    let remaining = Math.max(0, Math.min(distance, this.demoRoute.length));
+    for (let i = 1; i < route.length; i++) {
+      const from = route[i - 1];
+      const to = route[i];
+      const segment = Math.hypot(to.x - from.x, to.y - from.y);
+      if (remaining <= segment || i === route.length - 1) {
+        const t = segment === 0 ? 1 : Math.max(0, Math.min(1, remaining / segment));
+        return {
+          x: from.x + (to.x - from.x) * t,
+          y: from.y + (to.y - from.y) * t,
+          angle: Math.atan2(to.y - from.y, to.x - from.x),
+        };
+      }
+      remaining -= segment;
+    }
+
+    const last = route[route.length - 1];
+    return { x: last.x, y: last.y, angle: this.demoRoute.finalAngle };
+  }
+
+  private updateDemo(dt: number) {
+    if (!this.demoRoute) {
+      this.gameState = 'menu';
+      return;
+    }
+
+    this.demoTime += dt;
+    const driveTime = this.demoRoute.length / this.DEMO_SPEED;
+    if (this.demoTime < driveTime) {
+      const pose = this.sampleDemoRoute(this.demoTime * this.DEMO_SPEED);
+      this.car = {
+        ...this.car,
+        x: pose.x,
+        y: pose.y,
+        angle: pose.angle,
+        speed: this.DEMO_SPEED,
+        vx: Math.cos(pose.angle) * this.DEMO_SPEED,
+        vy: Math.sin(pose.angle) * this.DEMO_SPEED,
+        steerAngle: 0,
+      };
+      return;
+    }
+
+    const target = this.demoRoute.waypoints[this.demoRoute.waypoints.length - 1];
+    const rotateT = Math.min(1, (this.demoTime - driveTime) / this.DEMO_ROTATE_TIME);
+    const eased = rotateT * rotateT * (3 - 2 * rotateT);
+    const angle = this.demoRoute.arrivalAngle + angleDelta(this.demoRoute.arrivalAngle, this.demoRoute.finalAngle) * eased;
+    this.car = {
+      ...this.car,
+      x: target.x,
+      y: target.y,
+      angle,
+      speed: 0,
+      vx: 0,
+      vy: 0,
+      steerAngle: 0,
+    };
+
+    if (rotateT >= 1) {
+      this.gameState = 'demoComplete';
+    }
+  }
+
   update(dt: number) {
-    if (this.gameState === 'crash' || this.gameState === 'timeout' || this.gameState === 'complete' || this.gameState === 'menu') {
+    if (this.gameState === 'demo') {
+      this.updateDemo(dt);
+      return;
+    }
+
+    if (this.gameState === 'crash' || this.gameState === 'complete' || this.gameState === 'demoComplete' || this.gameState === 'menu') {
       return;
     }
 
@@ -594,7 +912,7 @@ export class ParkingGame extends BaseGame {
         if (this.levelIndex + 1 > this.bestLevel) {
           this.bestLevel = this.levelIndex + 1;
         }
-        if (this.levelIndex + 1 > this.unlockedLevel && this.levelIndex + 1 < LEVELS.length) {
+        if (this.levelIndex + 1 > this.unlockedLevel && this.levelIndex + 1 < PARKING_LEVELS.length) {
           this.unlockedLevel = this.levelIndex + 1;
         }
         this.saveProgress();
@@ -608,6 +926,7 @@ export class ParkingGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    this.canvas.dataset.parkingState = this.gameState;
     const isDark = this.isDarkTheme();
     const primary = isDark ? '#39C5BB' : '#0d9488';
     const asphalt = isDark ? '#13161f' : '#e8e9ec';
@@ -657,6 +976,22 @@ export class ParkingGame extends BaseGame {
     ctx.beginPath();
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fill();
+
+    // Demo route
+    if ((this.gameState === 'demo' || this.gameState === 'demoComplete') && this.demoRoute) {
+      ctx.strokeStyle = isDark ? 'rgba(57,197,187,0.42)' : 'rgba(13,148,136,0.35)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([8, 7]);
+      ctx.beginPath();
+      this.demoRoute.waypoints.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Obstacles
     for (const obs of this.level.obstacles) {
@@ -714,14 +1049,14 @@ export class ParkingGame extends BaseGame {
     }
 
     // Overlays
-    if (this.gameState === 'crash' || this.gameState === 'timeout') {
+    if (this.gameState === 'crash') {
       const zh = this.isZhLang();
       this.drawOverlay(
         ctx,
         isDark,
-        this.gameState === 'timeout' ? (zh ? '超时！' : 'TIME UP') : (zh ? '撞车！' : 'CRASH!'),
+        zh ? '撞车！' : 'CRASH!',
         zh ? '空格/点击 重试  ·  M 菜单' : 'SPACE/TAP RETRY  ·  M MENU',
-        this.gameState === 'timeout' ? primary : '#ef4444'
+        '#ef4444'
       );
     }
 
@@ -734,6 +1069,18 @@ export class ParkingGame extends BaseGame {
         `${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}`,
         primary,
         zh ? '空格: 下一关  ·  R: 重玩  ·  M: 菜单' : 'SPACE: NEXT  ·  R: REPLAY  ·  M: MENU'
+      );
+    }
+
+    if (this.gameState === 'demoComplete') {
+      const zh = this.isZhLang();
+      this.drawOverlay(
+        ctx,
+        isDark,
+        zh ? '示例完成' : 'DEMO COMPLETE',
+        `${zh ? '关卡' : 'LEVEL'} ${this.levelIndex + 1}`,
+        primary,
+        zh ? '空格: 正式开始  ·  R: 重看  ·  M: 菜单' : 'SPACE: PLAY  ·  R: REPLAY DEMO  ·  M: MENU'
       );
     }
   }
@@ -978,17 +1325,22 @@ export class ParkingGame extends BaseGame {
       }
 
       if (e.type === 'keydown' && !e.repeat) {
-        if (this.gameState === 'crash' || this.gameState === 'timeout') {
+        if (this.gameState === 'crash') {
           if (e.key === ' ') { this.loadLevel(this.levelIndex); return; }
           if (e.key === 'm' || e.key === 'M') { this.goToMenu(); return; }
         }
         if (this.gameState === 'complete') {
           if (e.key === ' ') {
-            if (this.levelIndex + 1 < LEVELS.length) this.loadLevel(this.levelIndex + 1);
+            if (this.levelIndex + 1 < PARKING_LEVELS.length) this.loadLevel(this.levelIndex + 1);
             else this.loadLevel(this.levelIndex);
             return;
           }
           if (e.key === 'r' || e.key === 'R') { this.loadLevel(this.levelIndex); return; }
+          if (e.key === 'm' || e.key === 'M') { this.goToMenu(); return; }
+        }
+        if (this.gameState === 'demoComplete') {
+          if (e.key === ' ') { this.loadLevel(this.levelIndex); return; }
+          if (e.key === 'r' || e.key === 'R') { this.startDemo(); return; }
           if (e.key === 'm' || e.key === 'M') { this.goToMenu(); return; }
         }
       }
@@ -1025,11 +1377,14 @@ export class ParkingGame extends BaseGame {
         }
 
         if (e.type === 'touchstart') {
-          if (this.gameState === 'crash' || this.gameState === 'timeout') {
+          if (this.gameState === 'crash') {
             this.loadLevel(this.levelIndex);
           }
           if (this.gameState === 'complete') {
-            if (this.levelIndex + 1 < LEVELS.length) this.loadLevel(this.levelIndex + 1);
+            if (this.levelIndex + 1 < PARKING_LEVELS.length) this.loadLevel(this.levelIndex + 1);
+          }
+          if (this.gameState === 'demoComplete') {
+            this.loadLevel(this.levelIndex);
           }
         }
       }
@@ -1041,11 +1396,14 @@ export class ParkingGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type === 'mousedown') {
-        if (this.gameState === 'crash' || this.gameState === 'timeout') {
+        if (this.gameState === 'crash') {
           this.loadLevel(this.levelIndex);
         }
         if (this.gameState === 'complete') {
-          if (this.levelIndex + 1 < LEVELS.length) this.loadLevel(this.levelIndex + 1);
+          if (this.levelIndex + 1 < PARKING_LEVELS.length) this.loadLevel(this.levelIndex + 1);
+        }
+        if (this.gameState === 'demoComplete') {
+          this.loadLevel(this.levelIndex);
         }
       }
     }

@@ -8,6 +8,7 @@ import {
   resolveIwannaHorizontalMove,
 } from '../src/games/iwannaPhysics';
 import { createParkingCar, updateParkingCar } from '../src/games/parkingPhysics';
+import { PARKING_LEVELS, createParkingDemoRoute, parkingRouteIsClear } from '../src/games/parking';
 import {
   PACMAN_RADIUS,
   PACMAN_TILE,
@@ -180,7 +181,7 @@ test.describe('Game rules', () => {
     expect(moved.y + IWANNA_PLAYER_H).toBeGreaterThan(platform.y);
   });
 
-  test('parking car accelerates responsively with a tight parking turn radius', () => {
+  test('parking car accelerates responsively with a balanced parking turn radius', () => {
     let straight = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 60; i++) {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
@@ -194,9 +195,10 @@ test.describe('Game rules', () => {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(238);
-    expect(car.angle).toBeGreaterThan(-1.02);
-    expect(car.angle).toBeLessThan(-0.55);
+    expect(car.x).toBeGreaterThan(232);
+    expect(car.x).toBeLessThan(239);
+    expect(car.angle).toBeGreaterThan(-1.10);
+    expect(car.angle).toBeLessThan(-1.00);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -204,6 +206,17 @@ test.describe('Game rules', () => {
       0.35
     );
     expect(reverse.angle).toBeLessThan(-Math.PI / 2);
+  });
+
+  test('parking levels all have a theoretical demo route', () => {
+    const missingRoutes = PARKING_LEVELS
+      .map((level, index) => ({ index, route: createParkingDemoRoute(level) }))
+      .filter(({ route, index }) =>
+        !route || route.waypoints.length < 2 || !parkingRouteIsClear(PARKING_LEVELS[index], route)
+      )
+      .map(({ index }) => index + 1);
+
+    expect(missingRoutes).toEqual([]);
   });
 
   test('pacman body stops before entering wall tiles', () => {
@@ -413,6 +426,47 @@ test.describe('Carrick Games - Lifecycle', () => {
 
     expect(filterFavicon(consoleErrors)).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
+  });
+
+  test('parking first start enters a drivable state for arrow keys', async ({ page }) => {
+    await selectGame(page, 'parking');
+    await page.locator('#actionBtn').click();
+
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowUp');
+
+    await expect(page.locator('#ds-speed-val')).toBeVisible();
+    const speed = Number(await page.locator('#ds-speed-val').textContent());
+    expect(speed).toBeGreaterThan(0);
+  });
+
+  test('parking driving HUD has no countdown timer', async ({ page }) => {
+    await selectGame(page, 'parking');
+    await startGame(page);
+
+    await expect(page.locator('#ds-speed-val')).toBeVisible();
+    await expect(page.locator('.ds-time')).toHaveCount(0);
+  });
+
+  test('parking demo completes without unlocking the next level', async ({ page }) => {
+    await page.evaluate(() => localStorage.removeItem('carrick-parking-progress'));
+    await page.reload();
+
+    await selectGame(page, 'parking');
+    const secondLevel = page.locator('.level-cell[data-level="1"]');
+    await expect(secondLevel).toHaveClass(/locked/);
+
+    await expect(page.locator('#demoBtn')).toBeVisible();
+    await page.locator('#demoBtn').click();
+    await expect(page.locator('#startOverlay')).not.toHaveClass(/active/);
+    await expect(page.locator('canvas')).toBeVisible();
+    await expect
+      .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState), {
+        timeout: 12000,
+      })
+      .toBe('demoComplete');
+    await expect(secondLevel).toHaveClass(/locked/);
   });
 });
 

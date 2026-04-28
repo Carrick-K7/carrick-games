@@ -491,7 +491,7 @@
       letter-spacing: 0.08em;
       margin-top: 2px;
     }
-    .ds-gear, .ds-time, .ds-level {
+    .ds-gear, .ds-level {
       text-align: center;
       padding: 4px 0;
     }
@@ -500,14 +500,14 @@
       font-weight: 700;
       line-height: 1;
     }
-    .ds-time-val, .ds-level-val {
+    .ds-level-val {
       font-size: 1.3rem;
       font-weight: 700;
       color: var(--text);
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    .ds-gear-label, .ds-time-label, .ds-level-label {
+    .ds-gear-label, .ds-level-label {
       font-size: 0.55rem;
       color: var(--text-secondary);
       text-transform: uppercase;
@@ -747,6 +747,21 @@
     .btn-primary:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn[hidden] {
+      display: none;
     }
 
     .sidebar-section {
@@ -1332,6 +1347,7 @@
         </div>
         <div class="action-bar">
           <button class="btn btn-primary" id="actionBtn">Start Game</button>
+          <button class="btn btn-secondary" id="demoBtn" hidden>Demo</button>
         </div>
         <div class="controls-panel" id="controlsPanel"></div>
       </div>

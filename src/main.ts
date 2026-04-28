@@ -684,16 +684,21 @@ function renderTouchIcon(icon: string): string {
 
 function updateActionButton() {
   const btn = document.getElementById('actionBtn') as HTMLButtonElement | null;
-  if (!btn) return;
+  if (!btn) {
+    updateDemoButton();
+    return;
+  }
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   if (isLoadingGame) {
     btn.textContent = zh ? '加载中...' : 'Loading...';
     btn.disabled = true;
+    updateDemoButton();
     return;
   }
   if (!currentGameInstance) {
     btn.textContent = zh ? '选择游戏' : 'Select a game';
     btn.disabled = true;
+    updateDemoButton();
     return;
   }
   btn.disabled = false;
@@ -702,6 +707,17 @@ function updateActionButton() {
   } else {
     btn.textContent = zh ? '重新开始' : 'Restart';
   }
+  updateDemoButton();
+}
+
+function updateDemoButton() {
+  const btn = document.getElementById('demoBtn') as HTMLButtonElement | null;
+  if (!btn) return;
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const canDemo = !!currentGameInstance && typeof (currentGameInstance as any).startDemo === 'function' && !isLoadingGame;
+  btn.hidden = !canDemo;
+  btn.disabled = !canDemo;
+  btn.textContent = zh ? '示例' : 'Demo';
 }
 
 function updateGameTitle() {
@@ -850,7 +866,6 @@ function getLevelSelectState(): LevelSelectState | null {
     unlockedLevel: typeof g.unlockedLevelEx === 'number' ? g.unlockedLevelEx : 0,
     speed: typeof g.speed === 'number' ? g.speed : 0,
     maxSpeed: typeof g.maxSpeed === 'number' ? g.maxSpeed : 200,
-    timeLeft: typeof g.timeLeftEx === 'number' ? g.timeLeftEx : 0,
     gear: typeof g.gear === 'string' ? g.gear : 'N',
     gameState: typeof g.gameStateEx === 'string' ? g.gameStateEx : 'menu',
   };
@@ -931,22 +946,14 @@ function updateLiveScoreDisplay() {
   const ls = getLevelSelectState();
   if (!ls || ls.gameState === 'menu') return;
 
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const speedEl = document.getElementById('ds-speed-val');
   const gearEl = document.getElementById('ds-gear-val');
-  const timeEl = document.getElementById('ds-time-val');
-  const dotsEl = document.getElementById('levelDots');
 
   if (speedEl) speedEl.textContent = String(Math.round(ls.speed));
   if (gearEl) {
     gearEl.textContent = ls.gear;
     gearEl.style.color = ls.gear === 'R' ? '#ef4444' : ls.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
   }
-  if (timeEl) {
-    timeEl.textContent = String(Math.ceil(ls.timeLeft));
-    timeEl.style.color = ls.timeLeft <= 10 ? '#ef4444' : '';
-  }
-
   // Re-render level grid when progress changes (e.g. after completing a level)
   const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.gameState}`;
   if (snapshot !== lastLevelSelectSnapshot) {
@@ -1257,6 +1264,22 @@ function startPreparedGame() {
   }
 }
 
+function startDemoForCurrentGame() {
+  if (!currentGameInstance || isLoadingGame) return;
+  const demoStarter = (currentGameInstance as any).startDemo;
+  if (typeof demoStarter !== 'function') return;
+  try {
+    setStartOverlay(false);
+    demoStarter.call(currentGameInstance);
+    isRunning = true;
+    updateActionButton();
+    startScorePolling();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(e);
+  }
+}
+
 export async function loadGame(name: string) {
   await prepareGame(name);
   setHashGame(name);
@@ -1421,6 +1444,11 @@ function toggleFullscreen() {
   const actionBtn = document.getElementById('actionBtn') as HTMLButtonElement | null;
   if (actionBtn) {
     actionBtn.addEventListener('click', startPreparedGame);
+  }
+
+  const demoBtn = document.getElementById('demoBtn') as HTMLButtonElement | null;
+  if (demoBtn) {
+    demoBtn.addEventListener('click', startDemoForCurrentGame);
   }
 
   // Zoom slider
