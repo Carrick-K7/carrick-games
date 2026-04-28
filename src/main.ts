@@ -332,7 +332,11 @@ function updateLiveScoreDisplay() {
   const speedEl = document.getElementById('ds-speed-val');
   const gearEl = document.getElementById('ds-gear-val');
 
-  if (speedEl) speedEl.textContent = String(Math.round(ls.speed));
+  const speedRatio = Math.max(0, Math.min(1, Math.abs(ls.speed) / Math.max(1, ls.maxSpeed)));
+  const roundedSpeed = String(Math.round(ls.speed));
+  if (speedEl && speedEl.textContent !== roundedSpeed) speedEl.textContent = roundedSpeed;
+  const speedArcEl = document.getElementById('ds-speed-arc') as SVGPathElement | null;
+  if (speedArcEl) speedArcEl.setAttribute('stroke-dasharray', `${251 * speedRatio} 251`);
   if (gearEl) {
     gearEl.textContent = ls.gear;
     gearEl.style.color = ls.gear === 'R' ? '#ef4444' : ls.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
@@ -383,12 +387,23 @@ function readGameScore(): number | null {
 }
 
 let scorePollTimer: number | null = null;
+let scorePollFrame: number | null = null;
 let lastLevelSelectSnapshot = '';
 
 function startScorePolling() {
   stopScorePolling();
   lastLevelSelectSnapshot = '';
   updateLiveScoreDisplay();
+
+  if (currentGameName === 'parking') {
+    const tick = () => {
+      updateLiveScoreDisplay();
+      scorePollFrame = window.requestAnimationFrame(tick);
+    };
+    scorePollFrame = window.requestAnimationFrame(tick);
+    return;
+  }
+
   scorePollTimer = window.setInterval(() => {
     updateLiveScoreDisplay();
   }, 200);
@@ -398,6 +413,10 @@ function stopScorePolling() {
   if (scorePollTimer != null) {
     clearInterval(scorePollTimer);
     scorePollTimer = null;
+  }
+  if (scorePollFrame != null) {
+    cancelAnimationFrame(scorePollFrame);
+    scorePollFrame = null;
   }
 }
 
@@ -615,6 +634,10 @@ export async function prepareGame(name: string) {
     }
     // eslint-disable-next-line no-console
     console.error(e);
+    return;
+  }
+
+  if (token !== prepareGameToken) {
     return;
   }
 

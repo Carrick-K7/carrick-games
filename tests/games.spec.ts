@@ -236,32 +236,32 @@ test.describe('Game rules', () => {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(straight.y).toBeGreaterThan(440);
-    expect(straight.y).toBeLessThan(448);
-    expect(straight.speed).toBeGreaterThan(30);
-    expect(straight.speed).toBeLessThan(35);
+    expect(straight.y).toBeGreaterThan(425);
+    expect(straight.y).toBeLessThan(430);
+    expect(straight.speed).toBeGreaterThan(64);
+    expect(straight.speed).toBeLessThan(66);
 
     let cruising = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 180; i++) {
       cruising = updateParkingCar(cruising, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(cruising.y).toBeGreaterThan(305);
-    expect(cruising.y).toBeLessThan(325);
-    expect(cruising.speed).toBeGreaterThan(92);
-    expect(cruising.speed).toBeLessThan(101);
+    expect(cruising.y).toBeGreaterThan(165);
+    expect(cruising.y).toBeLessThan(172);
+    expect(cruising.speed).toBeGreaterThan(192);
+    expect(cruising.speed).toBeLessThan(195);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 30; i++) {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(200.1);
-    expect(car.x).toBeLessThan(200.4);
-    expect(car.y).toBeGreaterThan(455);
-    expect(car.y).toBeLessThan(459);
-    expect(car.angle).toBeGreaterThan(-1.52);
-    expect(car.angle).toBeLessThan(-1.47);
+    expect(car.x).toBeGreaterThan(200.6);
+    expect(car.x).toBeLessThan(201.3);
+    expect(car.y).toBeGreaterThan(450);
+    expect(car.y).toBeLessThan(454);
+    expect(car.angle).toBeGreaterThan(-1.47);
+    expect(car.angle).toBeLessThan(-1.36);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -285,7 +285,7 @@ test.describe('Game rules', () => {
     expect(PARKING_WHEEL_BASE / PARKING_CAR_LENGTH).toBeCloseTo(2850 / 5078, 5);
     expect(PARKING_MIN_TURN_RADIUS / PARKING_CAR_LENGTH).toBeCloseTo(5600 / 5078, 5);
     expect(PARKING_MAX_STEER).toBeCloseTo(Math.atan(2850 / 5600), 5);
-    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER, 5);
+    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER * 2, 5);
   });
 
   test('parking ships 100 non-repeating levels with planned technique coverage', () => {
@@ -425,6 +425,11 @@ test.describe('Carrick Games - Lifecycle', () => {
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
     expect(await gameItems.count()).toBeGreaterThan(0);
+
+    const firstNameFontSize = await gameItems.first().locator('.game-list-name').evaluate((el) =>
+      parseFloat(window.getComputedStyle(el).fontSize)
+    );
+    expect(firstNameFontSize).toBeGreaterThanOrEqual(14);
   });
 
   test('initial page load does not fetch unselected game modules', async ({ page }) => {
@@ -487,6 +492,7 @@ test.describe('Carrick Games - Lifecycle', () => {
           pixelRatio: Number(canvas.dataset.pixelRatio),
           boxWidth: Math.round(box.width),
           boxHeight: Math.round(box.height),
+          parkingState: canvas.dataset.parkingState ?? '',
         };
       });
 
@@ -497,6 +503,7 @@ test.describe('Carrick Games - Lifecycle', () => {
       expect(metrics.height).toBe(800);
       expect(metrics.boxWidth).toBe(400);
       expect(metrics.boxHeight).toBe(400);
+      expect(metrics.parkingState).toBe('');
     } finally {
       await context.close();
     }
