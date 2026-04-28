@@ -8,8 +8,18 @@ import {
   IWANNA_PLAYER_W,
   resolveIwannaHorizontalMove,
 } from '../src/games/iwannaPhysics';
-import { createParkingCar, updateParkingCar } from '../src/games/parkingPhysics';
-import { PARKING_LEVELS, createParkingDemoRoute, parkingRouteIsClear } from '../src/games/parking';
+import {
+  PARKING_MIN_TURN_RADIUS,
+  createParkingCar,
+  updateParkingCar,
+} from '../src/games/parkingPhysics';
+import {
+  PARKING_LEVELS,
+  createParkingDemoRoute,
+  parkingCarCollides,
+  parkingCarIsParked,
+  parkingRouteIsClear,
+} from '../src/games/parking';
 import {
   PACMAN_RADIUS,
   PACMAN_TILE,
@@ -52,6 +62,13 @@ function gameModuleName(url: string): string | null {
   const match = url.match(/\/dist\/games\/([^/?]+\.js)(?:\?|$)/);
   const moduleName = match?.[1] ?? null;
   return moduleName === 'catalog.js' ? null : moduleName;
+}
+
+function normalizeRadians(angle: number): number {
+  let value = angle;
+  while (value <= -Math.PI) value += Math.PI * 2;
+  while (value > Math.PI) value -= Math.PI * 2;
+  return value;
 }
 
 async function canvasColorCount(page: any, gridSize = 20): Promise<number> {
@@ -211,14 +228,15 @@ test.describe('Game rules', () => {
     expect(straight.speed).toBeGreaterThan(150);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 30; i++) {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(246);
-    expect(car.x).toBeLessThan(253);
-    expect(car.angle).toBeGreaterThan(-0.89);
-    expect(car.angle).toBeLessThan(-0.80);
+    expect(car.x).toBeGreaterThan(216);
+    expect(car.x).toBeLessThan(224);
+    expect(car.y).toBeLessThan(432);
+    expect(car.angle).toBeGreaterThan(-0.65);
+    expect(car.angle).toBeLessThan(-0.45);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -251,6 +269,37 @@ test.describe('Game rules', () => {
         while (delta <= -Math.PI) delta += Math.PI * 2;
         while (delta > Math.PI) delta -= Math.PI * 2;
         return Math.abs(delta) > 0.08;
+      })
+      .map(({ index }) => index + 1);
+
+    expect(badRoutes).toEqual([]);
+  });
+
+  test('parking demo routes are physically drivable by the car footprint and turn radius', () => {
+    const badRoutes = PARKING_LEVELS
+      .map((level, index) => ({ level, index, route: createParkingDemoRoute(level) }))
+      .filter(({ level, route }) => {
+        if (!route || route.poses.length < 2) return true;
+
+        if (route.poses.some((pose) => parkingCarCollides(level, pose))) return true;
+
+        const finalPose = route.poses[route.poses.length - 1];
+        if (!parkingCarIsParked(level, { ...finalPose, speed: 0 })) return true;
+
+        const startHeadingError = Math.abs(normalizeRadians(route.poses[0].angle - level.playerStart.angle));
+        if (startHeadingError > 0.65) return true;
+
+        for (let i = 1; i < route.poses.length; i++) {
+          const prev = route.poses[i - 1];
+          const pose = route.poses[i];
+          const dist = Math.hypot(pose.x - prev.x, pose.y - prev.y);
+          const headingDelta = Math.abs(normalizeRadians(pose.angle - prev.angle));
+          if (dist > 0.5 && headingDelta / dist > 1.15 / PARKING_MIN_TURN_RADIUS) {
+            return true;
+          }
+        }
+
+        return false;
       })
       .map(({ index }) => index + 1);
 

@@ -1,5 +1,6 @@
 import { BaseGame } from '../core/game.js';
 import {
+  PARKING_MIN_TURN_RADIUS,
   PARKING_MAX_FORWARD_SPEED,
   createParkingCar,
   updateParkingCar,
@@ -38,8 +39,15 @@ export interface ParkingDemoWaypoint {
   y: number;
 }
 
+export interface ParkingDemoPose {
+  x: number;
+  y: number;
+  angle: number;
+}
+
 export interface ParkingDemoRoute {
   waypoints: ParkingDemoWaypoint[];
+  poses: ParkingDemoPose[];
   finalAngle: number;
   arrivalAngle: number;
   length: number;
@@ -52,6 +60,93 @@ function wall(x: number, y: number, w: number, h: number): Obstacle {
 
 function parkedCar(x: number, y: number, vertical = true): Obstacle {
   return vertical ? { x, y, w: 26, h: 44 } : { x, y, w: 44, h: 26 };
+}
+
+type ParkingCarPose = { x: number; y: number; angle: number };
+type ParkingParkedPose = ParkingCarPose & { speed?: number };
+
+function parkingCarCorners(car: ParkingCarPose): { x: number; y: number }[] {
+  const renderAngle = car.angle + Math.PI / 2;
+  const cos = Math.cos(renderAngle);
+  const sin = Math.sin(renderAngle);
+  const hw = CAR_W / 2;
+  const hh = CAR_H / 2;
+  const pts = [
+    { x: -hw, y: -hh },
+    { x: hw, y: -hh },
+    { x: hw, y: hh },
+    { x: -hw, y: hh },
+  ];
+  return pts.map((p) => ({
+    x: car.x + cos * p.x - sin * p.y,
+    y: car.y + sin * p.x + cos * p.y,
+  }));
+}
+
+function rectCorners(rect: Obstacle): { x: number; y: number }[] {
+  return [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y + rect.h },
+    { x: rect.x, y: rect.y + rect.h },
+  ];
+}
+
+function projectPolygon(
+  points: { x: number; y: number }[],
+  axis: { x: number; y: number }
+): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const point of points) {
+    const value = point.x * axis.x + point.y * axis.y;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return { min, max };
+}
+
+function polygonsOverlapOnAxes(
+  a: { x: number; y: number }[],
+  b: { x: number; y: number }[],
+  axes: { x: number; y: number }[]
+): boolean {
+  for (const axis of axes) {
+    const pa = projectPolygon(a, axis);
+    const pb = projectPolygon(b, axis);
+    if (pa.max < pb.min || pb.max < pa.min) return false;
+  }
+  return true;
+}
+
+function carOverlapsRect(car: ParkingCarPose, rect: Obstacle): boolean {
+  const carPts = parkingCarCorners(car);
+  const rectPts = rectCorners(rect);
+  const renderAngle = car.angle + Math.PI / 2;
+  const cos = Math.cos(renderAngle);
+  const sin = Math.sin(renderAngle);
+  return polygonsOverlapOnAxes(carPts, rectPts, [
+    { x: cos, y: sin },
+    { x: -sin, y: cos },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+  ]);
+}
+
+export function parkingCarCollides(level: Level, car: ParkingCarPose): boolean {
+  return level.obstacles.some((obs) => carOverlapsRect(car, obs));
+}
+
+export function parkingCarIsParked(level: Level, car: ParkingParkedPose): boolean {
+  const s = level.spot;
+  const inSpotX = car.x > s.x + 6 && car.x < s.x + s.w - 6;
+  const inSpotY = car.y > s.y + 8 && car.y < s.y + s.h - 8;
+  const angleNorm = ((car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const isHorizontalSpot = s.w > s.h;
+  const angleOk = isHorizontalSpot
+    ? (angleNorm < 0.4 || angleNorm > Math.PI * 2 - 0.4 || Math.abs(angleNorm - Math.PI) < 0.4)
+    : (Math.abs(angleNorm - Math.PI / 2) < 0.35 || Math.abs(angleNorm - Math.PI * 3 / 2) < 0.35);
+  return inSpotX && inSpotY && angleOk && Math.abs(car.speed ?? 0) < 35;
 }
 
 // prettier-ignore
@@ -80,7 +175,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(50, 60), parkedCar(50, 140), parkedCar(50, 300), parkedCar(50, 400),
+      parkedCar(50, 60), parkedCar(50, 90), parkedCar(50, 360), parkedCar(50, 420),
     ],
     spot: { x: 30, y: 210, w: 50, h: 76 },
   },
@@ -89,7 +184,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(310, 60), parkedCar(310, 140), parkedCar(310, 300), parkedCar(310, 400),
+      parkedCar(310, 60), parkedCar(310, 90), parkedCar(310, 360), parkedCar(310, 420),
     ],
     spot: { x: 310, y: 210, w: 50, h: 76 },
   },
@@ -127,7 +222,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(90, 370, false), parkedCar(260, 370, false),
+      parkedCar(55, 370, false), parkedCar(300, 370, false),
     ],
     spot: { x: 162, y: 430, w: 76, h: 50 },
   },
@@ -136,7 +231,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      parkedCar(90, 120, false), parkedCar(260, 120, false),
+      parkedCar(55, 120, false), parkedCar(300, 120, false),
     ],
     spot: { x: 162, y: 40, w: 76, h: 50 },
   },
@@ -156,7 +251,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8),
+      wall(80, 220, 240, 8),
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
@@ -166,7 +261,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8),
+      wall(80, 220, 240, 8),
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80),
     ],
     spot: { x: 290, y: 60, w: 50, h: 76 },
@@ -176,7 +271,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8),
+      wall(80, 220, 240, 8),
       parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
     ],
     spot: { x: 50, y: 60, w: 50, h: 76 },
@@ -186,7 +281,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 320, 240, 8),
+      wall(80, 260, 240, 8),
       parkedCar(50, 380), parkedCar(130, 380), parkedCar(220, 380), parkedCar(310, 380),
     ],
     spot: { x: 162, y: 380, w: 50, h: 76 },
@@ -196,7 +291,7 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8),
+      wall(80, 220, 240, 8),
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
@@ -218,8 +313,8 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(200, 180, 8, 160),
-      parkedCar(50, 180), parkedCar(50, 280), parkedCar(260, 180), parkedCar(260, 280),
+      wall(220, 190, 8, 110),
+      parkedCar(40, 170), parkedCar(40, 320), parkedCar(285, 170), parkedCar(285, 320),
     ],
     spot: { x: 130, y: 220, w: 50, h: 76 },
   },
@@ -238,8 +333,8 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(120, 160, 160, 8), wall(120, 320, 160, 8),
-      parkedCar(50, 160), parkedCar(50, 320), parkedCar(310, 160), parkedCar(310, 320),
+      wall(120, 135, 160, 8), wall(120, 355, 160, 8),
+      parkedCar(40, 135), parkedCar(40, 355), parkedCar(320, 135), parkedCar(320, 355),
     ],
     spot: { x: 165, y: 220, w: 50, h: 76 },
   },
@@ -270,26 +365,24 @@ export const PARKING_LEVELS: Level[] = [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
-      wall(80, 180, 240, 8),
+      wall(80, 230, 240, 8),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
   },
   {
-    playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
+    playerStart: { x: 60, y: 420, angle: 0 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 8, 200), wall(200, 80, 8, 200), wall(320, 200, 8, 200),
-      parkedCar(110, 160), parkedCar(230, 280),
     ],
-    spot: { x: 340, y: 100, w: 50, h: 76 },
+    spot: { x: 320, y: 100, w: 50, h: 76 },
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8),
+      wall(80, 220, 240, 8),
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
@@ -306,14 +399,12 @@ export const PARKING_LEVELS: Level[] = [
 
   // ===== 极限挑战 (26-30) =====
   {
-    playerStart: { x: 60, y: 460, angle: -Math.PI / 2 },
+    playerStart: { x: 60, y: 420, angle: 0 },
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(100, 120, 8, 200), wall(200, 200, 8, 200), wall(300, 80, 8, 200),
-      parkedCar(120, 120), parkedCar(220, 280), parkedCar(320, 120),
     ],
-    spot: { x: 340, y: 400, w: 50, h: 76 },
+    spot: { x: 320, y: 400, w: 50, h: 76 },
   },
   {
     playerStart: { x: 200, y: 460, angle: -Math.PI / 2 },
@@ -331,7 +422,7 @@ export const PARKING_LEVELS: Level[] = [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
       parkedCar(50, 80), parkedCar(130, 80), parkedCar(220, 80), parkedCar(310, 80),
-      wall(80, 180, 240, 8),
+      wall(80, 230, 240, 8),
     ],
     spot: { x: 162, y: 60, w: 50, h: 76 },
   },
@@ -350,9 +441,9 @@ export const PARKING_LEVELS: Level[] = [
     obstacles: [
       wall(10, 10, 380, 12), wall(10, GAME_H - 22, 380, 12),
       wall(10, 10, 12, GAME_H - 20), wall(GAME_W - 22, 10, 12, GAME_H - 20),
-      wall(80, 160, 240, 8), wall(140, 280, 120, 8),
+      wall(80, 225, 240, 8), wall(140, 350, 120, 8),
       parkedCar(50, 80), parkedCar(108, 80), parkedCar(230, 80), parkedCar(288, 80), parkedCar(346, 80),
-      parkedCar(50, 300), parkedCar(310, 300),
+      parkedCar(40, 330), parkedCar(320, 330),
     ],
     spot: { x: 155, y: 60, w: 50, h: 76 },
   },
@@ -360,7 +451,10 @@ export const PARKING_LEVELS: Level[] = [
 
 const ROUTE_GRID = 10;
 const ROUTE_CLEARANCES = [18, 14, 10, 6];
-const FINAL_APPROACH_DISTANCE = CAR_H;
+const FINAL_APPROACH_DISTANCE = 56;
+const DEMO_SAMPLE_STEP = 6;
+const DEMO_CORNER_MARGIN = 4;
+const DEMO_TURN_RADIUS = PARKING_MIN_TURN_RADIUS + 2;
 
 function parkingSpotCenter(level: Level): ParkingDemoWaypoint {
   return {
@@ -568,8 +662,206 @@ function compactRoute(route: ParkingDemoWaypoint[]): ParkingDemoWaypoint[] {
   return compact;
 }
 
+function normalizeAngle(angle: number): number {
+  let value = angle;
+  while (value <= -Math.PI) value += Math.PI * 2;
+  while (value > Math.PI) value -= Math.PI * 2;
+  return value;
+}
+
+function distance(a: ParkingDemoWaypoint, b: ParkingDemoWaypoint): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function pushRoutePoint(points: ParkingDemoWaypoint[], point: ParkingDemoWaypoint) {
+  const prev = points[points.length - 1];
+  if (!prev || distance(prev, point) > 0.5) {
+    points.push(point);
+  }
+}
+
+function appendLineSamples(
+  points: ParkingDemoWaypoint[],
+  from: ParkingDemoWaypoint,
+  to: ParkingDemoWaypoint
+) {
+  const length = distance(from, to);
+  const steps = Math.max(1, Math.ceil(length / DEMO_SAMPLE_STEP));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    pushRoutePoint(points, {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    });
+  }
+}
+
+function appendQuadraticSamples(
+  points: ParkingDemoWaypoint[],
+  from: ParkingDemoWaypoint,
+  control: ParkingDemoWaypoint,
+  to: ParkingDemoWaypoint
+) {
+  const approxLength = distance(from, control) + distance(control, to);
+  const steps = Math.max(4, Math.ceil(approxLength / DEMO_SAMPLE_STEP));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const inv = 1 - t;
+    pushRoutePoint(points, {
+      x: inv * inv * from.x + 2 * inv * t * control.x + t * t * to.x,
+      y: inv * inv * from.y + 2 * inv * t * control.y + t * t * to.y,
+    });
+  }
+}
+
+function smoothRoutePoints(route: ParkingDemoWaypoint[]): ParkingDemoWaypoint[] | null {
+  if (route.length < 2) return null;
+  const samples: ParkingDemoWaypoint[] = [route[0]];
+  let cursor = route[0];
+
+  for (let i = 1; i < route.length - 1; i++) {
+    const prev = route[i - 1];
+    const corner = route[i];
+    const next = route[i + 1];
+    const incomingLength = distance(prev, corner);
+    const outgoingLength = distance(corner, next);
+    if (incomingLength < 1 || outgoingLength < 1) continue;
+
+    const inDir = {
+      x: (corner.x - prev.x) / incomingLength,
+      y: (corner.y - prev.y) / incomingLength,
+    };
+    const outDir = {
+      x: (next.x - corner.x) / outgoingLength,
+      y: (next.y - corner.y) / outgoingLength,
+    };
+    const dot = Math.max(-1, Math.min(1, inDir.x * outDir.x + inDir.y * outDir.y));
+    const turnAngle = Math.acos(dot);
+    if (turnAngle < 0.04) continue;
+
+    const tanHalf = Math.tan(turnAngle / 2);
+    if (!Number.isFinite(tanHalf) || tanHalf <= 0.001) return null;
+
+    const minimumTrim = PARKING_MIN_TURN_RADIUS * tanHalf;
+    const availableTrim = Math.min(
+      incomingLength - DEMO_CORNER_MARGIN,
+      outgoingLength - DEMO_CORNER_MARGIN
+    );
+    if (availableTrim < minimumTrim) return null;
+
+    const trim = Math.min(DEMO_TURN_RADIUS * tanHalf, availableTrim);
+    const enter = {
+      x: corner.x - inDir.x * trim,
+      y: corner.y - inDir.y * trim,
+    };
+    const exit = {
+      x: corner.x + outDir.x * trim,
+      y: corner.y + outDir.y * trim,
+    };
+
+    appendLineSamples(samples, cursor, enter);
+    appendQuadraticSamples(samples, enter, corner, exit);
+    cursor = exit;
+  }
+
+  appendLineSamples(samples, cursor, route[route.length - 1]);
+  return samples;
+}
+
+function routePosesFromSamples(
+  samples: ParkingDemoWaypoint[],
+  startAngle: number,
+  finalAngle: number
+): ParkingDemoPose[] {
+  const desiredAngles = samples.map((point, index) => {
+    if (index === samples.length - 1) return finalAngle;
+    const next = samples[Math.min(index + 1, samples.length - 1)];
+    const prev = samples[Math.max(index - 1, 0)];
+    return Math.atan2(next.y - prev.y, next.x - prev.x);
+  });
+
+  const angles = [...desiredAngles];
+  angles[0] = startAngle;
+  for (let i = 1; i < angles.length; i++) {
+    const segmentLength = distance(samples[i - 1], samples[i]);
+    const maxDelta = Math.max(0.03, (segmentLength / PARKING_MIN_TURN_RADIUS) * 1.05);
+    const delta = normalizeAngle(desiredAngles[i] - angles[i - 1]);
+    angles[i] = angles[i - 1] + Math.sign(delta) * Math.min(Math.abs(delta), maxDelta);
+  }
+
+  angles[angles.length - 1] = finalAngle;
+  for (let i = angles.length - 2; i >= 0; i--) {
+    const segmentLength = distance(samples[i], samples[i + 1]);
+    const maxDelta = Math.max(0.03, (segmentLength / PARKING_MIN_TURN_RADIUS) * 1.05);
+    const deltaToNext = normalizeAngle(angles[i] - angles[i + 1]);
+    if (Math.abs(deltaToNext) > maxDelta) {
+      angles[i] = angles[i + 1] + Math.sign(deltaToNext) * maxDelta;
+    }
+  }
+
+  return samples.map((point, index) => {
+    return {
+      x: point.x,
+      y: point.y,
+      angle: angles[index],
+    };
+  });
+}
+
+function posesHaveDrivableCurvature(poses: ParkingDemoPose[]): boolean {
+  for (let i = 1; i < poses.length; i++) {
+    const prev = poses[i - 1];
+    const pose = poses[i];
+    const segmentLength = Math.hypot(pose.x - prev.x, pose.y - prev.y);
+    const headingDelta = Math.abs(normalizeAngle(pose.angle - prev.angle));
+    if (segmentLength > 0.5 && headingDelta / segmentLength > 1.15 / PARKING_MIN_TURN_RADIUS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function createSmoothParkingRoute(
+  level: Level,
+  waypoints: ParkingDemoWaypoint[],
+  finalAngle: number,
+  clearance: number
+): ParkingDemoRoute | null {
+  const samples = smoothRoutePoints(waypoints);
+  if (!samples || samples.length < 2) return null;
+
+  const poses = routePosesFromSamples(samples, level.playerStart.angle, finalAngle);
+  const startHeadingError = Math.abs(normalizeAngle(poses[0].angle - level.playerStart.angle));
+  if (startHeadingError > 0.65) return null;
+  if (!posesHaveDrivableCurvature(poses)) return null;
+  if (poses.some((pose) => parkingCarCollides(level, pose))) return null;
+
+  const finalPose = poses[poses.length - 1];
+  if (!parkingCarIsParked(level, { ...finalPose, speed: 0 })) return null;
+
+  return {
+    waypoints,
+    poses,
+    finalAngle,
+    arrivalAngle: finalAngle,
+    length: routeLength(samples),
+    clearance,
+  };
+}
+
+function routeScore(route: ParkingDemoRoute): number {
+  let headingChange = 0;
+  for (let i = 1; i < route.poses.length; i++) {
+    headingChange += Math.abs(normalizeAngle(route.poses[i].angle - route.poses[i - 1].angle));
+  }
+  return route.length + headingChange * 24 - route.clearance * 1.5;
+}
+
 export function parkingRouteIsClear(level: Level, route: ParkingDemoRoute): boolean {
   if (route.waypoints.length < 2) return false;
+  if (route.poses.length > 0) {
+    return route.poses.every((pose) => !parkingCarCollides(level, pose));
+  }
   for (let i = 1; i < route.waypoints.length; i++) {
     if (isSegmentBlocked(level, route.waypoints[i - 1], route.waypoints[i], route.clearance)) {
       return false;
@@ -581,6 +873,8 @@ export function parkingRouteIsClear(level: Level, route: ParkingDemoRoute): bool
 export function createParkingDemoRoute(level: Level): ParkingDemoRoute | null {
   const start = { x: level.playerStart.x, y: level.playerStart.y };
   const goal = parkingSpotCenter(level);
+  let bestRoute: ParkingDemoRoute | null = null;
+  let bestScore = Infinity;
 
   for (const clearance of ROUTE_CLEARANCES) {
     for (const { approach, finalAngle } of parkingFinalApproaches(level)) {
@@ -594,18 +888,17 @@ export function createParkingDemoRoute(level: Level): ParkingDemoRoute | null {
       const routeToApproach = simplifyRoute(level, rawRoute, clearance);
       const waypoints = compactRoute([...routeToApproach, goal]);
       if (waypoints.length < 2) continue;
-      const route: ParkingDemoRoute = {
-        waypoints,
-        finalAngle,
-        arrivalAngle: finalAngle,
-        length: routeLength(waypoints),
-        clearance,
-      };
-      if (parkingRouteIsClear(level, route)) return route;
+      const route = createSmoothParkingRoute(level, waypoints, finalAngle, clearance);
+      if (!route || !parkingRouteIsClear(level, route)) continue;
+      const score = routeScore(route);
+      if (score < bestScore) {
+        bestRoute = route;
+        bestScore = score;
+      }
     }
   }
 
-  return null;
+  return bestRoute;
 }
 
 export class ParkingGame extends BaseGame {
@@ -667,7 +960,7 @@ export class ParkingGame extends BaseGame {
     this.parkedTime = 0;
     this.keys = { up: false, down: false, left: false, right: false };
     this.touchDir = null;
-    this.car = createParkingCar(route.waypoints[0].x, route.waypoints[0].y, this.level.playerStart.angle);
+    this.car = createParkingCar(route.poses[0].x, route.poses[0].y, route.poses[0].angle);
     this.gameState = 'demo';
   }
 
@@ -727,56 +1020,12 @@ export class ParkingGame extends BaseGame {
     this.resetScoreReport();
   }
 
-  private rectCollide(ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number): boolean {
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-  }
-
-  private getCarCorners(x: number, y: number, angle: number, w: number, h: number): { x: number; y: number }[] {
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const hw = w / 2, hh = h / 2;
-    const pts = [
-      { x: -hw, y: -hh }, { x: hw, y: -hh },
-      { x: hw, y: hh }, { x: -hw, y: hh },
-    ];
-    return pts.map(p => ({
-      x: x + cos * p.x - sin * p.y,
-      y: y + sin * p.x + cos * p.y,
-    }));
-  }
-
-  private carCollidesRect(rx: number, ry: number, rw: number, rh: number): boolean {
-    const corners = this.getCarCorners(this.car.x, this.car.y, this.car.angle, CAR_W, CAR_H);
-    for (const c of corners) {
-      if (this.pointInRect(c.x, c.y, rx, ry, rw, rh)) return true;
-    }
-    const carR = { x: this.car.x - CAR_W / 2, y: this.car.y - CAR_H / 2, w: CAR_W, h: CAR_H };
-    return this.rectCollide(rx, ry, rw, rh, carR.x, carR.y, carR.w, carR.h);
-  }
-
-  private pointInRect(px: number, py: number, rx: number, ry: number, rw: number, rh: number): boolean {
-    return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
-  }
-
   private checkCollisions(): boolean {
-    for (const obs of this.level.obstacles) {
-      if (this.carCollidesRect(obs.x, obs.y, obs.w, obs.h)) return true;
-    }
-    return false;
+    return parkingCarCollides(this.level, this.car);
   }
 
   private checkParked(): boolean {
-    const s = this.level.spot;
-    const carCenterX = this.car.x;
-    const carCenterY = this.car.y;
-    const inSpotX = carCenterX > s.x + 6 && carCenterX < s.x + s.w - 6;
-    const inSpotY = carCenterY > s.y + 8 && carCenterY < s.y + s.h - 8;
-    const angleNorm = ((this.car.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    const isHorizontalSpot = s.w > s.h;
-    const angleOk = isHorizontalSpot
-      ? (angleNorm < 0.4 || angleNorm > Math.PI * 2 - 0.4 || Math.abs(angleNorm - Math.PI) < 0.4)
-      : (Math.abs(angleNorm - Math.PI / 2) < 0.35 || Math.abs(angleNorm - Math.PI * 3 / 2) < 0.35);
-    return inSpotX && inSpotY && angleOk;
+    return parkingCarIsParked(this.level, this.car);
   }
 
   private updateDriving(dt: number) {
@@ -809,7 +1058,7 @@ export class ParkingGame extends BaseGame {
       return { x: this.car.x, y: this.car.y, angle: this.car.angle };
     }
 
-    const route = this.demoRoute.waypoints;
+    const route = this.demoRoute.poses;
     let remaining = Math.max(0, Math.min(distance, this.demoRoute.length));
     for (let i = 1; i < route.length; i++) {
       const from = route[i - 1];
@@ -817,17 +1066,18 @@ export class ParkingGame extends BaseGame {
       const segment = Math.hypot(to.x - from.x, to.y - from.y);
       if (remaining <= segment || i === route.length - 1) {
         const t = segment === 0 ? 1 : Math.max(0, Math.min(1, remaining / segment));
+        const angle = from.angle + normalizeAngle(to.angle - from.angle) * t;
         return {
           x: from.x + (to.x - from.x) * t,
           y: from.y + (to.y - from.y) * t,
-          angle: Math.atan2(to.y - from.y, to.x - from.x),
+          angle,
         };
       }
       remaining -= segment;
     }
 
     const last = route[route.length - 1];
-    return { x: last.x, y: last.y, angle: this.demoRoute.finalAngle };
+    return { x: last.x, y: last.y, angle: last.angle };
   }
 
   private updateDemo(dt: number) {
@@ -853,12 +1103,12 @@ export class ParkingGame extends BaseGame {
       return;
     }
 
-    const target = this.demoRoute.waypoints[this.demoRoute.waypoints.length - 1];
+    const target = this.demoRoute.poses[this.demoRoute.poses.length - 1];
     this.car = {
       ...this.car,
       x: target.x,
       y: target.y,
-      angle: this.demoRoute.finalAngle,
+      angle: target.angle,
       speed: 0,
       vx: 0,
       vy: 0,
@@ -978,9 +1228,9 @@ export class ParkingGame extends BaseGame {
       ctx.lineJoin = 'round';
       ctx.setLineDash([8, 7]);
       ctx.beginPath();
-      this.demoRoute.waypoints.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
+      this.demoRoute.poses.forEach((pose, index) => {
+        if (index === 0) ctx.moveTo(pose.x, pose.y);
+        else ctx.lineTo(pose.x, pose.y);
       });
       ctx.stroke();
       ctx.setLineDash([]);

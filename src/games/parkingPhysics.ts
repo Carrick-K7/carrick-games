@@ -15,10 +15,11 @@ export interface ParkingDriveInput {
   right: boolean;
 }
 
-const MAX_STEER = 0.36;
-const STEER_RATE = 5.6;
-const STEER_RETURN_RATE = 6.4;
-const WHEEL_BASE = 72;
+export const PARKING_MAX_STEER = 0.64;
+const STEER_RATE = 8.0;
+const STEER_RETURN_RATE = 9.0;
+export const PARKING_WHEEL_BASE = 30;
+export const PARKING_MIN_TURN_RADIUS = PARKING_WHEEL_BASE / Math.tan(PARKING_MAX_STEER);
 export const PARKING_MAX_FORWARD_SPEED = 200;
 const MAX_REVERSE_SPEED = 90;
 const FORWARD_ACCEL = 320;
@@ -66,7 +67,7 @@ export function updateParkingCar(
 
   speed = Math.max(-MAX_REVERSE_SPEED, Math.min(PARKING_MAX_FORWARD_SPEED, speed));
 
-  const steerTarget = input.left === input.right ? 0 : input.left ? -MAX_STEER : MAX_STEER;
+  const steerTarget = input.left === input.right ? 0 : input.left ? -PARKING_MAX_STEER : PARKING_MAX_STEER;
   const steerRate = steerTarget === 0 ? STEER_RETURN_RATE : STEER_RATE;
   const steerDelta = steerTarget - car.steerAngle;
   const steerStep = Math.sign(steerDelta) * Math.min(Math.abs(steerDelta), steerRate * dt);
@@ -74,7 +75,7 @@ export function updateParkingCar(
 
   let angle = car.angle;
   if (Math.abs(speed) > STOP_SPEED && Math.abs(steerAngle) > 0.001) {
-    angle += (speed / WHEEL_BASE) * Math.tan(steerAngle) * dt;
+    angle += (speed / PARKING_WHEEL_BASE) * Math.tan(steerAngle) * dt;
   }
 
   const vx = Math.cos(angle) * speed;
