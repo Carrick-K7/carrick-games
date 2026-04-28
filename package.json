@@ -1,6 +1,6 @@
 {
   "name": "carrick-games",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Retro game collection by Carrick - HTML5 Canvas games",
   "scripts": {
     "build": "tsc -p tsconfig.prod.json",

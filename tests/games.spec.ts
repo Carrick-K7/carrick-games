@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getCanvasPoint } from '../src/core/render';
+import { GAMES } from '../src/games/catalog';
 import {
   IWANNA_PLAYER_H,
   IWANNA_PLAYER_W,
@@ -49,7 +50,8 @@ function filterFavicon(errors: string[]) {
 
 function gameModuleName(url: string): string | null {
   const match = url.match(/\/dist\/games\/([^/?]+\.js)(?:\?|$)/);
-  return match?.[1] ?? null;
+  const moduleName = match?.[1] ?? null;
+  return moduleName === 'catalog.js' ? null : moduleName;
 }
 
 async function canvasColorCount(page: any, gridSize = 20): Promise<number> {
@@ -123,6 +125,24 @@ const ALL_GAME_IDS = [
 // ─── Lifecycle tests ────────────────────────────────────────────────────────
 
 test.describe('Game rules', () => {
+  test('published game catalog matches source and README', () => {
+    const ids = GAMES.map((g) => g.id);
+    expect(ids).toHaveLength(27);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
+    expect(readme).toContain('Carrick Games currently ships 27 playable games');
+
+    const gamesDir = join(process.cwd(), 'src/games');
+    const gameClassFiles = readdirSync(gamesDir).filter((file) => {
+      if (!file.endsWith('.ts') || file === 'catalog.ts') return false;
+      const source = readFileSync(join(gamesDir, file), 'utf8');
+      return /export class \w+ extends BaseGame/.test(source);
+    });
+
+    expect(gameClassFiles).toHaveLength(ids.length);
+  });
+
   test('canvas font literals stay within UI bounds', () => {
     const gamesDir = join(process.cwd(), 'src/games');
     const oversizedFonts: string[] = [];

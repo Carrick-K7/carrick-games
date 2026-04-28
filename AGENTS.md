@@ -9,8 +9,9 @@ src/
   core/game.ts        # BaseGame abstract class; all games extend it
   core/render.ts      # HiDPI canvas, palette, and coordinate helpers
   core/levelselect.ts # Shared level-select UI helpers
-  games/              # One file per game plus pure helper modules
-  main.ts             # Game registration, UI rendering, controls, routing
+  games/catalog.ts    # Game metadata, dynamic loaders, and sidebar grouping
+  games/              # One file per registered game plus pure helper modules
+  main.ts             # App UI rendering, controls, routing, and lifecycle
 tests/
   games.spec.ts       # Playwright e2e and behavior coverage
   gameover.spec.ts    # Game-over and restart coverage
@@ -31,7 +32,7 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 
 ## Development Rules
 
-- Prefer existing patterns in `BaseGame`, `src/core/render.ts`, `src/main.ts`, and nearby games.
+- Prefer existing patterns in `BaseGame`, `src/core/render.ts`, `src/games/catalog.ts`, `src/main.ts`, and nearby games.
 - Do not add external runtime dependencies for games unless the user explicitly approves it.
 - Keep changes scoped. Do not reformat unrelated files or rewrite established game logic as part of a narrow fix.
 - Use `this.isDarkTheme()` and `this.isZhLang()` for theme and language branching inside games.
@@ -79,7 +80,7 @@ Required `BaseGame` methods:
 | `handleInput(e)` | Yes | Handle keyboard, mouse, and touch input. |
 | `destroy()` | Optional | Cleanup when the active game changes. |
 
-### 2. Register it in `src/main.ts`
+### 2. Register it in `src/games/catalog.ts`
 
 Add one loader to `GAME_LOADERS`:
 
@@ -109,7 +110,7 @@ Add one `GAMES` entry:
 },
 ```
 
-If the game should appear in a specific sidebar group, update `GAME_GROUP_MAP` and `GAME_LIST_ORDER`.
+If the game should appear in a specific sidebar group, update `GAME_GROUP_MAP` and `GAME_LIST_ORDER` in the same file.
 
 ### 3. Add focused tests when needed
 
@@ -191,6 +192,22 @@ When this repository is changed by an Agent, the work is not complete until ever
 6. The final response states the commit SHA, GA run status, and production smoke-test result.
 
 Do not call Agent-developed work done after only editing files, running tests, committing, or pushing. Deployment completion and production smoke testing are required for closure.
+
+## Release Tags
+
+Release tags are cut only after the Agent Development Closure steps pass for the commit being tagged.
+
+For a release:
+
+1. Set `package.json` and `package-lock.json` to the intended version.
+2. Commit, push, monitor GA, and smoke test production.
+3. Create an annotated tag from the verified commit:
+   ```bash
+   git tag -a v0.1.0 -m "Carrick Games v0.1.0"
+   git push origin v0.1.0
+   ```
+
+Do not tag an unpushed, unverified, or locally-only commit.
 
 ## Deployment Reference
 

@@ -4,6 +4,8 @@ A browser-based collection of retro-inspired HTML5 Canvas games.
 
 Live site: https://games.carrick7.com/
 
+Current release line: `0.1.x`.
+
 ## Games
 
 Carrick Games currently ships 27 playable games:
@@ -55,6 +57,8 @@ Carrick Games currently ships 27 playable games:
 - CSS custom properties for theming.
 - Playwright end-to-end tests.
 - GitHub Actions and Caddy for production deployment.
+
+Game metadata and dynamic loaders live in `src/games/catalog.ts`; the app shell and lifecycle code live in `src/main.ts`.
 
 ## Local Development
 

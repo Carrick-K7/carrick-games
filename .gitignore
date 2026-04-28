@@ -4,3 +4,7 @@ _site
 .DS_Store
 *.log
 test-results/
+playwright-report/
+.kimi_session
+.codex
+*.patch
