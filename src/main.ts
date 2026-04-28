@@ -1,6 +1,7 @@
 import {
   GAME_GROUPS,
   GAME_GROUP_MAP,
+  GAME_LIST_ORDER,
   GAME_LIST_ORDER_INDEX,
   GAMES,
   type GameCtor,
@@ -591,6 +592,7 @@ export async function prepareGame(name: string) {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d');
   if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  delete canvas.dataset.parkingState;
 
   canvas.width = meta.canvasSize.width;
   canvas.height = meta.canvasSize.height;
@@ -875,7 +877,8 @@ function toggleFullscreen() {
   });
 
   const hashGame = getHashGame();
-  const initialGame = hashGame && GAMES.some((g) => g.id === hashGame) ? hashGame : GAMES[0]?.id;
+  const firstListedGame = GAME_LIST_ORDER.find((id) => GAMES.some((g) => g.id === id));
+  const initialGame = hashGame && GAMES.some((g) => g.id === hashGame) ? hashGame : firstListedGame ?? GAMES[0]?.id;
   if (initialGame) {
     void prepareGame(initialGame);
     if (!hashGame) {

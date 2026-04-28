@@ -49,6 +49,12 @@ async function selectGame(page: any, gameId: string) {
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
+  const meta = GAMES.find((g) => g.id === gameId);
+  const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
+  if (meta) {
+    await expect(page.locator('#gameTitle')).toHaveText(zh ? meta.nameZh : meta.name);
+  }
+  await expect(item).toHaveClass(/active/);
   await expect(page.locator('#actionBtn')).toBeVisible();
   await expect(page.locator('#actionBtn')).toBeEnabled();
 }
@@ -432,7 +438,17 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    expect([...new Set(gameModules)].sort()).toEqual(['snake.js']);
+    expect([...new Set(gameModules)].sort()).toEqual(['parking.js', 'parkingLevels.js', 'parkingPhysics.js']);
+  });
+
+  test('parking is the first game and default entry is playable', async ({ page }) => {
+    await expect(page.locator('.game-list-item').first()).toHaveAttribute('data-id', 'parking');
+    await expect(page.locator('#gameTitle')).toHaveText('停车');
+
+    await page.locator('#actionBtn').click();
+    await expect
+      .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState))
+      .toBe('playing');
   });
 
   test('system light theme renders the canvas with light game colors', async ({ page }) => {

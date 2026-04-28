@@ -624,8 +624,8 @@ export const GAME_GROUP_MAP: Record<string, string> = {
 };
 
 export const GAME_LIST_ORDER = [
-  'snake', 'pacman', 'frogger', 'flappybird', 'doodlejump', 'iwanna',
-  'parking', 'breakout', 'pong', 'stacker',
+  'parking', 'snake', 'pacman', 'frogger', 'flappybird', 'doodlejump', 'iwanna',
+  'breakout', 'pong', 'stacker',
   'spaceshooter', 'galaga', 'asteroids', 'beachhead',
   'bubbleshooter', 'tetris', '2048', 'simon',
   'minesweeper', 'wordle', 'sudoku',
