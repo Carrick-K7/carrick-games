@@ -476,7 +476,6 @@ function renderControlsInfo() {
 function renderControls() {
   renderStats();
   renderKeyboard();
-  renderControlsInfo();
 }
 
 function normalizeKey(label: string): string {
