@@ -615,7 +615,7 @@ export const GAME_GROUP_MAP: Record<string, string> = {
   flappybird: 'arcade', doodlejump: 'arcade', iwanna: 'arcade',
   parking: 'arcade', breakout: 'arcade', pong: 'arcade', stacker: 'arcade',
   spaceshooter: 'combat', galaga: 'combat',
-  asteroids: 'combat', beachhead: 'combat',
+  asteroids: 'combat', beachhead: 'combat', aimlab: 'combat',
   bubbleshooter: 'puzzle', tetris: 'puzzle', '2048': 'puzzle',
   simon: 'puzzle', minesweeper: 'puzzle', wordle: 'puzzle',
   sudoku: 'puzzle',

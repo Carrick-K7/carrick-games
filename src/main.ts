@@ -442,37 +442,6 @@ function renderKeyboard() {
   bindVirtualKeyboard();
 }
 
-function renderControlsInfo() {
-  const container = document.getElementById('controlsPanel');
-  if (!container) return;
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  if (!meta) {
-    container.innerHTML = '';
-    return;
-  }
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  let html = '';
-
-  if (meta.controls.keyboard?.length) {
-    html += `<div class="control-section"><div class="control-section-title">${zh ? '键盘' : 'KEYBOARD'}</div>`;
-    for (const row of meta.controls.keyboard) {
-      const keysHtml = row.keys.map((k) => `<span class="keycap">${k}</span>`).join('');
-      html += `<div class="control-row"><div class="control-keys">${keysHtml}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
-    }
-    html += `</div>`;
-  }
-
-  if (meta.controls.touch?.length) {
-    html += `<div class="control-section"><div class="control-section-title">${zh ? '触摸' : 'TOUCH'}</div>`;
-    for (const row of meta.controls.touch) {
-      html += `<div class="control-row"><div class="control-icon">${renderTouchIcon(row.icon)}</div><div class="control-label">${zh ? row.actionZh : row.action}</div></div>`;
-    }
-    html += `</div>`;
-  }
-
-  container.innerHTML = html;
-}
-
 function renderControls() {
   renderStats();
   renderKeyboard();
