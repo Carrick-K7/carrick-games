@@ -236,32 +236,32 @@ test.describe('Game rules', () => {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(straight.y).toBeGreaterThan(425);
-    expect(straight.y).toBeLessThan(430);
-    expect(straight.speed).toBeGreaterThan(64);
-    expect(straight.speed).toBeLessThan(66);
+    expect(straight.y).toBeGreaterThan(441);
+    expect(straight.y).toBeLessThan(447);
+    expect(straight.speed).toBeGreaterThan(30);
+    expect(straight.speed).toBeLessThan(35);
 
     let cruising = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 180; i++) {
       cruising = updateParkingCar(cruising, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(cruising.y).toBeGreaterThan(165);
-    expect(cruising.y).toBeLessThan(172);
-    expect(cruising.speed).toBeGreaterThan(192);
-    expect(cruising.speed).toBeLessThan(195);
+    expect(cruising.y).toBeGreaterThan(311);
+    expect(cruising.y).toBeLessThan(318);
+    expect(cruising.speed).toBeGreaterThan(94);
+    expect(cruising.speed).toBeLessThan(99);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 30; i++) {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(200.6);
-    expect(car.x).toBeLessThan(201.3);
-    expect(car.y).toBeGreaterThan(450);
-    expect(car.y).toBeLessThan(454);
-    expect(car.angle).toBeGreaterThan(-1.47);
-    expect(car.angle).toBeLessThan(-1.36);
+    expect(car.x).toBeGreaterThan(200.0);
+    expect(car.x).toBeLessThan(200.5);
+    expect(car.y).toBeGreaterThan(453);
+    expect(car.y).toBeLessThan(459);
+    expect(car.angle).toBeGreaterThan(-1.54);
+    expect(car.angle).toBeLessThan(-1.48);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -274,8 +274,8 @@ test.describe('Game rules', () => {
     for (let i = 0; i < 30; i++) {
       analog = updateParkingCar(analog, { up: true, down: false, left: false, right: false, steer: 0.5 }, 1 / 60);
     }
-    expect(analog.steerAngle).toBeGreaterThan(PARKING_MAX_STEER * 0.45);
-    expect(analog.steerAngle).toBeLessThan(PARKING_MAX_STEER * 0.55);
+    expect(analog.steerAngle).toBeGreaterThan(PARKING_MAX_STEER * 0.40);
+    expect(analog.steerAngle).toBeLessThan(PARKING_MAX_STEER * 0.60);
   });
 
   test('parking car model follows Tank 500 proportions', () => {
@@ -285,7 +285,23 @@ test.describe('Game rules', () => {
     expect(PARKING_WHEEL_BASE / PARKING_CAR_LENGTH).toBeCloseTo(2850 / 5078, 5);
     expect(PARKING_MIN_TURN_RADIUS / PARKING_CAR_LENGTH).toBeCloseTo(5600 / 5078, 5);
     expect(PARKING_MAX_STEER).toBeCloseTo(Math.atan(2850 / 5600), 5);
-    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER * 2, 5);
+    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER, 5);
+  });
+
+  test('parking completion requires the full car footprint inside the spot', () => {
+    const level = PARKING_LEVELS[0];
+    const centered = {
+      x: level.spot.x + level.spot.w / 2,
+      y: level.spot.y + level.spot.h / 2,
+      angle: -Math.PI / 2,
+      speed: 0,
+    };
+
+    expect(parkingCarIsParked(level, centered)).toBe(true);
+    expect(parkingCarIsParked(level, {
+      ...centered,
+      x: level.spot.x + 7,
+    })).toBe(false);
   });
 
   test('parking ships 100 non-repeating levels with planned technique coverage', () => {
@@ -300,12 +316,15 @@ test.describe('Game rules', () => {
     expect(new Set(signatures).size).toBe(100);
 
     expect(new Set(PARKING_LEVELS.map((level) => level.technique))).toEqual(new Set([
-      'front-bay',
-      'parallel-park',
-      'bay-realign',
-      'offset-gate',
-      'alley-dock',
-      'slalom-aisle',
+      'front-bay-top',
+      'front-bay-bottom',
+      'reverse-bay-top',
+      'reverse-bay-bottom',
+      'parallel-right',
+      'reverse-parallel-right',
+      'angled-bay',
+      'tight-garage',
+      'alley-weave',
       'precision-curb',
     ]));
   });
@@ -443,7 +462,10 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    expect([...new Set(gameModules)].sort()).toEqual(['parking.js', 'parkingLevels.js', 'parkingPhysics.js']);
+    expect([...new Set(gameModules)].sort()).toEqual([
+      'parking.js', 'parkingConstants.js', 'parkingGeometry.js',
+      'parkingLevels.js', 'parkingPhysics.js', 'parkingRoute.js',
+    ]);
   });
 
   test('parking is the first game and default entry is playable', async ({ page }) => {

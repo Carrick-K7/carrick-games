@@ -92,9 +92,8 @@ export function renderParkingSteeringHTML(state: LevelSelectState, zh: boolean):
   return `<div class="parking-steering">
     <div class="parking-steering-title">${zh ? '方向盘' : 'STEERING'}</div>
     <div class="steering-wheel" id="parkingSteeringWheel" style="--wheel-rotation:${wheelRotation}deg">
-      <svg viewBox="0 0 100 100" aria-hidden="true">
+       <svg viewBox="0 0 100 100" aria-hidden="true">
         <circle class="steering-rim" cx="50" cy="50" r="42"/>
-        <circle class="steering-hub" cx="50" cy="50" r="13"/>
         <path class="steering-spoke" d="M50 50 L50 17"/>
         <path class="steering-spoke" d="M50 50 L21 70"/>
         <path class="steering-spoke" d="M50 50 L79 70"/>
