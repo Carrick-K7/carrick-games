@@ -48,19 +48,6 @@ function setHashGame(name: string) {
   }
 }
 
-function renderTouchIcon(icon: string): string {
-  const icons: Record<string, string> = {
-    tap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.2"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>',
-    'swipe-left': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 8l-4 4 4 4M6 12h12"/></svg>',
-    'swipe-right': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 8l4 4-4 4M18 12H6"/></svg>',
-    'swipe-up': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 14l4-4 4 4M12 6v12"/></svg>',
-    'swipe-down': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 10l4 4 4-4M12 6v12"/></svg>',
-    hold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2" opacity="0.2"/><path d="M12 8v8M9 12h6"/></svg>',
-    swipe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 8l4 4-4 4"/></svg>',
-  };
-  return icons[icon] || icons.tap;
-}
-
 function updateActionButton() {
   const btn = document.getElementById('actionBtn') as HTMLButtonElement | null;
   if (!btn) {
@@ -570,7 +557,6 @@ export async function prepareGame(name: string) {
   setLoadingOverlay(true);
   updateGameTitle();
   updateGameDesc();
-  renderControls();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
     el.classList.toggle('active', el.getAttribute('data-id') === name);

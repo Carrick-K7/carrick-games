@@ -17,7 +17,7 @@ export const GAME_LOADERS = {
   asteroids: () => import('./asteroids.js').then((m) => m.AsteroidsGame),
   minesweeper: () => import('./minesweeper.js').then((m) => m.MinesweeperGame),
   doodlejump: () => import('./doodlejump.js').then((m) => m.DoodleJumpGame),
-  game2048: () => import('./game2048.js').then((m) => m.Game2048),
+  '2048': () => import('./game2048.js').then((m) => m.Game2048),
   simon: () => import('./simon.js').then((m) => m.SimonGame),
   frogger: () => import('./frogger.js').then((m) => m.FroggerGame),
   beachhead: () => import('./beachhead.js').then((m) => m.BeachHeadGame),
@@ -283,7 +283,7 @@ export const GAMES: GameMeta[] = [
     nameZh: '2048',
     desc: 'Slide and merge tiles to reach 2048.',
     descZh: '滑动合并数字方块,挑战 2048!',
-    loader: GAME_LOADERS.game2048,
+    loader: GAME_LOADERS['2048'],
     canvasSize: { width: 400, height: 400 },
     controls: {
       keyboard: [

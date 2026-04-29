@@ -107,17 +107,6 @@ export function renderParkingSteeringHTML(state: LevelSelectState, zh: boolean):
   </div>`;
 }
 
-export function renderLevelDotsHTML(state: LevelSelectState): string {
-  let html = `<div class="level-dots" id="levelDots">`;
-  for (let i = 0; i < state.totalLevels; i++) {
-    const cls = i < state.bestLevel ? 'dot cleared' :
-      i === state.currentLevel ? 'dot current' : 'dot';
-    html += `<span class="${cls}"></span>`;
-  }
-  html += `</div>`;
-  return html;
-}
-
 export function renderMenuHint(zh: boolean): string {
   return `<div class="ds-hint">${zh ? '点击关卡开始' : 'Click a level to start'}</div>`;
 }
