@@ -604,8 +604,8 @@ export async function prepareGame(name: string) {
   canvas.dataset.logicalHeight = String(meta.canvasSize.height);
   canvas.dataset.pixelRatio = '1';
 
-  canvas.style.width = Math.round(meta.canvasSize.width * 1.35) + 'px';
-  canvas.style.height = Math.round(meta.canvasSize.height * 1.35) + 'px';
+  canvas.style.width = Math.round(meta.canvasSize.width * 2) + 'px';
+  canvas.style.height = Math.round(meta.canvasSize.height * 2) + 'px';
 
   let GameClass: GameCtor;
   try {
