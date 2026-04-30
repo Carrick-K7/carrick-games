@@ -26,11 +26,6 @@ import {
   parkingCarIsParked,
   parkingRouteIsClear,
 } from '../src/games/parking';
-import {
-  PACMAN_RADIUS,
-  PACMAN_TILE,
-  movePacmanBody,
-} from '../src/games/pacmanPhysics';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -117,16 +112,13 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'pong', keys: ['ArrowUp', 'ArrowDown', 'w', 's'], delayMs: 2000 },
   { id: 'spaceshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'flappybird', keys: ['Space', 'Space', 'Space'], delayMs: 2000 },
-  { id: 'pacman', keys: ['ArrowRight', 'ArrowUp', 'ArrowLeft'], delayMs: 2000 },
 
   { id: 'asteroids', keys: ['ArrowLeft', 'ArrowUp', 'Space'], delayMs: 2000 },
   { id: 'doodlejump', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'frogger', keys: ['ArrowUp', 'ArrowUp', 'ArrowLeft'], delayMs: 2000 },
   { id: 'galaga', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
 
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'beachhead', keys: ['ArrowLeft', 'ArrowUp', 'Space', 'ArrowRight'], delayMs: 2000 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
@@ -156,11 +148,11 @@ const ALL_GAME_IDS = [
 test.describe('Game rules', () => {
   test('published game catalog matches source and README', () => {
     const ids = GAMES.map((g) => g.id);
-    expect(ids).toHaveLength(28);
+    expect(ids).toHaveLength(25);
     expect(new Set(ids).size).toBe(ids.length);
 
     const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
-    expect(readme).toContain('Carrick Games currently ships 28 playable games');
+    expect(readme).toContain('Carrick Games currently ships 25 playable games');
 
     const gamesDir = join(process.cwd(), 'src/games');
     const gameClassFiles = readdirSync(gamesDir).filter((file) => {
@@ -389,49 +381,7 @@ test.describe('Game rules', () => {
     expect(badRoutes).toEqual([]);
   });
 
-  test('pacman body stops before entering wall tiles', () => {
-    const centerY = PACMAN_TILE + PACMAN_TILE / 2;
-    const result = movePacmanBody({
-      maze: [[0, 0], [1, 0], [0, 0]],
-      cols: 2,
-      rows: 3,
-      tile: PACMAN_TILE,
-      radius: PACMAN_RADIUS,
-      x: PACMAN_TILE / 2,
-      y: centerY,
-      dir: 'RIGHT',
-      nextDir: 'RIGHT',
-      speed: PACMAN_TILE * 2,
-      dt: 1,
-    });
 
-    expect(result.x + PACMAN_RADIUS).toBeLessThanOrEqual(PACMAN_TILE);
-    expect(result.y).toBe(centerY);
-    expect(result.col).toBe(0);
-    expect(result.row).toBe(1);
-  });
-
-  test('pacman recenters on the lane axis when blocked by a wall', () => {
-    const centerY = PACMAN_TILE + PACMAN_TILE / 2;
-    const result = movePacmanBody({
-      maze: [[0, 0], [1, 0], [0, 0]],
-      cols: 2,
-      rows: 3,
-      tile: PACMAN_TILE,
-      radius: PACMAN_RADIUS,
-      x: PACMAN_TILE - PACMAN_RADIUS - 1,
-      y: centerY + 3,
-      dir: 'RIGHT',
-      nextDir: 'RIGHT',
-      speed: PACMAN_TILE,
-      dt: 1,
-    });
-
-    expect(result.x).toBeCloseTo(PACMAN_TILE - PACMAN_RADIUS, 5);
-    expect(result.y).toBe(centerY);
-    expect(result.col).toBe(0);
-    expect(result.row).toBe(1);
-  });
 });
 
 test.describe('Carrick Games - Lifecycle', () => {
@@ -554,7 +504,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('all 28 games are registered in the list', async ({ page }) => {
+  test('all 25 games are registered in the list', async ({ page }) => {
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await expect(item).toBeVisible();

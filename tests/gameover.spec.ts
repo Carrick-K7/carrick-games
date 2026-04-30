@@ -93,14 +93,6 @@ async function suicideFlappybird(page: any) {
   await page.waitForTimeout(4000);
 }
 
-async function suicidePacman(page: any) {
-  // Move a bit then stop, ghost catches you
-  await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(200);
-  await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(8000);
-}
-
 async function suicideAsteroids(page: any) {
   // No thrust, asteroid hits you
   await page.waitForTimeout(6000);
@@ -109,12 +101,6 @@ async function suicideAsteroids(page: any) {
 async function suicideDoodlejump(page: any) {
   // No movement, fall off screen
   await page.waitForTimeout(4000);
-}
-
-async function suicideFrogger(page: any) {
-  // Hop up into water without log -> die
-  await page.keyboard.press('ArrowUp');
-  await page.waitForTimeout(2000);
 }
 
 async function suicideGalaga(page: any) {
@@ -135,11 +121,6 @@ async function suicideIwanna(page: any) {
   await page.waitForTimeout(1200);
   await page.keyboard.up('ArrowRight');
   await page.waitForTimeout(1200);
-}
-
-async function suicideBeachhead(page: any) {
-  // Let early waves land and fire back without defending
-  await page.waitForTimeout(9000);
 }
 
 async function suicideParking(page: any) {
@@ -309,14 +290,11 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'pong', suicide: suicidePong, timeout: 20000 },
   { id: 'spaceshooter', suicide: suicideSpaceshooter, timeout: 15000 },
   { id: 'flappybird', suicide: suicideFlappybird, timeout: 15000 },
-  { id: 'pacman', suicide: suicidePacman, timeout: 20000 },
   { id: 'asteroids', suicide: suicideAsteroids, timeout: 15000 },
   { id: 'doodlejump', suicide: suicideDoodlejump, timeout: 15000 },
-  { id: 'frogger', suicide: suicideFrogger, timeout: 15000 },
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
-  { id: 'beachhead', suicide: suicideBeachhead, timeout: 20000 },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 15000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },

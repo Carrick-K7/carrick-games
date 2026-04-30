@@ -236,10 +236,42 @@ export class IwannaGame extends BaseGame {
     }
 
     if (this.respawnTimer <= 0) {
-      ctx.fillStyle = accent;
-      ctx.fillRect(this.player.x, this.player.y, PLAYER_W, PLAYER_H);
-      ctx.fillStyle = dark ? '#f8fafc' : '#0f172a';
-      ctx.fillRect(this.player.x + 9, this.player.y + 4, 3, 3);
+      const x = this.player.x;
+      const y = this.player.y;
+      const w = PLAYER_W;
+      const h = PLAYER_H;
+
+      // Cape (red, behind body)
+      ctx.fillStyle = '#e74c3c';
+      ctx.fillRect(x + 2, y - 2, w - 4, 5);
+      ctx.fillRect(x + 1, y + 2, w - 2, 4);
+
+      // Legs (dark blue)
+      ctx.fillStyle = '#2c3e50';
+      ctx.fillRect(x + 2, y + h - 5, 4, 5);
+      ctx.fillRect(x + w - 6, y + h - 5, 4, 5);
+
+      // Body (blue)
+      ctx.fillStyle = '#3498db';
+      ctx.fillRect(x + 1, y + 4, w - 2, h - 9);
+
+      // Head (skin)
+      ctx.fillStyle = '#ffd9b3';
+      ctx.fillRect(x + 1, y, w - 2, 7);
+
+      // Hair (brown)
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(x, y - 1, w, 3);
+
+      // Eyes (white)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 3, y + 2, 3, 2);
+      ctx.fillRect(x + w - 6, y + 2, 3, 2);
+
+      // Pupils (dark)
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x + 4, y + 2, 1, 1);
+      ctx.fillRect(x + w - 5, y + 2, 1, 1);
     }
 
     ctx.restore();
