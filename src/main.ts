@@ -10,7 +10,7 @@ import {
 } from './games/catalog.js';
 export { GAMES } from './games/catalog.js';
 import { getStoredRecord, readStoredRecords } from './core/game.js';
-import { getLogicalCanvasSize } from './core/render.js';
+
 import {
   renderLevelGridHTML,
   renderDrivingStateHTML,
@@ -261,16 +261,17 @@ function renderStats() {
   const ls = getLevelSelectState();
   let html = '';
 
-  // Title
-  html += `<div class="stats-section">`;
-  html += `<div class="stats-title">${zh ? meta.nameZh : meta.name}</div>`;
+  // Game info card
+  html += `<div class="game-info-card">`;
+  html += `<div class="gic-name">${zh ? meta.nameZh : meta.name}</div>`;
+  html += `<div class="gic-desc">${zh ? (meta.descZh || meta.desc) : meta.desc}</div>`;
   if (best != null) {
     const bestLabel = currentGameName === 'parking' ? (zh ? '最高关卡' : 'Best Level') : (zh ? '最高记录' : 'Best');
-    html += `<div class="stats-row"><span>${bestLabel}</span><span class="stats-value">${best}</span></div>`;
+    html += `<div class="gic-record"><span>${bestLabel}</span><span class="gic-value">${best}</span></div>`;
   }
   html += `</div>`;
 
-  // Driving state (replaces in-canvas dashboard)
+  // Driving state
   if (ls && ls.gameState !== 'menu') {
     html += renderDrivingStateHTML(ls, zh);
   }
@@ -289,7 +290,6 @@ function renderStats() {
 
   container.innerHTML = html;
 
-  // Bind level cell clicks
   if (ls) {
     container.querySelectorAll('.level-cell').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -573,9 +573,8 @@ export async function prepareGame(name: string) {
   canvas.dataset.logicalHeight = String(meta.canvasSize.height);
   canvas.dataset.pixelRatio = '1';
 
-  // Re-apply zoom so the displayed size matches the new canvas dimensions
-  const savedZoom = parseInt(localStorage.getItem('cg-zoom') || '100', 10);
-  applyCanvasZoom(savedZoom);
+  canvas.style.width = Math.round(meta.canvasSize.width * 1.35) + 'px';
+  canvas.style.height = Math.round(meta.canvasSize.height * 1.35) + 'px';
 
   let GameClass: GameCtor;
   try {
@@ -596,7 +595,6 @@ export async function prepareGame(name: string) {
   }
 
   const nextGameInstance = new GameClass();
-  applyCanvasZoom(savedZoom);
   if (token !== prepareGameToken) {
     nextGameInstance.destroy?.();
     return;
@@ -775,20 +773,6 @@ window.addEventListener('blur', () => {
   updateVirtualKeyboardHighlight(pressedKeys);
 });
 
-// Canvas zoom logic
-function applyCanvasZoom(percent: number) {
-  const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
-  const label = document.getElementById('zoomLabel');
-  if (!canvas) return;
-  const scale = percent / 100;
-  const size = getLogicalCanvasSize(canvas);
-  // Use width/height instead of transform so document flow adjusts correctly
-  canvas.style.width = `${size.width * scale}px`;
-  canvas.style.height = `${size.height * scale}px`;
-  if (label) label.textContent = `${percent}%`;
-  localStorage.setItem('cg-zoom', String(percent));
-}
-
 // Fullscreen toggle
 function toggleFullscreen() {
   const wrapper = document.getElementById('canvasWrapper');
@@ -826,17 +810,6 @@ function toggleFullscreen() {
   const demoBtn = document.getElementById('demoBtn') as HTMLButtonElement | null;
   if (demoBtn) {
     demoBtn.addEventListener('click', startDemoForCurrentGame);
-  }
-
-  // Zoom slider
-  const zoomSlider = document.getElementById('zoomSlider') as HTMLInputElement | null;
-  if (zoomSlider) {
-    const savedZoom = parseInt(localStorage.getItem('cg-zoom') || '100', 10);
-    zoomSlider.value = String(savedZoom);
-    applyCanvasZoom(savedZoom);
-    zoomSlider.addEventListener('input', () => {
-      applyCanvasZoom(parseInt(zoomSlider.value, 10));
-    });
   }
 
   // Fullscreen button

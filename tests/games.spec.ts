@@ -598,8 +598,8 @@ test.describe('Carrick Games - Lifecycle', () => {
 
     await selectGame(page, 'parking');
 
-    const bestRow = page.locator('#statsPanel .stats-row').filter({ hasText: '最高关卡' });
-    await expect(bestRow.locator('.stats-value')).toHaveText('7');
+    const bestRow = page.locator('#statsPanel .gic-record').filter({ hasText: '最高关卡' });
+    await expect(bestRow.locator('.gic-value')).toHaveText('7');
     const migratedRecord = await page.evaluate(() => JSON.parse(localStorage.getItem('cg-records') || '{}').parking);
     expect(migratedRecord).toBe(7);
 
@@ -610,7 +610,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await page.reload();
     await selectGame(page, 'parking');
 
-    await expect(bestRow.locator('.stats-value')).toHaveText('0');
+    await expect(bestRow.locator('.gic-value')).toHaveText('0');
     const discardedStaleRecord = await page.evaluate(() => JSON.parse(localStorage.getItem('cg-records') || '{}').parking);
     expect(discardedStaleRecord).toBe(0);
   });

@@ -446,7 +446,7 @@ export class LuckyCaseGame extends BaseGame {
     // Notification
     if (this.notifyTimer > 0) {
       const zh = this.isZhLang();
-      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.font = '16px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = this.isDarkTheme() ? '#ff6b6b' : '#c0392b';
       ctx.fillText(this.notification, this.width / 2, 40);
@@ -457,7 +457,7 @@ export class LuckyCaseGame extends BaseGame {
       this.hintTimer += 0.016;
       const blink = Math.sin(this.hintTimer * 3) > 0;
       if (blink) {
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = this.isDarkTheme() ? '#666' : '#999';
         const zh = this.isZhLang();
@@ -476,13 +476,13 @@ export class LuckyCaseGame extends BaseGame {
     const dark = this.isDarkTheme();
 
     // Header
-    ctx.font = '18px "Press Start 2P", monospace';
+    ctx.font = '18px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
     ctx.fillText(zh ? '🎰 幸运开箱' : '🎰 LUCKY CASE', this.width / 2, 40);
 
     // Coin display
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillStyle = dark ? '#ffd700' : '#b8860b';
     ctx.fillText(`💰 ${this.save.coins}`, this.width - 15, 40);
@@ -490,7 +490,7 @@ export class LuckyCaseGame extends BaseGame {
     // Stats
     ctx.textAlign = 'left';
     ctx.fillStyle = dark ? '#888' : '#666';
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.fillText(zh ? `已开 ${this.save.totalOpens} 箱` : `Opens: ${this.save.totalOpens}`, 15, 70);
 
     // Mode toggle
@@ -504,7 +504,7 @@ export class LuckyCaseGame extends BaseGame {
       ctx.beginPath();
       this.roundRect(ctx, btnX, btnY, btnW, btnH, 12);
       ctx.stroke();
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '7px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = isSlot ? '#ff9800' : '#39C5BB';
       ctx.fillText(isSlot ? (zh ? '🎰 老虎机' : '🎰 SLOT') : (zh ? '📜 经典' : '📜 CLASSIC'), this.width / 2, btnY + 16);
@@ -518,7 +518,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.strokeStyle = '#39C5BB';
     ctx.lineWidth = 1;
     ctx.strokeRect(collBtn.x - collBtn.w, collBtn.y, collBtn.w, collBtn.h);
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', collBtn.x - collBtn.w / 2, collBtn.y + 16);
 
@@ -556,17 +556,17 @@ export class LuckyCaseGame extends BaseGame {
       ctx.fillText(c.animEmoji, cx + cardW / 2, cy + 50);
 
       // Case name
-      ctx.font = '11px "Press Start 2P", monospace';
+      ctx.font = '11px system-ui, -apple-system, sans-serif';
       ctx.fillStyle = affordable ? (dark ? '#fff' : '#222') : (dark ? '#555' : '#ccc');
       ctx.fillText(zh ? c.nameZh : c.name, cx + cardW / 2, cy + 80);
 
       // Price
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '10px system-ui, -apple-system, sans-serif';
       ctx.fillStyle = affordable ? '#ffd700' : (dark ? '#555' : '#ccc');
       ctx.fillText(`💰 ${c.cost}`, cx + cardW / 2, cy + 105);
 
       // Rarity label
-      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.font = '8px system-ui, -apple-system, sans-serif';
       ctx.fillStyle = c.color;
       const rLabel = zh ? '包含' : 'Contains:';
       ctx.fillText(rLabel, cx + cardW / 2, cy + 130);
@@ -606,7 +606,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Title
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = c.color;
     ctx.fillText(zh ? '开箱中...' : 'OPENING...', this.width / 2, 40);
@@ -633,7 +633,7 @@ export class LuckyCaseGame extends BaseGame {
     if (this.animScrollItems.length > 0) {
       const idx = Math.floor(this.animTimer * 12) % this.animScrollItems.length;
       const item = this.animScrollItems[idx];
-      ctx.font = '15px "Press Start 2P", monospace';
+      ctx.font = '15px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = item.color;
       ctx.fillText(item.name, this.width / 2, slotY + slotH / 2 + 5);
@@ -660,7 +660,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fill();
 
     // "Press Start 2P" hint
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = dark ? '#666' : '#999';
     ctx.fillText(zh ? '滚动中...' : 'Spinning...', this.width / 2, slotY + slotH + 30);
@@ -684,7 +684,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Title
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = c.color;
     ctx.fillText(zh ? '🎰 开箱中...' : '🎰 SPINNING...', this.width / 2, 40);
@@ -735,7 +735,7 @@ export class LuckyCaseGame extends BaseGame {
         ctx.fillText(item.emoji, rx + REEL_W / 2, iy + 30);
 
         // Name
-        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.font = '7px system-ui, -apple-system, sans-serif';
         ctx.fillStyle = dark ? '#888' : '#666';
         ctx.globalAlpha = 0.7;
         ctx.fillText(item.name, rx + REEL_W / 2, iy + 48);
@@ -782,7 +782,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.setLineDash([]);
 
     // Status text
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = dark ? '#888' : '#666';
     let status = '';
@@ -815,13 +815,13 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Case name
-    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = c.color;
     ctx.fillText(zh ? c.nameZh : c.name, this.width / 2, 40);
 
     // Rarity label
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = rc.color;
     const rarityText = `${zh ? '★ ' + rc.labelZh : rc.label + ' ★'}`;
     ctx.fillText(rarityText, this.width / 2, 80);
@@ -832,18 +832,18 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillText(item.emoji, this.width / 2, 170);
 
     // Item name
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '16px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = rc.color;
     ctx.fillText(zh ? item.nameZh : item.name, this.width / 2, 220);
 
     // Value
-    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#ffd700';
     ctx.fillText(`${zh ? '价值' : 'Value'}: 💰 ${item.value}`, this.width / 2, 260);
 
     // Collection count
     const collCount = this.getCollected(item.name)?.count || 1;
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = dark ? '#888' : '#666';
     ctx.fillText(zh ? `拥有 ${collCount} 个` : `Owned: ${collCount}`, this.width / 2, 285);
 
@@ -861,13 +861,13 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '10px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#ffd700';
     ctx.textAlign = 'center';
     ctx.fillText(zh ? `💰 出售 (+${item.value})` : `💰 SELL (+${item.value})`, this.width / 2, btnY + 19);
 
     // Coin display
-    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = '#ffd700';
     ctx.textAlign = 'right';
     ctx.fillText(`💰 ${this.save.coins}`, this.width - 15, 40);
@@ -888,13 +888,13 @@ export class LuckyCaseGame extends BaseGame {
     const totalCount = allItems.length;
 
     // Header
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
     ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', this.width / 2, 28);
 
     // Progress text
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = dark ? '#aaa' : '#666';
     ctx.fillText(`${ownedCount}/${totalCount} ${zh ? '已收集' : 'collected'}`, this.width / 2, 45);
 
@@ -919,7 +919,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.beginPath();
     this.roundRect(ctx, 15, 55, 100, 22, 4);
     ctx.stroke();
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '8px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
     ctx.fillText(zh ? '← 返回' : '← BACK', 65, 70);
@@ -977,14 +977,14 @@ export class LuckyCaseGame extends BaseGame {
 
       // Name (shortened if needed)
       const name = isOwned ? (zh ? item.nameZh : item.name) : '??? 🔒';
-      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.font = '7px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = isOwned ? (dark ? '#ddd' : '#333') : (dark ? '#555' : '#bbb');
       ctx.fillText(name, cx + cardW / 2, cy + 50);
 
       // Count badge for owned
       if (isOwned && entry && entry.count > 1) {
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = '8px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'right';
         ctx.fillStyle = '#ffd700';
         ctx.fillText(`x${entry.count}`, cx + cardW - 4, cy + 14);
@@ -1002,7 +1002,7 @@ export class LuckyCaseGame extends BaseGame {
     // Page navigation
     if (this.museumTotalPages > 1) {
       const navY = this.height - 28;
-      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.font = '10px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = dark ? '#888' : '#666';
 
