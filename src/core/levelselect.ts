@@ -13,7 +13,7 @@ export interface LevelSelectState {
 }
 
 export function renderLevelGridHTML(state: LevelSelectState, selectedLevel: number, zh: boolean): string {
-  const cols = state.totalLevels > 50 ? 10 : 5;
+  const cols = state.totalLevels > 50 ? 8 : 5;
   const largeClass = state.totalLevels > 50 ? ' level-grid-large' : '';
   let html = `<div class="level-grid${largeClass}">`;
   for (let i = 0; i < state.totalLevels; i++) {

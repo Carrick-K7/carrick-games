@@ -330,9 +330,9 @@
     }
 
     .game-sidebar.stats-panel {
-      width: 320px;
-      min-width: 280px;
-      max-width: 380px;
+      width: 360px;
+      min-width: 300px;
+      max-width: 440px;
       max-height: calc(100vh - 120px);
       overflow-y: auto;
     }
@@ -438,12 +438,12 @@
     .level-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 4px;
-      margin: 6px 0 4px;
+      gap: 5px;
+      margin: 8px 0 4px;
     }
     .level-grid-large {
-      grid-template-columns: repeat(10, 1fr);
-      gap: 3px;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
     }
     .level-cell {
       position: relative;
@@ -454,9 +454,9 @@
       aspect-ratio: 1;
       background: var(--elevated);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      padding: 3px;
+      padding: 4px;
       transition: background .15s, border-color .15s;
       min-width: 0;
     }
@@ -479,34 +479,34 @@
       cursor: default;
     }
     .level-cell .lc-num {
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       font-weight: 600;
       color: var(--text);
       line-height: 1;
     }
     .level-grid-large .level-cell {
-      border-radius: 5px;
-      padding: 2px;
+      border-radius: 6px;
+      padding: 3px;
     }
     .level-grid-large .level-cell .lc-num {
-      font-size: 0.62rem;
+      font-size: 0.75rem;
     }
     .level-grid-large .level-cell .lc-lock,
     .level-grid-large .level-cell .lc-check {
-      font-size: 0.48rem;
+      font-size: 0.6rem;
     }
     .level-cell.locked .lc-num {
       color: var(--text-secondary);
     }
     .level-cell .lc-lock {
-      font-size: 0.6rem;
-      line-height: 1;
-      margin-top: 1px;
-    }
-    .level-cell .lc-check {
       font-size: 0.7rem;
       line-height: 1;
-      margin-top: 1px;
+      margin-top: 2px;
+    }
+    .level-cell .lc-check {
+      font-size: 0.8rem;
+      line-height: 1;
+      margin-top: 2px;
       color: var(--accent);
     }
 
