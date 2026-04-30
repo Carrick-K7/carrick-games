@@ -11,6 +11,37 @@ import {
 export { GAMES } from './games/catalog.js';
 import { getStoredRecord, readStoredRecords } from './core/game.js';
 
+// Game icons — Lucide-style SVGs, green accent stroke
+const ICON = (d: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="#39C5BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+const GAME_ICONS: Record<string, string> = {
+  parking: ICON('M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M9 17v2m6-2v2M8 12h0m8 0h0'),
+  luckycase: ICON('M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8M12 2v10M8 6l4-4 4 4M4 10h16'),
+  snake: ICON('M3 17l6-6-6-6M9 17l6-6-6-6M15 17l6-6-6-6'),
+  breakout: ICON('M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6 0h4a2 2 0 0 0 2-2v-4m0-6V5a2 2 0 0 0-2-2h-4'),
+  bubbleshooter: ICON('M22 12A10 10 0 1 1 12 2M12 6v6l4 2'),
+  tetris: ICON('M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'),
+  pong: ICON('M12 5v14M5 12h14'),
+  spaceshooter: ICON('M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8'),
+  flappybird: ICON('M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z'),
+  asteroids: ICON('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'),
+  minesweeper: ICON('M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'),
+  doodlejump: ICON('M12 19V5M5 12l7-7 7 7'),
+  '2048': ICON('M8 4h8M8 20h8M4 8v8M20 8v8M4 4h16v16H4z'),
+  simon: ICON('M13 2 3 14h9l-1 8 10-12h-9z'),
+  checkers: ICON('M3 3h18v18H3zm3 3v2m12-2v2M6 12v2m12-2v2M6 15v4m12-4v4M3 3v6m18-6v6'),
+  solitaire: ICON('M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6v4H9z'),
+  wordle: ICON('M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'),
+  sudoku: ICON('M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7zm-7-7h7v3H7zm11 0h7v3h-7z'),
+  chess: ICON('M6 3h12v4H6zM8 7v2h8V7M8 9l-2 7h12l-2-7M12 9v7m-3 5h6M6 21h12'),
+  galaga: ICON('M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3'),
+  stacker: ICON('M2 17 12 22 22 17M2 12 12 17 22 12M12 2 12 22M12 2 2 7l10 5 10-5-10-5z'),
+  iwanna: ICON('M5 12h14M12 5v14'),
+  aimlab: ICON('M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zm0 4a6 6 0 1 0 0 12 6 6 0 1 0 0-12zm0 4a2 2 0 1 0 0 4 2 2 0 1 0 0-4'),
+  texashold: ICON('M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'),
+  connectfour: ICON('M12 20V10m6 10V4M6 20v-4'),
+  _default: ICON('M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'),
+};
+
 import {
   renderLevelGridHTML,
   renderDrivingStateHTML,
@@ -707,6 +738,7 @@ function renderGameList(filter = '') {
     }
     html += `
       <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}">
+        <span class="game-list-icon">${GAME_ICONS[g.id] || GAME_ICONS._default}</span>
         <div class="game-list-name">${zh ? g.nameZh : g.name}</div>
         <div class="game-list-desc">${zh ? g.descZh : g.desc}</div>
       </button>
