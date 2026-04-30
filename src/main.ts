@@ -302,11 +302,6 @@ function renderStats() {
   }
   html += `</div>`;
 
-  // Driving state
-  if (ls && ls.gameState !== 'menu') {
-    html += renderDrivingStateHTML(ls, zh);
-  }
-
   // Level grid
   if (ls) {
     const selected = getSelectedLevel();
@@ -372,11 +367,12 @@ function updateLiveScoreDisplay() {
       : (document.documentElement.getAttribute('data-lang') === 'zh' ? '键盘' : 'KEYS');
   }
 
-  // Re-render level grid when progress changes (e.g. after completing a level)
+  // Re-render level grid when progress changes
   const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.gameState}`;
   if (snapshot !== lastLevelSelectSnapshot) {
     lastLevelSelectSnapshot = snapshot;
     renderStats();
+    renderKeyboard();
   }
 }
 
@@ -456,7 +452,8 @@ function renderKeyboard() {
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const ls = getLevelSelectState();
   const steeringPanel = ls ? renderParkingSteeringHTML(ls, zh) : '';
-  container.innerHTML = steeringPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+  const drivingPanel = (ls && ls.gameState !== 'menu') ? renderDrivingStateHTML(ls, zh) : '';
+  container.innerHTML = steeringPanel + drivingPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
   bindVirtualKeyboard();
 }
 
