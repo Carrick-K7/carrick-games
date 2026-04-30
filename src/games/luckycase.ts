@@ -37,6 +37,14 @@ interface Particle {
   color: string; size: number;
 }
 
+/* ───────── Slot machine ───────── */
+interface SlotReel {
+  items: { name: string; color: string; emoji: string }[];
+  offset: number;
+  speed: number;
+  stopped: boolean;
+}
+
 /* ───────── Rarity config ───────── */
 const RARITY: Record<Rarity, { color: string; label: string; labelZh: string; glow: string }> = {
   common:     { color: '#8a8a8a', label: 'Common', labelZh: '普通', glow: 'rgba(138,138,138,0.3)' },
@@ -192,6 +200,10 @@ export class LuckyCaseGame extends BaseGame {
   private notifyTimer = 0;
   private hintTimer = 0;
   private hoveredCase: number = -1;
+  private openMode: 'classic' | 'slot' = 'classic';
+  private slotReels: SlotReel[] = [];
+  private slotStopPhase = 0;
+  private slotStopTimer = 0;
 
   constructor() {
     super('gameCanvas', 420, 560);
@@ -257,25 +269,46 @@ export class LuckyCaseGame extends BaseGame {
     this.animPhase = 1;
     this.animTimer = 0;
 
-    // Generate scroll items
+    const zh = this.isZhLang();
     const rarity = rollRarity(caseDef.id);
     this.drawnItem = rollItem(caseDef.id, rarity);
 
-    this.animScrollItems = [];
-    // Fill with decoy items
-    const pool = caseDef.items;
-    for (let i = 0; i < 20; i++) {
-      const decoy = pool[Math.floor(Math.random() * pool.length)];
+    if (this.openMode === 'slot') {
+      this.slotReels = [];
+      this.slotStopPhase = 0;
+      this.slotStopTimer = 0;
+      const pool = caseDef.items;
+      for (let reelIdx = 0; reelIdx < 3; reelIdx++) {
+        const reelItems: SlotReel['items'] = [];
+        for (let i = 0; i < 18; i++) {
+          const decoy = pool[Math.floor(Math.random() * pool.length)];
+          reelItems.push({ name: zh ? decoy.nameZh : decoy.name, color: RARITY[decoy.rarity].color, emoji: decoy.emoji });
+        }
+        // Final item — middle reel shows the actual prize
+        if (reelIdx === 1) {
+          reelItems.push({ name: zh ? this.drawnItem.nameZh : this.drawnItem.name, color: RARITY[this.drawnItem.rarity].color, emoji: this.drawnItem.emoji });
+        } else {
+          const final = pool[Math.floor(Math.random() * pool.length)];
+          reelItems.push({ name: zh ? final.nameZh : final.name, color: RARITY[final.rarity].color, emoji: final.emoji });
+        }
+        this.slotReels.push({ items: reelItems, offset: 0, speed: 900 + Math.random() * 500, stopped: false });
+      }
+    } else {
+      // Classic scroll animation
+      this.animScrollItems = [];
+      const pool = caseDef.items;
+      for (let i = 0; i < 20; i++) {
+        const decoy = pool[Math.floor(Math.random() * pool.length)];
+        this.animScrollItems.push({
+          name: zh ? decoy.nameZh : decoy.name,
+          color: RARITY[decoy.rarity].color,
+        });
+      }
       this.animScrollItems.push({
-        name: this.isZhLang() ? decoy.nameZh : decoy.name,
-        color: RARITY[decoy.rarity].color,
+        name: zh ? this.drawnItem.nameZh : this.drawnItem.name,
+        color: RARITY[this.drawnItem.rarity].color,
       });
     }
-    // Add the real item at the end
-    this.animScrollItems.push({
-      name: this.isZhLang() ? this.drawnItem.nameZh : this.drawnItem.name,
-      color: RARITY[this.drawnItem.rarity].color,
-    });
   }
 
   update(dt: number) {
@@ -294,31 +327,99 @@ export class LuckyCaseGame extends BaseGame {
     // Opening animation
     if (this.screen === 'opening' && this.animPhase === 1) {
       this.animTimer += dt;
-      // Scroll for 2 seconds then reveal
-      if (this.animTimer >= 2) {
-        this.animPhase = 2;
-        this.addToCollection(this.drawnItem.name);
-        this.save.totalOpens++;
-        this.save.totalValue += this.drawnItem.value;
-        this.persist();
 
-        // Spawn celebration particles
-        const rc = RARITY[this.drawnItem.rarity];
-        for (let i = 0; i < 40; i++) {
-          this.particles.push({
-            x: this.width / 2 + (Math.random() - 0.5) * 100,
-            y: this.height / 3,
-            vx: (Math.random() - 0.5) * 200,
-            vy: -Math.random() * 150 - 50,
-            life: 1.5 + Math.random(),
-            maxLife: 2,
-            color: rc.color,
-            size: 3 + Math.random() * 4,
-          });
+      if (this.openMode === 'slot') {
+        // Spin reels that haven't stopped yet
+        for (let i = 0; i < 3; i++) {
+          const reel = this.slotReels[i];
+          if (!reel.stopped) {
+            reel.offset += reel.speed * dt;
+          }
         }
-        this.screen = 'result';
+
+        this.slotStopTimer += dt;
+
+        // Stop reel 0 (left) at 1.0s
+        if (this.slotStopPhase === 0 && this.slotStopTimer >= 1.0) {
+          this.slotReels[0].stopped = true;
+          this.slotReels[0].speed = 0;
+          this.slotReels[0].offset = this.snapReelOffset(0);
+          this.slotStopPhase = 1;
+        }
+        // Stop reel 2 (right) at 1.6s
+        if (this.slotStopPhase === 1 && this.slotStopTimer >= 1.6) {
+          this.slotReels[2].stopped = true;
+          this.slotReels[2].speed = 0;
+          this.slotReels[2].offset = this.snapReelOffset(2);
+          this.slotStopPhase = 2;
+        }
+        // Stop reel 1 (middle) at 2.2s, reveal result
+        if (this.slotStopPhase === 2 && this.slotStopTimer >= 2.2) {
+          this.slotReels[1].stopped = true;
+          this.slotReels[1].speed = 0;
+          this.slotReels[1].offset = this.snapReelOffset(1);
+          this.slotStopPhase = 3;
+          this.animPhase = 2;
+          this.addToCollection(this.drawnItem.name);
+          this.save.totalOpens++;
+          this.save.totalValue += this.drawnItem.value;
+          this.persist();
+          const rc = RARITY[this.drawnItem.rarity];
+          for (let i = 0; i < 40; i++) {
+            this.particles.push({
+              x: this.width / 2 + (Math.random() - 0.5) * 100,
+              y: this.height / 3,
+              vx: (Math.random() - 0.5) * 200,
+              vy: -Math.random() * 150 - 50,
+              life: 1.5 + Math.random(),
+              maxLife: 2,
+              color: rc.color,
+              size: 3 + Math.random() * 4,
+            });
+          }
+          this.screen = 'result';
+        }
+      } else {
+        // Classic scroll
+        if (this.animTimer >= 2) {
+          this.animPhase = 2;
+          this.addToCollection(this.drawnItem.name);
+          this.save.totalOpens++;
+          this.save.totalValue += this.drawnItem.value;
+          this.persist();
+          const rc = RARITY[this.drawnItem.rarity];
+          for (let i = 0; i < 40; i++) {
+            this.particles.push({
+              x: this.width / 2 + (Math.random() - 0.5) * 100,
+              y: this.height / 3,
+              vx: (Math.random() - 0.5) * 200,
+              vy: -Math.random() * 150 - 50,
+              life: 1.5 + Math.random(),
+              maxLife: 2,
+              color: rc.color,
+              size: 3 + Math.random() * 4,
+            });
+          }
+          this.screen = 'result';
+        }
       }
     }
+  }
+
+  private snapReelOffset(reelIdx: number): number {
+    const ITEM_H = 56;
+    const reel = this.slotReels[reelIdx];
+    // Last item should land on the win line (row 2, 0-indexed)
+    const target = (reel.items.length - 3) * ITEM_H;
+    const cur = reel.offset;
+    // Find the nearest valid offset that puts an item at the win line
+    const wrappedTarget = ((target % (reel.items.length * ITEM_H)) + reel.items.length * ITEM_H) % (reel.items.length * ITEM_H);
+    // Snap current offset to item-grid, then add cycles until in range
+    const snapped = Math.round(cur / ITEM_H) * ITEM_H;
+    if (snapped >= wrappedTarget) {
+      return snapped;
+    }
+    return snapped + reel.items.length * ITEM_H * Math.ceil((wrappedTarget - snapped) / (reel.items.length * ITEM_H));
   }
 
   /* ─── Drawing ─── */
@@ -391,6 +492,24 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillStyle = dark ? '#888' : '#666';
     ctx.font = '9px "Press Start 2P", monospace';
     ctx.fillText(zh ? `已开 ${this.save.totalOpens} 箱` : `Opens: ${this.save.totalOpens}`, 15, 70);
+
+    // Mode toggle
+    const isSlot = this.openMode === 'slot';
+    {
+      const btnW = 110; const btnH = 24;
+      const btnX = (this.width - btnW) / 2;
+      const btnY = 62;
+      ctx.strokeStyle = isSlot ? '#ff9800' : '#39C5BB';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      this.roundRect(ctx, btnX, btnY, btnW, btnH, 12);
+      ctx.stroke();
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = isSlot ? '#ff9800' : '#39C5BB';
+      ctx.fillText(isSlot ? (zh ? '🎰 老虎机' : '🎰 SLOT') : (zh ? '📜 经典' : '📜 CLASSIC'), this.width / 2, btnY + 16);
+      ctx.textAlign = 'left';
+    }
 
     // Museum button
     ctx.textAlign = 'right';
@@ -470,6 +589,14 @@ export class LuckyCaseGame extends BaseGame {
 
   /* ─── Opening Animation ─── */
   private drawOpening(ctx: CanvasRenderingContext2D) {
+    if (this.openMode === 'slot') {
+      this.drawOpeningSlot(ctx);
+      return;
+    }
+    this.drawOpeningClassic(ctx);
+  }
+
+  private drawOpeningClassic(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang();
     const dark = this.isDarkTheme();
     const c = this.selectedCase;
@@ -537,6 +664,132 @@ export class LuckyCaseGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.fillStyle = dark ? '#666' : '#999';
     ctx.fillText(zh ? '滚动中...' : 'Spinning...', this.width / 2, slotY + slotH + 30);
+  }
+
+  /* ─── Slot Machine Reel Animation ─── */
+  private drawOpeningSlot(ctx: CanvasRenderingContext2D) {
+    const zh = this.isZhLang();
+    const dark = this.isDarkTheme();
+    const c = this.selectedCase;
+    const REEL_W = 100;
+    const REEL_H = 280;
+    const ITEM_H = 56;
+    const GAP = 12;
+    const reelStartX = (this.width - (REEL_W * 3 + GAP * 2)) / 2;
+    const reelY = 140;
+    const winLineY = reelY + REEL_H / 2;
+
+    // Background
+    ctx.fillStyle = dark ? '#0d1117' : '#fafafa';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    // Title
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = c.color;
+    ctx.fillText(zh ? '🎰 开箱中...' : '🎰 SPINNING...', this.width / 2, 40);
+
+    // Case emoji above reels
+    const bobY = Math.sin(this.animTimer * 8) * 6;
+    ctx.font = '36px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(c.animEmoji, this.width / 2, 100 + bobY);
+
+    // Draw each reel
+    for (let r = 0; r < 3; r++) {
+      const reel = this.slotReels[r];
+      const rx = reelStartX + r * (REEL_W + GAP);
+      const stopped = reel.stopped;
+      const itemCount = reel.items.length;
+      const totalH = itemCount * ITEM_H;
+      const safeOff = ((reel.offset % totalH) + totalH) % totalH;
+      const firstIdx = Math.floor(safeOff / ITEM_H);
+      const subOff = safeOff % ITEM_H;
+
+      // Reel background
+      ctx.save();
+      ctx.beginPath();
+      this.roundRect(ctx, rx, reelY, REEL_W, REEL_H, 8);
+      ctx.clip();
+      ctx.fillStyle = dark ? '#11151f' : '#e8e8e8';
+      ctx.fillRect(rx, reelY, REEL_W, REEL_H);
+
+      // Reel items
+      for (let row = -1; row <= 7; row++) {
+        const idx = ((firstIdx + row) % itemCount + itemCount) % itemCount;
+        const item = reel.items[idx];
+        const iy = reelY + row * ITEM_H - subOff;
+        if (iy + ITEM_H < reelY || iy > reelY + REEL_H) continue;
+
+        // Item background
+        const alpha = Math.abs(iy + ITEM_H / 2 - winLineY) < ITEM_H / 2 ? 0.12 : 0;
+        if (alpha > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.fillRect(rx, iy, REEL_W, ITEM_H);
+        }
+
+        // Emoji
+        ctx.font = '26px serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = item.color;
+        ctx.fillText(item.emoji, rx + REEL_W / 2, iy + 30);
+
+        // Name
+        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.fillStyle = dark ? '#888' : '#666';
+        ctx.globalAlpha = 0.7;
+        ctx.fillText(item.name, rx + REEL_W / 2, iy + 48);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+
+      // Reel border
+      ctx.strokeStyle = stopped ? '#ffd700' : (dark ? '#333' : '#ccc');
+      ctx.lineWidth = stopped ? 2.5 : 1.5;
+      ctx.beginPath();
+      this.roundRect(ctx, rx, reelY, REEL_W, REEL_H, 8);
+      ctx.stroke();
+
+      // Stopped glow
+      if (stopped) {
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        this.roundRect(ctx, rx, reelY, REEL_W, REEL_H, 8);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // Win-line notch markers (left/right ticks)
+      ctx.fillStyle = c.color;
+      ctx.fillRect(rx - 3, winLineY - 8, 3, 16);
+      ctx.fillRect(rx + REEL_W, winLineY - 8, 3, 16);
+    }
+
+    // Win line
+    ctx.strokeStyle = c.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(reelStartX - 8, winLineY);
+    ctx.lineTo(reelStartX + REEL_W * 3 + GAP * 2 + 8, winLineY);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    // Status text
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = dark ? '#888' : '#666';
+    let status = '';
+    if (this.slotStopPhase === 0) status = zh ? '旋转中...' : 'Spinning...';
+    else if (this.slotStopPhase === 1) status = zh ? '左列停!' : 'Left stop!';
+    else if (this.slotStopPhase === 2) status = zh ? '右列停!' : 'Right stop!';
+    ctx.fillText(status, this.width / 2, reelY + REEL_H + 30);
   }
 
   /* ─── Result Screen ─── */
@@ -870,6 +1123,13 @@ export class LuckyCaseGame extends BaseGame {
       this.hoveredCase = this.getHoveredCase(x, y);
 
       if (!isClick) return;
+
+      // Mode toggle button
+      const modeBtn = { x: (this.width - 110) / 2, y: 62, w: 110, h: 24 };
+      if (this.hitTest(x, y, modeBtn.x, modeBtn.y, modeBtn.w, modeBtn.h)) {
+        this.openMode = this.openMode === 'classic' ? 'slot' : 'classic';
+        return;
+      }
 
       // Collection button
       if (this.hitTest(x, y, this.width - 15 - 120, 65, 120, 24)) {

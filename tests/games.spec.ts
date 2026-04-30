@@ -156,11 +156,11 @@ const ALL_GAME_IDS = [
 test.describe('Game rules', () => {
   test('published game catalog matches source and README', () => {
     const ids = GAMES.map((g) => g.id);
-    expect(ids).toHaveLength(27);
+    expect(ids).toHaveLength(28);
     expect(new Set(ids).size).toBe(ids.length);
 
     const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
-    expect(readme).toContain('Carrick Games currently ships 27 playable games');
+    expect(readme).toContain('Carrick Games currently ships 28 playable games');
 
     const gamesDir = join(process.cwd(), 'src/games');
     const gameClassFiles = readdirSync(gamesDir).filter((file) => {
@@ -554,7 +554,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('all 27 games are registered in the list', async ({ page }) => {
+  test('all 28 games are registered in the list', async ({ page }) => {
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await expect(item).toBeVisible();

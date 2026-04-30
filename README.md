@@ -8,7 +8,7 @@ Current release line: `0.1.x`.
 
 ## Games
 
-Carrick Games currently ships 27 playable games:
+Carrick Games currently ships 28 playable games:
 
 | Game | Chinese | Type |
 |------|---------|------|
