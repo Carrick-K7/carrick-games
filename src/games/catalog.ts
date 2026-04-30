@@ -32,6 +32,7 @@ export const GAME_LOADERS = {
   aimlab: () => import('./aimlab.js').then((m) => m.AimLabGame),
   texashold: () => import('./texashold.js').then((m) => m.TexasHoldGame),
   connectfour: () => import('./connectfour.js').then((m) => m.ConnectFourGame),
+  luckycase: () => import('./luckycase.js').then((m) => m.LuckyCaseGame),
 } satisfies Record<string, GameLoader>;
 
 export interface VirtualKeySpec {
@@ -581,6 +582,24 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
+    id: 'luckycase',
+    name: 'Lucky Case',
+    nameZh: '幸运开箱',
+    desc: 'Open cases and collect rare items. Every pull is a thrill!',
+    descZh: '开箱收集稀有物品,一发入魂的刺激体验!',
+    loader: GAME_LOADERS.luckycase,
+    canvasSize: { width: 420, height: 560 },
+    controls: {
+      keyboard: [
+        { keys: ['Escape'], action: 'Go back', actionZh: '返回' },
+        { keys: ['R'], action: 'Reset progress', actionZh: '重置进度' },
+      ],
+      touch: [
+        { icon: 'tap', action: 'Click cases to open, sell items in collection', actionZh: '点击箱子开箱,在收集中出售物品' },
+      ],
+    },
+  },
+  {
     id: 'aimlab',
     name: 'Aim Lab',
     nameZh: '瞄准实验室',
@@ -616,6 +635,7 @@ export const GAME_GROUP_MAP: Record<string, string> = {
   parking: 'arcade', breakout: 'arcade', pong: 'arcade', stacker: 'arcade',
   spaceshooter: 'combat', galaga: 'combat',
   asteroids: 'combat', beachhead: 'combat', aimlab: 'combat',
+  luckycase: 'arcade',
   bubbleshooter: 'puzzle', tetris: 'puzzle', '2048': 'puzzle',
   simon: 'puzzle', minesweeper: 'puzzle', wordle: 'puzzle',
   sudoku: 'puzzle',
@@ -631,6 +651,7 @@ export const GAME_LIST_ORDER = [
   'minesweeper', 'wordle', 'sudoku',
   'checkers', 'chess', 'connectfour', 'solitaire', 'texashold',
   'aimlab',
+  'luckycase',
 ] as const;
 
 export const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(
