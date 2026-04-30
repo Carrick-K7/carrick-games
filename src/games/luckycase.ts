@@ -392,7 +392,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.font = '9px "Press Start 2P", monospace';
     ctx.fillText(zh ? `已开 ${this.save.totalOpens} 箱` : `Opens: ${this.save.totalOpens}`, 15, 70);
 
-    // Collection button
+    // Museum button
     ctx.textAlign = 'right';
     ctx.fillStyle = '#39C5BB';
     const collBtn = { x: this.width - 15, y: 65, w: 120, h: 24 };
@@ -401,7 +401,7 @@ export class LuckyCaseGame extends BaseGame {
     ctx.strokeRect(collBtn.x - collBtn.w, collBtn.y, collBtn.w, collBtn.h);
     ctx.font = '9px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(zh ? '📋 收藏' : '📋 COLLECTION', collBtn.x - collBtn.w / 2, collBtn.y + 16);
+    ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', collBtn.x - collBtn.w / 2, collBtn.y + 16);
 
     // Case cards
     const cardW = 180;
@@ -620,100 +620,175 @@ export class LuckyCaseGame extends BaseGame {
     ctx.fillText(`💰 ${this.save.coins}`, this.width - 15, 40);
   }
 
-  /* ─── Collection Screen ─── */
+  /* ─── Museum Screen (all items, owned + unowned) ─── */
+  private museumPage = 0;
+  private museumTotalPages = 0;
+
   private drawCollection(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang();
     const dark = this.isDarkTheme();
 
+    const allItems = this.getAllItems();
+    const owned = this.save.collection;
+    const ownedNames = new Set(owned.map((e) => e.id));
+    const ownedCount = owned.length;
+    const totalCount = allItems.length;
+
     // Header
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '14px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
-    ctx.fillText(zh ? '📋 收藏品' : '📋 COLLECTION', this.width / 2, 40);
+    ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', this.width / 2, 28);
+
+    // Progress text
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillStyle = dark ? '#aaa' : '#666';
+    ctx.fillText(`${ownedCount}/${totalCount} ${zh ? '已收集' : 'collected'}`, this.width / 2, 45);
+
+    // Progress bar
+    const barW = 320;
+    const barH = 10;
+    const barX = (this.width - barW) / 2;
+    const barY = 52;
+    const pct = ownedCount / totalCount;
+    ctx.fillStyle = dark ? '#2d2d2d' : '#e0e0e0';
+    ctx.beginPath();
+    this.roundRect(ctx, barX, barY, barW, barH, 5);
+    ctx.fill();
+    ctx.fillStyle = '#39C5BB';
+    ctx.beginPath();
+    this.roundRect(ctx, barX, barY, barW * pct, barH, 5);
+    ctx.fill();
 
     // Back button
     ctx.strokeStyle = '#39C5BB';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    this.roundRect(ctx, 15, 55, 100, 24, 4);
+    this.roundRect(ctx, 15, 55, 100, 22, 4);
     ctx.stroke();
-    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.font = '8px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
-    ctx.fillText(zh ? '← 返回' : '← BACK', 65, 72);
+    ctx.fillText(zh ? '← 返回' : '← BACK', 65, 70);
 
-    // Sort collection by rarity (highest first)
-    const sorted = [...this.save.collection].sort((a, b) => {
-      const itemA = this.findItem(a.id);
-      const itemB = this.findItem(b.id);
-      if (!itemA || !itemB) return 0;
-      return rarityIndex(itemB.rarity) - rarityIndex(itemA.rarity);
-    });
+    // Pagination
+    const cols = 4;
+    const cardW = 88;
+    const cardH = 70;
+    const gapX = Math.floor((this.width - cols * cardW - 20) / (cols - 1));
+    const gridStartX = 10;
+    const gridStartY = 75;
+    const itemsPerPage = cols * 2; // 8 items per page
+    this.museumTotalPages = Math.ceil(totalCount / itemsPerPage);
 
-    const itemH = 36;
-    const startY = 95;
-    const itemsPerPage = Math.min(sorted.length, 12);
+    if (this.museumPage >= this.museumTotalPages) this.museumPage = 0;
+
+    const startIdx = this.museumPage * itemsPerPage;
+    const pageItems = allItems.slice(startIdx, startIdx + itemsPerPage);
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, startY - 5, this.width, this.height - startY + 5);
+    ctx.rect(0, gridStartY - 5, this.width, this.height - gridStartY + 5);
     ctx.clip();
 
-    for (let i = 0; i < itemsPerPage; i++) {
-      const entry = sorted[i];
-      const itemDef = this.findItem(entry.id);
-      if (!itemDef) continue;
-      const rc = RARITY[itemDef.rarity];
-      const y = startY + i * itemH;
+    for (let i = 0; i < pageItems.length; i++) {
+      const item = pageItems[i];
+      const rc = RARITY[item.rarity];
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const cx = gridStartX + col * (cardW + gapX);
+      const cy = gridStartY + row * (cardH + 6);
+      const isOwned = ownedNames.has(item.name);
+      const entry = owned.find((e) => e.id === item.name);
 
-      // Item row bg
-      ctx.fillStyle = dark ? (i % 2 === 0 ? '#1a1a2e' : '#16213e') : (i % 2 === 0 ? '#fff' : '#f0f0f0');
-      ctx.fillRect(10, y, this.width - 20, itemH - 2);
-
-      // Rarity bar
-      ctx.fillStyle = rc.color;
-      ctx.fillRect(10, y, 4, itemH - 2);
+      // Card background
+      ctx.fillStyle = dark ? (isOwned ? '#1a1a2e' : '#111118') : (isOwned ? '#fff' : '#f5f5f5');
+      ctx.strokeStyle = isOwned ? rc.color : (dark ? '#333' : '#ccc');
+      ctx.lineWidth = isOwned ? 1 : 1;
+      ctx.globalAlpha = isOwned ? 1 : 0.4;
+      ctx.beginPath();
+      this.roundRect(ctx, cx, cy, cardW, cardH, 6);
+      ctx.fill();
+      ctx.stroke();
 
       // Emoji
-      ctx.font = '18px serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(itemDef.emoji, 25, y + 24);
-
-      // Name
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillStyle = dark ? '#ddd' : '#333';
-      ctx.fillText(zh ? itemDef.nameZh : itemDef.name, 55, y + 24);
-
-      // Count
-      ctx.textAlign = 'right';
-      ctx.font = '9px "Press Start 2P", monospace';
-      ctx.fillStyle = dark ? '#888' : '#666';
-      ctx.fillText(`x${entry.count}`, this.width - 80, y + 24);
-
-      // Sell button for items with count > 0
-      if (entry.count > 0) {
-        ctx.fillStyle = dark ? '#2d2d2d' : '#eee';
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        this.roundRect(ctx, this.width - 75, y + 5, 60, 24, 4);
-        ctx.fill();
-        ctx.stroke();
-        ctx.font = '8px "Press Start 2P", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffd700';
-        ctx.fillText(zh ? '出售' : 'SELL', this.width - 45, y + 21);
+      ctx.font = isOwned ? '22px serif' : '22px serif';
+      ctx.textAlign = 'center';
+      if (isOwned) {
+        ctx.fillText(item.emoji, cx + cardW / 2, cy + 30);
+      } else {
+        ctx.fillStyle = dark ? '#444' : '#aaa';
+        ctx.fillText('❓', cx + cardW / 2, cy + 30);
       }
+      ctx.globalAlpha = 1;
+
+      // Name (shortened if needed)
+      const name = isOwned ? (zh ? item.nameZh : item.name) : '??? 🔒';
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = isOwned ? (dark ? '#ddd' : '#333') : (dark ? '#555' : '#bbb');
+      ctx.fillText(name, cx + cardW / 2, cy + 50);
+
+      // Count badge for owned
+      if (isOwned && entry && entry.count > 1) {
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText(`x${entry.count}`, cx + cardW - 4, cy + 14);
+      }
+
+      // Rarity dot
+      ctx.fillStyle = rc.color;
+      ctx.beginPath();
+      ctx.arc(cx + cardW - 8, cy + 8, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
 
-    if (sorted.length === 0) {
-      ctx.font = '12px "Press Start 2P", monospace';
+    // Page navigation
+    if (this.museumTotalPages > 1) {
+      const navY = this.height - 28;
+      ctx.font = '10px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = dark ? '#555' : '#999';
-      ctx.fillText(zh ? '还没有任何收藏品' : 'No items collected yet', this.width / 2, this.height / 2);
+      ctx.fillStyle = dark ? '#888' : '#666';
+
+      // Previous arrow
+      ctx.textAlign = 'left';
+      ctx.fillStyle = this.museumPage > 0 ? '#39C5BB' : (dark ? '#444' : '#ccc');
+      ctx.fillText('◀', 35, navY + 4);
+
+      // Page indicator
+      ctx.textAlign = 'center';
+      ctx.fillStyle = dark ? '#aaa' : '#666';
+      ctx.fillText(`${this.museumPage + 1}/${this.museumTotalPages}`, this.width / 2, navY + 4);
+
+      // Next arrow
+      ctx.textAlign = 'right';
+      ctx.fillStyle = this.museumPage < this.museumTotalPages - 1 ? '#39C5BB' : (dark ? '#444' : '#ccc');
+      ctx.fillText('▶', this.width - 35, navY + 4);
     }
+  }
+
+  private getAllItems(): ItemDef[] {
+    const seen = new Set<string>();
+    const items: ItemDef[] = [];
+    // Collect by case order to preserve grouping, then deduplicate
+    for (const c of CASES) {
+      for (const item of c.items) {
+        if (!seen.has(item.name)) {
+          seen.add(item.name);
+          items.push(item);
+        }
+      }
+    }
+    // Sort by rarity (highest first), then by name
+    return items.sort((a, b) => {
+      const ra = rarityIndex(a.rarity);
+      const rb = rarityIndex(b.rarity);
+      if (ra !== rb) return rb - ra;
+      return a.name.localeCompare(b.name);
+    });
   }
 
   /* ─── Helpers ─── */
@@ -825,23 +900,45 @@ export class LuckyCaseGame extends BaseGame {
       this.screen = 'menu';
     } else if (this.screen === 'collection' && isClick) {
       // Back button
-      if (this.hitTest(x, y, 15, 55, 100, 24)) {
+      if (this.hitTest(x, y, 15, 55, 100, 22)) {
         this.screen = 'menu';
         return;
       }
 
-      // Sell buttons in collection
-      const startY = 95;
-      const itemH = 36;
-      for (let i = 0; i < this.save.collection.length; i++) {
-        const entry = this.save.collection[i];
-        if (entry.count <= 0) continue;
-        const yPos = startY + i * itemH;
-        if (this.hitTest(x, y, this.width - 75, yPos + 5, 60, 24)) {
-          const itemDef = this.findItem(entry.id);
-          if (itemDef) {
-            this.sellItem(entry.id, itemDef.value);
-          }
+      const allItems = this.getAllItems();
+      const cols = 4;
+      const cardW = 88;
+      const cardH = 70;
+      const gapX = Math.floor((this.width - cols * cardW - 20) / (cols - 1));
+      const gridStartX = 10;
+      const gridStartY = 75;
+      const itemsPerPage = cols * 2;
+      const startIdx = this.museumPage * itemsPerPage;
+      const pageItems = allItems.slice(startIdx, startIdx + itemsPerPage);
+
+      // Check page nav arrows
+      if (this.museumTotalPages > 1) {
+        if (this.museumPage > 0 && this.hitTest(x, y, 15, this.height - 38, 40, 24)) {
+          this.museumPage--;
+          return;
+        }
+        if (this.museumPage < this.museumTotalPages - 1 && this.hitTest(x, y, this.width - 55, this.height - 38, 40, 24)) {
+          this.museumPage++;
+          return;
+        }
+      }
+
+      // Click on item card to sell
+      const ownedNames = new Set(this.save.collection.map((e) => e.id));
+      for (let i = 0; i < pageItems.length; i++) {
+        const item = pageItems[i];
+        if (!ownedNames.has(item.name)) continue;
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const cx = gridStartX + col * (cardW + gapX);
+        const cy = gridStartY + row * (cardH + 6);
+        if (this.hitTest(x, y, cx, cy, cardW, cardH)) {
+          this.sellItem(item.name, item.value);
           return;
         }
       }
