@@ -199,11 +199,11 @@ export class LuckyCaseGame extends BaseGame {
   private notification = '';
   private notifyTimer = 0;
   private hintTimer = 0;
-  private hoveredCase: number = -1;
   private openMode: 'classic' | 'slot' = 'classic';
   private slotReels: SlotReel[] = [];
   private slotStopPhase = 0;
   private slotStopTimer = 0;
+  private selectedCaseIdx = 0;
 
   constructor() {
     super('gameCanvas', 420, 560);
@@ -474,117 +474,146 @@ export class LuckyCaseGame extends BaseGame {
   private drawMenu(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang();
     const dark = this.isDarkTheme();
+    const c = CASES[this.selectedCaseIdx];
+    const text = dark ? '#f0f0f0' : '#222';
+    const muted = dark ? '#888' : '#999';
 
-    // Header
-    ctx.font = '18px system-ui, -apple-system, sans-serif';
+    // Top bar background
+    ctx.fillStyle = dark ? '#151a28' : '#f0f2f5';
+    ctx.beginPath();
+    this.roundRect(ctx, 10, 15, this.width - 20, 42, 10);
+    ctx.fill();
+
+    // Left stats
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = muted;
+    const invested = STARTING_COINS - this.save.coins + this.save.totalValue;
+    ctx.fillText(`S:${invested} E:${this.save.totalValue} O:${this.save.totalOpens}`, 24, 36);
+
+    // Center title
+    ctx.font = '700 16px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#39C5BB';
-    ctx.fillText(zh ? '🎰 幸运开箱' : '🎰 LUCKY CASE', this.width / 2, 40);
+    ctx.fillText('🎰 ' + (zh ? '头彩' : 'LUCKY CASE'), this.width / 2, 36);
 
-    // Coin display
-    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    // Right coins
+    ctx.font = '600 14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillStyle = dark ? '#ffd700' : '#b8860b';
-    ctx.fillText(`💰 ${this.save.coins}`, this.width - 15, 40);
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(`💰 ${this.save.coins}`, this.width - 24, 36);
 
-    // Stats
-    ctx.textAlign = 'left';
-    ctx.fillStyle = dark ? '#888' : '#666';
-    ctx.font = '9px system-ui, -apple-system, sans-serif';
-    ctx.fillText(zh ? `已开 ${this.save.totalOpens} 箱` : `Opens: ${this.save.totalOpens}`, 15, 70);
+    // Main area: gift box as centerpiece
+    const boxCX = this.width / 2 + 30;
+    const boxCY = 280;
+    this.drawGiftBox(ctx, boxCX, boxCY, 140, 170, c.color, c.accentColor);
+
+    // Case name below box
+    ctx.font = '600 15px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = c.color;
+    ctx.fillText(zh ? c.nameZh : c.name, boxCX, 400);
+
+    // Cost
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = dark ? '#aaa' : '#666';
+    ctx.fillText(`${zh ? '价格' : 'Cost'}: 💰 ${c.cost}`, boxCX, 425);
+
+    // Case switching arrows (left of box)
+    const arrowY = 270;
+    ctx.font = '22px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#39C5BB';
+    ctx.fillText('◀', boxCX - 120, arrowY);
+    ctx.fillText('▶', boxCX + 120, arrowY);
 
     // Mode toggle
+    ctx.font = '10px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = muted;
     const isSlot = this.openMode === 'slot';
-    {
-      const btnW = 110; const btnH = 24;
-      const btnX = (this.width - btnW) / 2;
-      const btnY = 62;
-      ctx.strokeStyle = isSlot ? '#ff9800' : '#39C5BB';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      this.roundRect(ctx, btnX, btnY, btnW, btnH, 12);
-      ctx.stroke();
-      ctx.font = '7px system-ui, -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = isSlot ? '#ff9800' : '#39C5BB';
-      ctx.fillText(isSlot ? (zh ? '🎰 老虎机' : '🎰 SLOT') : (zh ? '📜 经典' : '📜 CLASSIC'), this.width / 2, btnY + 16);
-      ctx.textAlign = 'left';
-    }
+    ctx.fillText(isSlot ? (zh ? '🎰 老虎机' : '🎰 SLOT') : (zh ? '📜 经典' : '📜 CLASSIC'), boxCX - 120, arrowY + 40);
 
-    // Museum button
-    ctx.textAlign = 'right';
+    // Museum button (bottom-left)
+    ctx.font = '600 11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#39C5BB';
-    const collBtn = { x: this.width - 15, y: 65, w: 120, h: 24 };
-    ctx.strokeStyle = '#39C5BB';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(collBtn.x - collBtn.w, collBtn.y, collBtn.w, collBtn.h);
-    ctx.font = '9px system-ui, -apple-system, sans-serif';
+    ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', 24, this.height - 24);
+
+    // Click hint
     ctx.textAlign = 'center';
-    ctx.fillText(zh ? '🏛️ 展览馆' : '🏛️ MUSEUM', collBtn.x - collBtn.w / 2, collBtn.y + 16);
-
-    // Case cards
-    const cardW = 180;
-    const cardH = 200;
-    const gapX = 25;
-    const gapY = 20;
-    const startX = (this.width - cardW * 2 - gapX) / 2;
-    const startY = 90;
-
-    for (let i = 0; i < CASES.length; i++) {
-      const c = CASES[i];
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const cx = startX + col * (cardW + gapX);
-      const cy = startY + row * (cardH + gapY);
-      const hovered = this.hoveredCase === i;
-      const affordable = this.save.coins >= c.cost;
-
-      // Card background
-      const bg = dark ? '#16213e' : '#ffffff';
-      ctx.fillStyle = bg;
-      ctx.strokeStyle = affordable ? c.color : (dark ? '#444' : '#ddd');
-      ctx.lineWidth = hovered && affordable ? 2 : 1;
-      ctx.beginPath();
-      this.roundRect(ctx, cx, cy, cardW, cardH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      // Case emoji
-      ctx.font = '32px serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = affordable ? c.color : (dark ? '#555' : '#ccc');
-      ctx.fillText(c.animEmoji, cx + cardW / 2, cy + 50);
-
-      // Case name
-      ctx.font = '11px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = affordable ? (dark ? '#fff' : '#222') : (dark ? '#555' : '#ccc');
-      ctx.fillText(zh ? c.nameZh : c.name, cx + cardW / 2, cy + 80);
-
-      // Price
-      ctx.font = '10px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = affordable ? '#ffd700' : (dark ? '#555' : '#ccc');
-      ctx.fillText(`💰 ${c.cost}`, cx + cardW / 2, cy + 105);
-
-      // Rarity label
-      ctx.font = '8px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = c.color;
-      const rLabel = zh ? '包含' : 'Contains:';
-      ctx.fillText(rLabel, cx + cardW / 2, cy + 130);
-
-      // Item counts by rarity
-      const counts: Record<string, number> = {};
-      for (const item of c.items) {
-        counts[item.rarity] = (counts[item.rarity] || 0) + 1;
-      }
-      let ly = cy + 148;
-      for (const r of RARITY_ORDER) {
-        if (counts[r]) {
-          ctx.fillStyle = RARITY[r].color;
-          ctx.fillText(`${RARITY[r][zh ? 'labelZh' : 'label']} x${counts[r]}`, cx + cardW / 2, ly);
-          ly += 16;
-        }
-      }
+    ctx.textBaseline = 'bottom';
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = muted;
+    const blink = Math.sin(this.hintTimer * 3) > 0;
+    if (blink) {
+      ctx.fillText(zh ? '点击箱子开箱' : 'Click the box to open', boxCX, this.height - 24);
     }
+
+  }
+
+  private drawGiftBox(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, color: string, accent: string) {
+    const hw = w / 2;
+    const hh = h / 2;
+
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+
+    // Box body (rounded rect)
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.globalAlpha = 0.85;
+    this.roundRect(ctx, cx - hw, cy - hh + 18, w, h - 18, 8);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Lid (slightly darker)
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    this.roundRect(ctx, cx - hw - 2, cy - hh + 8, w + 4, 22, 6);
+    ctx.fill();
+
+    // Lid top curve
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw + 4, cy - hh + 10);
+    ctx.lineTo(cx + hw - 4, cy - hh + 10);
+    ctx.quadraticCurveTo(cx, cy - hh - 4, cx - hw + 4, cy - hh + 10);
+    ctx.fill();
+
+    // Ribbon vertical band
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(cx - 10, cy - hh + 8, 20, h - 18);
+
+    // Ribbon horizontal band
+    ctx.fillRect(cx - hw, cy - 12, w, 10);
+
+    // Bow
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(cx - 16, cy - hh - 2, 12, -0.6, 0.6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx + 16, cy - hh - 2, 12, Math.PI - 0.6, Math.PI + 0.6);
+    ctx.fill();
+
+    // Bow center dot
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(cx, cy - hh - 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shimmer highlight
+    const grad = ctx.createLinearGradient(cx - hw, cy - hh, cx - hw + 30, cy - hh);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - hw, cy - hh + 8, w, h - 18);
   }
 
   /* ─── Opening Animation ─── */
@@ -601,35 +630,29 @@ export class LuckyCaseGame extends BaseGame {
     const dark = this.isDarkTheme();
     const c = this.selectedCase;
 
-    // Background
     ctx.fillStyle = dark ? '#0d1117' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Title
     ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = c.color;
     ctx.fillText(zh ? '开箱中...' : 'OPENING...', this.width / 2, 40);
 
-    // Scrolling slot
     const slotY = 160;
     const slotH = 60;
     const slotW = 300;
 
-    // Slot bg
     ctx.fillStyle = dark ? '#1a1a2e' : '#eee';
     ctx.beginPath();
     this.roundRect(ctx, (this.width - slotW) / 2, slotY, slotW, slotH, 6);
     ctx.fill();
 
-    // Decorative lines on slot
     ctx.strokeStyle = c.color;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.strokeRect((this.width - slotW) / 2, slotY, slotW, slotH);
     ctx.setLineDash([]);
 
-    // Scrolling text
     if (this.animScrollItems.length > 0) {
       const idx = Math.floor(this.animTimer * 12) % this.animScrollItems.length;
       const item = this.animScrollItems[idx];
@@ -639,13 +662,11 @@ export class LuckyCaseGame extends BaseGame {
       ctx.fillText(item.name, this.width / 2, slotY + slotH / 2 + 5);
     }
 
-    // Box emoji bouncing
     const bobY = Math.sin(this.animTimer * 8) * 8;
     ctx.font = '48px serif';
     ctx.textAlign = 'center';
     ctx.fillText(c.animEmoji, this.width / 2, 100 + bobY);
 
-    // Shimmer effect
     const shimmerX = ((this.animTimer * 200) % (slotW + 100)) - 50;
     const grad = ctx.createLinearGradient(
       (this.width - slotW) / 2 + shimmerX - 30, slotY,
@@ -659,14 +680,13 @@ export class LuckyCaseGame extends BaseGame {
     this.roundRect(ctx, (this.width - slotW) / 2, slotY, slotW, slotH, 6);
     ctx.fill();
 
-    // "Press Start 2P" hint
     ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = dark ? '#666' : '#999';
     ctx.fillText(zh ? '滚动中...' : 'Spinning...', this.width / 2, slotY + slotH + 30);
   }
 
-  /* ─── Slot Machine Reel Animation ─── */
+  /* ─── Slot Machine ─── */
   private drawOpeningSlot(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang();
     const dark = this.isDarkTheme();
@@ -679,23 +699,19 @@ export class LuckyCaseGame extends BaseGame {
     const reelY = 140;
     const winLineY = reelY + REEL_H / 2;
 
-    // Background
     ctx.fillStyle = dark ? '#0d1117' : '#fafafa';
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Title
     ctx.font = '14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = c.color;
     ctx.fillText(zh ? '🎰 开箱中...' : '🎰 SPINNING...', this.width / 2, 40);
 
-    // Case emoji above reels
     const bobY = Math.sin(this.animTimer * 8) * 6;
     ctx.font = '36px serif';
     ctx.textAlign = 'center';
     ctx.fillText(c.animEmoji, this.width / 2, 100 + bobY);
 
-    // Draw each reel
     for (let r = 0; r < 3; r++) {
       const reel = this.slotReels[r];
       const rx = reelStartX + r * (REEL_W + GAP);
@@ -706,7 +722,6 @@ export class LuckyCaseGame extends BaseGame {
       const firstIdx = Math.floor(safeOff / ITEM_H);
       const subOff = safeOff % ITEM_H;
 
-      // Reel background
       ctx.save();
       ctx.beginPath();
       this.roundRect(ctx, rx, reelY, REEL_W, REEL_H, 8);
@@ -714,27 +729,23 @@ export class LuckyCaseGame extends BaseGame {
       ctx.fillStyle = dark ? '#11151f' : '#e8e8e8';
       ctx.fillRect(rx, reelY, REEL_W, REEL_H);
 
-      // Reel items
       for (let row = -1; row <= 7; row++) {
         const idx = ((firstIdx + row) % itemCount + itemCount) % itemCount;
         const item = reel.items[idx];
         const iy = reelY + row * ITEM_H - subOff;
         if (iy + ITEM_H < reelY || iy > reelY + REEL_H) continue;
 
-        // Item background
         const alpha = Math.abs(iy + ITEM_H / 2 - winLineY) < ITEM_H / 2 ? 0.12 : 0;
         if (alpha > 0) {
           ctx.fillStyle = `rgba(255,255,255,${alpha})`;
           ctx.fillRect(rx, iy, REEL_W, ITEM_H);
         }
 
-        // Emoji
         ctx.font = '26px serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = item.color;
         ctx.fillText(item.emoji, rx + REEL_W / 2, iy + 30);
 
-        // Name
         ctx.font = '7px system-ui, -apple-system, sans-serif';
         ctx.fillStyle = dark ? '#888' : '#666';
         ctx.globalAlpha = 0.7;
@@ -744,14 +755,12 @@ export class LuckyCaseGame extends BaseGame {
 
       ctx.restore();
 
-      // Reel border
       ctx.strokeStyle = stopped ? '#ffd700' : (dark ? '#333' : '#ccc');
       ctx.lineWidth = stopped ? 2.5 : 1.5;
       ctx.beginPath();
       this.roundRect(ctx, rx, reelY, REEL_W, REEL_H, 8);
       ctx.stroke();
 
-      // Stopped glow
       if (stopped) {
         ctx.shadowColor = '#ffd700';
         ctx.shadowBlur = 10;
@@ -763,13 +772,11 @@ export class LuckyCaseGame extends BaseGame {
         ctx.shadowBlur = 0;
       }
 
-      // Win-line notch markers (left/right ticks)
       ctx.fillStyle = c.color;
       ctx.fillRect(rx - 3, winLineY - 8, 3, 16);
       ctx.fillRect(rx + REEL_W, winLineY - 8, 3, 16);
     }
 
-    // Win line
     ctx.strokeStyle = c.color;
     ctx.lineWidth = 1;
     ctx.setLineDash([6, 4]);
@@ -781,7 +788,6 @@ export class LuckyCaseGame extends BaseGame {
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
 
-    // Status text
     ctx.font = '9px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = dark ? '#888' : '#666';
@@ -1119,33 +1125,44 @@ export class LuckyCaseGame extends BaseGame {
     const { x, y } = p;
 
     if (this.screen === 'menu') {
-      // Hover tracking always
-      this.hoveredCase = this.getHoveredCase(x, y);
-
       if (!isClick) return;
 
-      // Mode toggle button
-      const modeBtn = { x: (this.width - 110) / 2, y: 62, w: 110, h: 24 };
-      if (this.hitTest(x, y, modeBtn.x, modeBtn.y, modeBtn.w, modeBtn.h)) {
+      const boxCX = this.width / 2 + 30;
+      const arrowY = 270;
+
+      // Left arrow — cycle case
+      if (this.hitTest(x, y, boxCX - 140, arrowY - 18, 40, 36)) {
+        this.selectedCaseIdx = (this.selectedCaseIdx - 1 + CASES.length) % CASES.length;
+        return;
+      }
+      // Right arrow
+      if (this.hitTest(x, y, boxCX + 100, arrowY - 18, 40, 36)) {
+        this.selectedCaseIdx = (this.selectedCaseIdx + 1) % CASES.length;
+        return;
+      }
+
+      // Mode toggle
+      if (this.hitTest(x, y, boxCX - 160, arrowY + 24, 90, 24)) {
         this.openMode = this.openMode === 'classic' ? 'slot' : 'classic';
         return;
       }
 
-      // Collection button
-      if (this.hitTest(x, y, this.width - 15 - 120, 65, 120, 24)) {
+      // Collection
+      if (this.hitTest(x, y, 14, this.height - 38, 130, 28)) {
         this.screen = 'collection';
         return;
       }
 
-      // Case cards
-      const hovered = this.getHoveredCase(x, y);
-      if (hovered >= 0) {
-        if (this.save.coins >= CASES[hovered].cost) {
-          this.startOpening(CASES[hovered]);
+      // Gift box — click to open
+      if (this.hitTest(x, y, boxCX - 85, 190, 170, 200)) {
+        const selected = CASES[this.selectedCaseIdx];
+        if (this.save.coins >= selected.cost) {
+          this.startOpening(selected);
         } else {
           this.notification = this.isZhLang() ? '金币不足!' : 'Not enough coins!';
           this.notifyTimer = 2;
         }
+        return;
       }
     } else if (this.screen === 'result' && isClick) {
       // Sell button
@@ -1203,22 +1220,5 @@ export class LuckyCaseGame extends BaseGame {
         }
       }
     }
-  }
-
-  private getHoveredCase(x: number, y: number): number {
-    const cardW = 180;
-    const cardH = 200;
-    const gapX = 25;
-    const gapY = 20;
-    const startX = (this.width - cardW * 2 - gapX) / 2;
-    const startY = 90;
-    for (let i = 0; i < CASES.length; i++) {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const cx = startX + col * (cardW + gapX);
-      const cy = startY + row * (cardH + gapY);
-      if (this.hitTest(x, y, cx, cy, cardW, cardH)) return i;
-    }
-    return -1;
   }
 }
