@@ -213,6 +213,12 @@ Do not tag an unpushed, unverified, or locally-only commit.
 
 Deployment is automatic on every push to `main` through `.github/workflows/deploy.yml`.
 
+Shared Caddy configuration, host listeners, and production monitoring are
+owned by the private `Carrick-K7/carrick-ops` repository. This application
+workflow deploys only its static release and must never overwrite Caddy,
+systemd, firewall, or another application's files. For host diagnosis, use
+the observe-only doctor interface documented in `carrick-ops`.
+
 The workflow:
 
 - installs with `npm ci`
