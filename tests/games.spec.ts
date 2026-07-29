@@ -621,12 +621,30 @@ test.describe('Carrick Games - Lifecycle', () => {
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
     expect(await gameItems.count()).toBeGreaterThan(0);
-    await expect(page.locator('.game-list-group')).toHaveText(['休闲', '动作', '益智', '棋牌']);
+    await expect(page.locator('.game-list-group-label')).toHaveText(['休闲', '动作', '益智', '棋牌']);
+    await expect(page.locator('#librarySummary')).toHaveText('25 款游戏 · 4 个分类');
 
     const firstNameFontSize = await gameItems.first().locator('.game-list-name').evaluate((el) =>
       parseFloat(window.getComputedStyle(el).fontSize)
     );
     expect(firstNameFontSize).toBeGreaterThanOrEqual(14);
+  });
+
+  test('category filters expose counts and narrow the visible library', async ({ page }) => {
+    const filters = page.locator('.category-chip');
+    await expect(filters).toHaveCount(5);
+    await expect(filters.locator('.category-chip-count')).toHaveText(['25', '8', '5', '7', '5']);
+
+    await page.locator('.category-chip[data-group="action"]').click();
+    await expect(page.locator('.category-chip[data-group="action"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.game-list-group-label')).toHaveText(['动作']);
+    await expect(page.locator('.game-list-item')).toHaveCount(5);
+    await expect(page.locator('.game-list-item[data-id="iwanna"]')).toBeVisible();
+    await expect(page.locator('.game-list-item[data-id="snake"]')).toHaveCount(0);
+
+    await page.locator('.category-chip[data-group="all"]').click();
+    await expect(page.locator('.game-list-item')).toHaveCount(25);
+    await expect(page.locator('#selectedGameLabel')).toHaveText('休闲 / 停车');
   });
 
   test('game canvas exposes an accessible name and live score', async ({ page }) => {
@@ -812,11 +830,17 @@ test.describe('Carrick Games - Lifecycle', () => {
     };
 
     for (const id of ['breakout', 'pong', 'snake', 'flappybird']) {
+      const collapsed = await page.locator('body').evaluate((el) => el.classList.contains('sidebar-collapsed'));
+      if (collapsed) {
+        await page.locator('#sidebarToggle').click();
+        await page.waitForTimeout(180);
+      }
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await item.scrollIntoViewIfNeeded();
       await item.click();
       await expect(page.locator('#gameTitle')).toHaveText(idToNameZh[id]);
       await expect(page.locator('#actionBtn')).toHaveText('开始游戏');
+      await expect(page.locator('body')).toHaveClass(/sidebar-collapsed/);
       const hash = await page.evaluate(() => location.hash);
       expect(hash).toBe(`#/${id}`);
     }

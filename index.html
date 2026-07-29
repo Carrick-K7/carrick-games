@@ -24,6 +24,10 @@
       --key-text: #e2e8f0;
       --key-pressed: var(--accent);
       --key-pressed-text: #ffffff;
+      --group-casual: #39C5BB;
+      --group-action: #fb7185;
+      --group-puzzle: #60a5fa;
+      --group-tabletop: #facc15;
     }
 
     [data-theme="light"] {
@@ -79,14 +83,18 @@
 
     /* Sidebar */
     .main-sidebar {
-      width: 300px;
-      min-width: 260px;
+      width: 320px;
+      min-width: 280px;
+      height: 100vh;
+      position: sticky;
+      top: 0;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      padding: 24px;
-      gap: 16px;
+      padding: 20px;
+      gap: 14px;
+      overflow: hidden;
     }
 
     .brand {
@@ -165,8 +173,12 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
-      grid-auto-rows: minmax(58px, auto);
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
+      padding: 0 4px 20px 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
     }
 
     .game-list-item {
@@ -205,12 +217,57 @@
 
     .game-list-group {
       grid-column: 1 / -1;
-      font-size: 0.65rem;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--text);
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      padding: 12px 0 4px;
+      padding: 12px 2px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .game-list-group-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .game-list-group-dot,
+    .category-chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--group-casual);
+      flex: 0 0 auto;
+    }
+
+    [data-group="action"] .game-list-group-dot,
+    .category-chip[data-group="action"] .category-chip-dot {
+      background: var(--group-action);
+    }
+
+    [data-group="puzzle"] .game-list-group-dot,
+    .category-chip[data-group="puzzle"] .category-chip-dot {
+      background: var(--group-puzzle);
+    }
+
+    [data-group="tabletop"] .game-list-group-dot,
+    .category-chip[data-group="tabletop"] .category-chip-dot {
+      background: var(--group-tabletop);
+    }
+
+    .category-chip[data-group="all"] .category-chip-dot {
+      background: var(--text-secondary);
+    }
+
+    .game-list-group-count {
+      color: var(--text-secondary);
+      font-size: 0.68rem;
+      font-variant-numeric: tabular-nums;
     }
 
     .game-list-item:focus-visible {
@@ -236,21 +293,122 @@
       display: none;
     }
 
+    .library-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .library-heading-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .library-summary {
+      color: var(--text-secondary);
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .category-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 1px 1px 4px;
+    }
+
+    .category-chip {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .category-chip:hover,
+    .category-chip.active {
+      color: var(--text);
+      border-color: var(--border-strong);
+      background: var(--accent-dim);
+    }
+
+    .category-chip:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .category-chip-count {
+      min-width: 18px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: var(--elevated);
+      color: var(--text-secondary);
+      text-align: center;
+      font-size: 0.62rem;
+      font-variant-numeric: tabular-nums;
+    }
+
     /* Main */
     main {
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 28px 32px;
-      gap: 18px;
+      min-width: 0;
+      padding: 20px 28px 28px;
+      gap: 14px;
       overflow-y: auto;
     }
 
     .topbar {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: space-between;
       gap: 16px;
+      min-height: 48px;
+    }
+
+    .topbar-context {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .library-eyebrow {
+      color: var(--accent);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+    }
+
+    .selected-game-label {
+      overflow: hidden;
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 750;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .topbar-settings {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 0 0 auto;
     }
 
     .lang-switch, .theme-switch {
@@ -307,13 +465,15 @@
 
     /* ===== New game layout with side panels ===== */
     .game-layout {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+      grid-template-areas:
+        "game stats"
+        "keyboard keyboard";
+      align-items: start;
       gap: 20px;
       width: 100%;
-      max-width: 1600px;
+      max-width: 1080px;
       margin: 0 auto;
     }
 
@@ -325,32 +485,33 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 20px;
-      align-self: center;
       min-width: 0;
     }
 
     .game-sidebar.stats-panel {
-      width: 360px;
-      min-width: 300px;
-      max-width: 440px;
+      grid-area: stats;
+      width: 100%;
+      min-width: 0;
+      max-width: none;
       max-height: calc(100vh - 120px);
       overflow-y: auto;
     }
 
     .game-sidebar.keyboard-panel {
-      width: auto;
-      flex: 0 1 560px;
-      min-width: 340px;
-      max-width: 660px;
+      grid-area: keyboard;
+      width: 100%;
+      min-width: 0;
+      max-width: none;
       overflow-x: auto;
     }
 
     .game-center {
+      grid-area: game;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 14px;
-      flex: 0 0 auto;
+      width: 100%;
       min-width: 0;
       max-width: 1100px;
     }
@@ -692,39 +853,36 @@
       text-align: right;
     }
 
-    /* Responsive: side panels stack below on narrow screens */
-    @media (max-width: 1320px) {
+    @media (min-width: 1721px) {
       .game-layout {
+        grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) minmax(340px, 560px);
+        grid-template-areas: "stats game keyboard";
+        align-items: center;
+        max-width: 1600px;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .game-layout {
+        display: flex;
         flex-direction: column;
         align-items: center;
-      }
-      .game-sidebar {
-        width: 100%;
-        max-width: 100%;
       }
       .game-center {
         order: 1;
       }
       .game-sidebar.stats-panel {
         order: 2;
+        width: 100%;
+        max-width: 100%;
+        max-height: 520px;
       }
       .game-sidebar.keyboard-panel {
         order: 3;
-      }
-      .game-sidebar.stats-panel {
         width: 100%;
         max-width: 100%;
-        min-width: 0;
-      }
-      .game-sidebar.keyboard-panel {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
         overflow-x: visible;
       }
-    }
-
-    @media (max-width: 960px) {
       .main-sidebar {
         width: 100%;
         border-right: none;
@@ -798,6 +956,10 @@
       body.sidebar-collapsed .search-wrap {
         display: none;
       }
+      body.sidebar-collapsed .library-heading,
+      body.sidebar-collapsed .category-filters {
+        display: none;
+      }
       body.sidebar-collapsed .game-list {
         grid-template-columns: 1fr;
         gap: 6px;
@@ -839,6 +1001,16 @@
       }
       main {
         padding: 64px 16px 28px;
+      }
+      .topbar {
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+      .topbar-context {
+        flex: 1 1 120px;
+      }
+      .topbar-settings {
+        gap: 8px;
       }
     }
 
@@ -1328,12 +1500,12 @@
   </style>
 </head>
 <body>
-  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar" aria-controls="gameLibrary" aria-expanded="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M3 12h18M3 6h18M3 18h18"/>
     </svg>
   </button>
-  <aside class="main-sidebar">
+  <aside class="main-sidebar" id="gameLibrary">
     <div class="brand">
       <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
@@ -1357,33 +1529,44 @@
       <input type="text" id="searchInput" aria-label="Search games / 搜索游戏" placeholder="Search games / 搜索游戏">
     </div>
 
+    <div class="library-heading">
+      <div class="library-heading-title" id="libraryHeadingTitle">Game Library</div>
+      <div class="library-summary" id="librarySummary"></div>
+    </div>
+    <nav class="category-filters" id="categoryFilters" aria-label="Game categories / 游戏分类"></nav>
     <div class="game-list" id="gameList"></div>
   </aside>
 
   <main>
     <div class="topbar">
-      <div class="lang-switch" aria-label="Language">
-        <button class="lang-btn" data-lang="en">En</button>
-        <button class="lang-btn" data-lang="zh">中</button>
+      <div class="topbar-context">
+        <span class="library-eyebrow" id="libraryEyebrow">GAME LIBRARY · 25</span>
+        <strong class="selected-game-label" id="selectedGameLabel">Select a game</strong>
       </div>
-      <div class="theme-switch" aria-label="Theme">
-        <button class="theme-btn" data-set="light" aria-label="Light">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="5"/>
-            <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-          </svg>
-        </button>
-        <button class="theme-btn" data-set="dark" aria-label="Dark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-          </svg>
-        </button>
-        <button class="theme-btn" data-set="system" aria-label="System">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 3v18"/>
-          </svg>
-        </button>
+      <div class="topbar-settings">
+        <div class="lang-switch" aria-label="Language">
+          <button class="lang-btn" data-lang="en">En</button>
+          <button class="lang-btn" data-lang="zh">中</button>
+        </div>
+        <div class="theme-switch" aria-label="Theme">
+          <button class="theme-btn" data-set="light" aria-label="Light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </button>
+          <button class="theme-btn" data-set="dark" aria-label="Dark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+            </svg>
+          </button>
+          <button class="theme-btn" data-set="system" aria-label="System">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 3v18"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1430,6 +1613,8 @@
 
       function setSidebarCollapsed(collapsed) {
         body.classList.toggle('sidebar-collapsed', collapsed);
+        if (toggle) toggle.setAttribute('aria-expanded', String(!collapsed));
+        if (brandToggle) brandToggle.setAttribute('aria-expanded', String(!collapsed));
         if (brandToggle) {
           const collapseIcon = brandToggle.querySelector('.icon-collapse');
           const expandIcon = brandToggle.querySelector('.icon-expand');
@@ -1441,12 +1626,17 @@
         } catch {}
       }
 
+      window.closeGameLibrary = function() {
+        if (window.innerWidth <= 960) setSidebarCollapsed(true);
+      };
+
       function isSidebarCollapsed() {
+        if (window.innerWidth <= 960) return true;
         try {
           const v = localStorage.getItem('cg-sidebar-collapsed');
           if (v !== null) return v === '1';
         } catch {}
-        return window.innerWidth <= 960;
+        return false;
       }
 
       if (toggle) {
@@ -1477,6 +1667,6 @@
       setSidebarCollapsed(isSidebarCollapsed());
     })();
   </script>
-  <script type="module" src="./dist/main.js?v=10"></script>
+  <script type="module" src="./dist/main.js?v=11"></script>
 </body>
 </html>

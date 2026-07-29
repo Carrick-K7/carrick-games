@@ -27,6 +27,11 @@ The shell UI is an application surface, not a marketing landing page.
 - Do not let sidebars, keyboard panels, or overlays intercept unrelated clicks.
 - Text must fit in buttons, cards, sidebars, and canvas overlays at mobile and desktop sizes.
 
+The game library uses four visible primary category filters plus grouped game
+sections. Category filters show counts, the selected category is explicit, and
+the current game's family remains visible in the top bar. On mobile, choosing a
+game closes the library drawer so the play surface is revealed immediately.
+
 ## Palette
 
 Use the app theme tokens for page UI and `getRetroPalette()` from `src/core/render.ts` for canvas scenes.
@@ -100,6 +105,9 @@ Rules:
 - Avoid layout shifts caused by hover states, dynamic labels, loading states, or translated text.
 - Mobile sidebars must not overlap game-list items in a way that changes click targets.
 - Touch targets should be at least `40px` where the game allows it.
+- On common desktop widths, keep the game and its status panel in the first
+  layout row; place the keyboard/control panel below when three columns do not
+  fit.
 
 ## In-Game HUD
 

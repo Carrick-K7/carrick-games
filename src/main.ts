@@ -55,6 +55,7 @@ declare global {
     setLang?: (lang: 'en' | 'zh') => void;
     setTheme?: (mode: 'light' | 'dark' | 'system') => void;
     startPreparedGame?: () => void;
+    closeGameLibrary?: () => void;
   }
 }
 
@@ -63,6 +64,7 @@ let currentGameInstance: GameInstance | null = null;
 let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
+let selectedGameGroup = 'all';
 
 // Routing helpers
 function getHashGame(): string | null {
@@ -122,6 +124,17 @@ function updateGameTitle() {
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
+  const libraryEyebrow = document.getElementById('libraryEyebrow');
+  if (libraryEyebrow) {
+    libraryEyebrow.textContent = zh ? `游戏库 · ${GAMES.length} 款` : `GAME LIBRARY · ${GAMES.length}`;
+  }
+  const selectedGameLabel = document.getElementById('selectedGameLabel');
+  if (selectedGameLabel) {
+    const group = meta ? GAME_GROUPS.find((item) => item.id === GAME_GROUP_MAP[meta.id]) : null;
+    const gameName = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '选择游戏' : 'Select a game');
+    const groupName = group ? (zh ? group.nameZh : group.name) : '';
+    selectedGameLabel.textContent = groupName ? `${groupName} / ${gameName}` : gameName;
+  }
   const canvas = document.getElementById('gameCanvas');
   if (canvas && meta) {
     const gameName = zh ? meta.nameZh : meta.name;
@@ -699,14 +712,53 @@ export async function loadGame(name: string) {
   setHashGame(name);
 }
 
+function renderLibraryFilters(zh: boolean) {
+  const heading = document.getElementById('libraryHeadingTitle');
+  if (heading) heading.textContent = zh ? '游戏库' : 'Game Library';
+  const summary = document.getElementById('librarySummary');
+  if (summary) {
+    summary.textContent = zh ? `${GAMES.length} 款游戏 · ${GAME_GROUPS.length} 个分类` : `${GAMES.length} games · ${GAME_GROUPS.length} categories`;
+  }
+
+  const filters = document.getElementById('categoryFilters');
+  if (!filters) return;
+  const items = [
+    { id: 'all', name: 'All', nameZh: '全部', count: GAMES.length },
+    ...GAME_GROUPS.map((group) => ({
+      ...group,
+      count: GAMES.filter((game) => GAME_GROUP_MAP[game.id] === group.id).length,
+    })),
+  ];
+
+  filters.innerHTML = items.map((item) => {
+    const active = item.id === selectedGameGroup;
+    return `
+      <button class="category-chip${active ? ' active' : ''}" data-group="${item.id}" aria-pressed="${active}">
+        <span class="category-chip-dot" aria-hidden="true"></span>
+        <span>${zh ? item.nameZh : item.name}</span>
+        <span class="category-chip-count">${item.count}</span>
+      </button>
+    `;
+  }).join('');
+
+  filters.querySelectorAll<HTMLButtonElement>('.category-chip').forEach((button) => {
+    button.addEventListener('click', () => {
+      selectedGameGroup = button.dataset.group || 'all';
+      const search = document.getElementById('searchInput') as HTMLInputElement | null;
+      renderGameList(search?.value || '');
+    });
+  });
+}
+
 function renderGameList(filter = '') {
   const list = document.getElementById('gameList');
   if (!list) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const term = filter.trim().toLowerCase();
-  const isSearching = term.length > 0;
+  renderLibraryFilters(zh);
 
   const filtered = GAMES.filter((g) => {
+    if (selectedGameGroup !== 'all' && GAME_GROUP_MAP[g.id] !== selectedGameGroup) return false;
     if (!term) return true;
     return (
       g.name.toLowerCase().includes(term) ||
@@ -735,12 +787,22 @@ function renderGameList(filter = '') {
   // Build grouped HTML
   let lastGroup = '';
   let html = '';
+  const visibleGroupCounts = filtered.reduce((counts, game) => {
+    const groupId = GAME_GROUP_MAP[game.id] || '';
+    counts.set(groupId, (counts.get(groupId) || 0) + 1);
+    return counts;
+  }, new Map<string, number>());
   for (const g of filtered) {
     const groupId = GAME_GROUP_MAP[g.id] || '';
     if (groupId && groupId !== lastGroup) {
       const group = GAME_GROUPS.find((gr) => gr.id === groupId);
-      if (!isSearching && group) {
-        html += `<div class="game-list-group">${zh ? group.nameZh : group.name}</div>`;
+      if (group) {
+        html += `
+          <div class="game-list-group" data-group="${group.id}">
+            <span class="game-list-group-label"><span class="game-list-group-dot" aria-hidden="true"></span>${zh ? group.nameZh : group.name}</span>
+            <span class="game-list-group-count">${visibleGroupCounts.get(group.id) || 0}</span>
+          </div>
+        `;
       }
       lastGroup = groupId;
     }
@@ -759,6 +821,7 @@ function renderGameList(filter = '') {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id')!;
       void loadGame(id);
+      if (window.innerWidth <= 960) window.closeGameLibrary?.();
     });
   });
 }
