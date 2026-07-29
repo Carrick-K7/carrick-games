@@ -63,7 +63,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic arcade snake. Eat, grow, and avoid the walls.',
     descZh: '经典街机贪吃蛇。吃东西、变长、别撞墙。',
     loader: GAME_LOADERS.snake,
-    canvasSize: { width: 500, height: 500 },
+    canvasSize: { width: 400, height: 400 },
     controls: {
       keyboard: [
         { keys: ['←', '↑', '→', '↓'], action: 'Move', actionZh: '移动' },
@@ -82,7 +82,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Bounce the ball and break all bricks.',
     descZh: '弹球击碎所有砖块。',
     loader: GAME_LOADERS.breakout,
-    canvasSize: { width: 600, height: 450 },
+    canvasSize: { width: 480, height: 360 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Move paddle', actionZh: '移动挡板' },
@@ -102,7 +102,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Aim from the bottom, match colors, and stop the bubble wall from reaching you.',
     descZh: '从底部瞄准发射,消除同色泡泡,阻止泡泡墙压到底部。',
     loader: GAME_LOADERS.bubbleshooter,
-    canvasSize: { width: 520, height: 780 },
+    canvasSize: { width: 420, height: 620 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Adjust aim', actionZh: '调整瞄准' },
@@ -122,13 +122,14 @@ export const GAMES: GameMeta[] = [
     desc: 'The legendary falling blocks puzzle.',
     descZh: '传奇下落方块益智游戏。',
     loader: GAME_LOADERS.tetris,
-    canvasSize: { width: 380, height: 750 },
+    canvasSize: { width: 420, height: 600 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Move', actionZh: '移动' },
         { keys: ['↓'], action: 'Soft drop', actionZh: '软降' },
         { keys: ['↑', 'X'], action: 'Rotate CW', actionZh: '顺时针旋转' },
         { keys: ['Z'], action: 'Rotate CCW', actionZh: '逆时针旋转' },
+        { keys: ['P'], action: 'Pause / resume', actionZh: '暂停 / 继续' },
         { keys: ['Space'], action: 'Hard drop / Restart', actionZh: '硬降 / 重新开始' },
       ],
       touch: [
@@ -146,7 +147,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic arcade table tennis against AI.',
     descZh: '经典街机乒乓球对战 AI。',
     loader: GAME_LOADERS.pong,
-    canvasSize: { width: 750, height: 500 },
+    canvasSize: { width: 600, height: 400 },
     controls: {
       keyboard: [
         { keys: ['↑', 'W'], action: 'Move up', actionZh: '上移' },
@@ -165,7 +166,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Vertical space shooter. Destroy enemies and avoid collisions.',
     descZh: '纵向太空射击游戏。消灭敌人并避免碰撞。',
     loader: GAME_LOADERS.spaceshooter,
-    canvasSize: { width: 600, height: 800 },
+    canvasSize: { width: 480, height: 640 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Move ship', actionZh: '移动飞船' },
@@ -184,7 +185,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Tap to flap. Dodge the pipes and survive.',
     descZh: '点击飞翔,躲避管道,尽可能存活。',
     loader: GAME_LOADERS.flappybird,
-    canvasSize: { width: 500, height: 700 },
+    canvasSize: { width: 400, height: 560 },
     controls: {
       keyboard: [
         { keys: ['Space'], action: 'Flap / Restart', actionZh: '飞翔 / 重新开始' },
@@ -202,7 +203,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic vector arcade. Thrust and shoot your way through asteroid fields.',
     descZh: '经典矢量街机游戏。在小行星带中旋转、推进、射击。',
     loader: GAME_LOADERS.asteroids,
-    canvasSize: { width: 750, height: 750 },
+    canvasSize: { width: 600, height: 600 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Rotate', actionZh: '旋转' },
@@ -222,7 +223,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic puzzle. Reveal cells, avoid mines, and use numbers to deduce safe paths.',
     descZh: '经典益智游戏。翻开格子,避免地雷,用数字推理安全路径。',
     loader: GAME_LOADERS.minesweeper,
-    canvasSize: { width: 410, height: 515 },
+    canvasSize: { width: 328, height: 376 },
     controls: {
       keyboard: [
         { keys: ['←', '↑', '→', '↓'], action: 'Move cursor', actionZh: '移动光标' },
@@ -244,7 +245,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Bounce higher and higher on platforms. Avoid falling!',
     descZh: '在平台上越跳越高,千万别掉下去!',
     loader: GAME_LOADERS.doodlejump,
-    canvasSize: { width: 500, height: 750 },
+    canvasSize: { width: 400, height: 600 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Move left/right', actionZh: '左右移动' },
@@ -263,7 +264,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Slide and merge tiles to reach 2048.',
     descZh: '滑动合并数字方块,挑战 2048!',
     loader: GAME_LOADERS['2048'],
-    canvasSize: { width: 500, height: 500 },
+    canvasSize: { width: 400, height: 400 },
     controls: {
       keyboard: [
         { keys: ['←', '↑', '→', '↓'], action: 'Slide tiles', actionZh: '滑动方块' },
@@ -282,7 +283,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Memorize the color sequence, repeat it, and keep up as the playback speeds up.',
     descZh: '记住颜色序列并快速重复,随着关卡提升节奏会越来越快。',
     loader: GAME_LOADERS.simon,
-    canvasSize: { width: 500, height: 620 },
+    canvasSize: { width: 400, height: 500 },
     controls: {
       keyboard: [
         { keys: ['1', 'R'], action: 'Red pad', actionZh: '红色按键' },
@@ -308,7 +309,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic checkers against AI. Capture all enemy pieces or block their moves to win.',
     descZh: '经典跳棋对战 AI。吃掉所有敌方棋子或让其无路可走即可获胜。',
     loader: GAME_LOADERS.checkers,
-    canvasSize: { width: 620, height: 680 },
+    canvasSize: { width: 500, height: 540 },
     controls: {
       keyboard: [
         { keys: ['Space'], action: 'Restart', actionZh: '重新开始' },
@@ -325,7 +326,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic Klondike Solitaire. Move cards, build foundations, and clear the table.',
     descZh: '经典纸牌游戏。将所有纸牌移到王牌堆即可通关。',
     loader: GAME_LOADERS.solitaire,
-    canvasSize: { width: 600, height: 800 },
+    canvasSize: { width: 480, height: 640 },
     controls: {
       keyboard: [
         { keys: ['1', '2', '3', '4', '5', '6', '7'], action: 'Select column', actionZh: '选择列' },
@@ -334,7 +335,7 @@ export const GAMES: GameMeta[] = [
       ],
       touch: [
         { icon: 'tap', action: 'Select / move card', actionZh: '选择 / 移动牌' },
-        { icon: 'hold', action: 'Double-click: auto-move', actionZh: '双击:自动放牌' },
+        { icon: 'tap', action: 'Double-click / double-tap: auto-move', actionZh: '双击 / 双击触屏:自动放牌' },
       ],
     },
   },
@@ -345,7 +346,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Guess the 5-letter word in 6 tries. Green = correct, Yellow = wrong place, Gray = not in word.',
     descZh: '在六次尝试内猜出五个字母的单词。绿色=正确,黄色=位置错,灰色=不存在。',
     loader: GAME_LOADERS.wordle,
-    canvasSize: { width: 650, height: 650 },
+    canvasSize: { width: 400, height: 520 },
     controls: {
       keyboard: [
         { keys: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'], action: 'Type letter', actionZh: '输入字母' },
@@ -364,7 +365,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Fill the 9x9 grid so each row, column, and 3x3 box contains digits 1-9.',
     descZh: '在9x9网格中填入1-9数字,使每行、每列、每个3x3宫格都不重复。',
     loader: GAME_LOADERS.sudoku,
-    canvasSize: { width: 600, height: 700 },
+    canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
         { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], action: 'Input number', actionZh: '输入数字' },
@@ -386,7 +387,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic chess against AI. Click to select and move pieces.',
     descZh: '经典国际象棋对战 AI。点击选择并移动棋子。',
     loader: GAME_LOADERS.chess,
-    canvasSize: { width: 600, height: 700 },
+    canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
         { keys: ['Escape'], action: 'Deselect', actionZh: '取消选择' },
@@ -403,7 +404,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic vertical shooter - destroy enemy formations before they dive-bomb you!',
     descZh: '经典垂直射击游戏--在敌人俯冲轰炸前消灭它们!',
     loader: GAME_LOADERS.galaga,
-    canvasSize: { width: 520, height: 780 },
+    canvasSize: { width: 420, height: 620 },
     controls: {
       keyboard: [
         { keys: ['←', 'A'], action: 'Move left', actionZh: '左移' },
@@ -422,7 +423,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!',
     descZh: '经典街机堆叠方块。精准时机,一路堆到顶端!',
     loader: GAME_LOADERS.stacker,
-    canvasSize: { width: 400, height: 600 },
+    canvasSize: { width: 320, height: 480 },
     controls: {
       keyboard: [
         { keys: ['←', '→', 'A', 'D', 'Space'], action: 'Lock block', actionZh: '锁定方块' },
@@ -440,7 +441,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Pure precision platforming. Climb increasingly brutal jump chains with no trick traps.',
     descZh: '纯技术向平台跳跃。没有阴人机关,只有逐步升级的跳跃难度。',
     loader: GAME_LOADERS.iwanna,
-    canvasSize: { width: 600, height: 700 },
+    canvasSize: { width: 480, height: 560 },
     controls: {
       keyboard: [
         { keys: ['←', '→'], action: 'Move left/right', actionZh: '左右移动' },
@@ -462,7 +463,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Four-player Hold\u2019em with betting rounds, AI opponents, and showdown scoring.',
     descZh: '四人德州扑克,含下注轮、AI 对手与摊牌结算。',
     loader: GAME_LOADERS.texashold,
-    canvasSize: { width: 550, height: 650 },
+    canvasSize: { width: 440, height: 520 },
     controls: {
       keyboard: [
         { keys: ['F'], action: 'Fold', actionZh: '弃牌' },
@@ -483,7 +484,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
     descZh: '俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。',
     loader: GAME_LOADERS.parking,
-    canvasSize: { width: 500, height: 650 },
+    canvasSize: { width: 400, height: 520 },
     controls: {
       keyboard: [
         { keys: ['↑', 'W'], action: 'Accelerate', actionZh: '加速' },
@@ -504,7 +505,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Drop discs and connect four in a row before the computer does.',
     descZh: '在电脑之前将四个棋子连成一线。',
     loader: GAME_LOADERS.connectfour,
-    canvasSize: { width: 550, height: 550 },
+    canvasSize: { width: 440, height: 420 },
     controls: {
       keyboard: [
         { keys: ['1', '2', '3', '4', '5', '6', '7'], action: 'Drop in column', actionZh: '在对应列落子' },
@@ -522,11 +523,12 @@ export const GAMES: GameMeta[] = [
     desc: 'Open cases and collect rare items. Every pull is a thrill!',
     descZh: '开箱收集稀有物品,一发入魂的刺激体验!',
     loader: GAME_LOADERS.luckycase,
-    canvasSize: { width: 520, height: 700 },
+    canvasSize: { width: 420, height: 560 },
     controls: {
       keyboard: [
         { keys: ['Escape'], action: 'Go back', actionZh: '返回' },
-        { keys: ['R'], action: 'Reset progress', actionZh: '重置进度' },
+        { keys: ['R'], action: 'Return to menu', actionZh: '返回菜单' },
+        { keys: ['Shift', 'R'], action: 'Reset progress', actionZh: '重置进度' },
       ],
       touch: [
         { icon: 'tap', action: 'Click cases to open, sell items in collection', actionZh: '点击箱子开箱,在收集中出售物品' },
@@ -540,7 +542,7 @@ export const GAMES: GameMeta[] = [
     desc: 'Test your reaction speed. Click targets as fast and accurately as possible.',
     descZh: '测试你的反应速度。尽可能快速准确地点击目标。',
     loader: GAME_LOADERS.aimlab,
-    canvasSize: { width: 620, height: 500 },
+    canvasSize: { width: 500, height: 400 },
     controls: {
       keyboard: [],
       touch: [
@@ -557,17 +559,17 @@ export interface GameGroup {
 }
 
 export const GAME_GROUPS: GameGroup[] = [
-  { id: 'arcade', name: 'Arcade Movement', nameZh: '街机动作' },
-  { id: 'combat', name: 'Combat & Shooters', nameZh: '射击战斗' },
-  { id: 'puzzle', name: 'Puzzles & Word', nameZh: '益智解谜' },
-  { id: 'tabletop', name: 'Tabletop & Cards', nameZh: '桌面卡牌' },
+  { id: 'casual', name: 'Casual', nameZh: '休闲' },
+  { id: 'action', name: 'Action', nameZh: '动作' },
+  { id: 'puzzle', name: 'Puzzle', nameZh: '益智' },
+  { id: 'tabletop', name: 'Board & Card', nameZh: '棋牌' },
 ];
 
 export const GAME_GROUP_MAP: Record<string, string> = {
-  snake: 'arcade', flappybird: 'arcade', doodlejump: 'arcade', iwanna: 'arcade',
-  parking: 'arcade', luckycase: 'arcade', breakout: 'arcade', pong: 'arcade', stacker: 'arcade',
-  spaceshooter: 'combat', galaga: 'combat',
-  asteroids: 'combat', aimlab: 'combat',
+  parking: 'casual', luckycase: 'casual', snake: 'casual', flappybird: 'casual',
+  doodlejump: 'casual', breakout: 'casual', pong: 'casual', stacker: 'casual',
+  iwanna: 'action', spaceshooter: 'action', galaga: 'action',
+  asteroids: 'action', aimlab: 'action',
   bubbleshooter: 'puzzle', tetris: 'puzzle', '2048': 'puzzle',
   simon: 'puzzle', minesweeper: 'puzzle', wordle: 'puzzle',
   sudoku: 'puzzle',
@@ -576,13 +578,12 @@ export const GAME_GROUP_MAP: Record<string, string> = {
 };
 
 export const GAME_LIST_ORDER = [
-  'parking', 'luckycase', 'snake', 'flappybird', 'doodlejump', 'iwanna',
+  'parking', 'luckycase', 'snake', 'flappybird', 'doodlejump',
   'breakout', 'pong', 'stacker',
-  'spaceshooter', 'galaga', 'asteroids',
+  'iwanna', 'spaceshooter', 'galaga', 'asteroids', 'aimlab',
   'bubbleshooter', 'tetris', '2048', 'simon',
   'minesweeper', 'wordle', 'sudoku',
   'checkers', 'chess', 'connectfour', 'solitaire', 'texashold',
-  'aimlab',
 ] as const;
 
 export const GAME_LIST_ORDER_INDEX: Map<string, number> = new Map(

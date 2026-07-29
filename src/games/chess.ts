@@ -58,9 +58,6 @@ export class ChessGame extends BaseGame {
   };
   private aiThinking = false;
   private touchStart: { r: number; c: number } | null = null;
-  private promotionPending: { from: { r: number; c: number }; to: { r: number; c: number } } | null = null;
-  private promotionResolve: ((t: PieceType) => void) | null = null;
-  private promotionCallback: ((t: PieceType) => void) | null = null;
   private animTime = 0;
   private lastAiTime = 0;
 
@@ -79,11 +76,8 @@ export class ChessGame extends BaseGame {
     this.gameResult = null;
     this.castling = { w: { K: true, Q: true }, b: { K: true, Q: true } };
     this.aiThinking = false;
-    this.promotionPending = null;
     this.animTime = 0;
     this.touchStart = null;
-    this.promotionResolve = null;
-    this.promotionCallback = null;
     this.resetScoreReport();
   }
 
@@ -171,11 +165,15 @@ export class ChessGame extends BaseGame {
         for (let dr of [-1,0,1]) for (let dc of [-1,0,1]) if (dr||dc) add(dr, dc);
         // Castling
         const row = color === 'w' ? 7 : 0;
+        const enemy = color === 'w' ? 'b' : 'w';
         if (r === row && c === 4) {
-          if (castling_[color].K && !board[row][5] && !board[row][6] && board[row][7]?.type === 'R' && board[row][7]?.color === color) {
+          const kingSafe = !this.isSquareAttacked(board, row, 4, enemy);
+          if (kingSafe && castling_[color].K && !board[row][5] && !board[row][6] && board[row][7]?.type === 'R' && board[row][7]?.color === color
+            && !this.isSquareAttacked(board, row, 5, enemy) && !this.isSquareAttacked(board, row, 6, enemy)) {
             moves.push({ r: row, c: 6, flags: 'castleK' });
           }
-          if (castling_[color].Q && !board[row][3] && !board[row][2] && !board[row][1] && board[row][0]?.type === 'R' && board[row][0]?.color === color) {
+          if (kingSafe && castling_[color].Q && !board[row][3] && !board[row][2] && !board[row][1] && board[row][0]?.type === 'R' && board[row][0]?.color === color
+            && !this.isSquareAttacked(board, row, 3, enemy) && !this.isSquareAttacked(board, row, 2, enemy)) {
             moves.push({ r: row, c: 2, flags: 'castleQ' });
           }
         }
@@ -215,16 +213,57 @@ export class ChessGame extends BaseGame {
     return { r: -1, c: -1 };
   }
 
-  private isKingAttacked(board: Board, byColor: PieceColor): boolean {
+  private isSquareAttacked(board: Board, targetR: number, targetC: number, byColor: PieceColor): boolean {
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      if (board[r][c]?.color === byColor) {
-        const moves = this.getRawMoves(board, r, c, { w: { K: false, Q: false }, b: { K: false, Q: false } });
-        for (const m of moves) {
-          if (board[m.r][m.c]?.type === 'K') return true;
-        }
+      const piece = board[r][c];
+      if (!piece || piece.color !== byColor) continue;
+      const dr = targetR - r;
+      const dc = targetC - c;
+
+      if (piece.type === 'P') {
+        const dir = byColor === 'w' ? -1 : 1;
+        if (dr === dir && Math.abs(dc) === 1) return true;
+        continue;
       }
+      if (piece.type === 'N') {
+        if ((Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2)) return true;
+        continue;
+      }
+      if (piece.type === 'K') {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) === 1) return true;
+        continue;
+      }
+
+      const diagonal = Math.abs(dr) === Math.abs(dc);
+      const straight = dr === 0 || dc === 0;
+      const attacksAlongLine =
+        (diagonal && (piece.type === 'B' || piece.type === 'Q')) ||
+        (straight && (piece.type === 'R' || piece.type === 'Q'));
+      if (!attacksAlongLine) continue;
+
+      const stepR = Math.sign(dr);
+      const stepC = Math.sign(dc);
+      let nr = r + stepR;
+      let nc = c + stepC;
+      let clear = true;
+      while (nr !== targetR || nc !== targetC) {
+        if (board[nr][nc]) {
+          clear = false;
+          break;
+        }
+        nr += stepR;
+        nc += stepC;
+      }
+      if (clear) return true;
     }
     return false;
+  }
+
+  private isKingAttacked(board: Board, color: PieceColor): boolean {
+    const king = this.findKing(board, color);
+    if (king.r < 0) return true;
+    const enemy = color === 'w' ? 'b' : 'w';
+    return this.isSquareAttacked(board, king.r, king.c, enemy);
   }
 
   private isInCheck(color: PieceColor): boolean {
@@ -240,10 +279,6 @@ export class ChessGame extends BaseGame {
       }
     }
     return all;
-  }
-
-  private needsPromotion(r: number, col: number, color: PieceColor): boolean {
-    return this.board[r][col]?.type === 'P' && ((color === 'w' && r === 0) || (color === 'b' && r === 7));
   }
 
   private makeMove(from: { r: number; c: number }, to: { r: number; c: number }, flags?: string) {
@@ -478,11 +513,6 @@ export class ChessGame extends BaseGame {
       ctx.fillText(String.fromCharCode(97 + c), c * CELL + CELL / 2, this.height - 4);
     }
 
-    // Promotion dialog
-    if (this.promotionPending) {
-      this.drawPromotionDialog(ctx, theme);
-    }
-
     // Game over overlay
     if (this.phase === 'gameover') {
       this.drawGameOver(ctx, theme);
@@ -566,34 +596,6 @@ export class ChessGame extends BaseGame {
     this.startBtnBounds = { x: bx, y: by, w: btnW, h: btnH };
   }
 
-  private drawPromotionDialog(ctx: CanvasRenderingContext2D, theme: ReturnType<typeof getTheme>) {
-    ctx.fillStyle = theme.overlay;
-    ctx.fillRect(0, 0, this.width, this.height);
-    const color = this.promotionPending ? (this.board[this.promotionPending.to.r][this.promotionPending.to.c]?.color || 'w') : 'w';
-    const pieces: PieceType[] = ['Q', 'R', 'B', 'N'];
-    const CELL2 = CELL;
-    const totalW = CELL2 * 4;
-    const ox = this.width / 2 - totalW / 2;
-    const oy = this.height / 2 - CELL2 / 2;
-    ctx.fillStyle = theme.overlay;
-    ctx.fillRect(ox - 10, oy - 10, totalW + 20, CELL2 + 20);
-
-    pieces.forEach((t, i) => {
-      const px = ox + i * CELL2;
-      ctx.fillStyle = (i % 2 === 0) ? theme.lightSquare : theme.darkSquare;
-      ctx.fillRect(px, oy, CELL2, CELL2);
-      ctx.font = `${CELL2 * 0.85}px "Segoe UI Symbol", "Apple Symbols", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = color === 'w' ? '#fff' : '#000';
-      ctx.strokeStyle = color === 'w' ? '#333' : '#eee';
-      ctx.lineWidth = 1;
-      const ch = PIECE_CHARS[color + t];
-      ctx.fillText(ch, px + CELL2 / 2, oy + CELL2 / 2 + 2);
-      ctx.strokeText(ch, px + CELL2 / 2, oy + CELL2 / 2 + 2);
-    });
-  }
-
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e.type === 'keydown') {
       const ke = e as KeyboardEvent;
@@ -606,23 +608,20 @@ export class ChessGame extends BaseGame {
     }
 
     // Get canvas-relative position
-    const rect = this.canvas.getBoundingClientRect();
     let clientX: number, clientY: number;
     if (e.type.startsWith('touch')) {
       e.preventDefault();
       const te = e as TouchEvent;
-      if (te.touches.length === 0) return;
-      clientX = te.touches[0]?.clientX ?? te.changedTouches[0]?.clientX ?? 0;
-      clientY = te.touches[0]?.clientY ?? te.changedTouches[0]?.clientY ?? 0;
+      const touch = te.changedTouches[0] ?? te.touches[0];
+      if (!touch) return;
+      clientX = touch.clientX;
+      clientY = touch.clientY;
     } else {
       const me = e as MouseEvent;
       clientX = me.clientX;
       clientY = me.clientY;
     }
-    const scaleX = this.width / rect.width;
-    const scaleY = this.height / rect.height;
-    const cx = (clientX - rect.left) * scaleX;
-    const cy = (clientY - rect.top) * scaleY;
+    const { x: cx, y: cy } = this.canvasPoint(clientX, clientY);
 
     if (this.phase === 'start') {
       if (this.startBtnBounds && cx >= this.startBtnBounds.x && cx <= this.startBtnBounds.x + this.startBtnBounds.w && cy >= this.startBtnBounds.y && cy <= this.startBtnBounds.y + this.startBtnBounds.h) {
@@ -637,37 +636,6 @@ export class ChessGame extends BaseGame {
       if (this.startBtnBounds && cx >= this.startBtnBounds.x && cx <= this.startBtnBounds.x + this.startBtnBounds.w && cy >= this.startBtnBounds.y && cy <= this.startBtnBounds.y + this.startBtnBounds.h) {
         this.init();
         this.phase = 'play';
-      }
-      return;
-    }
-
-    if (this.promotionPending) {
-      const CELL2 = CELL;
-      const totalW = CELL2 * 4;
-      const ox = this.width / 2 - totalW / 2;
-      const oy = this.height / 2 - CELL2 / 2;
-      const col = Math.floor((cx - ox) / CELL2);
-      if (col >= 0 && col < 4) {
-        const pieces: PieceType[] = ['Q', 'R', 'B', 'N'];
-        const t = pieces[col];
-        if (this.promotionResolve) this.promotionResolve(t);
-        this.board[this.promotionPending.to.r][this.promotionPending.to.c] = {
-          type: t, color: this.board[this.promotionPending.to.r][this.promotionPending.to.c]!.color
-        };
-        const last = this.moveHistory[this.moveHistory.length - 1];
-        if (last) last.promotion = t;
-        this.promotionPending = null;
-        this.promotionResolve = null;
-        this.turn = this.turn === 'w' ? 'b' : 'w';
-        this.isCheck = this.isInCheck(this.turn);
-        const legalMoves = this.getAllLegalMoves(this.turn);
-        if (legalMoves.length === 0) {
-          this.phase = 'gameover';
-          if (this.isCheck) this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
-          else this.gameResult = 'stalemate';
-          this.submitScoreOnce(this.moveHistory.length);
-        }
-        if (this.turn === 'b') this.asyncAI();
       }
       return;
     }
@@ -711,34 +679,6 @@ export class ChessGame extends BaseGame {
         const isValid = this.validMoves.some(m => m.r === r && m.c === c);
         if (isValid) {
           const flags = this.validMoves.find(m => m.r === r && m.c === c)?.flags;
-          const piece = this.board[this.selected.r][this.selected.c];
-
-          // Check for pawn promotion
-          if (piece?.type === 'P' && (r === 0 || r === 7)) {
-            // Auto-promote to queen for simplicity
-            this.makeMove(this.selected, { r, c }, flags);
-            this.promotionPending = { from: this.selected, to: { r, c } };
-            // Auto-select queen
-            const t: PieceType = 'Q';
-            this.board[r][c] = { type: t, color: piece.color };
-            const last = this.moveHistory[this.moveHistory.length - 1];
-            if (last) last.promotion = t;
-            this.promotionPending = null;
-            this.promotionResolve = null;
-            this.turn = this.turn === 'w' ? 'b' : 'w';
-            this.isCheck = this.isInCheck(this.turn);
-            const legalMoves = this.getAllLegalMoves(this.turn);
-            if (legalMoves.length === 0) {
-              this.phase = 'gameover';
-              if (this.isCheck) this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
-              else this.gameResult = 'stalemate';
-            }
-            this.selected = null;
-            this.validMoves = [];
-            if (this.turn === 'b') this.asyncAI();
-            return;
-          }
-
           this.makeMove(this.selected, { r, c }, flags);
           this.selected = null;
           this.validMoves = [];

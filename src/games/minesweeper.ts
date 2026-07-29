@@ -14,10 +14,8 @@ export class MinesweeperGame extends BaseGame {
   private cursorY = Math.floor(ROWS / 2);
   private flagsLeft = MINES;
   private timer = 0;
-  private gameStart = 0;
+  private minesPlaced = false;
   private touchTimer: number | null = null;
-  private touchStartX = 0;
-  private touchStartY = 0;
 
   constructor() {
     super('gameCanvas', CELL * COLS + 4, CELL * ROWS + 52);
@@ -37,26 +35,43 @@ export class MinesweeperGame extends BaseGame {
         this.flagged[y][x] = false;
       }
     }
-    this.placeMines();
-    this.computeNumbers();
     this.flagsLeft = MINES;
     this.timer = 0;
+    this.minesPlaced = false;
     this.gameState = 'idle';
     this.cursorX = Math.floor(COLS / 2);
     this.cursorY = Math.floor(ROWS / 2);
     this.resetScoreReport();
   }
 
-  private placeMines() {
+  private placeMines(safeX: number, safeY: number) {
     let placed = 0;
     while (placed < MINES) {
       const x = Math.floor(Math.random() * COLS);
       const y = Math.floor(Math.random() * ROWS);
-      if (this.grid[y][x] !== -1) {
+      const inSafeArea = Math.abs(x - safeX) <= 1 && Math.abs(y - safeY) <= 1;
+      if (!inSafeArea && this.grid[y][x] !== -1) {
         this.grid[y][x] = -1;
         placed++;
       }
     }
+    this.computeNumbers();
+    this.minesPlaced = true;
+  }
+
+  private beginAt(x: number, y: number) {
+    if (!this.minesPlaced) this.placeMines(x, y);
+    if (this.gameState === 'idle') {
+      this.timer = 0;
+      this.gameState = 'playing';
+    }
+  }
+
+  private toggleFlag(x: number, y: number) {
+    if (this.revealed[y][x]) return;
+    if (!this.flagged[y][x] && this.flagsLeft === 0) return;
+    this.flagged[y][x] = !this.flagged[y][x];
+    this.flagsLeft += this.flagged[y][x] ? -1 : 1;
   }
 
   private computeNumbers() {
@@ -106,7 +121,6 @@ export class MinesweeperGame extends BaseGame {
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     const isKeyDown = e instanceof KeyboardEvent && e.type === 'keydown';
-    const isKeyUp = e instanceof KeyboardEvent && e.type === 'keyup';
 
     if (isKeyDown && e.key === 'r') {
       this.init();
@@ -127,16 +141,11 @@ export class MinesweeperGame extends BaseGame {
       if (e.key === 'ArrowUp' || e.key === 'w') this.cursorY = Math.max(0, this.cursorY - 1);
       if (e.key === 'ArrowDown' || e.key === 's') this.cursorY = Math.min(ROWS - 1, this.cursorY + 1);
       if (e.key === ' ' || e.key === 'Enter') {
-        if (this.gameState === 'idle') this.gameState = 'playing';
+        this.beginAt(this.cursorX, this.cursorY);
         if (this.gameState === 'playing') this.revealCell(this.cursorX, this.cursorY);
-        this.timer = 0;
-        this.gameStart = performance.now();
       }
       if (e.key === 'f' || e.key === 'x') {
-        if (!this.revealed[this.cursorY][this.cursorX]) {
-          this.flagged[this.cursorY][this.cursorX] = !this.flagged[this.cursorY][this.cursorX];
-          this.flagsLeft += this.flagged[this.cursorY][this.cursorX] ? -1 : 1;
-        }
+        this.toggleFlag(this.cursorX, this.cursorY);
       }
       return;
     }
@@ -146,11 +155,7 @@ export class MinesweeperGame extends BaseGame {
     const mouseEvent = e as MouseEvent;
 
     const getCell = (clientX: number, clientY: number): { x: number; y: number } | null => {
-      const rect = this.canvas.getBoundingClientRect();
-      const scaleX = this.width / rect.width;
-      const scaleY = this.height / rect.height;
-      const tx = (clientX - rect.left) * scaleX;
-      const ty = (clientY - rect.top) * scaleY;
+      const { x: tx, y: ty } = this.canvasPoint(clientX, clientY);
       const cellX = Math.floor((tx - 2) / CELL);
       const cellY = Math.floor((ty - 50) / CELL);
       if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) return { x: cellX, y: cellY };
@@ -160,15 +165,12 @@ export class MinesweeperGame extends BaseGame {
     if (touchEvent.type === 'touchstart') {
       e.preventDefault();
       const t = touchEvent.touches[0];
+      if (!t) return;
       const cell = getCell(t.clientX, t.clientY);
       if (!cell) return;
-      this.touchStartX = t.clientX;
-      this.touchStartY = t.clientY;
       this.touchTimer = window.setTimeout(() => {
         // Long press = flag
-        if (this.gameState === 'idle') this.gameState = 'playing';
-        this.flagged[cell.y][cell.x] = !this.flagged[cell.y][cell.x];
-        this.flagsLeft += this.flagged[cell.y][cell.x] ? -1 : 1;
+        this.toggleFlag(cell.x, cell.y);
         this.touchTimer = null;
       }, 300);
       return;
@@ -180,14 +182,13 @@ export class MinesweeperGame extends BaseGame {
         clearTimeout(this.touchTimer);
         this.touchTimer = null;
         const t = touchEvent.changedTouches[0];
+        if (!t) return;
         const cell = getCell(t.clientX, t.clientY);
         if (cell) {
-          if (this.gameState === 'idle') this.gameState = 'playing';
+          this.beginAt(cell.x, cell.y);
           this.revealCell(cell.x, cell.y);
           this.cursorX = cell.x;
           this.cursorY = cell.y;
-          this.timer = 0;
-          this.gameStart = performance.now();
         }
       }
       return;
@@ -214,12 +215,10 @@ export class MinesweeperGame extends BaseGame {
     if (mouseEvent.type === 'mouseup') {
       const cell = getCell(mouseEvent.clientX, mouseEvent.clientY);
       if (cell) {
-        if (this.gameState === 'idle') this.gameState = 'playing';
+        this.beginAt(cell.x, cell.y);
         this.revealCell(cell.x, cell.y);
         this.cursorX = cell.x;
         this.cursorY = cell.y;
-        this.timer = 0;
-        this.gameStart = performance.now();
       }
     }
   }

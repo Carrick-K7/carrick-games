@@ -12,33 +12,31 @@ Carrick Games currently ships 25 playable games:
 
 | Game | Chinese | Type |
 |------|---------|------|
-| Snake | 贪吃蛇 | Arcade |
-| Pac-Man | 吃豆人 | Arcade |
-| Frogger | 青蛙过河 | Arcade |
-| Flappy Bird | 像素鸟 | Arcade |
-| Doodle Jump | 涂鸦跳跃 | Arcade |
-| I Wanna | I Wanna | Precision platformer |
-| Parking | 停车 | Driving |
-| Breakout | 打砖块 | Arcade |
-| Pong | 乒乓 | Arcade |
-| Stacker | 堆叠方块 | Arcade |
-| Space Shooter | 太空射击 | Shooter |
-| Galaga | 大战役 | Shooter |
-| Asteroids | 小行星 | Shooter |
-| Beach Head | 抢滩登陆战 | Shooter |
+| Parking | 停车 | Casual |
+| Lucky Case | 头彩 | Casual |
+| Snake | 贪吃蛇 | Casual |
+| Flappy Bird | 像素鸟 | Casual |
+| Doodle Jump | 涂鸦跳跃 | Casual |
+| Breakout | 打砖块 | Casual |
+| Pong | 乒乓 | Casual |
+| Stacker | 堆叠方块 | Casual |
+| I Wanna | I Wanna | Action |
+| Space Shooter | 太空射击 | Action |
+| Galaga | 大战役 | Action |
+| Asteroids | 小行星 | Action |
+| Aim Lab | AimLab | Action |
 | Bubble Shooter | 泡泡龙 | Puzzle |
 | Tetris | 俄罗斯方块 | Puzzle |
 | 2048 | 2048 | Puzzle |
-| Simon Says | 西蒙记忆 | Memory |
+| Simon Says | 西蒙记忆 | Puzzle |
 | Minesweeper | 扫雷 | Puzzle |
-| Wordle | 猜单词 | Word |
+| Wordle | 猜单词 | Puzzle |
 | Sudoku | 数独 | Puzzle |
-| Checkers | 跳棋 | Tabletop |
-| Chess | 国际象棋 | Tabletop |
-| Connect Four | 四子连珠 | Tabletop |
-| Solitaire | 纸牌 | Card |
-| Texas Hold'em | 德州扑克 | Card |
-| Aim Lab | 瞄准实验室 | Skill |
+| Checkers | 跳棋 | Board & Card |
+| Chess | 国际象棋 | Board & Card |
+| Connect Four | 四子连珠 | Board & Card |
+| Solitaire | 纸牌 | Board & Card |
+| Texas Hold'em | 德州扑克 | Board & Card |
 
 ## Features
 

@@ -96,7 +96,7 @@ export class SolitaireGame extends BaseGame {
   // Waste (face-up drawn cards)
   private waste: Card[] = [];
   // 4 foundations (build A->K by suit)
-  private foundations: Card[][] = [[], [], [], [], []];
+  private foundations: Card[][] = [[], [], [], []];
 
   private phase: Phase = 'ready';
   private moves = 0;
@@ -147,7 +147,7 @@ export class SolitaireGame extends BaseGame {
     this.stock = [];
     this.waste = [];
     this.tableau = [[], [], [], [], [], [], []];
-    this.foundations = [[], [], [], [], []];
+    this.foundations = [[], [], [], []];
     this.deck = [];
   }
 
@@ -215,7 +215,6 @@ export class SolitaireGame extends BaseGame {
         if (!t) return;
         this.touchStartTime = Date.now();
         this.touchStartPos = { x: t.clientX, y: t.clientY };
-        this.lastTap = { x: t.clientX, y: t.clientY, time: Date.now() };
       }
       if (e.type === 'touchend') {
         e.preventDefault();
@@ -225,7 +224,18 @@ export class SolitaireGame extends BaseGame {
         const dy = Math.abs(t.clientY - this.touchStartPos.y);
         const dt2 = Date.now() - this.touchStartTime;
         if (dx < 15 && dy < 15 && dt2 < 400) {
-          this.handleTap(t.clientX, t.clientY, true);
+          const target = this.getClickTarget(t.clientX, t.clientY);
+          if (!target) return;
+          const now = Date.now();
+          const ddx = Math.abs(t.clientX - this.lastTap.x);
+          const ddy = Math.abs(t.clientY - this.lastTap.y);
+          if (ddx < 15 && ddy < 15 && now - this.lastTap.time < 350) {
+            this.handleDoubleClick(target);
+            this.lastTap.time = 0;
+          } else {
+            this.handleClick(target);
+            this.lastTap = { x: t.clientX, y: t.clientY, time: now };
+          }
         }
       }
       return;
@@ -287,6 +297,10 @@ export class SolitaireGame extends BaseGame {
       // Try to move selected card to foundation
       if (this.selectedSrc) {
         this.tryMoveToFoundation(target.col);
+      } else {
+        const found = this.foundations[target.col];
+        const card = found[found.length - 1];
+        if (card) this.selectedSrc = { type: 'found', col: target.col, card };
       }
       return;
     }
@@ -298,13 +312,14 @@ export class SolitaireGame extends BaseGame {
         if (this.selectedSrc) this.tryMoveToTableau(target.col);
         return;
       }
-      const card = tab[tab.length - 1];
       if (this.selectedSrc) {
         // Try to move selected to this column
         this.tryMoveToTableau(target.col);
       } else {
+        const index = target.index ?? tab.length - 1;
+        const card = tab[index];
         if (card.faceUp) {
-          this.selectedSrc = { type: 'tab', col: target.col, index: tab.length - 1, card };
+          this.selectedSrc = { type: 'tab', col: target.col, index, card };
         }
       }
       return;
@@ -364,12 +379,6 @@ export class SolitaireGame extends BaseGame {
     }
   }
 
-  private handleTap(clientX: number, clientY: number, isTouch: boolean) {
-    const target = this.getClickTarget(clientX, clientY);
-    if (!target) return;
-    this.handleClick(target);
-  }
-
   private getClickTarget(clientX: number, clientY: number): { type: 'tab' | 'waste' | 'found' | 'stock'; col?: number; index?: number } | null {
     const { x, y } = this.canvasPoint(clientX, clientY);
 
@@ -397,7 +406,8 @@ export class SolitaireGame extends BaseGame {
       let ty = TAB_Y;
       for (let i = 0; i < this.tableau[c].length; i++) {
         const offset = this.tableau[c][i].faceUp ? TAB_OFFSET_UP : TAB_OFFSET_DOWN;
-        if (x >= tx && x <= tx + CW && y >= ty && y <= ty + CH) {
+        const hitHeight = i === this.tableau[c].length - 1 ? CH : offset;
+        if (x >= tx && x <= tx + CW && y >= ty && y <= ty + hitHeight) {
           return { type: 'tab', col: c, index: i };
         }
         ty += offset;
@@ -457,6 +467,10 @@ export class SolitaireGame extends BaseGame {
 
   private tryMoveToTableau(colIdx: number) {
     if (!this.selectedSrc) return;
+    if (this.selectedSrc.type === 'tab' && this.selectedSrc.col === colIdx) {
+      this.selectedSrc = null;
+      return;
+    }
     let cards: Card[] = [];
 
     if (this.selectedSrc.type === 'waste') {
@@ -464,6 +478,9 @@ export class SolitaireGame extends BaseGame {
     } else if (this.selectedSrc.type === 'tab' && this.selectedSrc.col !== undefined) {
       const tab = this.tableau[this.selectedSrc.col];
       cards = tab.slice(this.selectedSrc.index!);
+    } else if (this.selectedSrc.type === 'found' && this.selectedSrc.col !== undefined) {
+      const found = this.foundations[this.selectedSrc.col];
+      cards = [found[found.length - 1]];
     } else {
       return;
     }
@@ -481,6 +498,8 @@ export class SolitaireGame extends BaseGame {
       this.waste.pop();
     } else if (this.selectedSrc.type === 'tab' && this.selectedSrc.col !== undefined) {
       this.tableau[this.selectedSrc.col].splice(this.selectedSrc.index!);
+    } else if (this.selectedSrc.type === 'found' && this.selectedSrc.col !== undefined) {
+      this.foundations[this.selectedSrc.col].pop();
     }
 
     dest.push(...cards);

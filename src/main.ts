@@ -122,6 +122,11 @@ function updateGameTitle() {
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
+  const canvas = document.getElementById('gameCanvas');
+  if (canvas && meta) {
+    const gameName = zh ? meta.nameZh : meta.name;
+    canvas.setAttribute('aria-label', zh ? `${gameName}游戏画布` : `${gameName} game canvas`);
+  }
 }
 
 function updateGameDesc() {
@@ -296,6 +301,10 @@ function renderStats() {
   html += `<div class="game-info-card">`;
   html += `<div class="gic-name">${zh ? meta.nameZh : meta.name}</div>`;
   html += `<div class="gic-desc">${zh ? (meta.descZh || meta.desc) : meta.desc}</div>`;
+  const liveScore = readGameScore();
+  if (liveScore != null) {
+    html += `<div class="gic-record"><span>${zh ? '当前分数' : 'Score'}</span><span class="gic-value" id="liveScore">${liveScore}</span></div>`;
+  }
   if (best != null) {
     const bestLabel = currentGameName === 'parking' ? (zh ? '最高关卡' : 'Best Level') : (zh ? '最高记录' : 'Best');
     html += `<div class="gic-record"><span>${bestLabel}</span><span class="gic-value">${best}</span></div>`;
@@ -505,6 +514,7 @@ window.saveRecord = saveRecord;
 window.reportScore = (score: number) => {
   if (!currentGameName) return;
   saveRecord(currentGameName, score);
+  renderStats();
 };
 
 function bindVirtualKeyboard() {
@@ -591,6 +601,7 @@ export async function prepareGame(name: string) {
   });
 
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+  canvas.tabIndex = 0;
   const ctx = canvas.getContext('2d');
   if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   delete canvas.dataset.parkingState;
@@ -763,6 +774,7 @@ function setLang(lang: 'en' | 'zh') {
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
     b.classList.toggle('active', target === lang);
+    b.setAttribute('aria-pressed', String(target === lang));
   });
 }
 
@@ -775,7 +787,9 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
   }
   localStorage.setItem('cg-theme', mode);
   document.querySelectorAll('.theme-btn').forEach((b) => {
-    b.classList.toggle('active', b.getAttribute('data-set') === mode);
+    const active = b.getAttribute('data-set') === mode;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', String(active));
   });
 }
 

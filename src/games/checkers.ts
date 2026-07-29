@@ -22,7 +22,7 @@ export class CheckersGame extends BaseGame {
   private winner: number | null = null;
   private score = 0;
   private validMoves: Move[] = [];
-  private mustCapture = false;
+  private forcedCapture: { c: number; r: number } | null = null;
 
   constructor() {
     super('gameCanvas', BOARD * CELL + MARGIN * 2, BOARD * CELL + MARGIN * 2 + 40);
@@ -48,7 +48,7 @@ export class CheckersGame extends BaseGame {
     this.winner = null;
     this.score = 0;
     this.validMoves = [];
-    this.mustCapture = false;
+    this.forcedCapture = null;
   }
 
   update(_dt: number) {
@@ -97,13 +97,14 @@ export class CheckersGame extends BaseGame {
         }
       }
     }
-    return all;
+    const captures = all.filter((move) => move.captures.length > 0);
+    return captures.length > 0 ? captures : all;
   }
 
   private aiTurn() {
-    const moves = this.getAllMoves(2);
-    const captures = moves.filter(m => m.captures.length > 0);
-    const candidates = captures.length > 0 ? captures : moves;
+    const candidates = this.forcedCapture
+      ? this.getPieceMoves(this.forcedCapture.c, this.forcedCapture.r, 2).filter((move) => move.captures.length > 0)
+      : this.getAllMoves(2);
     if (candidates.length === 0) {
       this.gameOver = true;
       this.winner = 1;
@@ -137,13 +138,19 @@ export class CheckersGame extends BaseGame {
     this.board[move.toC][move.toR] = newPiece;
 
     // Check multi-capture
-    const further = this.getPieceMoves(move.toC, move.toR, this.currentPlayer).filter(m => m.captures.length > 0);
+    const promoted = newPiece !== piece;
+    const further = promoted
+      ? []
+      : this.getPieceMoves(move.toC, move.toR, this.currentPlayer).filter(m => m.captures.length > 0);
     if (move.captures.length > 0 && further.length > 0) {
-      // For simplicity, don't chain; AI will chain on next tick if still its turn
-      // For player, we let them continue manually
+      this.forcedCapture = { c: move.toC, r: move.toR };
+      this.selected = this.currentPlayer === 1 ? { c: move.toC, r: move.toR } : null;
+      this.validMoves = this.currentPlayer === 1 ? further : [];
+      return;
     }
 
     // Switch turn
+    this.forcedCapture = null;
     this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
     this.selected = null;
     this.validMoves = [];
@@ -265,15 +272,12 @@ export class CheckersGame extends BaseGame {
 
     let x = 0, y = 0;
     if (e instanceof MouseEvent && e.type === 'mousedown') {
-      const rect = this.canvas.getBoundingClientRect();
-      x = (e.clientX - rect.left) * (this.width / rect.width);
-      y = (e.clientY - rect.top) * (this.height / rect.height);
+      ({ x, y } = this.canvasPoint(e.clientX, e.clientY));
     } else if (e instanceof TouchEvent && e.type === 'touchstart') {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0];
-      x = (touch.clientX - rect.left) * (this.width / rect.width);
-      y = (touch.clientY - rect.top) * (this.height / rect.height);
+      if (!touch) return;
+      ({ x, y } = this.canvasPoint(touch.clientX, touch.clientY));
     } else {
       return;
     }
@@ -297,12 +301,10 @@ export class CheckersGame extends BaseGame {
     }
 
     if (isPlayerPiece) {
+      if (this.forcedCapture && (c !== this.forcedCapture.c || r !== this.forcedCapture.r)) return;
       this.selected = { c, r };
-      this.validMoves = this.getPieceMoves(c, r, 1).filter(m => {
-        const all = this.getAllMoves(1);
-        const hasCapture = all.some(cm => cm.captures.length > 0);
-        return !hasCapture || m.captures.length > 0;
-      });
+      const legal = this.getAllMoves(1);
+      this.validMoves = legal.filter((move) => move.fromC === c && move.fromR === r);
     } else {
       this.selected = null;
       this.validMoves = [];

@@ -123,12 +123,12 @@ Do not create large explanatory screens inside games. The app already renders co
 
 ## Game Families
 
-The 0.1.x release line includes 27 published games. Keep this list aligned with `src/games/catalog.ts` and `README.md`.
+The 0.1.x release line includes 25 published games. The four primary families are intentionally broad and follow familiar App Store game-category language. Keep this list aligned with `src/games/catalog.ts` and `README.md`.
 
-- Arcade movement: Snake, Pac-Man, Frogger, Flappy Bird, Doodle Jump, I Wanna, Parking, Breakout, Pong, Stacker.
-- Combat and shooters: Space Shooter, Galaga, Asteroids, Beach Head.
-- Puzzles and word games: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku, Aim Lab.
-- Tabletop and cards: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
+- Casual: Parking, Lucky Case, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
+- Action: I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
+- Puzzle: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku.
+- Board & Card: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
 
 Each family can vary in mood, but all games should share the same clarity, theming, and HiDPI expectations.
 

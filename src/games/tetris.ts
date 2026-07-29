@@ -95,7 +95,7 @@ export class TetrisGame extends BaseGame {
   private autoRepeatDelay = 0.15;
 
   constructor() {
-    super('gameCanvas', 300, 600);
+    super('gameCanvas', 420, 600);
   }
 
   init() {
@@ -322,6 +322,7 @@ export class TetrisGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
+    const zh = this.isZhLang();
 
     // Background
     ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
@@ -371,7 +372,7 @@ export class TetrisGame extends BaseGame {
     ctx.fillStyle = isDark ? '#94a3b8' : '#4b5563';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('NEXT', previewX, previewY - 8);
+    ctx.fillText(zh ? '下一个' : 'NEXT', previewX, previewY - 8);
 
     const nextShape = TETROMINOES[this.nextType][0];
     const offsetX = previewX + (4 - nextShape[0].length) * previewSize / 2;
@@ -389,8 +390,20 @@ export class TetrisGame extends BaseGame {
     ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`LINES ${this.lines}`, this.cols * this.cellSize + 16, 224);
-    ctx.fillText(`LEVEL ${this.level}`, this.cols * this.cellSize + 16, 248);
+    ctx.fillText(`${zh ? '行数' : 'LINES'} ${this.lines}`, this.cols * this.cellSize + 16, 224);
+    ctx.fillText(`${zh ? '等级' : 'LEVEL'} ${this.level}`, this.cols * this.cellSize + 16, 248);
+
+    if (this.paused) {
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '28px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(zh ? '已暂停' : 'PAUSED', this.width / 2, this.height / 2 - 10);
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillText(zh ? '按 P 继续' : 'PRESS P TO RESUME', this.width / 2, this.height / 2 + 22);
+      return;
+    }
 
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
@@ -399,9 +412,9 @@ export class TetrisGame extends BaseGame {
       ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
       ctx.font = '28px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
+      ctx.fillText(zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
       ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
+      ctx.fillText(zh ? '按空格重新开始' : 'PRESS SPACE', this.width / 2, this.height / 2 + 16);
     }
   }
 
@@ -424,6 +437,14 @@ export class TetrisGame extends BaseGame {
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {
       const down = e.type === 'keydown';
+      if ((e.key === 'p' || e.key === 'P') && down && !e.repeat && !this.gameOver) {
+        this.paused = !this.paused;
+        this.moveLeft = false;
+        this.moveRight = false;
+        this.softDrop = false;
+        return;
+      }
+      if (this.paused) return;
       switch (e.key) {
         case 'ArrowLeft':
         case 'a':
@@ -471,7 +492,6 @@ export class TetrisGame extends BaseGame {
 
     if (e instanceof TouchEvent) {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
       const x = touch.clientX;

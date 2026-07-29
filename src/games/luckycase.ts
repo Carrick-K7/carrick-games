@@ -250,6 +250,12 @@ export class LuckyCaseGame extends BaseGame {
   /* ─── State machine ─── */
   init() {
     this.save = loadSave();
+    if (this.save.coins < CASES[0].cost && this.save.collection.length === 0) {
+      this.save.coins = 250;
+      this.notification = this.isZhLang() ? '补给金 +250' : 'Recovery grant +250';
+      this.notifyTimer = 2;
+      this.persist();
+    }
     this.screen = 'menu';
     this.animPhase = 0;
     this.particles = [];
@@ -1079,8 +1085,19 @@ export class LuckyCaseGame extends BaseGame {
   /* ─── Input ─── */
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {
-      if (e.key === 'r' || e.key === 'R') {
+      if (e.type !== 'keydown') return;
+      if ((e.key === 'r' || e.key === 'R') && e.shiftKey) {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch { /* ignore */ }
         this.init();
+        this.notification = this.isZhLang() ? '进度已重置' : 'Progress reset';
+        this.notifyTimer = 2;
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        this.screen = 'menu';
+        this.animPhase = 0;
         return;
       }
       if (e.key === 'Escape') {

@@ -330,7 +330,7 @@ export class Game2048 extends BaseGame {
             this.init();
             this.gameState = 'playing';
           } else if (this.gameState === 'playing' && this.hasWon) {
-            this.gameState = 'playing';
+            this.hasWon = false;
           }
         }
       }
@@ -347,7 +347,7 @@ export class Game2048 extends BaseGame {
           this.init();
           this.gameState = 'playing';
         } else if (this.gameState === 'playing' && this.hasWon) {
-          this.gameState = 'playing';
+          this.hasWon = false;
         }
       }
       if (e.type === 'touchend') {
@@ -372,7 +372,7 @@ export class Game2048 extends BaseGame {
           this.init();
           this.gameState = 'playing';
         } else if (this.gameState === 'playing' && this.hasWon) {
-          this.gameState = 'playing';
+          this.hasWon = false;
         }
       }
     }

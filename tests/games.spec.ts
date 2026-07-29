@@ -2,7 +2,12 @@ import { test, expect } from '@playwright/test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getCanvasPoint } from '../src/core/render';
-import { GAMES } from '../src/games/catalog';
+import {
+  GAME_GROUP_MAP,
+  GAME_GROUPS,
+  GAME_LIST_ORDER,
+  GAMES,
+} from '../src/games/catalog';
 import {
   IWANNA_PLAYER_H,
   IWANNA_PLAYER_W,
@@ -48,6 +53,8 @@ async function selectGame(page: any, gameId: string) {
   const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
   if (meta) {
     await expect(page.locator('#gameTitle')).toHaveText(zh ? meta.nameZh : meta.name);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width));
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(meta.canvasSize.height));
   }
   await expect(item).toHaveClass(/active/);
   await expect(page.locator('#actionBtn')).toBeVisible();
@@ -126,6 +133,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
 ];
 
 const CLICK_GAMES: GameProfile[] = [
+  { id: 'luckycase', clicks: 1, delayMs: 1000 },
   { id: 'minesweeper', clicks: 3, delayMs: 1500 },
   { id: 'checkers', clicks: 2, delayMs: 1500 },
   { id: 'solitaire', clicks: 2, delayMs: 1500 },
@@ -153,6 +161,10 @@ test.describe('Game rules', () => {
 
     const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
     expect(readme).toContain('Carrick Games currently ships 25 playable games');
+    const readmeNames = [...readme.matchAll(/^\| ([^|]+?) \| [^|]+? \| (?:Casual|Action|Puzzle|Board & Card) \|$/gm)]
+      .map((match) => match[1]);
+    expect(readmeNames).toHaveLength(ids.length);
+    expect(new Set(readmeNames)).toEqual(new Set(GAMES.map((game) => game.name)));
 
     const gamesDir = join(process.cwd(), 'src/games');
     const gameClassFiles = readdirSync(gamesDir).filter((file) => {
@@ -162,6 +174,22 @@ test.describe('Game rules', () => {
     });
 
     expect(gameClassFiles).toHaveLength(ids.length);
+  });
+
+  test('catalog uses four App Store-style primary groups', () => {
+    expect(GAME_GROUPS).toEqual([
+      { id: 'casual', name: 'Casual', nameZh: '休闲' },
+      { id: 'action', name: 'Action', nameZh: '动作' },
+      { id: 'puzzle', name: 'Puzzle', nameZh: '益智' },
+      { id: 'tabletop', name: 'Board & Card', nameZh: '棋牌' },
+    ]);
+
+    const ids = GAMES.map((game) => game.id);
+    expect(new Set(Object.keys(GAME_GROUP_MAP))).toEqual(new Set(ids));
+    expect(new Set(GAME_LIST_ORDER)).toEqual(new Set(ids));
+    for (const id of ids) {
+      expect(GAME_GROUPS.some((group) => group.id === GAME_GROUP_MAP[id])).toBe(true);
+    }
   });
 
   test('canvas font literals stay within UI bounds', () => {
@@ -381,6 +409,205 @@ test.describe('Game rules', () => {
     expect(badRoutes).toEqual([]);
   });
 
+  test('chess legal moves preserve king safety and castling rules', async ({ page }) => {
+    await page.goto('/#/chess');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      const { ChessGame } = await import('/dist/games/chess.js');
+      const game = new ChessGame() as any;
+      const emptyBoard = () => Array.from({ length: 8 }, () => Array(8).fill(null));
+      const noCastling = { w: { K: false, Q: false }, b: { K: false, Q: false } };
+
+      const checkingBoard = emptyBoard();
+      checkingBoard[7][4] = { type: 'K', color: 'w' };
+      checkingBoard[0][4] = { type: 'K', color: 'b' };
+      checkingBoard[2][0] = { type: 'R', color: 'w' };
+      game.moveHistory = [];
+      const checkingMoveAllowed = game.getLegalMoves(checkingBoard, 2, 0, noCastling)
+        .some((move: { r: number; c: number }) => move.r === 2 && move.c === 4);
+
+      const pinnedBoard = emptyBoard();
+      pinnedBoard[7][4] = { type: 'K', color: 'w' };
+      pinnedBoard[0][0] = { type: 'K', color: 'b' };
+      pinnedBoard[0][4] = { type: 'R', color: 'b' };
+      pinnedBoard[6][4] = { type: 'R', color: 'w' };
+      const selfCheckMoveAllowed = game.getLegalMoves(pinnedBoard, 6, 4, noCastling)
+        .some((move: { r: number; c: number }) => move.r === 6 && move.c === 3);
+
+      const castleBoard = emptyBoard();
+      castleBoard[7][4] = { type: 'K', color: 'w' };
+      castleBoard[7][7] = { type: 'R', color: 'w' };
+      castleBoard[0][0] = { type: 'K', color: 'b' };
+      castleBoard[0][5] = { type: 'R', color: 'b' };
+      const throughCheckCastleAllowed = game.getLegalMoves(
+        castleBoard,
+        7,
+        4,
+        { w: { K: true, Q: false }, b: { K: false, Q: false } }
+      ).some((move: { flags?: string }) => move.flags === 'castleK');
+
+      game.destroy();
+      return { checkingMoveAllowed, selfCheckMoveAllowed, throughCheckCastleAllowed };
+    });
+
+    expect(result).toEqual({
+      checkingMoveAllowed: true,
+      selfCheckMoveAllowed: false,
+      throughCheckCastleAllowed: false,
+    });
+  });
+
+  test('checkers enforces mandatory captures and multi-jumps', async ({ page }) => {
+    await page.goto('/#/checkers');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      const { CheckersGame } = await import('/dist/games/checkers.js');
+      const game = new CheckersGame() as any;
+      game.board = Array.from({ length: 8 }, () => Array(8).fill(0));
+      game.board[1][5] = 1;
+      game.board[2][4] = 2;
+      game.board[4][2] = 2;
+      game.board[7][7] = 1;
+      game.currentPlayer = 1;
+
+      const allMoves = game.getAllMoves(1);
+      const ordinaryMoveIncluded = allMoves.some((move: { captures: unknown[] }) => move.captures.length === 0);
+      game.executeMove(allMoves.find((move: { fromC: number }) => move.fromC === 1));
+
+      const outcome = {
+        ordinaryMoveIncluded,
+        currentPlayer: game.currentPlayer,
+        selected: game.selected,
+        continuationTargets: game.validMoves.map((move: { toC: number; toR: number }) => [move.toC, move.toR]),
+      };
+      game.destroy();
+      return outcome;
+    });
+
+    expect(result.ordinaryMoveIncluded).toBe(false);
+    expect(result.currentPlayer).toBe(1);
+    expect(result.selected).toEqual({ c: 3, r: 3 });
+    expect(result.continuationTargets).toContainEqual([5, 1]);
+  });
+
+  test('minesweeper protects the first reveal and keeps a continuous timer', async ({ page }) => {
+    await page.goto('/#/minesweeper');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      const { MinesweeperGame } = await import('/dist/games/minesweeper.js');
+      const game = new MinesweeperGame() as any;
+      game.init();
+      game.beginAt(4, 4);
+      game.update(1);
+      game.beginAt(0, 0);
+      game.update(1);
+      const safeArea = game.grid.slice(3, 6).flatMap((row: number[]) => row.slice(3, 6));
+      const outcome = {
+        firstCell: game.grid[4][4],
+        safeAreaHasMine: safeArea.includes(-1),
+        timer: game.timer,
+      };
+      game.destroy();
+      return outcome;
+    });
+
+    expect(result.firstCell).toBeGreaterThanOrEqual(0);
+    expect(result.safeAreaHasMine).toBe(false);
+    expect(result.timer).toBeCloseTo(2, 5);
+  });
+
+  test('2048 can continue after reaching the winning tile', async ({ page }) => {
+    await page.goto('/#/2048');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const hasWon = await page.evaluate(async () => {
+      const { Game2048 } = await import('/dist/games/game2048.js');
+      const game = new Game2048() as any;
+      game.init();
+      game.gameState = 'playing';
+      game.hasWon = true;
+      game.handleInput(new KeyboardEvent('keydown', { key: ' ' }));
+      const result = game.hasWon;
+      game.destroy();
+      return result;
+    });
+
+    expect(hasWon).toBe(false);
+  });
+
+  test('Lucky Case recovers from an empty balance and supports an explicit reset', async ({ page }) => {
+    await page.goto('/#/luckycase');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      localStorage.setItem('luckycase', JSON.stringify({
+        coins: 0,
+        collection: [],
+        totalOpens: 20,
+        totalValue: 0,
+      }));
+      const { LuckyCaseGame } = await import('/dist/games/luckycase.js');
+      const game = new LuckyCaseGame() as any;
+      game.init();
+      const recoveredCoins = game.save.coins;
+
+      localStorage.setItem('luckycase', JSON.stringify({
+        coins: 123,
+        collection: [{ id: 'test', count: 1 }],
+        totalOpens: 2,
+        totalValue: 10,
+      }));
+      game.handleInput(new KeyboardEvent('keydown', { key: 'R', shiftKey: true }));
+      const outcome = {
+        recoveredCoins,
+        resetCoins: game.save.coins,
+        storageWasCleared: localStorage.getItem('luckycase') === null,
+      };
+      game.destroy();
+      return outcome;
+    });
+
+    expect(result).toEqual({
+      recoveredCoins: 250,
+      resetCoins: 5000,
+      storageWasCleared: true,
+    });
+  });
+
+  test('solitaire can select and move a face-up tableau sequence', async ({ page }) => {
+    await page.goto('/#/solitaire');
+    await expect(page.locator('#actionBtn')).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      const { SolitaireGame } = await import('/dist/games/solitaire.js');
+      const game = new SolitaireGame() as any;
+      game.init();
+      game.phase = 'playing';
+      game.tableau[0] = [
+        { suit: 0, rank: 11, faceUp: true },
+        { suit: 2, rank: 10, faceUp: true },
+      ];
+      game.tableau[1] = [{ suit: 2, rank: 12, faceUp: true }];
+      game.handleClick({ type: 'tab', col: 0, index: 0 });
+      game.handleClick({ type: 'tab', col: 1, index: 0 });
+      const outcome = {
+        foundations: game.foundations.length,
+        sourceCount: game.tableau[0].length,
+        destinationRanks: game.tableau[1].map((card: { rank: number }) => card.rank),
+      };
+      game.destroy();
+      return outcome;
+    });
+
+    expect(result).toEqual({
+      foundations: 4,
+      sourceCount: 0,
+      destinationRanks: [12, 11, 10],
+    });
+  });
 
 });
 
@@ -394,11 +621,20 @@ test.describe('Carrick Games - Lifecycle', () => {
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
     expect(await gameItems.count()).toBeGreaterThan(0);
+    await expect(page.locator('.game-list-group')).toHaveText(['休闲', '动作', '益智', '棋牌']);
 
     const firstNameFontSize = await gameItems.first().locator('.game-list-name').evaluate((el) =>
       parseFloat(window.getComputedStyle(el).fontSize)
     );
     expect(firstNameFontSize).toBeGreaterThanOrEqual(14);
+  });
+
+  test('game canvas exposes an accessible name and live score', async ({ page }) => {
+    await selectGame(page, 'snake');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('aria-label', '贪吃蛇游戏画布');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('tabindex', '0');
+    await startGame(page);
+    await expect(page.locator('#liveScore')).toHaveText('0');
   });
 
   test('initial page load does not fetch unselected game modules', async ({ page }) => {
@@ -482,6 +718,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   });
 
   test('all games render HD Retro layered canvas scenes', async ({ page }) => {
+    test.setTimeout(90_000);
     for (const id of ALL_GAME_IDS) {
       await selectGame(page, id);
       await startGame(page);
@@ -489,6 +726,43 @@ test.describe('Carrick Games - Lifecycle', () => {
       expect(renderStyle).toBe('minimal-hd');
       expect(await canvasColorCount(page)).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  test('all games accept real touch events without page errors', async ({ page }) => {
+    test.setTimeout(90_000);
+    const { pageErrors } = await collectErrors(page);
+
+    for (const id of ALL_GAME_IDS) {
+      await selectGame(page, id);
+      await startGame(page);
+      await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
+        const rect = canvas.getBoundingClientRect();
+        const touch = new Touch({
+          identifier: 1,
+          target: canvas,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+          radiusX: 2,
+          radiusY: 2,
+        });
+        canvas.dispatchEvent(new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: [touch],
+          targetTouches: [touch],
+          changedTouches: [touch],
+        }));
+        canvas.dispatchEvent(new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: [touch],
+        }));
+      });
+    }
+
+    expect(pageErrors).toEqual([]);
   });
 
   test('corrupted stored records do not break startup', async ({ page }) => {

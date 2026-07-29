@@ -31,6 +31,7 @@ export class SnakeGame extends BaseGame {
     this.score = 0;
     this.gameOver = false;
     this.moveTimer = 0;
+    this.moveInterval = 0.12;
     this.particles = [];
     this.spawnFood();
     this.resetScoreReport();
@@ -236,13 +237,13 @@ export class SnakeGame extends BaseGame {
     }
     if (e instanceof TouchEvent) {
       e.preventDefault();
+      if (e.type !== 'touchstart') return;
       // Simple touch areas for mobile
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
+      if (!touch) return;
+      const { x, y } = this.canvasPoint(touch.clientX, touch.clientY);
+      const cx = this.width / 2;
+      const cy = this.height / 2;
       if (Math.abs(x - cx) > Math.abs(y - cy)) {
         if (x > cx && this.direction !== 'LEFT') this.nextDirection = 'RIGHT';
         else if (x <= cx && this.direction !== 'RIGHT') this.nextDirection = 'LEFT';
