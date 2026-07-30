@@ -3,6 +3,7 @@ import {
   drawGameResultOverlay,
   getRetroPalette,
   getCanvasPoint,
+  isPixelMode,
   type CanvasPoint,
   type GameResultOverlayOptions,
 } from './render.js';
@@ -137,6 +138,10 @@ export abstract class BaseGame implements Game {
 
   protected isZhLang(): boolean {
     return isZhLang();
+  }
+
+  protected isPixelMode(): boolean {
+    return isPixelMode();
   }
 
   protected canvasPoint(clientX: number, clientY: number): CanvasPoint {

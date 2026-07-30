@@ -12,8 +12,8 @@ import {
 export { GAMES } from './games/catalog.js';
 import { getStoredRecord, readStoredRecords } from './core/game.js';
 
-// Game icons — Lucide-style SVGs, green accent stroke
-const ICON = (d: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="#39C5BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+// Game icons — Lucide-style SVGs, colored by the current theme via currentColor
+const ICON = (d: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 const GAME_ICONS: Record<string, string> = {
   parking: ICON('M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M9 17v2m6-2v2M8 12h0m8 0h0'),
   luckycase: ICON('M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8M12 2v10M8 6l4-4 4 4M4 10h16'),
@@ -55,6 +55,7 @@ declare global {
   interface Window {
     setLang?: (lang: 'en' | 'zh') => void;
     setTheme?: (mode: 'light' | 'dark' | 'system') => void;
+    setStyleMode?: (mode: 'modern' | 'pixel') => void;
     startPreparedGame?: () => void;
     closeGameLibrary?: () => void;
   }
@@ -808,6 +809,7 @@ function renderGameList(filter = '') {
   // Build grouped HTML
   let lastGroup = '';
   let html = '';
+  let itemIndex = 0;
   const visibleGroupCounts = filtered.reduce((counts, game) => {
     const groupId = GAME_GROUP_MAP[game.id] || '';
     counts.set(groupId, (counts.get(groupId) || 0) + 1);
@@ -828,12 +830,13 @@ function renderGameList(filter = '') {
       lastGroup = groupId;
     }
     html += `
-      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" title="${zh ? g.nameZh : g.name}">
+      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" style="--i:${itemIndex}" title="${zh ? g.nameZh : g.name}">
         <span class="game-list-icon">${GAME_ICONS[g.id] || GAME_ICONS._default}</span>
         <div class="game-list-name">${zh ? g.nameZh : g.name}</div>
         <div class="game-list-desc">${zh ? g.descZh : g.desc}</div>
       </button>
     `;
+    itemIndex += 1;
   }
 
   list.innerHTML = html;
@@ -853,6 +856,10 @@ function setLang(lang: 'en' | 'zh') {
     b.classList.toggle('active', target === lang);
     b.setAttribute('aria-pressed', String(target === lang));
   });
+  // Refresh the start overlay copy when it is currently displayed.
+  const startOverlay = document.getElementById('startOverlay');
+  if (startOverlay?.classList.contains('active')) setStartOverlay(true);
+  repaintCurrentFrame();
 }
 
 function setTheme(mode: 'light' | 'dark' | 'system') {
@@ -868,10 +875,37 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
     b.classList.toggle('active', active);
     b.setAttribute('aria-pressed', String(active));
   });
+  repaintCurrentFrame();
+}
+
+// Repaint the current frame so static (non-looping) scenes follow theme,
+// language, and style-mode changes immediately.
+function repaintCurrentFrame() {
+  try {
+    currentGameInstance?.renderFrame?.();
+  } catch {
+    // A failed repaint is harmless; the next frame will pick the change up.
+  }
+}
+
+function setStyleMode(mode: 'modern' | 'pixel') {
+  document.documentElement.setAttribute('data-style-mode', mode);
+  try {
+    localStorage.setItem('cg-style-mode', mode);
+  } catch {
+    // Style mode is a convenience; storage failures should not break the shell.
+  }
+  document.querySelectorAll('.style-btn').forEach((b) => {
+    const active = b.getAttribute('data-mode') === mode;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  repaintCurrentFrame();
 }
 
 window.setLang = setLang;
 window.setTheme = setTheme;
+window.setStyleMode = setStyleMode;
 window.startPreparedGame = startPreparedGame;
 
 // Global keyboard highlight listener
@@ -912,8 +946,15 @@ function toggleFullscreen() {
 (function init() {
   const savedLang = (localStorage.getItem('cg-lang') as 'en' | 'zh') || 'zh';
   const savedTheme = (localStorage.getItem('cg-theme') as 'light' | 'dark' | 'system') || 'system';
+  let savedStyleMode: 'modern' | 'pixel' = 'modern';
+  try {
+    if (localStorage.getItem('cg-style-mode') === 'pixel') savedStyleMode = 'pixel';
+  } catch {
+    // Ignore storage failures; the default modern mode applies.
+  }
   setLang(savedLang);
   setTheme(savedTheme);
+  setStyleMode(savedStyleMode);
 
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
   if (search) {

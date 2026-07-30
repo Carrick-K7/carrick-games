@@ -16,6 +16,46 @@ The target feel is:
 
 Do not use a separate visual-style document. Put durable visual decisions here.
 
+## Style Modes
+
+The shell ships two style modes, orthogonal to the light/dark theme. The active
+mode lives on `<html data-style-mode="modern|pixel">` (default `modern`) and is
+persisted in `localStorage` under `cg-style-mode`. Both modes share one set of
+semantic CSS tokens in `index.html`; a mode only changes token values
+(geometry, shadows, display font) plus a short list of component overrides.
+
+### Modern (default)
+
+- Layered dark scene (`--bg-scene` gradient + faint accent ambience), glassy
+  translucent sidebar/panels with `backdrop-filter` blur, hairline alpha
+  borders, soft elevation shadows.
+- The canvas sits on a "stage": hairline bezel, rounded corners, and a
+  restrained ambient accent glow (`0 0 80px -22px var(--accent-glow)`).
+- Motion is token-driven (`--dur-fast`, `--dur-base`, `--ease-out`): hover
+  lifts, pressed states, staggered list entrances, canvas pop-in, overlay
+  fade-up. Everything degrades to instant under
+  `prefers-reduced-motion: reduce`.
+
+### Pixel
+
+- Geometry tokens flip to the arcade set: `--radius-*` → 2px/4px,
+  `--bw` → 2px, blur shadows → hard offset shadows (`0 4px 0 ...`),
+  `--glass-blur` → 0.
+- Dark pixel is a deep indigo cabinet palette; light pixel is a warm retro
+  paper palette.
+- Display type uses the bundled `fonts/PressStart2P-Regular.ttf`
+  (`@font-face 'Press Start 2P'`, stack falls back to system UI for Chinese
+  glyphs). Apply it via `var(--font-display)` to brand, eyebrows, section
+  titles, buttons, numeric readouts, and overlay titles — never to dense body
+  text or the game list names.
+- CJK fallback rule: any pixel-mode selector whose text may be Chinese must
+  stay at or above roughly `0.55rem`; keep tiny `0.4–0.5rem` sizes for
+  Latin/digit-only micro labels.
+- `#gameCanvas` gets `image-rendering: pixelated` and a thicker bezel.
+- `drawGameResultOverlay()`/`fillRoundedPanel()` in `src/core/render.ts` read
+  `isPixelMode()` and switch to the pixel font stack, small radius, and hard
+  shadow so in-canvas terminal panels match the shell.
+
 ## Core UI
 
 The shell UI is an application surface, not a marketing landing page.
@@ -40,14 +80,17 @@ Use the app theme tokens for page UI and `getRetroPalette()` from `src/core/rend
 
 | Purpose | Dark | Light |
 |---------|------|-------|
-| App background | `#0b0f14` | `#f8fafc` |
+| App background | `#070b12` | `#eef2f7` |
 | Canvas background | `#0b0f19` | `#fafafa` |
 | Primary accent | `#39C5BB` | `#0d9488` |
-| Text | `#f8fafc` | `#0f172a` |
-| Muted text | `#94a3af` | `#64748b` |
+| Text | `#f1f5f9` | `#0f172a` |
+| Muted text | `#94a3b8` | `#5b6b80` |
 | Danger | `#fb7185` | `#dc2626` |
 | Warning | `#facc15` | `#ca8a04` |
 | Success | `#4ade80` | `#16a34a` |
+
+Pixel mode shifts the shell palette (indigo cabinet / retro paper) and
+brightens the accent; canvas scenes keep the shared `getRetroPalette()` values.
 
 Rules:
 
@@ -68,6 +111,9 @@ Rules:
 - Use system fonts for HUDs, labels, instructions, and overlays.
 - Use `ui-monospace, SFMono-Regular, monospace` only for aligned numeric readouts.
 - Use symbol fonts only for board-game pieces or card suits where needed.
+- The pixel display font (`'Press Start 2P'`) is reserved for result-overlay
+  titles/details in pixel mode and for shell display elements; never use it
+  for in-gameplay HUD text that must read at a glance.
 - Minimum readable canvas text size is `10px`.
 - Typical HUD text is `12px-14px`.
 - Game-over and title text is usually `18px-28px`.
@@ -131,8 +177,9 @@ Game-over, pause, win, and start overlays should use:
 
 All terminal win, loss, completion, and game-over states use
 `BaseGame.drawResultOverlay()`. This keeps result hierarchy, tone, spacing,
-theme behavior, and the testable canvas result state consistent. The only
-published exception is Lucky Case, which has no terminal state.
+theme behavior, style-mode behavior, and the testable canvas result state
+consistent. The only published exception is Lucky Case, which has no terminal
+state.
 
 The standard terminal primary action is Space, Enter, click, or tap, detected
 through `BaseGame.isRestartInput()`. A game may map that action to the next
@@ -160,6 +207,7 @@ Before a design or UI change is done:
 - `npm run build` passes.
 - Relevant Playwright tests pass; full `npm run test:e2e` is required before Agent closure.
 - Canvas is nonblank in dark and light themes.
-- Text fits in English and Chinese.
+- Shell looks intentional in both style modes (modern and pixel), in dark and light.
+- Text fits in English and Chinese, including pixel-mode CJK fallback sizes.
 - Keyboard, mouse, and touch input remain correctly mapped after canvas scaling.
 - The UI has no incoherent overlaps at mobile and desktop widths.

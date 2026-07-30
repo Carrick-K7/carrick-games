@@ -33,6 +33,14 @@ export interface GameResultOverlayOptions {
 
 const MAX_CANVAS_PIXEL_RATIO = 2;
 
+export function isPixelMode(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.getAttribute('data-style-mode') === 'pixel';
+}
+
+const PIXEL_FONT_STACK = `'Press Start 2P', system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+const UI_FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+
 export function getCanvasPixelRatio(): number {
   if (typeof window === 'undefined') return 1;
   const ratio = window.devicePixelRatio || 1;
@@ -172,18 +180,19 @@ export function fillRoundedPanel(
   palette: RetroPalette,
   radius = 8
 ) {
+  const pixel = isPixelMode();
   ctx.save();
   const grad = ctx.createLinearGradient(x, y, x, y + height);
   grad.addColorStop(0, palette.panel);
   grad.addColorStop(1, palette.panel2);
   ctx.fillStyle = grad;
   ctx.strokeStyle = palette.border;
-  ctx.lineWidth = 1;
-  ctx.shadowColor = palette.shadow;
-  ctx.shadowBlur = 14;
+  ctx.lineWidth = pixel ? 2 : 1;
+  ctx.shadowColor = pixel ? 'rgba(0,0,0,0.55)' : palette.shadow;
+  ctx.shadowBlur = pixel ? 0 : 14;
   ctx.shadowOffsetY = 4;
   ctx.beginPath();
-  ctx.roundRect(x, y, width, height, radius);
+  ctx.roundRect(x, y, width, height, pixel ? Math.min(radius, 4) : radius);
   ctx.fill();
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
@@ -214,21 +223,24 @@ export function drawGameResultOverlay(
   ctx.fillRect(0, 0, width, height);
   fillRoundedPanel(ctx, panelX, panelY, panelWidth, panelHeight, palette, 14);
 
+  const pixel = isPixelMode();
+  const fontStack = pixel ? PIXEL_FONT_STACK : UI_FONT_STACK;
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = toneColor;
-  ctx.font = 'bold 24px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.font = pixel ? `16px ${fontStack}` : `bold 24px ${fontStack}`;
   ctx.fillText(options.title, width / 2, panelY + 34);
 
   ctx.fillStyle = palette.text;
-  ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.font = pixel ? `10px ${fontStack}` : `14px ${fontStack}`;
   details.forEach((line, index) => {
     ctx.fillText(line, width / 2, panelY + 68 + index * 24);
   });
 
   if (options.hint) {
     ctx.fillStyle = palette.muted;
-    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = pixel ? `9px ${fontStack}` : `12px ${fontStack}`;
     ctx.fillText(options.hint, width / 2, panelY + panelHeight - 20);
   }
   ctx.restore();

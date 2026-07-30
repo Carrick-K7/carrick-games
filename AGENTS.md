@@ -37,6 +37,7 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 - Keep changes scoped. Do not reformat unrelated files or rewrite established game logic as part of a narrow fix.
 - Use `this.isDarkTheme()` and `this.isZhLang()` for theme and language branching inside games.
 - Use `this.canvasPoint(clientX, clientY)` for mouse and touch coordinates. Do not compute from `canvas.width / rect.width`; canvases use HiDPI backing stores.
+- The shell supports two style modes, `data-style-mode="modern"` (default) and `"pixel"`, orthogonal to the light/dark theme and persisted as `cg-style-mode`. Keep both modes coherent when editing `index.html` styles or shared canvas chrome (`src/core/render.ts` reads `isPixelMode()` for result panels). See `DESIGN.md` for the mode rules.
 - Follow `DESIGN.md` for visual choices. If `AGENTS.md` and `DESIGN.md` appear to conflict on design, update the docs instead of inventing a third rule.
 
 ## Adding A Game

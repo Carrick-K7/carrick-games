@@ -269,7 +269,7 @@ test.describe('Game rules', () => {
       .map((match) => match[1]);
 
     expect(preloads).toEqual([
-      './dist/main.js?v=14',
+      './dist/main.js?v=15',
       './dist/games/catalog.js',
       './dist/core/game.js',
       './dist/core/render.js',
@@ -281,7 +281,7 @@ test.describe('Game rules', () => {
       './dist/games/parkingLevels.js',
       './dist/games/parkingRoute.js',
     ]);
-    expect(index).toContain('<script type="module" src="./dist/main.js?v=14"></script>');
+    expect(index).toContain('<script type="module" src="./dist/main.js?v=15"></script>');
   });
 
   test('sudoku hints reduce final score', () => {
