@@ -31,6 +31,8 @@ The game library uses four visible primary category filters plus grouped game
 sections. Category filters show counts, the selected category is explicit, and
 the current game's family remains visible in the top bar. On mobile, choosing a
 game closes the library drawer so the play surface is revealed immediately.
+Desktop and mobile sidebar state must remain independent. A collapsed desktop
+rail shows icons only and always keeps an obvious expand control visible.
 
 ## Palette
 

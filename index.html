@@ -947,11 +947,17 @@
       body.sidebar-collapsed .brand {
         justify-content: center;
       }
+      body.sidebar-collapsed .brand-icon {
+        display: none;
+      }
       body.sidebar-collapsed .brand-text {
         display: none;
       }
       body.sidebar-collapsed .brand-toggle {
-        display: none;
+        display: flex;
+        width: 40px;
+        height: 40px;
+        margin-left: 0;
       }
       body.sidebar-collapsed .search-wrap {
         display: none;
@@ -968,11 +974,14 @@
         min-height: 44px;
         padding: 6px 2px;
       }
+      body.sidebar-collapsed .game-list-icon {
+        margin-bottom: 0;
+      }
       body.sidebar-collapsed .game-list-group {
         display: none;
       }
       body.sidebar-collapsed .game-list-name {
-        font-size: 0.68rem;
+        display: none;
       }
     }
 
@@ -1610,6 +1619,7 @@
       const toggle = document.getElementById('sidebarToggle');
       const brandToggle = document.getElementById('sidebarToggleBtn');
       const body = document.body;
+      const desktopSidebarStorageKey = 'cg-sidebar-collapsed-desktop-v2';
 
       function setSidebarCollapsed(collapsed) {
         body.classList.toggle('sidebar-collapsed', collapsed);
@@ -1622,7 +1632,9 @@
           if (expandIcon) expandIcon.style.display = collapsed ? 'block' : 'none';
         }
         try {
-          localStorage.setItem('cg-sidebar-collapsed', collapsed ? '1' : '0');
+          if (window.innerWidth > 960) {
+            localStorage.setItem(desktopSidebarStorageKey, collapsed ? '1' : '0');
+          }
         } catch {}
       }
 
@@ -1633,7 +1645,7 @@
       function isSidebarCollapsed() {
         if (window.innerWidth <= 960) return true;
         try {
-          const v = localStorage.getItem('cg-sidebar-collapsed');
+          const v = localStorage.getItem(desktopSidebarStorageKey);
           if (v !== null) return v === '1';
         } catch {}
         return false;
@@ -1667,6 +1679,6 @@
       setSidebarCollapsed(isSidebarCollapsed());
     })();
   </script>
-  <script type="module" src="./dist/main.js?v=11"></script>
+  <script type="module" src="./dist/main.js?v=12"></script>
 </body>
 </html>

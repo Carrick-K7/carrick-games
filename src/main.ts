@@ -807,7 +807,7 @@ function renderGameList(filter = '') {
       lastGroup = groupId;
     }
     html += `
-      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}">
+      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" title="${zh ? g.nameZh : g.name}">
         <span class="game-list-icon">${GAME_ICONS[g.id] || GAME_ICONS._default}</span>
         <div class="game-list-name">${zh ? g.nameZh : g.name}</div>
         <div class="game-list-desc">${zh ? g.descZh : g.desc}</div>

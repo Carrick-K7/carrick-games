@@ -647,6 +647,31 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('#selectedGameLabel')).toHaveText('休闲 / 停车');
   });
 
+  test('desktop collapsed library stays usable and ignores the legacy cached state', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.evaluate(() => {
+      localStorage.setItem('cg-sidebar-collapsed', '1');
+      localStorage.removeItem('cg-sidebar-collapsed-desktop-v2');
+    });
+    await page.reload();
+
+    await expect(page.locator('body')).not.toHaveClass(/sidebar-collapsed/);
+    await expect(page.locator('#librarySummary')).toBeVisible();
+
+    await page.evaluate(() => localStorage.setItem('cg-sidebar-collapsed-desktop-v2', '1'));
+    await page.reload();
+
+    await expect(page.locator('body')).toHaveClass(/sidebar-collapsed/);
+    await expect(page.locator('#sidebarToggleBtn')).toBeVisible();
+    await expect(page.locator('.game-list-name').first()).toBeHidden();
+    await expect(page.locator('.game-list-icon').first()).toBeVisible();
+
+    await page.locator('#sidebarToggleBtn').click();
+    await expect(page.locator('body')).not.toHaveClass(/sidebar-collapsed/);
+    await expect(page.locator('#librarySummary')).toBeVisible();
+    await expect(page.locator('.game-list-name').first()).toBeVisible();
+  });
+
   test('game canvas exposes an accessible name and live score', async ({ page }) => {
     await selectGame(page, 'snake');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('aria-label', '贪吃蛇游戏画布');
