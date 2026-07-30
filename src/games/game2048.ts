@@ -38,7 +38,6 @@ export class Game2048 extends BaseGame {
   private hasWon = false;
   private touchStartX = 0;
   private touchStartY = 0;
-  private lastScoreReported = false;
 
   constructor() {
     super('gameCanvas', W, H);
@@ -47,9 +46,9 @@ export class Game2048 extends BaseGame {
   init() {
     this.grid = Array.from({ length: GRID }, () => Array(GRID).fill(null));
     this.score = 0;
-    this.gameState = 'idle';
+    this.gameState = 'playing';
     this.hasWon = false;
-    this.lastScoreReported = false;
+    this.resetScoreReport();
     this.addRandomTile();
     this.addRandomTile();
   }
@@ -178,10 +177,7 @@ export class Game2048 extends BaseGame {
     // Check game over
     if (moved && !this.canMove()) {
       this.gameState = 'gameover';
-      if (!this.lastScoreReported) {
-        this.lastScoreReported = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
     }
   }
 
@@ -256,7 +252,7 @@ export class Game2048 extends BaseGame {
       }
     }
 
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
     ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'right';
@@ -278,31 +274,22 @@ export class Game2048 extends BaseGame {
 
     // Win overlay
     if (this.gameState === 'playing' && this.hasWon) {
-      ctx.fillStyle = 'rgba(237,194,46,0.85)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#f9f6f2';
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(zh ? '你赢了！' : 'YOU WIN!', W / 2, H / 2 - 30);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
-      ctx.fillText(zh ? '点击继续' : 'TAP TO CONTINUE', W / 2, H / 2 + 35);
+      this.drawResultOverlay(ctx, {
+        title: zh ? '达成 2048！' : '2048 REACHED!',
+        tone: 'success',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格继续' : 'CLICK OR PRESS SPACE TO CONTINUE',
+      });
     }
 
     // Game over overlay
     if (this.gameState === 'gameover') {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 30);
-      ctx.font = '14px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '点击或按空格重新开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 40);
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
@@ -311,6 +298,17 @@ export class Game2048 extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameState === 'gameover' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+    if (this.gameState === 'playing' && this.hasWon && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.hasWon = false;
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         if (e.type === 'keydown') this.move('left');

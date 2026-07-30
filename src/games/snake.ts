@@ -199,19 +199,23 @@ export class SnakeGame extends BaseGame {
     // Game Over
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
-      ctx.textAlign = 'left';
+      const zh = this.isZhLang();
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       switch (e.key) {
         case 'ArrowUp':
@@ -238,6 +242,10 @@ export class SnakeGame extends BaseGame {
     if (e instanceof TouchEvent) {
       e.preventDefault();
       if (e.type !== 'touchstart') return;
+      if (this.gameOver) {
+        this.init();
+        return;
+      }
       // Simple touch areas for mobile
       const touch = e.touches[0];
       if (!touch) return;
@@ -251,6 +259,9 @@ export class SnakeGame extends BaseGame {
         if (y > cy && this.direction !== 'UP') this.nextDirection = 'DOWN';
         else if (y <= cy && this.direction !== 'DOWN') this.nextDirection = 'UP';
       }
+    }
+    if (e instanceof MouseEvent && e.type === 'mousedown' && this.gameOver) {
+      this.init();
     }
   }
 }

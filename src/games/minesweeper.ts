@@ -122,6 +122,12 @@ export class MinesweeperGame extends BaseGame {
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     const isKeyDown = e instanceof KeyboardEvent && e.type === 'keydown';
 
+    if ((this.gameState === 'won' || this.gameState === 'lost') && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (isKeyDown && e.key === 'r') {
       this.init();
       return;
@@ -129,6 +135,12 @@ export class MinesweeperGame extends BaseGame {
 
     if (this.gameState === 'won' || this.gameState === 'lost') {
       if (isKeyDown && (e.key === ' ' || e.key === 'Enter')) {
+        this.init();
+      } else if (
+        (e instanceof MouseEvent && e.type === 'mousedown')
+        || (e instanceof TouchEvent && e.type === 'touchstart')
+      ) {
+        if (e instanceof TouchEvent) e.preventDefault();
         this.init();
       }
       return;
@@ -235,7 +247,7 @@ export class MinesweeperGame extends BaseGame {
   draw(ctx: CanvasRenderingContext2D) {
     const w = this.width;
     const h = this.height;
-    const lang = document.documentElement.getAttribute('data-lang') === 'zh';
+    const lang = this.isZhLang();
     const isDark = this.isDarkTheme();
 
     // Background
@@ -334,23 +346,19 @@ export class MinesweeperGame extends BaseGame {
 
     // Overlay messages
     if (this.gameState === 'won') {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#39C5BB';
-      ctx.font = "24px system-ui, sans-serif";
-      ctx.textAlign = 'center';
-      ctx.fillText(lang ? '🎉 你赢了!' : '🎉 YOU WIN!', w / 2, h / 2 - 10);
-      ctx.font = "14px system-ui, sans-serif";
-      ctx.fillText(lang ? '按 R 或空格重新开始' : 'Press R or Space to restart', w / 2, h / 2 + 20);
+      this.drawResultOverlay(ctx, {
+        title: lang ? '你赢了！' : 'YOU WIN!',
+        tone: 'success',
+        details: [`${lang ? '用时' : 'TIME'} ${Math.floor(this.timer)}s`],
+        hint: lang ? '点击、R 或空格重新开始' : 'CLICK, R OR SPACE TO RESTART',
+      });
     } else if (this.gameState === 'lost') {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#ef4444';
-      ctx.font = "24px system-ui, sans-serif";
-      ctx.textAlign = 'center';
-      ctx.fillText(lang ? '💥 游戏结束' : '💥 GAME OVER', w / 2, h / 2 - 10);
-      ctx.font = "14px system-ui, sans-serif";
-      ctx.fillText(lang ? '按 R 或空格重新开始' : 'Press R or Space to restart', w / 2, h / 2 + 20);
+      this.drawResultOverlay(ctx, {
+        title: lang ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${lang ? '用时' : 'TIME'} ${Math.floor(this.timer)}s`],
+        hint: lang ? '点击、R 或空格重新开始' : 'CLICK, R OR SPACE TO RESTART',
+      });
     }
   }
 }

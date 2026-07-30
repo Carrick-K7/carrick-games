@@ -125,7 +125,8 @@ export class GalagaGame extends BaseGame {
     this.waveClearTimer = 0;
     this.respawnTimer = 0;
     this.spawnWave();
-    this.state = 'start';
+    this.state = 'playing';
+    this.resetScoreReport();
   }
 
   private spawnWave() {
@@ -228,7 +229,7 @@ export class GalagaGame extends BaseGame {
   }
 
   update(dt: number) {
-    const isZh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const isZh = this.isZhLang();
 
     if (this.state === 'start') return;
     if (this.state === 'gameover') return;
@@ -427,7 +428,7 @@ export class GalagaGame extends BaseGame {
     this.addExplosion(this.playerX + PLAYER_W / 2, PLAYER_Y + PLAYER_H / 2);
     if (this.lives <= 0) {
       this.state = 'gameover';
-      window.reportScore?.(this.score);
+      this.submitScoreOnce(this.score);
     } else {
       this.respawnTimer = this.respawnDelay;
       this.state = 'playing';
@@ -436,7 +437,7 @@ export class GalagaGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const { isDark, bg, primary, enemyDrone, enemyBoss } = getTheme();
-    const isZh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const isZh = this.isZhLang();
 
     // Background
     ctx.fillStyle = bg;
@@ -518,11 +519,12 @@ export class GalagaGame extends BaseGame {
         '',
         '');
     } else if (this.state === 'gameover') {
-      this.drawOverlay(ctx, isDark, isZh,
-        `GAME OVER`,
-        isZh ? `游戏结束  得分: ${this.score}` : `SCORE: ${this.score}`,
-        '',
-        '');
+      this.drawResultOverlay(ctx, {
+        title: isZh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${isZh ? '得分' : 'SCORE'} ${this.score}`, `${isZh ? '波次' : 'WAVE'} ${this.wave}`],
+        hint: isZh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
@@ -629,6 +631,12 @@ export class GalagaGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.state === 'gameover' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e.type !== 'keydown' && e.type !== 'keyup' &&
         e.type !== 'touchstart' && e.type !== 'touchend' &&
         e.type !== 'mousedown' && e.type !== 'mouseup') return;

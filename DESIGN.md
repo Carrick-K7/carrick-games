@@ -129,6 +129,17 @@ Game-over, pause, win, and start overlays should use:
 - clear score/result state,
 - concise restart/start instruction.
 
+All terminal win, loss, completion, and game-over states use
+`BaseGame.drawResultOverlay()`. This keeps result hierarchy, tone, spacing,
+theme behavior, and the testable canvas result state consistent. The only
+published exception is Lucky Case, which has no terminal state.
+
+The standard terminal primary action is Space, Enter, click, or tap, detected
+through `BaseGame.isRestartInput()`. A game may map that action to the next
+level or continue state when restarting would be incorrect, but its result
+panel must describe that behavior. Secondary shortcuts such as replay or menu
+may remain game-specific.
+
 Do not create large explanatory screens inside games. The app already renders controls outside the canvas.
 
 ## Game Families

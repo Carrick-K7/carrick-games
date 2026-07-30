@@ -29,6 +29,7 @@ export class ConnectFourGame extends BaseGame {
     this.animating = false;
     this.score = 0;
     this.moves = 0;
+    this.resetScoreReport();
   }
 
   update(_dt: number) {
@@ -90,11 +91,11 @@ export class ConnectFourGame extends BaseGame {
         this.score = 1000 - this.moves * 10;
         if (this.score < 100) this.score = 100;
       }
-      window.reportScore?.(this.score);
+      this.submitScoreOnce(this.score);
     } else if (this.board.every(col => col[0] !== null)) {
       this.gameOver = true;
       this.score = 0;
-      window.reportScore?.(this.score);
+      this.submitScoreOnce(this.score);
     } else {
       this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
     }
@@ -172,34 +173,38 @@ export class ConnectFourGame extends BaseGame {
     ctx.fillStyle = textColor;
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
     if (!this.gameOver) {
       const turnText = this.currentPlayer === 1
         ? (zh ? '你的回合 (红)' : 'Your Turn (Red)')
         : (zh ? '电脑思考中...' : 'Computer thinking...');
       ctx.fillText(turnText, this.width / 2, 24);
-    } else {
-      let msg = '';
-      if (this.winner === 1) msg = zh ? '你赢了!' : 'You Win!';
-      else if (this.winner === 2) msg = zh ? '电脑赢了!' : 'Computer Wins!';
-      else msg = zh ? '平局!' : 'Draw!';
-      ctx.fillText(msg, this.width / 2, 24);
     }
 
     // Game over overlay
     if (this.gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      const overText = zh ? '按空格重新开始' : 'PRESS SPACE';
-      ctx.fillText(overText, this.width / 2, this.height / 2 + 8);
+      const result = this.winner === 1
+        ? (zh ? '你赢了！' : 'YOU WIN!')
+        : this.winner === 2
+          ? (zh ? '电脑赢了' : 'COMPUTER WINS')
+          : (zh ? '平局' : 'DRAW');
+      this.drawResultOverlay(ctx, {
+        title: result,
+        tone: this.winner === 1 ? 'success' : this.winner === 2 ? 'danger' : 'neutral',
+        details: [`${zh ? '步数' : 'MOVES'} ${this.moves}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
     ctx.textAlign = 'left';
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type === 'keydown') {
         if (this.gameOver && e.key === ' ') {
@@ -223,8 +228,7 @@ export class ConnectFourGame extends BaseGame {
         return;
       }
       if (this.currentPlayer !== 1) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (this.width / rect.width);
+      const { x } = this.canvasPoint(e.clientX, e.clientY);
       const bx = MARGIN;
       if (x >= bx && x < bx + COLS * CELL) {
         const col = Math.floor((x - bx) / CELL);
@@ -238,9 +242,9 @@ export class ConnectFourGame extends BaseGame {
         return;
       }
       if (this.currentPlayer !== 1) return;
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0];
-      const x = (touch.clientX - rect.left) * (this.width / rect.width);
+      if (!touch) return;
+      const { x } = this.canvasPoint(touch.clientX, touch.clientY);
       const bx = MARGIN;
       if (x >= bx && x < bx + COLS * CELL) {
         const col = Math.floor((x - bx) / CELL);

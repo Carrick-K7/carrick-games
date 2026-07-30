@@ -29,7 +29,6 @@ export class DoodleJumpGame extends BaseGame {
   private keys = { left: false, right: false };
   private touchSide: 'left' | 'right' | null = null;
   private cameraY = 0;
-  private lastScoreReported = false;
 
   constructor() {
     super('gameCanvas', W, H);
@@ -40,11 +39,11 @@ export class DoodleJumpGame extends BaseGame {
     this.score = 0;
     this.maxY = this.player.y;
     this.cameraY = 0;
-    this.gameState = 'idle';
+    this.gameState = 'playing';
     this.platforms = [];
     this.keys = { left: false, right: false };
     this.touchSide = null;
-    this.lastScoreReported = false;
+    this.resetScoreReport();
 
     // Generate initial platforms
     this.platforms.push({ x: W / 2 - PLATFORM_W / 2, y: H - 60, w: PLATFORM_W, type: 'normal', alpha: 1, broken: false });
@@ -161,10 +160,7 @@ export class DoodleJumpGame extends BaseGame {
     // Game over: fell below camera
     if (this.player.y - this.cameraY > H + 40) {
       this.gameState = 'gameover';
-      if (!this.lastScoreReported) {
-        this.lastScoreReported = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
     }
   }
 
@@ -214,24 +210,19 @@ export class DoodleJumpGame extends BaseGame {
       ctx.fillStyle = '#f8fafc';
       ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      const zh = document.documentElement.getAttribute('data-lang') === 'zh';
       ctx.fillText('DOODLE JUMP', W / 2, H / 2 - 50);
       ctx.font = '12px system-ui, sans-serif';
     }
 
     // Game over
     if (this.gameState === 'gameover') {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-      ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, H / 2 - 40);
-      ctx.font = '14px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, H / 2 + 5);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '点击或按空格重新开始' : 'TAP OR PRESS SPACE', W / 2, H / 2 + 40);
+      const zh = this.isZhLang();
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
@@ -293,6 +284,12 @@ export class DoodleJumpGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameState === 'gameover' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         if (e.type === 'keydown') this.keys.left = true;
@@ -313,7 +310,8 @@ export class DoodleJumpGame extends BaseGame {
       if (e.type === 'touchstart' || e.type === 'touchmove') {
         const touch = e.touches[0];
         if (touch) {
-          this.touchSide = touch.clientX < window.innerWidth / 2 ? 'left' : 'right';
+          const { x } = this.canvasPoint(touch.clientX, touch.clientY);
+          this.touchSide = x < this.width / 2 ? 'left' : 'right';
         }
         if (e.type === 'touchstart') this.jump();
       }
@@ -325,7 +323,8 @@ export class DoodleJumpGame extends BaseGame {
 
     if (e instanceof MouseEvent) {
       if (e.type === 'mousedown') {
-        this.touchSide = e.clientX < window.innerWidth / 2 ? 'left' : 'right';
+        const { x } = this.canvasPoint(e.clientX, e.clientY);
+        this.touchSide = x < this.width / 2 ? 'left' : 'right';
         this.jump();
       }
       if (e.type === 'mouseup') {

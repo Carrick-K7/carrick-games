@@ -24,6 +24,13 @@ export interface CanvasPoint {
   y: number;
 }
 
+export interface GameResultOverlayOptions {
+  title: string;
+  details?: string[];
+  hint?: string;
+  tone?: 'success' | 'danger' | 'neutral';
+}
+
 const MAX_CANVAS_PIXEL_RATIO = 2;
 
 export function getCanvasPixelRatio(): number {
@@ -181,5 +188,48 @@ export function fillRoundedPanel(
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   ctx.stroke();
+  ctx.restore();
+}
+
+export function drawGameResultOverlay(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  palette: RetroPalette,
+  options: GameResultOverlayOptions
+) {
+  const details = (options.details || []).filter(Boolean).slice(0, 3);
+  const panelWidth = Math.min(Math.max(220, width - 40), 360);
+  const panelHeight = 92 + details.length * 24 + (options.hint ? 30 : 0);
+  const panelX = (width - panelWidth) / 2;
+  const panelY = (height - panelHeight) / 2;
+  const toneColor = options.tone === 'success'
+    ? palette.green
+    : options.tone === 'danger'
+      ? palette.red
+      : palette.primary;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(2,6,23,0.68)';
+  ctx.fillRect(0, 0, width, height);
+  fillRoundedPanel(ctx, panelX, panelY, panelWidth, panelHeight, palette, 14);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = toneColor;
+  ctx.font = 'bold 24px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillText(options.title, width / 2, panelY + 34);
+
+  ctx.fillStyle = palette.text;
+  ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  details.forEach((line, index) => {
+    ctx.fillText(line, width / 2, panelY + 68 + index * 24);
+  });
+
+  if (options.hint) {
+    ctx.fillStyle = palette.muted;
+    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(options.hint, width / 2, panelY + panelHeight - 20);
+  }
   ctx.restore();
 }

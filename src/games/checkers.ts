@@ -49,6 +49,7 @@ export class CheckersGame extends BaseGame {
     this.score = 0;
     this.validMoves = [];
     this.forcedCapture = null;
+    this.resetScoreReport();
   }
 
   update(_dt: number) {
@@ -109,7 +110,7 @@ export class CheckersGame extends BaseGame {
       this.gameOver = true;
       this.winner = 1;
       this.score = 100;
-      window.reportScore?.(this.score);
+      this.submitScoreOnce(this.score);
       return;
     }
     // Pick best: prioritize captures with most pieces, then center control
@@ -163,7 +164,7 @@ export class CheckersGame extends BaseGame {
       if (this.winner === 1) {
         this.score = 100;
       }
-      window.reportScore?.(this.score);
+      this.submitScoreOnce(this.score);
     }
   }
 
@@ -233,34 +234,39 @@ export class CheckersGame extends BaseGame {
     }
 
     // Turn text
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
     ctx.fillStyle = textColor;
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     if (!this.gameOver) {
       const txt = this.currentPlayer === 1 ? (zh ? '你的回合' : 'Your Turn') : (zh ? '电脑思考中...' : 'Computer thinking...');
       ctx.fillText(txt, this.width / 2, this.height - 16);
-    } else {
-      let msg = '';
-      if (this.winner === 1) msg = zh ? '你赢了!' : 'You Win!';
-      else if (this.winner === 2) msg = zh ? '电脑赢了!' : 'Computer Wins!';
-      else msg = zh ? '平局!' : 'Draw!';
-      ctx.fillText(msg, this.width / 2, this.height - 16);
     }
 
     // Game over overlay
     if (this.gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '18px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(zh ? '按空格重新开始' : 'PRESS SPACE', this.width / 2, this.height / 2);
+      const result = this.winner === 1
+        ? (zh ? '你赢了！' : 'YOU WIN!')
+        : this.winner === 2
+          ? (zh ? '电脑赢了' : 'COMPUTER WINS')
+          : (zh ? '平局' : 'DRAW');
+      this.drawResultOverlay(ctx, {
+        title: result,
+        tone: this.winner === 1 ? 'success' : this.winner === 2 ? 'danger' : 'neutral',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
     ctx.textAlign = 'left';
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type === 'keydown' && e.key === ' ') {
         if (this.gameOver) this.init();
@@ -268,7 +274,17 @@ export class CheckersGame extends BaseGame {
       }
     }
 
-    if (this.gameOver || this.currentPlayer !== 1) return;
+    if (this.gameOver) {
+      if (
+        (e instanceof MouseEvent && e.type === 'mousedown')
+        || (e instanceof TouchEvent && e.type === 'touchstart')
+      ) {
+        if (e instanceof TouchEvent) e.preventDefault();
+        this.init();
+      }
+      return;
+    }
+    if (this.currentPlayer !== 1) return;
 
     let x = 0, y = 0;
     if (e instanceof MouseEvent && e.type === 'mousedown') {

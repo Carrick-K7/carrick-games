@@ -753,56 +753,38 @@ export class ParkingGame extends BaseGame {
 
   private drawOverlay(
     ctx: CanvasRenderingContext2D,
-    isDark: boolean,
+    _isDark: boolean,
     title: string,
     subtitle: string,
     accent: string,
     hint?: string
   ) {
-    // Backdrop
-    ctx.fillStyle = isDark ? 'rgba(11,15,25,0.82)' : 'rgba(248,250,252,0.88)';
-    ctx.fillRect(0, 0, GAME_W, GAME_H);
-
-    // Card panel
-    const cardW = 280;
-    const cardH = hint ? 130 : 100;
-    const cardX = (GAME_W - cardW) / 2;
-    const cardY = (GAME_H - cardH) / 2;
-
-    ctx.fillStyle = isDark ? 'rgba(30,41,59,0.7)' : 'rgba(255,255,255,0.7)';
-    ctx.beginPath();
-    ctx.roundRect(cardX, cardY, cardW, cardH, 14);
-    ctx.fill();
-
-    ctx.strokeStyle = isDark ? 'rgba(57,197,187,0.25)' : 'rgba(13,148,136,0.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(cardX, cardY, cardW, cardH, 14);
-    ctx.stroke();
-
-    // Title
-    ctx.fillStyle = accent;
-    ctx.font = 'bold 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(title, GAME_W / 2, cardY + 36);
-
-    // Subtitle
-    ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-    ctx.font = '15px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText(subtitle, GAME_W / 2, cardY + 68);
-
-    // Hint
-    if (hint) {
-      ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-      ctx.font = '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-      ctx.fillText(hint, GAME_W / 2, cardY + 96);
-    }
+    this.drawResultOverlay(ctx, {
+      title,
+      tone: accent === '#ef4444' ? 'danger' : 'success',
+      details: [subtitle],
+      hint,
+    });
   }
 
 
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (
+      (this.gameState === 'crash' || this.gameState === 'complete' || this.gameState === 'demoComplete')
+      && this.isRestartInput(e)
+    ) {
+      e.preventDefault();
+      if (this.gameState === 'crash' || this.gameState === 'demoComplete') {
+        this.loadLevel(this.levelIndex);
+      } else if (this.levelIndex + 1 < PARKING_LEVELS.length) {
+        this.loadLevel(this.levelIndex + 1);
+      } else {
+        this.loadLevel(this.levelIndex);
+      }
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.key === ' ' || e.key === 'm' || e.key === 'M' || e.key === 'r' || e.key === 'R' ||
           e.key === 'ArrowUp' || e.key === 'ArrowDown') {

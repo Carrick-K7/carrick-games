@@ -80,7 +80,6 @@ export class WordleGame extends BaseGame {
   private messageTimer = 0;
   private keyRects: KeyRect[] = [];
   private keyStates: Map<string, TileState> = new Map();
-  private reported = false;
   private activeKey: string | null = null;
   private activeKeyTimer = 0;
 
@@ -105,7 +104,7 @@ export class WordleGame extends BaseGame {
     this.message = '';
     this.messageTimer = 0;
     this.keyStates = new Map();
-    this.reported = false;
+    this.resetScoreReport();
     this.activeKey = null;
     this.activeKeyTimer = 0;
   }
@@ -148,10 +147,7 @@ export class WordleGame extends BaseGame {
       if (allDone) {
         this.flips = [];
         this.animating = false;
-        if (this.gameOver && !this.reported) {
-          this.reported = true;
-          window.reportScore?.(this.score);
-        }
+        if (this.gameOver) this.submitScoreOnce(this.score);
       }
     }
   }
@@ -176,6 +172,12 @@ export class WordleGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.flips.length === 0 && !this.animating && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (this.gameOver && this.flips.length === 0 && !this.animating) {
       if (e instanceof KeyboardEvent && e.type === 'keydown') {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -225,11 +227,7 @@ export class WordleGame extends BaseGame {
   }
 
   private handlePointer(clientX: number, clientY: number) {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.width / rect.width;
-    const scaleY = this.height / rect.height;
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    const { x, y } = this.canvasPoint(clientX, clientY);
 
     for (const kr of this.keyRects) {
       if (x >= kr.x && x <= kr.x + kr.w && y >= kr.y && y <= kr.y + kr.h) {
@@ -508,38 +506,14 @@ export class WordleGame extends BaseGame {
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, theme: Theme, zh: boolean) {
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = theme.overlay;
-    ctx.beginPath();
-    ctx.roundRect(40, 180, W - 80, 160, 12);
-    ctx.fill();
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    if (this.won) {
-      ctx.fillStyle = theme.green;
-      ctx.font = '26px system-ui, sans-serif';
-      ctx.fillText(zh ? '恭喜!' : 'YOU WIN!', W / 2, 220);
-
-      ctx.fillStyle = theme.text;
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '分数' : 'SCORE'} ${this.score}`, W / 2, 252);
-    } else {
-      ctx.fillStyle = theme.gray;
-      ctx.font = '26px system-ui, sans-serif';
-      ctx.fillText(zh ? '游戏结束' : 'GAME OVER', W / 2, 220);
-
-      ctx.fillStyle = theme.text;
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '单词' : 'WORD'}: ${this.targetWord}`, W / 2, 252);
-    }
-
-    ctx.fillStyle = theme.accent;
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText(zh ? '按 Enter 重新开始' : 'PRESS ENTER', W / 2, 290);
+    this.drawResultOverlay(ctx, {
+      title: this.won ? (zh ? '恭喜！' : 'YOU WIN!') : (zh ? '游戏结束' : 'GAME OVER'),
+      tone: this.won ? 'success' : 'danger',
+      details: this.won
+        ? [`${zh ? '得分' : 'SCORE'} ${this.score}`, `${zh ? '尝试次数' : 'TRIES'} ${this.currentRow + 1}`]
+        : [`${zh ? '答案' : 'WORD'} ${this.targetWord}`],
+      hint: zh ? '点击或按回车重新开始' : 'CLICK OR PRESS ENTER',
+    });
   }
 
   private getTheme(): Theme {
@@ -575,6 +549,6 @@ export class WordleGame extends BaseGame {
   }
 
   private isZh(): boolean {
-    return document.documentElement.getAttribute('data-lang') === 'zh';
+    return this.isZhLang();
   }
 }

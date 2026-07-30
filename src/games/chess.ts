@@ -1,4 +1,8 @@
-import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
+import {
+  BaseGame,
+  isDarkTheme as getEffectiveDarkTheme,
+  isZhLang as getEffectiveZhLang,
+} from '../core/game.js';
 
 // Piece types
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
@@ -38,7 +42,7 @@ function langText(key: string): string {
     en: { title: 'Chess', start: 'Play Chess', restart: 'Play Again', whiteTurn: 'White to move', blackTurn: 'Black to move', whiteWin: 'White Wins!', blackWin: 'Black Wins!', stalemate: 'Stalemate!', draw: 'Draw!', check: 'Check!' },
     zh: { title: '国际象棋', start: '开始对局', restart: '再来一局', whiteTurn: '白方回合', blackTurn: '黑方回合', whiteWin: '白方胜!', blackWin: '黑方胜!', stalemate: '僵局!', draw: '平局!', check: '将军!' },
   };
-  const lang = document.documentElement.getAttribute('data-lang') === 'zh' ? 'zh' : 'en';
+  const lang = getEffectiveZhLang() ? 'zh' : 'en';
   return (t[lang]?.[key]) ?? (t.en?.[key] ?? '');
 }
 
@@ -67,7 +71,7 @@ export class ChessGame extends BaseGame {
 
   init() {
     this.setupBoard();
-    this.phase = 'start';
+    this.phase = 'play';
     this.turn = 'w';
     this.selected = null;
     this.validMoves = [];
@@ -572,33 +576,30 @@ export class ChessGame extends BaseGame {
   private startBtnBounds: { x: number; y: number; w: number; h: number } | null = null;
 
   private drawGameOver(ctx: CanvasRenderingContext2D, theme: ReturnType<typeof getTheme>) {
-    ctx.fillStyle = theme.overlay;
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    ctx.fillStyle = theme.accent;
-    ctx.font = '16px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     const msgKey = this.gameResult || 'draw';
     const msgs: Record<string, string> = { whiteWin: 'whiteWin', blackWin: 'blackWin', stalemate: 'stalemate', draw: 'draw' };
-    ctx.fillText(langText(msgs[msgKey] || 'draw'), this.width / 2, this.height / 2 - 20);
-
-    const btnW = 160, btnH = 32;
-    const bx = this.width / 2 - btnW / 2;
-    const by = this.height / 2 + 10;
-    ctx.fillStyle = theme.accent;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, btnW, btnH, 6);
-    ctx.fill();
-    ctx.fillStyle = theme.bg;
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillText(langText('restart'), this.width / 2, by + btnH / 2);
-    this.startBtnBounds = { x: bx, y: by, w: btnW, h: btnH };
+    const zh = this.isZhLang();
+    this.drawResultOverlay(ctx, {
+      title: langText(msgs[msgKey] || 'draw'),
+      tone: msgKey === 'whiteWin' ? 'success' : msgKey === 'blackWin' ? 'danger' : 'neutral',
+      details: [`${zh ? '回合' : 'MOVES'} ${this.moveHistory.length}`],
+      hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+    });
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.phase === 'gameover' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e.type === 'keydown') {
       const ke = e as KeyboardEvent;
+      if (this.phase === 'gameover' && (ke.key === ' ' || ke.key === 'Enter')) {
+        this.init();
+        return;
+      }
       if (ke.key === 'Escape') {
         this.selected = null;
         this.validMoves = [];
@@ -633,10 +634,7 @@ export class ChessGame extends BaseGame {
     }
 
     if (this.phase === 'gameover') {
-      if (this.startBtnBounds && cx >= this.startBtnBounds.x && cx <= this.startBtnBounds.x + this.startBtnBounds.w && cy >= this.startBtnBounds.y && cy <= this.startBtnBounds.y + this.startBtnBounds.h) {
-        this.init();
-        this.phase = 'play';
-      }
+      this.init();
       return;
     }
 

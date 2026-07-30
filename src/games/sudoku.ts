@@ -196,7 +196,7 @@ export class SudokuGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
 
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const text = isDark ? '#e0e0e0' : '#1a1a2e';
@@ -372,15 +372,15 @@ export class SudokuGame extends BaseGame {
 
     // Game over / win overlay
     if (this.gameOver || this.won) {
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.fillStyle = this.won ? primary : invalidColor;
-      ctx.fillText(this.won ? (zh ? '胜利!' : 'YOU WON!') : zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.fillStyle = text;
+      this.drawResultOverlay(ctx, {
+        title: this.won ? (zh ? '胜利！' : 'YOU WON!') : (zh ? '游戏结束' : 'GAME OVER'),
+        tone: this.won ? 'success' : 'danger',
+        details: [
+          `${zh ? '用时' : 'TIME'} ${Math.floor(this.timer)}s`,
+          `${zh ? '失误' : 'MISTAKES'} ${this.mistakes}/${this.maxMistakes}`,
+        ],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
@@ -504,6 +504,12 @@ export class SudokuGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if ((this.gameOver || this.won) && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.resetGame();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type === 'keydown') {
         if (this.showMenu) {

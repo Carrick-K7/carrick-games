@@ -407,14 +407,15 @@ export class TetrisGame extends BaseGame {
 
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(zh ? '游戏结束' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '按空格重新开始' : 'PRESS SPACE', this.width / 2, this.height / 2 + 16);
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+          `${zh ? '消行' : 'LINES'} ${this.lines}  ·  ${zh ? '等级' : 'LEVEL'} ${this.level}`,
+        ],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
@@ -435,6 +436,12 @@ export class TetrisGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       const down = e.type === 'keydown';
       if ((e.key === 'p' || e.key === 'P') && down && !e.repeat && !this.gameOver) {
@@ -494,8 +501,7 @@ export class TetrisGame extends BaseGame {
       e.preventDefault();
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
-      const x = touch.clientX;
-      const y = touch.clientY;
+      const { x, y } = this.canvasPoint(touch.clientX, touch.clientY);
 
       if (e.type === 'touchstart') {
         this.touchStartX = x;

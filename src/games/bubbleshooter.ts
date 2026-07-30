@@ -46,9 +46,8 @@ export class BubbleShooterGame extends BaseGame {
   private score = 0;
   private shotsSinceRow = 0;
   private gameOver = false;
-  private scoreReported = false;
   private readonly boundMouseMove = (e: MouseEvent) => {
-    const point = this.toCanvasPoint(e.clientX, e.clientY);
+    const point = this.canvasPoint(e.clientX, e.clientY);
     this.setAim(point.x, point.y);
   };
 
@@ -69,7 +68,7 @@ export class BubbleShooterGame extends BaseGame {
     this.score = 0;
     this.shotsSinceRow = 0;
     this.gameOver = false;
-    this.scoreReported = false;
+    this.resetScoreReport();
   }
 
   update(dt: number) {
@@ -103,7 +102,7 @@ export class BubbleShooterGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const panel = isDark ? '#111827' : '#edf7f5';
     const panelBorder = isDark ? 'rgba(57,197,187,0.26)' : 'rgba(13,148,136,0.22)';
@@ -196,7 +195,7 @@ export class BubbleShooterGame extends BaseGame {
     }
 
     if (this.gameOver) {
-      this.reportScore();
+      this.submitScoreOnce(this.score);
       this.drawOverlay(
         ctx,
         zh ? '游戏结束' : 'GAME OVER',
@@ -209,6 +208,12 @@ export class BubbleShooterGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type !== 'keydown') return;
 
@@ -228,7 +233,7 @@ export class BubbleShooterGame extends BaseGame {
     }
 
     if (e instanceof MouseEvent) {
-      const point = this.toCanvasPoint(e.clientX, e.clientY);
+      const point = this.canvasPoint(e.clientX, e.clientY);
       this.setAim(point.x, point.y);
       if (e.type === 'mousedown') {
         if (this.gameOver) {
@@ -244,7 +249,7 @@ export class BubbleShooterGame extends BaseGame {
       e.preventDefault();
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
-      const point = this.toCanvasPoint(touch.clientX, touch.clientY);
+      const point = this.canvasPoint(touch.clientX, touch.clientY);
       this.setAim(point.x, point.y);
 
       if (e.type === 'touchstart') {
@@ -593,13 +598,7 @@ export class BubbleShooterGame extends BaseGame {
   private triggerGameOver() {
     this.gameOver = true;
     this.activeBubble = null;
-    this.reportScore();
-  }
-
-  private reportScore() {
-    if (this.scoreReported) return;
-    this.scoreReported = true;
-    window.reportScore?.(this.score);
+    this.submitScoreOnce(this.score);
   }
 
   private drawBubble(
@@ -691,6 +690,16 @@ export class BubbleShooterGame extends BaseGame {
     text: string,
     scoreLine?: string,
   ) {
+    if (scoreLine) {
+      this.drawResultOverlay(ctx, {
+        title,
+        tone: 'danger',
+        details: [scoreLine],
+        hint: subtitle,
+      });
+      return;
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
     ctx.fillRect(0, 0, this.width, this.height);
 
@@ -720,13 +729,4 @@ export class BubbleShooterGame extends BaseGame {
     this.aimAngle = Math.max(AIM_MIN, Math.min(AIM_MAX, this.aimAngle + delta));
   }
 
-  private toCanvasPoint(clientX: number, clientY: number) {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.width / rect.width;
-    const scaleY = this.height / rect.height;
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
-  }
 }

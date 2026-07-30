@@ -1,4 +1,8 @@
-import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
+import {
+  BaseGame,
+  isDarkTheme as getEffectiveDarkTheme,
+  isZhLang as getEffectiveZhLang,
+} from '../core/game.js';
 import {
   IWANNA_PLAYER_H as PLAYER_H,
   IWANNA_PLAYER_W as PLAYER_W,
@@ -107,7 +111,7 @@ function isDarkTheme() {
 }
 
 function isZh() {
-  return document.documentElement.getAttribute('data-lang') === 'zh';
+  return getEffectiveZhLang();
 }
 
 export class IwannaGame extends BaseGame {
@@ -123,7 +127,6 @@ export class IwannaGame extends BaseGame {
   private elapsed = 0;
   private saveIndex = 0;
   private cleared = false;
-  private reportedClear = false;
   private touchStart: { x: number; y: number } | null = null;
 
   constructor() {
@@ -149,7 +152,7 @@ export class IwannaGame extends BaseGame {
     this.elapsed = 0;
     this.saveIndex = 0;
     this.cleared = false;
-    this.reportedClear = false;
+    this.resetScoreReport();
     this.touchStart = null;
   }
 
@@ -283,19 +286,25 @@ export class IwannaGame extends BaseGame {
     // Score shown in side panel
 
     if (this.cleared) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = text;
-      ctx.textAlign = 'center';
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.fillText(zh ? '通关' : 'CLEAR', W / 2, H / 2 - 18);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(zh ? '按空格重开' : 'PRESS SPACE', W / 2, H / 2 + 18);
-      ctx.textAlign = 'left';
+      this.drawResultOverlay(ctx, {
+        title: zh ? '通关！' : 'CLEAR!',
+        tone: 'success',
+        details: [
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+          `${zh ? '死亡' : 'DEATHS'} ${this.deaths}`,
+        ],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.cleared && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (e.type === 'keydown') {
@@ -398,7 +407,7 @@ export class IwannaGame extends BaseGame {
         this.respawnY = savePoint.spawnY;
         this.score = Math.max(this.score, savePoint.score);
         this.saveIndex += 1;
-        window.reportScore?.(this.score);
+        this.submitScore(this.score);
       } else {
         break;
       }
@@ -409,10 +418,7 @@ export class IwannaGame extends BaseGame {
     if (rectsOverlap(this.player.x, this.player.y, PLAYER_W, PLAYER_H, GOAL.x - 4, GOAL.y - 4, GOAL.w + 8, GOAL.h + 8)) {
       this.cleared = true;
       this.score = Math.max(this.score, 1200);
-      if (!this.reportedClear) {
-        this.reportedClear = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
     }
   }
 

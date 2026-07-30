@@ -1,7 +1,10 @@
 import {
   configureHiDpiCanvas,
+  drawGameResultOverlay,
+  getRetroPalette,
   getCanvasPoint,
   type CanvasPoint,
+  type GameResultOverlayOptions,
 } from './render.js';
 
 export interface Game {
@@ -140,10 +143,37 @@ export abstract class BaseGame implements Game {
     return getCanvasPoint(this.canvas, this.width, this.height, clientX, clientY);
   }
 
+  protected isRestartInput(e: KeyboardEvent | TouchEvent | MouseEvent): boolean {
+    if (e instanceof KeyboardEvent) {
+      return e.type === 'keydown' && !e.repeat && (e.key === ' ' || e.key === 'Enter');
+    }
+    if (e instanceof TouchEvent) {
+      return e.type === 'touchstart';
+    }
+    return e.type === 'mousedown';
+  }
+
   renderFrame() {
+    delete this.canvas.dataset.gameResult;
+    delete this.canvas.dataset.gameResultTitle;
     this.ctx.save();
     this.draw(this.ctx);
     this.ctx.restore();
+  }
+
+  protected drawResultOverlay(
+    ctx: CanvasRenderingContext2D,
+    options: GameResultOverlayOptions
+  ) {
+    this.canvas.dataset.gameResult = options.tone || 'neutral';
+    this.canvas.dataset.gameResultTitle = options.title;
+    drawGameResultOverlay(
+      ctx,
+      this.width,
+      this.height,
+      getRetroPalette(this.isDarkTheme()),
+      options
+    );
   }
 
   protected resetScoreReport() {

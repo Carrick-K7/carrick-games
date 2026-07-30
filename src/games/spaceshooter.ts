@@ -221,20 +221,23 @@ export class SpaceShooterGame extends BaseGame {
     // Game Over overlay
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-      ctx.font = '24px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 30);
-      ctx.font = '14px system-ui, sans-serif';
-      ctx.fillText(`SCORE ${this.score}`, this.width / 2, this.height / 2 + 10);
-      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 40);
-      ctx.textAlign = 'left';
+      const zh = this.isZhLang();
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       const isKeyDown = e.type === 'keydown';
       if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
@@ -249,12 +252,9 @@ export class SpaceShooterGame extends BaseGame {
 
     if (e instanceof TouchEvent) {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0] || e.changedTouches[0];
       if (!touch) return;
-      const x = touch.clientX - rect.left;
-      const scaleX = this.width / rect.width;
-      const canvasX = x * scaleX;
+      const { x: canvasX } = this.canvasPoint(touch.clientX, touch.clientY);
 
       if (this.gameOver) {
         this.init();
@@ -277,6 +277,9 @@ export class SpaceShooterGame extends BaseGame {
         this.rightPressed = false;
         this.leftPressed = false;
       }
+    }
+    if (e instanceof MouseEvent && e.type === 'mousedown' && this.gameOver) {
+      this.init();
     }
   }
 }

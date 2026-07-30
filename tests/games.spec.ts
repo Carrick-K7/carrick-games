@@ -212,13 +212,64 @@ test.describe('Game rules', () => {
     expect(oversizedFonts).toEqual([]);
   });
 
+  test('games use shared terminal, input, locale, and score infrastructure', () => {
+    const gamesDir = join(process.cwd(), 'src/games');
+    const terminalGameFiles = [
+      'aimlab.ts',
+      'asteroids.ts',
+      'breakout.ts',
+      'bubbleshooter.ts',
+      'checkers.ts',
+      'chess.ts',
+      'connectfour.ts',
+      'doodlejump.ts',
+      'flappybird.ts',
+      'galaga.ts',
+      'game2048.ts',
+      'iwanna.ts',
+      'minesweeper.ts',
+      'parking.ts',
+      'pong.ts',
+      'simon.ts',
+      'snake.ts',
+      'solitaire.ts',
+      'spaceshooter.ts',
+      'stacker.ts',
+      'sudoku.ts',
+      'tetris.ts',
+      'texashold.ts',
+      'wordle.ts',
+    ];
+
+    const gameClassFiles = readdirSync(gamesDir).filter((file) => {
+      if (!file.endsWith('.ts') || file === 'catalog.ts') return false;
+      return /export class \w+ extends BaseGame/.test(readFileSync(join(gamesDir, file), 'utf8'));
+    });
+
+    const bypasses: string[] = [];
+    for (const file of gameClassFiles) {
+      const source = readFileSync(join(gamesDir, file), 'utf8');
+      if (/window\.reportScore/.test(source)) bypasses.push(`${file}: direct score callback`);
+      if (/document\.documentElement.*data-lang/.test(source)) bypasses.push(`${file}: direct locale lookup`);
+      if (/getBoundingClientRect\(/.test(source)) bypasses.push(`${file}: manual pointer mapping`);
+    }
+
+    expect(bypasses).toEqual([]);
+    for (const file of terminalGameFiles) {
+      const source = readFileSync(join(gamesDir, file), 'utf8');
+      expect(source, `${file} should use the shared result overlay`).toContain('this.drawResultOverlay(');
+      expect(source, `${file} should use the shared restart action`).toContain('this.isRestartInput(');
+      expect(source, `${file} should reset one-shot score reporting on restart`).toContain('this.resetScoreReport(');
+    }
+  });
+
   test('initial parking experience preloads its complete critical module graph', () => {
     const index = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
     const preloads = [...index.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)]
       .map((match) => match[1]);
 
     expect(preloads).toEqual([
-      './dist/main.js?v=13',
+      './dist/main.js?v=14',
       './dist/games/catalog.js',
       './dist/core/game.js',
       './dist/core/render.js',
@@ -230,7 +281,7 @@ test.describe('Game rules', () => {
       './dist/games/parkingLevels.js',
       './dist/games/parkingRoute.js',
     ]);
-    expect(index).toContain('<script type="module" src="./dist/main.js?v=13"></script>');
+    expect(index).toContain('<script type="module" src="./dist/main.js?v=14"></script>');
   });
 
   test('sudoku hints reduce final score', () => {

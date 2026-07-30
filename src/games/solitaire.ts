@@ -102,7 +102,6 @@ export class SolitaireGame extends BaseGame {
   private moves = 0;
   private startTime = 0;
   private elapsed = 0;
-  private reportedScore = false;
 
   // Selection state
   private selectedSrc: { type: 'tab' | 'waste' | 'found'; col?: number; index?: number; card?: Card } | null = null;
@@ -140,7 +139,7 @@ export class SolitaireGame extends BaseGame {
     this.phase = 'ready';
     this.moves = 0;
     this.elapsed = 0;
-    this.reportedScore = false;
+    this.resetScoreReport();
     this.selectedSrc = null;
     this.hoveredCard = null;
     this.dragging = null;
@@ -179,6 +178,12 @@ export class SolitaireGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.phase === 'won' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.beginGame();
+      return;
+    }
+
     if (this.phase === 'ready' || this.phase === 'won') {
       if (e instanceof KeyboardEvent) {
         if (e.type === 'keydown' && (e.key === ' ' || e.key === 'Enter')) {
@@ -537,10 +542,7 @@ export class SolitaireGame extends BaseGame {
     const total = this.foundations.reduce((s, f) => s + f.length, 0);
     if (total === 52) {
       this.phase = 'won';
-      if (!this.reportedScore) {
-        this.reportedScore = true;
-        window.reportScore?.(this.score);
-      }
+      this.submitScoreOnce(this.score);
     }
   }
 
@@ -861,6 +863,22 @@ export class SolitaireGame extends BaseGame {
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
+    if (this.phase === 'won') {
+      const mins = Math.floor(this.elapsed / 60);
+      const secs = Math.floor(this.elapsed % 60);
+      this.drawResultOverlay(ctx, {
+        title: zh ? '恭喜通关！' : 'YOU WIN!',
+        tone: 'success',
+        details: [
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+          `${zh ? '步数' : 'MOVES'} ${this.moves}`,
+          `${zh ? '时间' : 'TIME'} ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
+        ],
+        hint: zh ? '点击或按空格再来一局' : 'CLICK OR PRESS SPACE TO PLAY AGAIN',
+      });
+      return;
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, W, H);
 
@@ -973,6 +991,6 @@ export class SolitaireGame extends BaseGame {
   }
 
   private isZh(): boolean {
-    return document.documentElement.getAttribute('data-lang') === 'zh';
+    return this.isZhLang();
   }
 }

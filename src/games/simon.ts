@@ -123,7 +123,6 @@ export class SimonGame extends BaseGame {
   private lastInputAt = 0;
   private lastBonus = 0;
   private lastBonusTimerMs = 0;
-  private reportedScore = false;
   private audioContext: AudioContext | null = null;
 
   constructor() {
@@ -157,7 +156,7 @@ export class SimonGame extends BaseGame {
     this.lastInputAt = 0;
     this.lastBonus = 0;
     this.lastBonusTimerMs = 0;
-    this.reportedScore = false;
+    this.resetScoreReport();
   }
 
   update(dt: number) {
@@ -228,9 +227,16 @@ export class SimonGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.phase === 'gameover' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      this.beginGame();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type !== 'keydown' || e.repeat) return;
-      if (this.phase === 'gameover' && e.key === ' ') {
+      if (this.phase === 'gameover' && (e.key === ' ' || e.key === 'Enter')) {
         this.init();
         this.beginGame();
         return;
@@ -274,7 +280,7 @@ export class SimonGame extends BaseGame {
     this.inputIndex = 0;
     this.lastBonus = 0;
     this.lastBonusTimerMs = 0;
-    this.reportedScore = false;
+    this.resetScoreReport();
     this.beginNextRound();
   }
 
@@ -320,10 +326,7 @@ export class SimonGame extends BaseGame {
     this.showTimerMs = 0;
     this.playErrorTone();
 
-    if (!this.reportedScore) {
-      this.reportedScore = true;
-      window.reportScore?.(this.score);
-    }
+    this.submitScoreOnce(this.score);
   }
 
   private randomColor(): SimonColor {
@@ -429,11 +432,7 @@ export class SimonGame extends BaseGame {
   }
 
   private getColorFromPoint(clientX: number, clientY: number): SimonColor | null {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.width / rect.width;
-    const scaleY = this.height / rect.height;
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    const { x, y } = this.canvasPoint(clientX, clientY);
 
     for (const pad of this.pads) {
       if (x >= pad.x && x <= pad.x + pad.w && y >= pad.y && y <= pad.y + pad.h) {
@@ -530,6 +529,19 @@ export class SimonGame extends BaseGame {
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
+    if (this.phase === 'gameover') {
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [
+          `${zh ? '关卡' : 'LEVEL'} ${this.level}`,
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+        ],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
+      return;
+    }
+
     this.drawCard(ctx, 44, 184, W - 88, 128, 16, theme.overlay, theme.panelBorder);
 
     ctx.textAlign = 'center';
@@ -625,6 +637,6 @@ export class SimonGame extends BaseGame {
   }
 
   private isZh(): boolean {
-    return document.documentElement.getAttribute('data-lang') === 'zh';
+    return this.isZhLang();
   }
 }

@@ -508,18 +508,23 @@ export class AsteroidsGame extends BaseGame {
     // Game Over
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
+      const zh = this.isZhLang();
+      this.drawResultOverlay(ctx, {
+        title: zh ? '游戏结束' : 'GAME OVER',
+        tone: 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '按空格重新开始' : 'PRESS SPACE TO RESTART',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.gameOver && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       const down = e.type === 'keydown';
       switch (e.key) {
@@ -553,11 +558,9 @@ export class AsteroidsGame extends BaseGame {
 
     if (e instanceof TouchEvent) {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
       const touch = e.touches[0] || e.changedTouches?.[0];
       if (!touch) return;
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
+      const { x, y } = this.canvasPoint(touch.clientX, touch.clientY);
       const cx = x - this.width / 2;
       const cy = y - this.height / 2;
 

@@ -117,7 +117,6 @@ export class TexasHoldGame extends BaseGame {
   private pendingSystemDelay = 0;
   private pendingSystemAction: (() => void) | null = null;
   private showdownHands = new Map<number, HandValue>();
-  private reportedScore = false;
 
   constructor() {
     super('gameCanvas', W, H);
@@ -138,7 +137,7 @@ export class TexasHoldGame extends BaseGame {
     this.pendingSystemDelay = 0;
     this.pendingSystemAction = null;
     this.showdownHands.clear();
-    this.reportedScore = false;
+    this.resetScoreReport();
 
     for (const player of this.players) {
       player.chips = STARTING_CHIPS;
@@ -188,6 +187,12 @@ export class TexasHoldGame extends BaseGame {
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.state === 'gameOver' && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type !== 'keydown') return;
       this.handleKeyInput(e);
@@ -255,8 +260,7 @@ export class TexasHoldGame extends BaseGame {
 
     if (!this.isHumanTurn()) return;
 
-    const point = this.toCanvasPoint(clientX, clientY);
-    if (!point) return;
+    const point = this.canvasPoint(clientX, clientY);
 
     const button = this.getActionButtons().find((item) =>
       point.x >= item.x &&
@@ -652,10 +656,7 @@ export class TexasHoldGame extends BaseGame {
       zh: `牌局结束。得分 ${this.score}。`,
     };
 
-    if (!this.reportedScore) {
-      this.reportedScore = true;
-      window.reportScore?.(this.score);
-    }
+    this.submitScoreOnce(this.score);
   }
 
   private shouldEndTournament(): boolean {
@@ -979,15 +980,6 @@ export class TexasHoldGame extends BaseGame {
     this.logs = this.logs.slice(0, 4);
   }
 
-  private toCanvasPoint(clientX: number, clientY: number) {
-    const rect = this.canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    return {
-      x: (clientX - rect.left) * (this.width / rect.width),
-      y: (clientY - rect.top) * (this.height / rect.height),
-    };
-  }
-
   private getTheme(): ThemePalette {
     const isDark = this.isDarkTheme();
 
@@ -1010,7 +1002,7 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private isZh(): boolean {
-    return document.documentElement.getAttribute('data-lang') === 'zh';
+    return this.isZhLang();
   }
 
   private drawTable(ctx: CanvasRenderingContext2D, theme: ThemePalette) {
@@ -1189,6 +1181,19 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
+    if (this.state === 'gameOver') {
+      this.drawResultOverlay(ctx, {
+        title: zh ? '牌局结束' : 'TOURNAMENT OVER',
+        tone: this.players[0].chips > 0 ? 'success' : 'danger',
+        details: [
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+          `${zh ? '完成局数' : 'HANDS'} ${this.completedHands}/${TOTAL_HANDS}`,
+        ],
+        hint: zh ? '点击、空格或回车重新开始' : 'CLICK, SPACE OR ENTER TO RESTART',
+      });
+      return;
+    }
+
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.56)';
     ctx.fillRect(0, 0, W, H);
@@ -1213,9 +1218,7 @@ export class TexasHoldGame extends BaseGame {
     ctx.fillText(zh ? this.banner.zh : this.banner.en, W / 2, 266);
 
     ctx.fillStyle = theme.muted;
-    const prompt = this.state === 'gameOver'
-      ? (zh ? '按 Space / Enter 重开' : 'Press Space / Enter to restart')
-      : (zh ? '按 Space / Enter 进入下一局' : 'Press Space / Enter for next hand');
+    const prompt = zh ? '按 Space / Enter 进入下一局' : 'Press Space / Enter for next hand';
     ctx.fillText(prompt, W / 2, 290);
     ctx.restore();
   }

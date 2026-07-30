@@ -333,6 +333,10 @@ test.describe('Game Over - Arcade', () => {
 
       if (profile.expectScore === true) {
         expect(hasReported, `[${profile.id}] should report score during deterministic game-over path`).toBe(true);
+        await expect(
+          page.locator('#gameCanvas'),
+          `[${profile.id}] should expose the shared result state`,
+        ).toHaveAttribute('data-game-result', /^(success|danger|neutral)$/);
       }
 
       // Restart should always work

@@ -247,18 +247,23 @@ export class BreakoutGame extends BaseGame {
     // Game Over / Win overlay
     if (this.gameOver || this.won) {
       this.submitScoreOnce(this.score);
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(0, 0, this.width, this.height);
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 18px system-ui, sans-serif';
-      ctx.fillText(this.won ? 'YOU WIN!' : 'GAME OVER', this.width / 2, this.height / 2 - 20);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText('PRESS SPACE', this.width / 2, this.height / 2 + 16);
+      const zh = this.isZhLang();
+      this.drawResultOverlay(ctx, {
+        title: this.won ? (zh ? '胜利！' : 'YOU WIN!') : (zh ? '游戏结束' : 'GAME OVER'),
+        tone: this.won ? 'success' : 'danger',
+        details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if ((this.gameOver || this.won) && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         this.rightPressed = e.type === 'keydown';

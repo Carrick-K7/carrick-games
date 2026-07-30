@@ -112,21 +112,17 @@ export class AimLabGame extends BaseGame {
     ctx.fillText(`${zh ? '目标' : 'TARGETS'} ${this.hits}/${TOTAL_TARGETS}`, 12, 38);
 
     if (this.gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = primary;
-      ctx.font = '22px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(zh ? '测试完成' : 'TEST COMPLETE', W / 2, H / 2 - 50);
-      ctx.fillStyle = text;
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, W / 2, H / 2 - 10);
       const avgReaction = this.hits > 0 ? (this.totalReactionTime / this.hits).toFixed(0) : '0';
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(`${zh ? '平均反应' : 'AVG REACTION'} ${avgReaction}ms`, W / 2, H / 2 + 18);
-      ctx.fillText(`${zh ? '命中' : 'HITS'} ${this.hits}  ${zh ? '失误' : 'MISSES'} ${this.misses}`, W / 2, H / 2 + 38);
-      ctx.textBaseline = 'alphabetic';
+      this.drawResultOverlay(ctx, {
+        title: zh ? '测试完成' : 'TEST COMPLETE',
+        tone: 'success',
+        details: [
+          `${zh ? '得分' : 'SCORE'} ${this.score}`,
+          `${zh ? '平均反应' : 'AVG REACTION'} ${avgReaction}ms`,
+          `${zh ? '命中' : 'HITS'} ${this.hits}  ${zh ? '失误' : 'MISSES'} ${this.misses}`,
+        ],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
       return;
     }
 
@@ -155,15 +151,9 @@ export class AimLabGame extends BaseGame {
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (this.gameOver) {
-      if (e instanceof KeyboardEvent && e.type === 'keydown' && e.key === ' ') {
-        this.start();
-      }
-      if (e instanceof MouseEvent && e.type === 'mousedown') {
-        this.start();
-      }
-      if (e instanceof TouchEvent && e.type === 'touchstart') {
-        e.preventDefault();
-        this.start();
+      if (this.isRestartInput(e)) {
+        if (e instanceof TouchEvent) e.preventDefault();
+        this.init();
       }
       return;
     }

@@ -27,6 +27,11 @@ export class StackerGame extends BaseGame {
     super('gameCanvas', 320, 480);
   }
 
+  override start() {
+    super.start();
+    this.startGame();
+  }
+
   init() {
     this.state = 'idle';
     this.score = 0;
@@ -37,6 +42,7 @@ export class StackerGame extends BaseGame {
     this.direction = 1;
     this.speed = this.getSpeed();
     this.loadHighScore();
+    this.resetScoreReport();
   }
 
   private getSpeed(): number {
@@ -64,7 +70,7 @@ export class StackerGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
-    const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+    const zh = this.isZhLang();
 
     const bg = isDark ? '#0b0f19' : '#fafafa';
     const primary = isDark ? '#39C5BB' : '#0d9488';
@@ -134,28 +140,26 @@ export class StackerGame extends BaseGame {
     }
 
     if (this.state === 'gameover' || this.state === 'win') {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(0, 0, this.width, this.height);
-
-      ctx.font = '28px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffffff';
       const title = this.state === 'win' ? (zh ? '胜利!' : 'WIN!') : (zh ? '游戏结束' : 'GAME OVER');
-      ctx.fillText(title, this.width / 2, this.height / 2 - 50);
-
-      ctx.font = '16px system-ui, sans-serif';
       const scoreText = zh ? `得分: ${this.score}` : `SCORE: ${this.score}`;
-      ctx.fillText(scoreText, this.width / 2, this.height / 2 - 10);
       const hsText = zh ? `最高: ${this.highScore}` : `HIGH: ${this.highScore}`;
-      ctx.fillText(hsText, this.width / 2, this.height / 2 + 20);
-
-      ctx.font = '14px system-ui, sans-serif';
-      const hint = zh ? '点击重试' : 'TAP TO RETRY';
-      ctx.fillText(hint, this.width / 2, this.height / 2 + 55);
+      this.drawResultOverlay(ctx, {
+        title,
+        tone: this.state === 'win' ? 'success' : 'danger',
+        details: [scoreText, hsText],
+        hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
+      });
     }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if ((this.state === 'gameover' || this.state === 'win') && this.isRestartInput(e)) {
+      if (e instanceof TouchEvent) e.preventDefault();
+      this.init();
+      this.startGame();
+      return;
+    }
+
     if (e instanceof KeyboardEvent) {
       if (e.type === 'keydown') {
         this.onAction();
@@ -246,11 +250,10 @@ export class StackerGame extends BaseGame {
     if (this.score > this.highScore) {
       this.highScore = this.score;
     }
-    window.reportScore?.(this.score);
+    this.submitScoreOnce(this.score);
   }
 
   destroy() {
-    this.stop();
-    this.unbindInput();
+    super.destroy();
   }
 }
