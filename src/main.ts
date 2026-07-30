@@ -6,6 +6,7 @@ import {
   GAMES,
   type GameCtor,
   type GameInstance,
+  type GameMeta,
   type VirtualKeySpec,
 } from './games/catalog.js';
 export { GAMES } from './games/catalog.js';
@@ -65,6 +66,26 @@ let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
 let selectedGameGroup = 'all';
+const gameClassCache = new Map<string, Promise<GameCtor>>();
+
+function loadGameClass(meta: GameMeta): Promise<GameCtor> {
+  const cached = gameClassCache.get(meta.id);
+  if (cached) return cached;
+
+  const pending = meta.loader();
+  gameClassCache.set(meta.id, pending);
+  void pending.catch(() => {
+    if (gameClassCache.get(meta.id) === pending) {
+      gameClassCache.delete(meta.id);
+    }
+  });
+  return pending;
+}
+
+function warmGameClass(name: string) {
+  const meta = GAMES.find((game) => game.id === name);
+  if (meta) void loadGameClass(meta).catch(() => {});
+}
 
 // Routing helpers
 function getHashGame(): string | null {
@@ -630,7 +651,7 @@ export async function prepareGame(name: string) {
 
   let GameClass: GameCtor;
   try {
-    GameClass = await meta.loader();
+    GameClass = await loadGameClass(meta);
   } catch (e) {
     if (token === prepareGameToken) {
       isLoadingGame = false;
@@ -817,13 +838,6 @@ function renderGameList(filter = '') {
 
   list.innerHTML = html;
 
-  list.querySelectorAll('.game-list-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-id')!;
-      void loadGame(id);
-      if (window.innerWidth <= 960) window.closeGameLibrary?.();
-    });
-  });
 }
 
 function setLang(lang: 'en' | 'zh') {
@@ -901,11 +915,29 @@ function toggleFullscreen() {
   setLang(savedLang);
   setTheme(savedTheme);
 
-  renderGameList();
-
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
   if (search) {
     search.addEventListener('input', () => renderGameList(search.value));
+  }
+
+  const gameList = document.getElementById('gameList');
+  if (gameList) {
+    const getGameId = (target: EventTarget | null) =>
+      (target as Element | null)?.closest<HTMLButtonElement>('.game-list-item')?.dataset.id;
+    const warmFromEvent = (event: Event) => {
+      const id = getGameId(event.target);
+      if (id) warmGameClass(id);
+    };
+
+    gameList.addEventListener('pointerover', warmFromEvent);
+    gameList.addEventListener('pointerdown', warmFromEvent);
+    gameList.addEventListener('focusin', warmFromEvent);
+    gameList.addEventListener('click', (event) => {
+      const id = getGameId(event.target);
+      if (!id) return;
+      void loadGame(id);
+      if (window.innerWidth <= 960) window.closeGameLibrary?.();
+    });
   }
 
   const actionBtn = document.getElementById('actionBtn') as HTMLButtonElement | null;

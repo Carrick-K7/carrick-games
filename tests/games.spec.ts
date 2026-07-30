@@ -14,6 +14,7 @@ import {
   resolveIwannaHorizontalMove,
 } from '../src/games/iwannaPhysics';
 import {
+  PARKING_ACCEL_RESPONSE_MULTIPLIER,
   PARKING_CAR_LENGTH,
   PARKING_CAR_WIDTH,
   PARKING_FORWARD_ACCEL,
@@ -211,6 +212,27 @@ test.describe('Game rules', () => {
     expect(oversizedFonts).toEqual([]);
   });
 
+  test('initial parking experience preloads its complete critical module graph', () => {
+    const index = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
+    const preloads = [...index.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)]
+      .map((match) => match[1]);
+
+    expect(preloads).toEqual([
+      './dist/main.js?v=13',
+      './dist/games/catalog.js',
+      './dist/core/game.js',
+      './dist/core/render.js',
+      './dist/core/levelselect.js',
+      './dist/games/parking.js',
+      './dist/games/parkingPhysics.js',
+      './dist/games/parkingConstants.js',
+      './dist/games/parkingGeometry.js',
+      './dist/games/parkingLevels.js',
+      './dist/games/parkingRoute.js',
+    ]);
+    expect(index).toContain('<script type="module" src="./dist/main.js?v=13"></script>');
+  });
+
   test('sudoku hints reduce final score', () => {
     const cleanSolve = calculateSudokuScore(120, 0, 0);
     const withHints = calculateSudokuScore(120, 0, 2);
@@ -256,32 +278,32 @@ test.describe('Game rules', () => {
       straight = updateParkingCar(straight, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(straight.y).toBeGreaterThan(441);
-    expect(straight.y).toBeLessThan(447);
-    expect(straight.speed).toBeGreaterThan(30);
-    expect(straight.speed).toBeLessThan(35);
+    expect(straight.y).toBeGreaterThan(431);
+    expect(straight.y).toBeLessThan(439);
+    expect(straight.speed).toBeGreaterThan(45);
+    expect(straight.speed).toBeLessThan(49);
 
     let cruising = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 180; i++) {
       cruising = updateParkingCar(cruising, { up: true, down: false, left: false, right: false }, 1 / 60);
     }
 
-    expect(cruising.y).toBeGreaterThan(311);
-    expect(cruising.y).toBeLessThan(318);
-    expect(cruising.speed).toBeGreaterThan(94);
-    expect(cruising.speed).toBeLessThan(99);
+    expect(cruising.y).toBeGreaterThan(250);
+    expect(cruising.y).toBeLessThan(270);
+    expect(cruising.speed).toBeGreaterThan(128);
+    expect(cruising.speed).toBeLessThanOrEqual(130);
 
     let car = createParkingCar(200, 460, -Math.PI / 2);
     for (let i = 0; i < 30; i++) {
       car = updateParkingCar(car, { up: true, down: false, left: false, right: true }, 1 / 60);
     }
 
-    expect(car.x).toBeGreaterThan(200.0);
-    expect(car.x).toBeLessThan(200.5);
-    expect(car.y).toBeGreaterThan(453);
-    expect(car.y).toBeLessThan(459);
-    expect(car.angle).toBeGreaterThan(-1.54);
-    expect(car.angle).toBeLessThan(-1.48);
+    expect(car.x).toBeGreaterThan(200.1);
+    expect(car.x).toBeLessThan(201);
+    expect(car.y).toBeGreaterThan(449);
+    expect(car.y).toBeLessThan(457);
+    expect(car.angle).toBeGreaterThan(-1.52);
+    expect(car.angle).toBeLessThan(-1.42);
 
     const reverse = updateParkingCar(
       { ...createParkingCar(200, 460, -Math.PI / 2), speed: -50 },
@@ -305,7 +327,10 @@ test.describe('Game rules', () => {
     expect(PARKING_WHEEL_BASE / PARKING_CAR_LENGTH).toBeCloseTo(2850 / 5078, 5);
     expect(PARKING_MIN_TURN_RADIUS / PARKING_CAR_LENGTH).toBeCloseTo(5600 / 5078, 5);
     expect(PARKING_MAX_STEER).toBeCloseTo(Math.atan(2850 / 5600), 5);
-    expect(PARKING_FORWARD_ACCEL).toBeCloseTo((100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER, 5);
+    expect(PARKING_FORWARD_ACCEL).toBeCloseTo(
+      (100000 / 3600 / 8.5) * PARKING_PIXELS_PER_METER * PARKING_ACCEL_RESPONSE_MULTIPLIER,
+      5
+    );
   });
 
   test('parking completion requires the full car footprint inside the spot', () => {

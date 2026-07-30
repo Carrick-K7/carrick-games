@@ -35,14 +35,17 @@ export const PARKING_MIN_TURN_RADIUS = PARKING_CAR_LENGTH * (TANK500_TURNING_RAD
 export const PARKING_MAX_STEER = Math.atan(PARKING_WHEEL_BASE / PARKING_MIN_TURN_RADIUS);
 
 // ── Driving dynamics ─────────────────────────────────────────────────────
-// Acceleration derived from Tank 500 0‑100 km/h (no arcade multiplier).
+// Acceleration starts from the Tank 500 0‑100 km/h figure, then adds a modest
+// response multiplier so short key presses feel immediate in a parking game.
 // Brake decel ≈ 0.8 g for a heavy‑SUV feel.
 // Steering rates reflect a large vehicle (slower than a sports car).
 const TANK500_ACCEL_MPS2 = KMH_100_MPS / TANK500_ZERO_TO_100_KMH_SECONDS;
-export const PARKING_FORWARD_ACCEL = TANK500_ACCEL_MPS2 * PARKING_PIXELS_PER_METER;
+export const PARKING_ACCEL_RESPONSE_MULTIPLIER = 1.45;
+export const PARKING_FORWARD_ACCEL =
+  TANK500_ACCEL_MPS2 * PARKING_PIXELS_PER_METER * PARKING_ACCEL_RESPONSE_MULTIPLIER;
 export const PARKING_MAX_FORWARD_SPEED = 130;       // ≈ 48 km/h on display
 const MAX_REVERSE_SPEED = 70;                       // ≈ 26 km/h on display
-const REVERSE_ACCEL = PARKING_FORWARD_ACCEL * 0.7;
+const REVERSE_ACCEL = PARKING_FORWARD_ACCEL * 0.8;
 const BRAKE_DECEL = Math.round(PARKING_FORWARD_ACCEL * 3.0);
 const COAST_DRAG = 3.5;
 const TURNING_DRAG = 0.005;   // lateral friction proportional to |steerAngle| × |speed|
