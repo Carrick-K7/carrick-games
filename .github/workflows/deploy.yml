@@ -43,6 +43,8 @@ jobs:
 
       - name: Package release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           mkdir -p release
@@ -51,6 +53,8 @@ jobs:
           if [ -d fonts ]; then
             cp -R fonts release/fonts
           fi
+          node -e 'require("fs").writeFileSync("release/manifest.json", JSON.stringify({ schemaVersion: 1, revision: process.env.RELEASE_SHA }, null, 2) + "\n")'
+          test "$(node -p 'require("./release/manifest.json").revision')" = "$RELEASE_SHA"
           tar -C release -czf release.tar.gz .
           tar -tzf release.tar.gz
 
@@ -80,7 +84,6 @@ jobs:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_ROOT: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
@@ -88,7 +91,6 @@ jobs:
           test -n "$SSH_KEY"
           test -n "$SSH_HOST"
           test -n "$SSH_USER"
-          test -n "$DEPLOY_ROOT"
           test -n "$DEPLOY_URL"
           test -n "$DEPLOY_KNOWN_HOSTS"
 
@@ -97,44 +99,24 @@ jobs:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_ROOT: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           RELEASE_ID: ${{ github.sha }}
         run: |
           set -euo pipefail
 
-          release="${RELEASE_ID:0:12}"
-          deploy_root="${DEPLOY_ROOT%/}"
-          remote_tmp="/tmp/carrick-games-${release}.tar.gz"
-
-          mkdir -p ~/.ssh
+          install -d -m 0700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
-          scp -i ~/.ssh/deploy_key release.tar.gz "$SSH_USER@$SSH_HOST:$remote_tmp"
-          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_ROOT='$deploy_root' RELEASE='$release' REMOTE_TMP='$remote_tmp' bash -s" <<'REMOTE'
-          set -euo pipefail
-
-          release_dir="$DEPLOY_ROOT/releases/$RELEASE"
-          mkdir -p "$release_dir"
-          tar -xzf "$REMOTE_TMP" -C "$release_dir"
-
-          test -f "$release_dir/index.html"
-          test -f "$release_dir/dist/main.js"
-          test -d "$release_dir/fonts"
-
-          ln -sfn "releases/$RELEASE" "$DEPLOY_ROOT/current.new"
-          mv -Tf "$DEPLOY_ROOT/current.new" "$DEPLOY_ROOT/current"
-          rm -f "$REMOTE_TMP"
-
-          mapfile -t old_releases < <(ls -1dt "$DEPLOY_ROOT"/releases/* 2>/dev/null | tail -n +6)
-          if ((${#old_releases[@]})); then
-            rm -rf "${old_releases[@]}"
-          fi
-          REMOTE
+          ssh -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "deploy $RELEASE_ID" < release.tar.gz
 
           curl --fail --silent --show-error --location "$DEPLOY_URL/" --output /tmp/carrick-games-index.html
           curl --fail --silent --show-error --location "$DEPLOY_URL/dist/main.js?v=8" --output /dev/null

@@ -226,6 +226,7 @@ The workflow:
 - builds with `npm run build`
 - runs `npm run test:e2e`
 - packages `index.html`, `dist/`, and `fonts/`
+- streams the immutable archive through a repository-specific restricted SSH key
 - deploys to `/var/www/games.carrick7.com/releases/<git-sha>/`
 - atomically switches `/var/www/games.carrick7.com/current`
 - smoke tests the public URL and `dist/main.js`
@@ -236,7 +237,6 @@ Required GitHub secrets, either repository-level or on the `production` environm
 
 - `DEPLOY_HOST`: SSH host, currently `games.carrick7.com`
 - `DEPLOY_USER`: SSH user, currently `ubuntu`
-- `DEPLOY_PATH`: deploy root, currently `/var/www/games.carrick7.com`
 - `DEPLOY_URL`: public URL, currently `https://games.carrick7.com`
 - `DEPLOY_SSH_KEY`: private key for the deploy user
 - `DEPLOY_KNOWN_HOSTS`: pinned SSH host key lines for `DEPLOY_HOST`
