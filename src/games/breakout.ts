@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 import {
   getRetroPalette,
 } from '../core/render.js';
@@ -24,6 +24,10 @@ export class BreakoutGame extends BaseGame {
   private brickOffsetLeft = 0;
   private bricks: { x: number; y: number; active: boolean; color: string }[] = [];
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private gameOver = false;
   private won = false;
   private rightPressed = false;
@@ -31,8 +35,8 @@ export class BreakoutGame extends BaseGame {
   private destroyedCount = 0;
   private hitParticles: HitParticle[] = [];
 
-  constructor() {
-    super('gameCanvas', 480, 360);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 480, 360));
   }
 
   init() {

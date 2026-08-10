@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 interface Bullet {
   x: number;
@@ -44,12 +44,16 @@ export class SpaceShooterGame extends BaseGame {
 
   // Game state
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private gameOver = false;
   private rightPressed = false;
   private leftPressed = false;
 
-  constructor() {
-    super('gameCanvas', 480, 640);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 480, 640));
   }
 
   init() {

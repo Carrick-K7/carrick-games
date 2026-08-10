@@ -1,4 +1,10 @@
-import { BaseGame } from '../core/game.js';
+import {
+  BaseGame,
+  createDefaultGameHost,
+  type GameFrameTelemetry,
+  type GameHost,
+  type GameShellSnapshot,
+} from '../core/game.js';
 import {
   PARKING_CAR_LENGTH,
   PARKING_CAR_WIDTH,
@@ -98,8 +104,33 @@ export class ParkingGame extends BaseGame {
     return s > 2 ? 'D' : s < -2 ? 'R' : 'N';
   }
 
-  constructor() {
-    super('gameCanvas', GAME_W, GAME_H);
+  private getLevelSelectSnapshot() {
+    return {
+      totalLevels: this.totalLevels,
+      currentLevel: this.levelIndex,
+      bestLevel: this.bestLevel,
+      unlockedLevel: this.unlockedLevel,
+      selectedLevel: this.selectedLevel,
+      speed: this.speed,
+      maxSpeed: this.maxSpeed,
+      gear: this.gear,
+      gameState: this.gameState,
+      steerAngle: this.steerAngle,
+      maxSteerAngle: this.maxSteerAngle,
+      steeringActive: this.mouseSteering,
+    };
+  }
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { levelSelect: this.getLevelSelectSnapshot() };
+  }
+
+  override getFrameTelemetry(): GameFrameTelemetry {
+    return { levelSelect: this.getLevelSelectSnapshot() };
+  }
+
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', GAME_W, GAME_H));
   }
 
   init() {
@@ -109,12 +140,12 @@ export class ParkingGame extends BaseGame {
     this.gameState = 'menu';
   }
 
-  start() {
-    super.start();
+  protected override onStart() {
     this.loadLevel(this.selectedLevel);
   }
 
   startDemo() {
+    this.prepare();
     super.start();
     const route = createParkingDemoRoute(this.level);
     if (!route) {
@@ -138,6 +169,7 @@ export class ParkingGame extends BaseGame {
     if (index > this.unlockedLevel) return;
     this.selectedLevel = index;
     this.loadLevel(index);
+    this.notifyShellStateChanged();
   }
 
   /** Called from side panel to select a level and enter menu mode */

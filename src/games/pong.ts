@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 export class PongGame extends BaseGame {
   private paddleWidth = 12;
@@ -12,6 +12,10 @@ export class PongGame extends BaseGame {
   private ballDy = 200;
   private playerScore = 0;
   private aiScore = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.playerScore };
+  }
   private upPressed = false;
   private downPressed = false;
   private gameOver = false;
@@ -20,8 +24,8 @@ export class PongGame extends BaseGame {
   private aiSpeed = 260;
   private maxScore = 7;
 
-  constructor() {
-    super('gameCanvas', 600, 400);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 600, 400));
   }
 
   init() {

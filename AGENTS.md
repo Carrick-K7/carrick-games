@@ -6,11 +6,15 @@ This is the repository's development authority. `README.md` is for external read
 
 ```text
 src/
-  core/game.ts        # BaseGame abstract class; all games extend it
+  app/                # Shell behavior such as responsive sidebar state
+  core/game.ts        # BaseGame, GameHost, lifecycle, and shell snapshots
   core/render.ts      # HiDPI canvas, palette, and coordinate helpers
+  core/storage.ts     # Safe shared score persistence
   core/levelselect.ts # Shared level-select UI helpers
   games/catalog.ts    # Game metadata, dynamic loaders, and sidebar grouping
   games/              # One file per registered game plus pure helper modules
+  ui/                 # Shell rendering helpers and input presentation
+  styles/             # Vite-managed application styles
   main.ts             # App UI rendering, controls, routing, and lifecycle
 tests/
   games.spec.ts       # Playwright e2e and behavior coverage
@@ -45,11 +49,11 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 ### 1. Create `src/games/<gamename>.ts`
 
 ```typescript
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
 
 export class ExampleGame extends BaseGame {
-  constructor() {
-    super('gameCanvas', 400, 400);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 400, 400));
   }
 
   init() {}
@@ -74,31 +78,30 @@ Required `BaseGame` methods:
 
 | Method | Required | Purpose |
 |--------|----------|---------|
-| `constructor(canvasId, width, height)` | Yes | Pass `'gameCanvas'` and logical canvas size. |
+| `constructor(host?: GameHost)` | Yes | Pass the shell host, with the documented fallback only for isolated browser tests. |
 | `init()` | Yes | Initialize or reset state. Called before play starts. |
 | `update(dt)` | Yes | Advance game logic. `dt` is seconds. |
 | `draw(ctx)` | Yes | Render the current frame. |
 | `handleInput(e)` | Yes | Handle keyboard, mouse, and touch input. |
 | `destroy()` | Optional | Cleanup when the active game changes. |
 
+The shell constructs registered games with a typed `GameHost`. The optional fallback shown above exists for isolated browser tests. Use `prepare()`, `start()`, and `restart()` from `BaseGame`; games that need start-specific behavior should override `protected onStart()` rather than `start()`.
+
 ### 2. Register it in `src/games/catalog.ts`
 
-Add one loader to `GAME_LOADERS`:
-
-```typescript
-example: () => import('./games/example.js').then((m) => m.ExampleGame),
-```
-
-Add one `GAMES` entry:
+Add one self-contained `GAMES` entry. Array position is irrelevant; `order` controls display order:
 
 ```typescript
 {
   id: 'example',
+  group: 'casual',
+  order: 25,
+  icon: 'example',
   name: 'Example',
   nameZh: '示例',
   desc: 'One sentence description.',
   descZh: '中文描述。',
-  loader: GAME_LOADERS.example,
+  loader: () => import('./example.js').then((m) => m.ExampleGame),
   canvasSize: { width: 400, height: 400 },
   controls: {
     keyboard: [
@@ -111,7 +114,7 @@ Add one `GAMES` entry:
 },
 ```
 
-If the game should appear in a specific sidebar group, update `GAME_GROUP_MAP` and `GAME_LIST_ORDER` in the same file.
+`GAME_GROUP_MAP` and `GAME_LIST_ORDER` are derived from these entries; do not maintain parallel registration maps.
 
 ### 3. Add focused tests when needed
 

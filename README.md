@@ -57,7 +57,7 @@ Carrick Games currently ships 25 playable games:
 - Vitest unit tests.
 - GitHub Actions and Caddy for production deployment.
 
-Game metadata and dynamic loaders live in `src/games/catalog.ts`; the app shell and lifecycle code live in `src/main.ts`.
+Game metadata and dynamic loaders live in `src/games/catalog.ts`; `GameHost` and lifecycle code live in `src/core/game.ts`; shell behavior and rendering helpers are split across `src/app/`, `src/ui/`, and `src/main.ts`.
 
 ## Local Development
 

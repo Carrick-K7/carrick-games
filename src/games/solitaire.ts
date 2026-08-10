@@ -1,7 +1,8 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 import {
   getRetroPalette,
 } from '../core/render.js';
+import { canPlaceOnFoundation, canPlaceOnTableau } from './solitaireRules.js';
 
 const W = 480;
 const H = 640;
@@ -123,15 +124,11 @@ export class SolitaireGame extends BaseGame {
   private touchStartPos = { x: 0, y: 0 };
   private lastTap = { x: 0, y: 0, time: 0 };
 
-  // Double-click detection
-  private doubleClickTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
-  override start() {
-    super.start();
+  protected override onStart() {
     this.beginGame();
   }
 
@@ -337,7 +334,7 @@ export class SolitaireGame extends BaseGame {
         // Try to move waste card
         if (this.selectedSrc.type === 'tab' && this.selectedSrc.col !== undefined) {
           const tab = this.tableau[this.selectedSrc.col];
-          if (this.canPlaceOnTableau(card, tab)) {
+          if (canPlaceOnTableau(card, tab)) {
             tab.push(card);
             this.waste.pop();
             this.moves++;
@@ -496,7 +493,7 @@ export class SolitaireGame extends BaseGame {
       if (cards[0].rank !== 12) return;
     } else {
       const top = dest[dest.length - 1];
-      if (!this.canPlaceOnTableau(cards[0], dest)) return;
+      if (!canPlaceOnTableau(cards[0], dest)) return;
     }
 
     if (this.selectedSrc.type === 'waste') {
@@ -514,20 +511,8 @@ export class SolitaireGame extends BaseGame {
     this.checkWin();
   }
 
-  private canPlaceOnTableau(card: Card, dest: Card[]): boolean {
-    if (dest.length === 0) return card.rank === 12; // King on empty
-    const top = dest[dest.length - 1];
-    if (!top.faceUp) return false;
-    const cardColor = card.suit < 2 ? 0 : 1;
-    const topColor = top.suit < 2 ? 0 : 1;
-    return cardColor !== topColor && card.rank === top.rank - 1;
-  }
-
   private canPlaceOnFoundation(card: Card, foundIdx: number): boolean {
-    const found = this.foundations[foundIdx];
-    if (found.length === 0) return card.rank === 0; // Ace on empty
-    const top = found[found.length - 1];
-    return card.suit === top.suit && card.rank === top.rank + 1;
+    return canPlaceOnFoundation(card, this.foundations[foundIdx]);
   }
 
   private revealTopOfTableau() {
@@ -547,7 +532,6 @@ export class SolitaireGame extends BaseGame {
   }
 
   private beginGame() {
-    this.init();
     this.phase = 'playing';
     this.moves = 0;
     this.startTime = performance.now();
@@ -586,6 +570,10 @@ export class SolitaireGame extends BaseGame {
     const timeBonus = Math.max(0, Math.round(100000 / (this.elapsed + 1)));
     const movePenalty = this.moves * 10;
     return Math.max(0, timeBonus - movePenalty + 50000);
+  }
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
   }
 
   // ─── Drawing helpers ─────────────────────────────────────────────

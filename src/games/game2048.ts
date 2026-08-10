@@ -1,4 +1,4 @@
-import { BaseGame, getStoredRecord } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, getStoredRecord } from '../core/game.js';
 
 const W = 400;
 const H = 400;
@@ -34,13 +34,17 @@ type Dir = 'up' | 'down' | 'left' | 'right';
 export class Game2048 extends BaseGame {
   private grid: (Tile | null)[][] = [];
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private gameState: 'idle' | 'playing' | 'gameover' | 'win' = 'idle';
   private hasWon = false;
   private touchStartX = 0;
   private touchStartY = 0;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {

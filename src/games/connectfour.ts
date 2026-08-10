@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const COLS = 7;
 const ROWS = 6;
@@ -15,10 +15,14 @@ export class ConnectFourGame extends BaseGame {
   private animY = 0;
   private animating = false;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private moves = 0;
 
-  constructor() {
-    super('gameCanvas', COLS * CELL + MARGIN * 2, ROWS * CELL + MARGIN * 2 + 40);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', COLS * CELL + MARGIN * 2, ROWS * CELL + MARGIN * 2 + 40));
   }
 
   init() {

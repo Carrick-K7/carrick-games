@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { getCanvasPoint } from '../src/core/render';
@@ -36,17 +36,17 @@ import { calculateSudokuScore } from '../src/games/sudokuScore';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function collectErrors(page: any) {
+async function collectErrors(page: Page) {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  page.on('console', (msg: any) => {
+  page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err: Error) => pageErrors.push(err.message));
   return { consoleErrors, pageErrors };
 }
 
-async function selectGame(page: any, gameId: string) {
+async function selectGame(page: Page, gameId: string) {
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
@@ -62,7 +62,7 @@ async function selectGame(page: any, gameId: string) {
   await expect(page.locator('#actionBtn')).toBeEnabled();
 }
 
-async function startGame(page: any) {
+async function startGame(page: Page) {
   const btn = page.locator('#actionBtn');
   await btn.click();
   // Wait briefly for game loop to start
@@ -106,7 +106,7 @@ function normalizeRadians(angle: number): number {
   return value;
 }
 
-async function canvasColorCount(page: any, gridSize = 20): Promise<number> {
+async function canvasColorCount(page: Page, gridSize = 20): Promise<number> {
   return page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement, size: number) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return 0;
@@ -696,6 +696,18 @@ test.describe('Game rules', () => {
 
 });
 
+test('failed dynamic game loads show a retry path', async ({ page }) => {
+  const parkingModule = builtModuleUrl('src/games/parking.ts');
+  await page.route(`**${parkingModule}`, (route) => route.abort());
+  await page.goto('/');
+  await expect(page.locator('#loadError')).toBeVisible();
+  await expect(page.locator('#retryLoadBtn')).toBeVisible();
+  await page.unroute(`**${parkingModule}`);
+  await page.locator('#retryLoadBtn').click();
+  await expect(page.locator('#actionBtn')).toBeEnabled();
+  await expect(page.locator('#loadError')).toBeHidden();
+});
+
 test.describe('Carrick Games - Lifecycle', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -713,6 +725,32 @@ test.describe('Carrick Games - Lifecycle', () => {
       parseFloat(window.getComputedStyle(el).fontSize)
     );
     expect(firstNameFontSize).toBeGreaterThanOrEqual(14);
+  });
+
+  test('prepare, first start, and restart initialize exactly once each', async ({ page }) => {
+    const canvas = page.locator('#gameCanvas');
+    await expect(canvas).toHaveAttribute('data-game-prepare-count', '1');
+    await page.locator('#actionBtn').click();
+    await expect(canvas).toHaveAttribute('data-game-prepare-count', '1');
+    await page.locator('#actionBtn').click();
+    await expect(canvas).toHaveAttribute('data-game-prepare-count', '2');
+  });
+
+  test('switching away cancels pending chess AI work', async ({ page }) => {
+    const { pageErrors } = await collectErrors(page);
+    await selectGame(page, 'chess');
+    await startGame(page);
+    const canvas = page.locator('#gameCanvas');
+    const box = await canvas.boundingBox();
+    expect(box).toBeTruthy();
+    if (box) {
+      await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.78);
+      await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.58);
+    }
+    await selectGame(page, 'snake');
+    await page.waitForTimeout(700);
+    expect(pageErrors).toEqual([]);
+    await expect(page.locator('#gameTitle')).toHaveText('贪吃蛇');
   });
 
   test('category filters expose counts and narrow the visible library', async ({ page }) => {

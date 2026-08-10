@@ -1,5 +1,7 @@
 import {
   BaseGame,
+  createDefaultGameHost,
+  type GameHost, type GameShellSnapshot,
   isDarkTheme as getEffectiveDarkTheme,
   isZhLang as getEffectiveZhLang,
 } from '../core/game.js';
@@ -124,13 +126,17 @@ export class IwannaGame extends BaseGame {
   private respawnTimer = 0;
   private deaths = 0;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private elapsed = 0;
   private saveIndex = 0;
   private cleared = false;
   private touchStart: { x: number; y: number } | null = null;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {

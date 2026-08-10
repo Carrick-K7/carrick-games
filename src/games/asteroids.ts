@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 interface Vec {
   x: number;
@@ -44,6 +44,10 @@ export class AsteroidsGame extends BaseGame {
   private saucer: Saucer | null = null;
   private saucerTimer = 0;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private lives = 3;
   private level = 1;
   private gameOver = false;
@@ -144,8 +148,8 @@ export class AsteroidsGame extends BaseGame {
     this.ship.blinkTimer = 0;
   }
 
-  constructor() {
-    super('gameCanvas', 600, 600);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 600, 600));
   }
 
   init() {

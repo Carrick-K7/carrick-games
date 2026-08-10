@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const COLS = 9;
 const ROWS = 9;
@@ -17,8 +17,8 @@ export class MinesweeperGame extends BaseGame {
   private minesPlaced = false;
   private touchTimer: number | null = null;
 
-  constructor() {
-    super('gameCanvas', CELL * COLS + 4, CELL * ROWS + 52);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', CELL * COLS + 4, CELL * ROWS + 52));
   }
 
   init() {
@@ -180,7 +180,7 @@ export class MinesweeperGame extends BaseGame {
       if (!t) return;
       const cell = getCell(t.clientX, t.clientY);
       if (!cell) return;
-      this.touchTimer = window.setTimeout(() => {
+      this.touchTimer = this.setManagedTimeout(() => {
         // Long press = flag
         this.toggleFlag(cell.x, cell.y);
         this.touchTimer = null;
@@ -191,7 +191,7 @@ export class MinesweeperGame extends BaseGame {
     if (touchEvent.type === 'touchend') {
       e.preventDefault();
       if (this.touchTimer !== null) {
-        clearTimeout(this.touchTimer);
+        this.clearManagedTimeout(this.touchTimer);
         this.touchTimer = null;
         const t = touchEvent.changedTouches[0];
         if (!t) return;
@@ -209,7 +209,7 @@ export class MinesweeperGame extends BaseGame {
     if (touchEvent.type === 'touchmove') {
       e.preventDefault();
       if (this.touchTimer !== null) {
-        clearTimeout(this.touchTimer);
+        this.clearManagedTimeout(this.touchTimer);
         this.touchTimer = null;
       }
       return;

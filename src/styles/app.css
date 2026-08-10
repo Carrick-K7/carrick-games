@@ -2003,6 +2003,17 @@
       border-radius: 50%;
       animation: cg-spin .6s linear infinite;
     }
+
+    .load-error {
+      max-width: 280px;
+      padding: 20px;
+      text-align: center;
+      color: var(--text);
+    }
+
+    .load-error .btn {
+      margin-top: 14px;
+    }
     @keyframes cg-spin { to { transform: rotate(360deg); } }
 
     /* ---------- Fullscreen canvas ---------- */

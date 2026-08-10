@@ -1,4 +1,12 @@
-import { BaseGame, isZhLang } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, isZhLang } from '../core/game.js';
+import {
+  LUCKY_CASE_STARTING_COINS as STARTING_COINS,
+  LUCKY_CASE_STORAGE_KEY as STORAGE_KEY,
+  loadLuckyCaseSave as loadSave,
+  writeLuckyCaseSave as writeSave,
+  type LuckyCaseCollectionEntry as CollectedEntry,
+  type LuckyCaseSaveData as SaveData,
+} from './luckycaseStorage.js';
 
 /* ───────── Types ───────── */
 interface ItemDef {
@@ -21,11 +29,6 @@ interface CaseDef {
 }
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-
-interface CollectedEntry {
-  id: string;
-  count: number;
-}
 
 type Screen = 'menu' | 'opening' | 'result' | 'collection' | 'shop';
 
@@ -123,34 +126,6 @@ const CASES: CaseDef[] = [
   },
 ];
 
-/* ───────── Persistence ───────── */
-const STORAGE_KEY = 'luckycase';
-const STARTING_COINS = 5000;
-
-interface SaveData {
-  coins: number;
-  collection: CollectedEntry[];
-  totalOpens: number;
-  totalValue: number;
-}
-
-function loadSave(): SaveData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw) as SaveData;
-      if (typeof d.coins === 'number' && Array.isArray(d.collection)) return d;
-    }
-  } catch { /* ignore */ }
-  return { coins: STARTING_COINS, collection: [], totalOpens: 0, totalValue: 0 };
-}
-
-function writeSave(s: SaveData) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  } catch { /* ignore */ }
-}
-
 /* ───────── Rarity roll helpers ───────── */
 function rollRarity(caseId: string): Rarity {
   const r = Math.random();
@@ -205,8 +180,8 @@ export class LuckyCaseGame extends BaseGame {
   private slotStopTimer = 0;
   private selectedCaseIdx = 0;
 
-  constructor() {
-    super('gameCanvas', 420, 560);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 420, 560));
     this.drawnItem = CASES[0].items[0];
   }
 

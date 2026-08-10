@@ -1,4 +1,4 @@
-import { BaseGame, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type EnemyKind = 'drone' | 'boss';
@@ -82,6 +82,10 @@ export class GalagaGame extends BaseGame {
   // State
   private state: GameState = 'start';
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private lives = 3;
   private wave = 1;
   private waveClearTimer = 0;
@@ -101,8 +105,8 @@ export class GalagaGame extends BaseGame {
   private respawnTimer = 0;
   private respawnDelay = 1.5;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {

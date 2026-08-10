@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 import { calculateSudokuScore } from './sudokuScore.js';
 
 interface Cell {
@@ -31,8 +31,8 @@ export class SudokuGame extends BaseGame {
   private difficultyHovered: Difficulty | null = null;
   private showMenu = true;
 
-  constructor() {
-    super('gameCanvas', 480, 560);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 480, 560));
   }
 
   init() {

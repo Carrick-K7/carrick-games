@@ -105,7 +105,13 @@
         </div>
         <div class="canvas-wrapper" id="canvasWrapper">
           <canvas id="gameCanvas" width="400" height="500">Your browser does not support the game canvas. / 当前浏览器不支持游戏画布。</canvas>
-          <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+          <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner" id="loadingSpinner"></div>
+            <div class="load-error" id="loadError" hidden>
+              <div id="loadErrorMessage"></div>
+              <button class="btn btn-secondary" id="retryLoadBtn" type="button">Retry</button>
+            </div>
+          </div>
           <div class="start-overlay" id="startOverlay">
             <div class="start-overlay-title"></div>
             <div class="start-overlay-hint"></div>
@@ -126,76 +132,6 @@
     </div>
   </main>
 
-  <script>
-    (function(){
-      document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', () => window.setLang(b.dataset.lang)));
-      document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => window.setTheme(b.dataset.set)));
-      document.querySelectorAll('.style-btn').forEach(b => b.addEventListener('click', () => window.setStyleMode && window.setStyleMode(b.dataset.mode)));
-
-      // Sidebar toggle
-      const toggle = document.getElementById('sidebarToggle');
-      const brandToggle = document.getElementById('sidebarToggleBtn');
-      const body = document.body;
-      const desktopSidebarStorageKey = 'cg-sidebar-collapsed-desktop-v2';
-
-      function setSidebarCollapsed(collapsed) {
-        body.classList.toggle('sidebar-collapsed', collapsed);
-        if (toggle) toggle.setAttribute('aria-expanded', String(!collapsed));
-        if (brandToggle) brandToggle.setAttribute('aria-expanded', String(!collapsed));
-        if (brandToggle) {
-          const collapseIcon = brandToggle.querySelector('.icon-collapse');
-          const expandIcon = brandToggle.querySelector('.icon-expand');
-          if (collapseIcon) collapseIcon.style.display = collapsed ? 'none' : 'block';
-          if (expandIcon) expandIcon.style.display = collapsed ? 'block' : 'none';
-        }
-        try {
-          if (window.innerWidth > 960) {
-            localStorage.setItem(desktopSidebarStorageKey, collapsed ? '1' : '0');
-          }
-        } catch {}
-      }
-
-      window.closeGameLibrary = function() {
-        if (window.innerWidth <= 960) setSidebarCollapsed(true);
-      };
-
-      function isSidebarCollapsed() {
-        if (window.innerWidth <= 960) return true;
-        try {
-          const v = localStorage.getItem(desktopSidebarStorageKey);
-          if (v !== null) return v === '1';
-        } catch {}
-        return false;
-      }
-
-      if (toggle) {
-        toggle.addEventListener('click', () => {
-          setSidebarCollapsed(!body.classList.contains('sidebar-collapsed'));
-        });
-      }
-
-      if (brandToggle) {
-        brandToggle.addEventListener('click', () => {
-          setSidebarCollapsed(!body.classList.contains('sidebar-collapsed'));
-        });
-      }
-
-      // Close sidebar when clicking outside on mobile
-      document.addEventListener('click', (e) => {
-        if (window.innerWidth > 960) return;
-        const aside = document.querySelector('.main-sidebar');
-        if (!aside) return;
-        const clickToggle = toggle && (e.target === toggle || toggle.contains(e.target));
-        const clickBrandToggle = brandToggle && (e.target === brandToggle || brandToggle.contains(e.target));
-        if (!body.classList.contains('sidebar-collapsed') && !aside.contains(e.target) && !clickToggle && !clickBrandToggle) {
-          setSidebarCollapsed(true);
-        }
-      });
-
-      // Initialize sidebar state
-      setSidebarCollapsed(isSidebarCollapsed());
-    })();
-  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

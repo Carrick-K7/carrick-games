@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 import {
   getRetroPalette,
 } from '../core/render.js';
@@ -17,11 +17,15 @@ export class SnakeGame extends BaseGame {
   private moveTimer = 0;
   private moveInterval = 0.12; // seconds
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private gameOver = false;
   private particles: Particle[] = [];
 
-  constructor() {
-    super('gameCanvas', 400, 400);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 400, 400));
   }
 
   init() {

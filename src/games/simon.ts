@@ -1,4 +1,4 @@
-import { BaseGame, getStoredRecord } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, getStoredRecord } from '../core/game.js';
 
 const W = 400;
 const H = 500;
@@ -115,6 +115,10 @@ export class SimonGame extends BaseGame {
   private inputIndex = 0;
   private level = 0;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private flashColor: SimonColor | null = null;
   private flashTimerMs = 0;
   private showIndex = 0;
@@ -125,12 +129,11 @@ export class SimonGame extends BaseGame {
   private lastBonusTimerMs = 0;
   private audioContext: AudioContext | null = null;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
-  override start() {
-    super.start();
+  protected override onStart() {
     this.beginGame();
   }
 

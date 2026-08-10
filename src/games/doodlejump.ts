@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const W = 400;
 const H = 600;
@@ -24,14 +24,18 @@ export class DoodleJumpGame extends BaseGame {
   private player = { x: W / 2 - CHAR_W / 2, y: H - 100, vx: 0, vy: 0 };
   private platforms: Platform[] = [];
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private maxY = this.player.y;
   private gameState: 'idle' | 'playing' | 'gameover' = 'idle';
   private keys = { left: false, right: false };
   private touchSide: 'left' | 'right' | null = null;
   private cameraY = 0;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {

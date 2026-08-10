@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const BOARD = 8;
 const CELL = 60;
@@ -21,11 +21,15 @@ export class CheckersGame extends BaseGame {
   private gameOver = false;
   private winner: number | null = null;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private validMoves: Move[] = [];
   private forcedCapture: { c: number; r: number } | null = null;
 
-  constructor() {
-    super('gameCanvas', BOARD * CELL + MARGIN * 2, BOARD * CELL + MARGIN * 2 + 40);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', BOARD * CELL + MARGIN * 2, BOARD * CELL + MARGIN * 2 + 40));
   }
 
   init() {

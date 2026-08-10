@@ -7,41 +7,20 @@ import {
   type GameCtor,
   type GameInstance,
   type GameMeta,
-  type VirtualKeySpec,
 } from './games/catalog.js';
 export { GAMES } from './games/catalog.js';
-import { getStoredRecord, readStoredRecords } from './core/game.js';
-
-// Game icons — Lucide-style SVGs, colored by the current theme via currentColor
-const ICON = (d: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-const GAME_ICONS: Record<string, string> = {
-  parking: ICON('M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M9 17v2m6-2v2M8 12h0m8 0h0'),
-  luckycase: ICON('M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8M12 2v10M8 6l4-4 4 4M4 10h16'),
-  snake: ICON('M3 17l6-6-6-6M9 17l6-6-6-6M15 17l6-6-6-6'),
-  breakout: ICON('M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6 0h4a2 2 0 0 0 2-2v-4m0-6V5a2 2 0 0 0-2-2h-4'),
-  bubbleshooter: ICON('M22 12A10 10 0 1 1 12 2M12 6v6l4 2'),
-  tetris: ICON('M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'),
-  pong: ICON('M12 5v14M5 12h14'),
-  spaceshooter: ICON('M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8'),
-  flappybird: ICON('M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z'),
-  asteroids: ICON('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'),
-  minesweeper: ICON('M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'),
-  doodlejump: ICON('M12 19V5M5 12l7-7 7 7'),
-  '2048': ICON('M8 4h8M8 20h8M4 8v8M20 8v8M4 4h16v16H4z'),
-  simon: ICON('M13 2 3 14h9l-1 8 10-12h-9z'),
-  checkers: ICON('M3 3h18v18H3zm3 3v2m12-2v2M6 12v2m12-2v2M6 15v4m12-4v4M3 3v6m18-6v6'),
-  solitaire: ICON('M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6v4H9z'),
-  wordle: ICON('M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'),
-  sudoku: ICON('M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7zm-7-7h7v3H7zm11 0h7v3h-7z'),
-  chess: ICON('M6 3h12v4H6zM8 7v2h8V7M8 9l-2 7h12l-2-7M12 9v7m-3 5h6M6 21h12'),
-  galaga: ICON('M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3'),
-  stacker: ICON('M2 17 12 22 22 17M2 12 12 17 22 12M12 2 12 22M12 2 2 7l10 5 10-5-10-5z'),
-  iwanna: ICON('M5 12h14M12 5v14'),
-  aimlab: ICON('M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zm0 4a6 6 0 1 0 0 12 6 6 0 1 0 0-12zm0 4a2 2 0 1 0 0 4 2 2 0 1 0 0-4'),
-  texashold: ICON('M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'),
-  connectfour: ICON('M12 20V10m6 10V4M6 20v-4'),
-  _default: ICON('M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'),
-};
+import {
+  getStoredRecord,
+  isDarkTheme,
+  isZhLang,
+  type GameHost,
+} from './core/game.js';
+import { saveStoredRecord } from './core/storage.js';
+import { isPixelMode } from './core/render.js';
+import { GAME_ICONS } from './ui/game-icons.js';
+import { normalizeKey } from './ui/keyboard-input.js';
+import { renderVirtualKeyboard } from './ui/virtual-keyboard.js';
+import { initializeSidebar } from './app/sidebar.js';
 
 import {
   renderLevelGridHTML,
@@ -50,16 +29,6 @@ import {
   renderParkingSteeringHTML,
   type LevelSelectState,
 } from './core/levelselect.js';
-
-declare global {
-  interface Window {
-    setLang?: (lang: 'en' | 'zh') => void;
-    setTheme?: (mode: 'light' | 'dark' | 'system') => void;
-    setStyleMode?: (mode: 'modern' | 'pixel') => void;
-    startPreparedGame?: () => void;
-    closeGameLibrary?: () => void;
-  }
-}
 
 let currentGameName: string | null = null;
 let currentGameInstance: GameInstance | null = null;
@@ -135,7 +104,7 @@ function updateDemoButton() {
   const btn = document.getElementById('demoBtn') as HTMLButtonElement | null;
   if (!btn) return;
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const canDemo = !!currentGameInstance && typeof (currentGameInstance as any).startDemo === 'function' && !isLoadingGame;
+  const canDemo = !!currentGameInstance && typeof currentGameInstance.startDemo === 'function' && !isLoadingGame;
   btn.hidden = !canDemo;
   btn.disabled = !canDemo;
   btn.textContent = zh ? '示例' : 'Demo';
@@ -178,143 +147,15 @@ function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
   });
 }
 
-function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[]) {
-  const enabledKeys = new Set(activeKeys);
-
-  if (panelKeys?.length) {
-    return `
-      <div class="vkeyboard vkeyboard-compact" id="vkeyboard">
-        <div class="vkeyboard-row">
-          ${panelKeys.map((key) => {
-            const normalizedKey = normalizeKey(key.key);
-            return `<div class="vkey ${key.classes || ''}" data-key="${normalizedKey}">${key.label}</div>`;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  const mk = (label: string, key: string, wClass: string, enabled: boolean) => {
-    const normalizedKey = normalizeKey(key);
-    const dataAttr = enabled ? ` data-key="${normalizedKey}"` : '';
-    const cls = `${wClass} ${enabled ? '' : ' inactive'}`;
-    return `<div class="vkey ${cls}"${dataAttr}>${label}</div>`;
-  };
-
-  const a = (key: string) => enabledKeys.has(normalizeKey(key));
-
-  // Standard ANSI 60% layout (no numpad)
-  return `
-    <div class="vkeyboard" id="vkeyboard">
-      <!-- Row 1: Numbers -->
-      <div class="vkeyboard-row">
-        ${mk('`', '`', 'w-1', a('`'))}
-        ${mk('1', '1', 'w-1', a('1'))}
-        ${mk('2', '2', 'w-1', a('2'))}
-        ${mk('3', '3', 'w-1', a('3'))}
-        ${mk('4', '4', 'w-1', a('4'))}
-        ${mk('5', '5', 'w-1', a('5'))}
-        ${mk('6', '6', 'w-1', a('6'))}
-        ${mk('7', '7', 'w-1', a('7'))}
-        ${mk('8', '8', 'w-1', a('8'))}
-        ${mk('9', '9', 'w-1', a('9'))}
-        ${mk('0', '0', 'w-1', a('0'))}
-        ${mk('-', '-', 'w-1', a('-'))}
-        ${mk('=', '=', 'w-1', a('='))}
-        ${mk('←', 'Backspace', 'w-2', a('Backspace'))}
-      </div>
-      <!-- Row 2: QWERTY -->
-      <div class="vkeyboard-row">
-        ${mk('Tab', 'Tab', 'w-1-5', a('Tab'))}
-        ${mk('Q', 'q', 'w-1', a('q'))}
-        ${mk('W', 'w', 'w-1', a('w'))}
-        ${mk('E', 'e', 'w-1', a('e'))}
-        ${mk('R', 'r', 'w-1', a('r'))}
-        ${mk('T', 't', 'w-1', a('t'))}
-        ${mk('Y', 'y', 'w-1', a('y'))}
-        ${mk('U', 'u', 'w-1', a('u'))}
-        ${mk('I', 'i', 'w-1', a('i'))}
-        ${mk('O', 'o', 'w-1', a('o'))}
-        ${mk('P', 'p', 'w-1', a('p'))}
-        ${mk('[', '[', 'w-1', a('['))}
-        ${mk(']', ']', 'w-1', a(']'))}
-        ${mk('\\', '\\', 'w-1-5', a('\\'))}
-      </div>
-      <!-- Row 3: ASDF -->
-      <div class="vkeyboard-row">
-        ${mk('Caps', 'CapsLock', 'w-1-75', a('CapsLock'))}
-        ${mk('A', 'a', 'w-1', a('a'))}
-        ${mk('S', 's', 'w-1', a('s'))}
-        ${mk('D', 'd', 'w-1', a('d'))}
-        ${mk('F', 'f', 'w-1', a('f'))}
-        ${mk('G', 'g', 'w-1', a('g'))}
-        ${mk('H', 'h', 'w-1', a('h'))}
-        ${mk('J', 'j', 'w-1', a('j'))}
-        ${mk('K', 'k', 'w-1', a('k'))}
-        ${mk('L', 'l', 'w-1', a('l'))}
-        ${mk(';', ';', 'w-1', a(';'))}
-        ${mk("'", "'", 'w-1', a("'"))}
-        ${mk('Enter', 'Enter', 'w-2-25', a('Enter'))}
-      </div>
-      <!-- Row 4: ZXCV + ↑ -->
-      <div class="vkeyboard-row">
-        ${mk('Shift', 'Shift', 'w-2-25', a('Shift'))}
-        ${mk('Z', 'z', 'w-1', a('z'))}
-        ${mk('X', 'x', 'w-1', a('x'))}
-        ${mk('C', 'c', 'w-1', a('c'))}
-        ${mk('V', 'v', 'w-1', a('v'))}
-        ${mk('B', 'b', 'w-1', a('b'))}
-        ${mk('N', 'n', 'w-1', a('n'))}
-        ${mk('M', 'm', 'w-1', a('m'))}
-        ${mk(',', ',', 'w-1', a(','))}
-        ${mk('.', '.', 'w-1', a('.'))}
-        ${mk('/', '/', 'w-1', a('/'))}
-        ${mk('↑', 'ArrowUp', 'w-1', a('ArrowUp'))}
-        ${mk('Shift', 'ShiftRight', 'w-1-75', a('Shift'))}
-      </div>
-      <!-- Row 5: Bottom row + ←↓→ -->
-      <div class="vkeyboard-row">
-        ${mk('Ctrl', 'Control', 'w-1-25', a('Control'))}
-        ${mk('Win', 'Meta', 'w-1-25', a('Meta'))}
-        ${mk('Alt', 'Alt', 'w-1-25', a('Alt'))}
-        ${mk('Space', ' ', 'w-5-25', a(' '))}
-        ${mk('Alt', 'AltGraph', 'w-1', a('AltGraph'))}
-        ${mk('Fn', 'Fn', 'w-1', a('Fn'))}
-        ${mk('Ctrl', 'ControlRight', 'w-1', a('Control'))}
-        ${mk('←', 'ArrowLeft', 'w-1', a('ArrowLeft'))}
-        ${mk('↓', 'ArrowDown', 'w-1', a('ArrowDown'))}
-        ${mk('→', 'ArrowRight', 'w-1', a('ArrowRight'))}
-      </div>
-    </div>
-  `;
-}
-
 function getRecord(gameId: string): number | null {
   return getStoredRecord(gameId);
 }
 
 function getLevelSelectState(): LevelSelectState | null {
-  const g = currentGameInstance as any;
-  if (!g || typeof g.totalLevels !== 'number') return null;
-  return {
-    totalLevels: g.totalLevels,
-    currentLevel: typeof g.levelIndexEx === 'number' ? g.levelIndexEx : 0,
-    bestLevel: typeof g.bestLevelEx === 'number' ? g.bestLevelEx : 0,
-    unlockedLevel: typeof g.unlockedLevelEx === 'number' ? g.unlockedLevelEx : 0,
-    speed: typeof g.speed === 'number' ? g.speed : 0,
-    maxSpeed: typeof g.maxSpeed === 'number' ? g.maxSpeed : 200,
-    gear: typeof g.gear === 'string' ? g.gear : 'N',
-    gameState: typeof g.gameStateEx === 'string' ? g.gameStateEx : 'menu',
-    steerAngle: typeof g.steerAngle === 'number' ? g.steerAngle : undefined,
-    maxSteerAngle: typeof g.maxSteerAngle === 'number' ? g.maxSteerAngle : undefined,
-    steeringActive: typeof g.mouseSteeringActiveEx === 'boolean' ? g.mouseSteeringActiveEx : undefined,
-  };
-}
-
-function getSelectedLevel(): number {
-  const g = currentGameInstance as any;
-  if (g && typeof g.selectedLevelEx === 'number') return g.selectedLevelEx;
-  return 0;
+  if (!currentGameInstance) return null;
+  return currentGameInstance.getFrameTelemetry()?.levelSelect
+    ?? currentGameInstance.getShellSnapshot().levelSelect
+    ?? null;
 }
 
 function renderStats() {
@@ -348,9 +189,8 @@ function renderStats() {
 
   // Level grid
   if (ls) {
-    const selected = getSelectedLevel();
     html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVELS'}</div>`;
-    html += renderLevelGridHTML(ls, selected, zh);
+    html += renderLevelGridHTML(ls, ls.selectedLevel, zh);
     html += `</div>`;
 
     if (ls.gameState === 'menu') {
@@ -365,10 +205,7 @@ function renderStats() {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.getAttribute('data-level') || '', 10);
         if (isNaN(idx)) return;
-        const g = currentGameInstance as any;
-        if (g && typeof g.selectLevel === 'function') {
-          g.selectLevel(idx);
-        }
+        currentGameInstance?.selectLevel?.(idx);
       });
     });
   }
@@ -425,6 +262,17 @@ function setLoadingOverlay(active: boolean) {
   if (el) el.classList.toggle('active', active);
 }
 
+function setLoadError(message: string | null) {
+  const error = document.getElementById('loadError');
+  const spinner = document.getElementById('loadingSpinner');
+  const messageEl = document.getElementById('loadErrorMessage');
+  const retry = document.getElementById('retryLoadBtn');
+  if (error) error.hidden = message == null;
+  if (spinner) spinner.hidden = message != null;
+  if (messageEl) messageEl.textContent = message ?? '';
+  if (retry) retry.textContent = isZhLang() ? '重试' : 'Retry';
+}
+
 function setStartOverlay(active: boolean) {
   const el = document.getElementById('startOverlay');
   if (!el) return;
@@ -439,12 +287,11 @@ function setStartOverlay(active: boolean) {
 
 function readGameScore(): number | null {
   if (!currentGameInstance) return null;
-  const raw = (currentGameInstance as any).score;
+  const raw = currentGameInstance.getShellSnapshot().score;
   if (typeof raw === 'number') return raw;
   return null;
 }
 
-let scorePollTimer: number | null = null;
 let scorePollFrame: number | null = null;
 let lastLevelSelectSnapshot = '';
 
@@ -453,7 +300,7 @@ function startScorePolling() {
   lastLevelSelectSnapshot = '';
   updateLiveScoreDisplay();
 
-  if (currentGameName === 'parking') {
+  if (currentGameInstance?.getFrameTelemetry()) {
     const tick = () => {
       updateLiveScoreDisplay();
       scorePollFrame = window.requestAnimationFrame(tick);
@@ -462,16 +309,9 @@ function startScorePolling() {
     return;
   }
 
-  scorePollTimer = window.setInterval(() => {
-    updateLiveScoreDisplay();
-  }, 200);
 }
 
 function stopScorePolling() {
-  if (scorePollTimer != null) {
-    clearInterval(scorePollTimer);
-    scorePollTimer = null;
-  }
   if (scorePollFrame != null) {
     cancelAnimationFrame(scorePollFrame);
     scorePollFrame = null;
@@ -506,18 +346,6 @@ function renderControls() {
   renderKeyboard();
 }
 
-function normalizeKey(label: string): string {
-  const map: Record<string, string> = {
-    '←': 'ArrowLeft',
-    '↑': 'ArrowUp',
-    '→': 'ArrowRight',
-    '↓': 'ArrowDown',
-    'Space': ' ',
-  };
-  if (map[label]) return map[label];
-  return label.length === 1 ? label.toLowerCase() : label;
-}
-
 function getKeysFromEvent(e: KeyboardEvent): string[] {
   const keys: string[] = [e.key];
   if (e.code === 'Space') keys.push(' ');
@@ -534,23 +362,29 @@ function getKeysFromEvent(e: KeyboardEvent): string[] {
 }
 
 function saveRecord(gameId: string, score: number) {
-  const records = readStoredRecords();
-  const shouldUpdate = records[gameId] == null || score > records[gameId];
-  if (shouldUpdate) {
-    records[gameId] = score;
-    try {
-      localStorage.setItem('cg-records', JSON.stringify(records));
-    } catch {
-      // Scores are a convenience feature; storage failures should not break play.
-    }
-  }
+  saveStoredRecord(gameId, score);
 }
-window.saveRecord = saveRecord;
-window.reportScore = (score: number) => {
+
+function reportCurrentScore(score: number) {
   if (!currentGameName) return;
   saveRecord(currentGameName, score);
+  window.dispatchEvent(new CustomEvent('carrick:score', { detail: score }));
   renderStats();
-};
+}
+
+function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement): GameHost {
+  return {
+    canvas,
+    logicalWidth: meta.canvasSize.width,
+    logicalHeight: meta.canvasSize.height,
+    isDarkTheme,
+    isZhLang,
+    isPixelMode,
+    getRecord: getStoredRecord,
+    reportScore: reportCurrentScore,
+    requestShellRender: renderControls,
+  };
+}
 
 function bindVirtualKeyboard() {
   const vk = document.getElementById('vkeyboard');
@@ -616,17 +450,14 @@ export async function prepareGame(name: string) {
 
   stopScorePolling();
   if (currentGameInstance) {
-    if (currentGameInstance.destroy) {
-      currentGameInstance.destroy();
-    } else {
-      currentGameInstance.stop();
-    }
+    currentGameInstance.destroy();
     currentGameInstance = null;
   }
   isRunning = false;
   isLoadingGame = true;
   currentGameName = name;
   updateActionButton();
+  setLoadError(null);
   setLoadingOverlay(true);
   updateGameTitle();
   updateGameDesc();
@@ -641,22 +472,14 @@ export async function prepareGame(name: string) {
   if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   delete canvas.dataset.parkingState;
 
-  canvas.width = meta.canvasSize.width;
-  canvas.height = meta.canvasSize.height;
-  canvas.dataset.logicalWidth = String(meta.canvasSize.width);
-  canvas.dataset.logicalHeight = String(meta.canvasSize.height);
-  canvas.dataset.pixelRatio = '1';
-
-  canvas.style.width = Math.round(meta.canvasSize.width * 2) + 'px';
-  canvas.style.height = Math.round(meta.canvasSize.height * 2) + 'px';
-
   let GameClass: GameCtor;
   try {
     GameClass = await loadGameClass(meta);
   } catch (e) {
     if (token === prepareGameToken) {
       isLoadingGame = false;
-      setLoadingOverlay(false);
+      setLoadError(isZhLang() ? '游戏加载失败，请重试。' : 'Game failed to load. Please retry.');
+      setLoadingOverlay(true);
       updateActionButton();
     }
     // eslint-disable-next-line no-console
@@ -668,9 +491,9 @@ export async function prepareGame(name: string) {
     return;
   }
 
-  const nextGameInstance = new GameClass();
+  const nextGameInstance = new GameClass(createGameHost(meta, canvas));
   if (token !== prepareGameToken) {
-    nextGameInstance.destroy?.();
+    nextGameInstance.destroy();
     return;
   }
   currentGameInstance = nextGameInstance;
@@ -679,13 +502,7 @@ export async function prepareGame(name: string) {
 
   // Draw initial frame so canvas isn't blank
   try {
-    nextGameInstance.init();
-    const ctx2 = canvas.getContext('2d');
-    if (nextGameInstance.renderFrame) {
-      nextGameInstance.renderFrame();
-    } else if (ctx2) {
-      nextGameInstance.draw(ctx2);
-    }
+    nextGameInstance.prepare();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);
@@ -703,7 +520,11 @@ function startPreparedGame() {
   if (!currentGameInstance || isLoadingGame) return;
   try {
     setStartOverlay(false);
-    currentGameInstance.start();
+    if (isRunning) {
+      currentGameInstance.restart();
+    } else {
+      currentGameInstance.start();
+    }
     isRunning = true;
     updateActionButton();
     startScorePolling();
@@ -715,7 +536,7 @@ function startPreparedGame() {
 
 function startDemoForCurrentGame() {
   if (!currentGameInstance || isLoadingGame) return;
-  const demoStarter = (currentGameInstance as any).startDemo;
+  const demoStarter = currentGameInstance.startDemo;
   if (typeof demoStarter !== 'function') return;
   try {
     setStartOverlay(false);
@@ -903,11 +724,6 @@ function setStyleMode(mode: 'modern' | 'pixel') {
   repaintCurrentFrame();
 }
 
-window.setLang = setLang;
-window.setTheme = setTheme;
-window.setStyleMode = setStyleMode;
-window.startPreparedGame = startPreparedGame;
-
 // Global keyboard highlight listener
 const pressedKeys = new Set<string>();
 window.addEventListener('keydown', (e) => {
@@ -944,6 +760,19 @@ function toggleFullscreen() {
 
 // Init UI
 (function init() {
+  const sidebar = initializeSidebar();
+  document.querySelectorAll<HTMLElement>('.lang-btn').forEach((button) => {
+    button.addEventListener('click', () => setLang(button.dataset.lang === 'en' ? 'en' : 'zh'));
+  });
+  document.querySelectorAll<HTMLElement>('.theme-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.dataset.set;
+      if (mode === 'light' || mode === 'dark' || mode === 'system') setTheme(mode);
+    });
+  });
+  document.querySelectorAll<HTMLElement>('.style-btn').forEach((button) => {
+    button.addEventListener('click', () => setStyleMode(button.dataset.mode === 'pixel' ? 'pixel' : 'modern'));
+  });
   const savedLang = (localStorage.getItem('cg-lang') as 'en' | 'zh') || 'zh';
   const savedTheme = (localStorage.getItem('cg-theme') as 'light' | 'dark' | 'system') || 'system';
   let savedStyleMode: 'modern' | 'pixel' = 'modern';
@@ -977,7 +806,7 @@ function toggleFullscreen() {
       const id = getGameId(event.target);
       if (!id) return;
       void loadGame(id);
-      if (window.innerWidth <= 960) window.closeGameLibrary?.();
+      sidebar.closeOnMobile();
     });
   }
 
@@ -995,6 +824,13 @@ function toggleFullscreen() {
   const fsBtn = document.getElementById('fullscreenBtn');
   if (fsBtn) {
     fsBtn.addEventListener('click', toggleFullscreen);
+  }
+
+  const retryLoadBtn = document.getElementById('retryLoadBtn');
+  if (retryLoadBtn) {
+    retryLoadBtn.addEventListener('click', () => {
+      window.location.reload();
+    });
   }
 
   // Hash-based routing

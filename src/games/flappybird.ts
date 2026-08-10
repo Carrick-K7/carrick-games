@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 interface Pipe {
   x: number;
@@ -19,11 +19,15 @@ export class FlappyBirdGame extends BaseGame {
   private spawnTimer = 0;
   private spawnInterval = 1.6;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private gameOver = false;
   private groundHeight = 40;
 
-  constructor() {
-    super('gameCanvas', 400, 560);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 400, 560));
   }
 
   init() {

@@ -1,4 +1,10 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import {
+  evaluatePreflopStrength,
+  hasFlushDraw,
+  hasStraightDraw,
+  type PokerCard,
+} from './texasholdRules.js';
 
 const W = 440;
 const H = 520;
@@ -18,7 +24,7 @@ type Street = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
 type TableState = 'playing' | 'betweenHands' | 'gameOver';
 type PlayerAction = 'fold' | 'call' | 'raise' | 'all-in';
 
-interface Card {
+interface Card extends PokerCard {
   rank: number;
   suit: Suit;
 }
@@ -88,6 +94,10 @@ interface ActionButton {
 export class TexasHoldGame extends BaseGame {
   score = STARTING_CHIPS;
 
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
+
   private readonly players: Player[] = [
     { seat: 0, name: 'You', nameZh: '你', isHuman: true, chips: STARTING_CHIPS, hole: [], folded: false, allIn: false, out: false, bet: 0, committed: 0, acted: false, lastAction: null, wonThisHand: 0 },
     { seat: 1, name: 'Bot A', nameZh: '甲机', isHuman: false, chips: STARTING_CHIPS, hole: [], folded: false, allIn: false, out: false, bet: 0, committed: 0, acted: false, lastAction: null, wonThisHand: 0 },
@@ -118,8 +128,8 @@ export class TexasHoldGame extends BaseGame {
   private pendingSystemAction: (() => void) | null = null;
   private showdownHands = new Map<number, HandValue>();
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {
@@ -781,7 +791,7 @@ export class TexasHoldGame extends BaseGame {
     if (player.hole.length < 2) return 0;
 
     if (this.stage === 'preflop') {
-      return this.evaluatePreflopStrength(player.hole);
+      return evaluatePreflopStrength(player.hole);
     }
 
     const cards = [...player.hole, ...this.community];
@@ -802,54 +812,11 @@ export class TexasHoldGame extends BaseGame {
     else if (hand.category === 1) score = 44 + highPair;
     else score = 18 + Math.max(player.hole[0].rank, player.hole[1].rank);
 
-    if (this.hasFlushDraw(cards)) score += 10;
-    if (this.hasStraightDraw(cards)) score += 8;
+    if (hasFlushDraw(cards)) score += 10;
+    if (hasStraightDraw(cards)) score += 8;
     if (player.hole[0].rank === player.hole[1].rank) score += 4;
 
     return Math.max(0, Math.min(100, score));
-  }
-
-  private evaluatePreflopStrength(hole: Card[]): number {
-    const ranks = hole.map((card) => card.rank).sort((a, b) => b - a);
-    const suited = hole[0].suit === hole[1].suit;
-    const pair = ranks[0] === ranks[1];
-    const gap = ranks[0] - ranks[1];
-    const bothBroadway = ranks[0] >= 10 && ranks[1] >= 10;
-
-    let score = ranks[0] * 2 + ranks[1];
-    if (pair) score = 38 + ranks[0] * 4;
-    if (suited) score += 8;
-    if (gap === 1) score += 7;
-    else if (gap === 2) score += 4;
-    if (bothBroadway) score += 10;
-    if (ranks[0] === 14) score += 8;
-    if (ranks[0] + ranks[1] >= 24) score += 8;
-
-    return Math.max(0, Math.min(100, score));
-  }
-
-  private hasFlushDraw(cards: Card[]): boolean {
-    const suits = [0, 0, 0, 0];
-    for (const card of cards) suits[card.suit] += 1;
-    return suits.some((count) => count === 4);
-  }
-
-  private hasStraightDraw(cards: Card[]): boolean {
-    const values = new Set<number>();
-    for (const card of cards) {
-      values.add(card.rank);
-      if (card.rank === 14) values.add(1);
-    }
-
-    for (let start = 1; start <= 10; start += 1) {
-      let count = 0;
-      for (let value = start; value < start + 5; value += 1) {
-        if (values.has(value)) count += 1;
-      }
-      if (count === 4) return true;
-    }
-
-    return false;
   }
 
   private evaluateBestHand(cards: Card[]): HandValue {

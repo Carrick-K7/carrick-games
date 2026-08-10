@@ -1,18 +1,18 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function collectErrors(page: any) {
+async function collectErrors(page: Page) {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  page.on('console', (msg: any) => {
+  page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err: Error) => pageErrors.push(err.message));
   return { consoleErrors, pageErrors };
 }
 
-async function selectGame(page: any, gameId: string) {
+async function selectGame(page: Page, gameId: string) {
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
@@ -20,7 +20,7 @@ async function selectGame(page: any, gameId: string) {
   await expect(page.locator('#actionBtn')).toBeEnabled();
 }
 
-async function startGame(page: any) {
+async function startGame(page: Page) {
   const btn = page.locator('#actionBtn');
   await btn.click();
   await page.waitForTimeout(400);
@@ -30,22 +30,22 @@ function filterFavicon(errors: string[]) {
   return errors.filter(e => !e.toLowerCase().includes('favicon'));
 }
 
-async function mockReportScore(page: any) {
+async function mockReportScore(page: Page) {
   await page.evaluate(() => {
-    (window as any).__testScores = [];
-    const orig = (window as any).reportScore;
-    (window as any).reportScore = (s: number) => {
-      (window as any).__testScores.push(s);
-      if (orig) orig(s);
-    };
+    sessionStorage.setItem('test-scores', '[]');
+    window.addEventListener('carrick:score', (event) => {
+      const scores = JSON.parse(sessionStorage.getItem('test-scores') || '[]') as number[];
+      scores.push((event as CustomEvent<number>).detail);
+      sessionStorage.setItem('test-scores', JSON.stringify(scores));
+    });
   });
 }
 
-async function getScores(page: any): Promise<number[]> {
-  return page.evaluate(() => (window as any).__testScores || []);
+async function getScores(page: Page): Promise<number[]> {
+  return page.evaluate(() => JSON.parse(sessionStorage.getItem('test-scores') || '[]') as number[]);
 }
 
-async function restartGame(page: any) {
+async function restartGame(page: Page) {
   const btn = page.locator('#actionBtn');
   await btn.click();
   await page.waitForTimeout(500);
@@ -53,7 +53,7 @@ async function restartGame(page: any) {
 
 // ─── Per-game suicide strategies ────────────────────────────────────────────
 
-async function suicideSnake(page: any) {
+async function suicideSnake(page: Page) {
   // Go right then immediately left -> wall collision
   await page.keyboard.press('ArrowRight');
   await page.waitForTimeout(300);
@@ -61,12 +61,12 @@ async function suicideSnake(page: any) {
   await page.waitForTimeout(1500);
 }
 
-async function suicideBreakout(page: any) {
+async function suicideBreakout(page: Page) {
   // Do nothing, ball drops
   await page.waitForTimeout(6000);
 }
 
-async function suicideTetris(page: any) {
+async function suicideTetris(page: Page) {
   // Spam hard drop to fill board quickly
   for (let i = 0; i < 15; i++) {
     await page.keyboard.press('Space');
@@ -75,7 +75,7 @@ async function suicideTetris(page: any) {
   await page.waitForTimeout(2000);
 }
 
-async function suicidePong(page: any) {
+async function suicidePong(page: Page) {
   // Move paddle away from ball to let AI score
   await page.keyboard.press('ArrowUp');
   await page.waitForTimeout(200);
@@ -83,39 +83,39 @@ async function suicidePong(page: any) {
   await page.waitForTimeout(8000);
 }
 
-async function suicideSpaceshooter(page: any) {
+async function suicideSpaceshooter(page: Page) {
   // Stay still, enemy will crash into you
   await page.waitForTimeout(5000);
 }
 
-async function suicideFlappybird(page: any) {
+async function suicideFlappybird(page: Page) {
   // Do nothing, bird falls
   await page.waitForTimeout(4000);
 }
 
-async function suicideAsteroids(page: any) {
+async function suicideAsteroids(page: Page) {
   // No thrust, asteroid hits you
   await page.waitForTimeout(6000);
 }
 
-async function suicideDoodlejump(page: any) {
+async function suicideDoodlejump(page: Page) {
   // No movement, fall off screen
   await page.waitForTimeout(4000);
 }
 
-async function suicideGalaga(page: any) {
+async function suicideGalaga(page: Page) {
   // Stay still, enemy dive-bombs you
   await page.waitForTimeout(5000);
 }
 
-async function suicideStacker(page: any) {
+async function suicideStacker(page: Page) {
   // Wait for block to pass edge then lock -> miss
   await page.waitForTimeout(1200);
   await page.keyboard.press('Space');
   await page.waitForTimeout(2000);
 }
 
-async function suicideIwanna(page: any) {
+async function suicideIwanna(page: Page) {
   // Walk into the opening spike pit
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(1200);
@@ -123,13 +123,13 @@ async function suicideIwanna(page: any) {
   await page.waitForTimeout(1200);
 }
 
-async function suicideParking(page: any) {
+async function suicideParking(page: Page) {
   // Accelerate into wall
   await page.keyboard.press('ArrowUp');
   await page.waitForTimeout(1500);
 }
 
-async function suicideBubbleshooter(page: any) {
+async function suicideBubbleshooter(page: Page) {
   // Rapid fire to fill board
   for (let i = 0; i < 20; i++) {
     await page.keyboard.press('Space');
@@ -138,7 +138,7 @@ async function suicideBubbleshooter(page: any) {
   await page.waitForTimeout(3000);
 }
 
-async function suicide2048(page: any) {
+async function suicide2048(page: Page) {
   // Fill board by spamming directions
   for (let i = 0; i < 40; i++) {
     const keys = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'];
@@ -148,7 +148,7 @@ async function suicide2048(page: any) {
   await page.waitForTimeout(2000);
 }
 
-async function suicideMinesweeper(page: any) {
+async function suicideMinesweeper(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -162,14 +162,14 @@ async function suicideMinesweeper(page: any) {
   await page.waitForTimeout(1000);
 }
 
-async function suicideSimon(page: any) {
+async function suicideSimon(page: Page) {
   // Press wrong key during playback (if it starts immediately)
   await page.waitForTimeout(1200);
   await page.keyboard.press('1');
   await page.waitForTimeout(2000);
 }
 
-async function suicideCheckers(page: any) {
+async function suicideCheckers(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -180,7 +180,7 @@ async function suicideCheckers(page: any) {
   await page.waitForTimeout(8000);
 }
 
-async function suicideConnectfour(page: any) {
+async function suicideConnectfour(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -191,7 +191,7 @@ async function suicideConnectfour(page: any) {
   }
 }
 
-async function suicideChess(page: any) {
+async function suicideChess(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -207,7 +207,7 @@ async function suicideChess(page: any) {
   await page.waitForTimeout(4000);
 }
 
-async function suicideWordle(page: any) {
+async function suicideWordle(page: Page) {
   // Type 6 wrong words rapidly
   await page.evaluate(() => {
     const words = ['apple', 'beach', 'cloud', 'dance', 'eagle', 'flame'];
@@ -221,7 +221,7 @@ async function suicideWordle(page: any) {
   await page.waitForTimeout(2000);
 }
 
-async function suicideSudoku(page: any) {
+async function suicideSudoku(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -237,7 +237,7 @@ async function suicideSudoku(page: any) {
   await page.waitForTimeout(1000);
 }
 
-async function suicideAimlab(page: any) {
+async function suicideAimlab(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -252,7 +252,7 @@ async function suicideAimlab(page: any) {
   await page.waitForTimeout(6000);
 }
 
-async function suicideSolitaire(page: any) {
+async function suicideSolitaire(page: Page) {
   const canvas = page.locator('#gameCanvas');
   const box = await canvas.boundingBox();
   if (!box) return;
@@ -266,7 +266,7 @@ async function suicideSolitaire(page: any) {
   await page.waitForTimeout(2000);
 }
 
-async function suicideTexashold(page: any) {
+async function suicideTexashold(page: Page) {
   // All-in and see result
   await page.keyboard.press('a');
   await page.waitForTimeout(200);
@@ -278,7 +278,7 @@ async function suicideTexashold(page: any) {
 
 interface GameProfile {
   id: string;
-  suicide: (page: any) => Promise<void>;
+  suicide: (page: Page) => Promise<void>;
   timeout?: number;
   expectScore?: boolean; // true only when the strategy deterministically reaches a score-reporting end state
 }

@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 type TetrominoType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
@@ -71,6 +71,10 @@ export class TetrisGame extends BaseGame {
   private nextType: TetrominoType = 'I';
   private bag: TetrominoType[] = [];
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private lines = 0;
   private level = 1;
   private dropTimer = 0;
@@ -94,8 +98,8 @@ export class TetrisGame extends BaseGame {
   private lastMoveTime = 0;
   private autoRepeatDelay = 0.15;
 
-  constructor() {
-    super('gameCanvas', 420, 600);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 420, 600));
   }
 
   init() {

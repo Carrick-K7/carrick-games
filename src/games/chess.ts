@@ -1,5 +1,7 @@
 import {
   BaseGame,
+  createDefaultGameHost,
+  type GameHost, type GameShellSnapshot,
   isDarkTheme as getEffectiveDarkTheme,
   isZhLang as getEffectiveZhLang,
 } from '../core/game.js';
@@ -65,8 +67,8 @@ export class ChessGame extends BaseGame {
   private animTime = 0;
   private lastAiTime = 0;
 
-  constructor() {
-    super('gameCanvas', CANVAS_W, CANVAS_H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', CANVAS_W, CANVAS_H));
   }
 
   init() {
@@ -352,7 +354,7 @@ export class ChessGame extends BaseGame {
     this.lastAiTime = performance.now();
 
     // Use setTimeout to avoid blocking
-    setTimeout(() => {
+    this.setManagedTimeout(() => {
       const moves = this.getAllLegalMoves('b');
       if (moves.length === 0) { this.aiThinking = false; return; }
 

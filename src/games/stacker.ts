@@ -1,4 +1,4 @@
-import { BaseGame, getStoredRecord } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, getStoredRecord } from '../core/game.js';
 
 const COLS = 7;
 const ROWS = 16;
@@ -15,6 +15,10 @@ interface LockedBlock {
 export class StackerGame extends BaseGame {
   private state: GameState = 'idle';
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private blocks: LockedBlock[] = [];
   private currentRow = ROWS - 1;
   private currentX = 0;
@@ -23,12 +27,11 @@ export class StackerGame extends BaseGame {
   private speed = 0;
   private highScore = 0;
 
-  constructor() {
-    super('gameCanvas', 320, 480);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', 320, 480));
   }
 
-  override start() {
-    super.start();
+  protected override onStart() {
     this.startGame();
   }
 

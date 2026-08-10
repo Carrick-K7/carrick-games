@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const W = 400;
 const H = 520;
@@ -72,6 +72,10 @@ export class WordleGame extends BaseGame {
   private gameOver = false;
   private won = false;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private shakeRow = -1;
   private shakeTimer = 0;
   private flips: FlipAnim[] = [];
@@ -83,8 +87,8 @@ export class WordleGame extends BaseGame {
   private activeKey: string | null = null;
   private activeKeyTimer = 0;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {

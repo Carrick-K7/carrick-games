@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const W = 420;
 const H = 620;
@@ -44,6 +44,10 @@ export class BubbleShooterGame extends BaseGame {
   private nextColor = BUBBLE_COLORS[1];
   private aimAngle = -Math.PI / 2;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private shotsSinceRow = 0;
   private gameOver = false;
   private readonly boundMouseMove = (e: MouseEvent) => {
@@ -51,8 +55,8 @@ export class BubbleShooterGame extends BaseGame {
     this.setAim(point.x, point.y);
   };
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
     this.canvas.addEventListener('mousemove', this.boundMouseMove);
   }
 

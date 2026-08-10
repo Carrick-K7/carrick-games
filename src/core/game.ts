@@ -7,21 +7,67 @@ import {
   type CanvasPoint,
   type GameResultOverlayOptions,
 } from './render.js';
+import type { LevelSelectState } from './levelselect.js';
+import { getStoredRecord } from './storage.js';
+export { getStoredRecord, readStoredRecords } from './storage.js';
+
+export interface GameShellSnapshot {
+  score?: number;
+  levelSelect?: LevelSelectState;
+}
+
+export interface GameFrameTelemetry {
+  levelSelect?: LevelSelectState;
+}
 
 export interface Game {
   init(): void;
   update(dt: number): void;
   draw(ctx: CanvasRenderingContext2D): void;
-  renderFrame?(): void;
+  prepare(): void;
+  start(): void;
+  restart(): void;
+  stop(): void;
+  renderFrame(): void;
+  getShellSnapshot(): GameShellSnapshot;
+  getFrameTelemetry(): GameFrameTelemetry | null;
+  startDemo?(): void;
+  selectLevel?(index: number): void;
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent): void;
-  destroy?(): void;
+  destroy(): void;
 }
 
-declare global {
-  interface Window {
-    reportScore?: (score: number) => void;
-    saveRecord?: (gameId: string, score: number) => void;
-  }
+export interface GameHost {
+  canvas: HTMLCanvasElement;
+  logicalWidth: number;
+  logicalHeight: number;
+  isDarkTheme(): boolean;
+  isZhLang(): boolean;
+  isPixelMode(): boolean;
+  getRecord(gameId: string): number | null;
+  reportScore(score: number): void;
+  requestShellRender(): void;
+}
+
+export const MAX_FRAME_DELTA_SECONDS = 0.05;
+
+export function clampFrameDelta(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds < 0) return 0;
+  return Math.min(seconds, MAX_FRAME_DELTA_SECONDS);
+}
+
+export function shellSnapshotKey(snapshot: GameShellSnapshot): string {
+  const levels = snapshot.levelSelect;
+  return JSON.stringify({
+    score: snapshot.score,
+    levels: levels ? {
+      currentLevel: levels.currentLevel,
+      bestLevel: levels.bestLevel,
+      unlockedLevel: levels.unlockedLevel,
+      selectedLevel: levels.selectedLevel,
+      gameState: levels.gameState,
+    } : undefined,
+  });
 }
 
 export function isDarkTheme(): boolean {
@@ -36,28 +82,24 @@ export function isZhLang(): boolean {
   return document.documentElement.getAttribute('data-lang') === 'zh';
 }
 
-export function readStoredRecords(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem('cg-records');
-    if (!raw) return {};
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-
-    const records: Record<string, number> = {};
-    for (const [gameId, score] of Object.entries(parsed)) {
-      if (typeof score === 'number' && Number.isFinite(score)) {
-        records[gameId] = score;
-      }
-    }
-    return records;
-  } catch {
-    return {};
-  }
-}
-
-export function getStoredRecord(gameId: string): number | null {
-  return readStoredRecords()[gameId] ?? null;
+export function createDefaultGameHost(
+  canvasId: string,
+  logicalWidth: number,
+  logicalHeight: number,
+): GameHost {
+  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+  if (!canvas) throw new Error(`Canvas #${canvasId} not found`);
+  return {
+    canvas,
+    logicalWidth,
+    logicalHeight,
+    isDarkTheme,
+    isZhLang,
+    isPixelMode,
+    getRecord: getStoredRecord,
+    reportScore: () => undefined,
+    requestShellRender: () => undefined,
+  };
 }
 
 export abstract class BaseGame implements Game {
@@ -70,19 +112,27 @@ export abstract class BaseGame implements Game {
   private readonly boundHandleInput: (e: KeyboardEvent | TouchEvent | MouseEvent) => void;
   private inputBound = false;
   private baseScoreAlreadyReported = false;
+  private prepared = false;
+  private readonly managedTimeouts = new Set<number>();
+  private readonly managedCleanups = new Set<() => void>();
+  private lastShellSnapshotKey = '';
 
-  constructor(canvasId: string, protected width = 640, protected height = 480) {
-    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-    if (!canvas) throw new Error(`Canvas #${canvasId} not found`);
-    this.canvas = canvas;
-    this.canvas.width = width;
-    this.canvas.height = height;
+  constructor(protected readonly host: GameHost) {
+    this.canvas = host.canvas;
+    this.width = host.logicalWidth;
+    this.height = host.logicalHeight;
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('2D context not available');
     this.ctx = ctx;
-    this.pixelRatio = configureHiDpiCanvas(this.canvas, this.ctx, width, height);
+    this.pixelRatio = configureHiDpiCanvas(this.canvas, this.ctx, this.width, this.height);
+    this.canvas.dataset.gamePrepareCount = '0';
     this.boundHandleInput = this.handleInput.bind(this);
   }
+
+  protected width: number;
+  protected height: number;
 
   protected bindInput() {
     if (this.inputBound) return;
@@ -112,17 +162,40 @@ export abstract class BaseGame implements Game {
     this.inputBound = false;
   }
 
-  start() {
+  prepare() {
     this.stop();
     this.resetScoreReport();
+    this.init();
+    this.canvas.dataset.gamePrepareCount = String(
+      (Number(this.canvas.dataset.gamePrepareCount) || 0) + 1,
+    );
+    this.prepared = true;
+    this.renderFrame();
+    this.lastShellSnapshotKey = '';
+    this.syncShellState();
+  }
+
+  start() {
+    if (!this.prepared) this.prepare();
+    this.stopRuntime();
     this.bindInput();
     this.running = true;
     this.lastTime = performance.now();
-    this.init();
+    this.onStart();
     this.loop(this.lastTime);
   }
 
+  restart() {
+    this.prepare();
+    this.start();
+  }
+
   stop() {
+    this.stopRuntime();
+    this.clearManagedResources();
+  }
+
+  private stopRuntime() {
     this.running = false;
     cancelAnimationFrame(this.animationId);
     this.unbindInput();
@@ -130,18 +203,21 @@ export abstract class BaseGame implements Game {
 
   destroy() {
     this.stop();
+    this.prepared = false;
   }
 
+  protected onStart() {}
+
   protected isDarkTheme(): boolean {
-    return isDarkTheme();
+    return this.host.isDarkTheme();
   }
 
   protected isZhLang(): boolean {
-    return isZhLang();
+    return this.host.isZhLang();
   }
 
   protected isPixelMode(): boolean {
-    return isPixelMode();
+    return this.host.isPixelMode();
   }
 
   protected canvasPoint(clientX: number, clientY: number): CanvasPoint {
@@ -186,7 +262,7 @@ export abstract class BaseGame implements Game {
   }
 
   protected submitScore(score: number) {
-    window.reportScore?.(score);
+    this.host.reportScore(score);
   }
 
   protected submitScoreOnce(score: number) {
@@ -195,11 +271,59 @@ export abstract class BaseGame implements Game {
     this.submitScore(score);
   }
 
+  protected notifyShellStateChanged() {
+    this.lastShellSnapshotKey = shellSnapshotKey(this.getShellSnapshot());
+    this.host.requestShellRender();
+  }
+
+  private syncShellState() {
+    const nextKey = shellSnapshotKey(this.getShellSnapshot());
+    if (nextKey === this.lastShellSnapshotKey) return;
+    this.lastShellSnapshotKey = nextKey;
+    this.host.requestShellRender();
+  }
+
+  getShellSnapshot(): GameShellSnapshot {
+    return {};
+  }
+
+  getFrameTelemetry(): GameFrameTelemetry | null {
+    return null;
+  }
+
+  protected setManagedTimeout(callback: () => void, delay: number): number {
+    const id = window.setTimeout(() => {
+      this.managedTimeouts.delete(id);
+      callback();
+    }, delay);
+    this.managedTimeouts.add(id);
+    return id;
+  }
+
+  protected clearManagedTimeout(id: number | null) {
+    if (id == null) return;
+    clearTimeout(id);
+    this.managedTimeouts.delete(id);
+  }
+
+  protected registerCleanup(cleanup: () => void) {
+    this.managedCleanups.add(cleanup);
+    return () => this.managedCleanups.delete(cleanup);
+  }
+
+  private clearManagedResources() {
+    for (const id of this.managedTimeouts) clearTimeout(id);
+    this.managedTimeouts.clear();
+    for (const cleanup of this.managedCleanups) cleanup();
+    this.managedCleanups.clear();
+  }
+
   private loop = (now: number) => {
     if (!this.running) return;
-    const dt = (now - this.lastTime) / 1000;
+    const dt = clampFrameDelta((now - this.lastTime) / 1000);
     this.lastTime = now;
     this.update(dt);
+    this.syncShellState();
     this.renderFrame();
     this.animationId = requestAnimationFrame(this.loop);
   };

@@ -3,6 +3,7 @@ export interface LevelSelectState {
   currentLevel: number;
   bestLevel: number;
   unlockedLevel: number;
+  selectedLevel: number;
   speed: number;
   maxSpeed: number;
   gear: string;

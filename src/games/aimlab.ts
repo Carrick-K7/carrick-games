@@ -1,4 +1,4 @@
-import { BaseGame } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
 
 const W = 500;
 const H = 400;
@@ -17,6 +17,10 @@ export class AimLabGame extends BaseGame {
   private targets: Target[] = [];
   private currentTarget: Target | null = null;
   private score = 0;
+
+  override getShellSnapshot(): GameShellSnapshot {
+    return { score: this.score };
+  }
   private timeLeft = GAME_DURATION;
   private gameOver = false;
   private gameStarted = false;
@@ -24,8 +28,8 @@ export class AimLabGame extends BaseGame {
   private misses = 0;
   private totalReactionTime = 0;
 
-  constructor() {
-    super('gameCanvas', W, H);
+  constructor(host?: GameHost) {
+    super(host ?? createDefaultGameHost('gameCanvas', W, H));
   }
 
   init() {
