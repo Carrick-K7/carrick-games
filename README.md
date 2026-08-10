@@ -50,10 +50,11 @@ Carrick Games currently ships 25 playable games:
 
 ## Tech Stack
 
-- TypeScript and browser ES modules.
+- TypeScript, Vite, and browser ES modules.
 - HTML5 Canvas 2D rendering.
 - CSS custom properties for theming.
 - Playwright end-to-end tests.
+- Vitest unit tests.
 - GitHub Actions and Caddy for production deployment.
 
 Game metadata and dynamic loaders live in `src/games/catalog.ts`; the app shell and lifecycle code live in `src/main.ts`.
@@ -62,15 +63,17 @@ Game metadata and dynamic loaders live in `src/games/catalog.ts`; the app shell 
 
 ```bash
 npm ci
+npm run typecheck
+npm run test:unit
 npm run build
 npm run test:e2e
-python3 -m http.server 8080
+npm run preview -- --host 127.0.0.1 --port 8080
 ```
 
 Then open `http://localhost:8080`.
 
 ## Deployment
 
-Pushes to `main` run the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow builds, runs Playwright e2e tests, packages `index.html`, `dist/`, and `fonts/`, then switches Caddy to a new release under `/var/www/games.carrick7.com/current`.
+Pushes to `main` run the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow type-checks, runs Vitest and Playwright, packages the Vite `dist/` output, then switches Caddy to a new release under `/var/www/games.carrick7.com/current`.
 
 Development and deployment rules are documented in `AGENTS.md`. Visual design rules are documented in `DESIGN.md`.

@@ -18,7 +18,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'python3 -m http.server 8080',
+    command: 'npm run preview -- --host 127.0.0.1 --port 8080',
     port: 8080,
     reuseExistingServer: true,
   },

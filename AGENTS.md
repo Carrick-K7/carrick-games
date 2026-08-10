@@ -162,6 +162,8 @@ Use `this.submitScore(score)` only if a single session intentionally reports mor
 Run these before committing:
 
 ```bash
+npm run typecheck
+npm run test:unit
 npm run build
 npm run test:e2e
 ```
@@ -174,6 +176,8 @@ When this repository is changed by an Agent, the work is not complete until ever
 
 1. Local verification passes:
    ```bash
+   npm run typecheck
+   npm run test:unit
    npm run build
    npm run test:e2e
    ```
@@ -188,7 +192,8 @@ When this repository is changed by an Agent, the work is not complete until ever
 5. Production smoke tests pass:
    ```bash
    curl -fsSL https://games.carrick7.com/ -o /tmp/carrick-games-index.html
-   curl -fsSL https://games.carrick7.com/dist/main.js?v=8 -o /dev/null
+   asset_path=$(grep -oE 'src="[^"]+\.js"' /tmp/carrick-games-index.html | head -1 | cut -d'"' -f2)
+   curl -fsSL "https://games.carrick7.com${asset_path}" -o /dev/null
    ```
 6. The final response states the commit SHA, GA run status, and production smoke-test result.
 
@@ -223,13 +228,13 @@ the observe-only doctor interface documented in `carrick-ops`.
 The workflow:
 
 - installs with `npm ci`
-- builds with `npm run build`
-- runs `npm run test:e2e`
-- packages `index.html`, `dist/`, and `fonts/`
+- type-checks and builds with Vite
+- runs Vitest and Playwright
+- packages the complete `dist/` output
 - streams the immutable archive through a repository-specific restricted SSH key
 - deploys to `/var/www/games.carrick7.com/releases/<git-sha>/`
 - atomically switches `/var/www/games.carrick7.com/current`
-- smoke tests the public URL and `dist/main.js`
+- smoke tests the public URL and its generated hashed JavaScript entry
 
 Caddy serves `/var/www/games.carrick7.com/current`.
 

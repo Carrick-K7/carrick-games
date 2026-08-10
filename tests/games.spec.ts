@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { getCanvasPoint } from '../src/core/render';
 import {
   GAME_GROUP_MAP,
@@ -74,9 +74,29 @@ function filterFavicon(errors: string[]) {
 }
 
 function gameModuleName(url: string): string | null {
-  const match = url.match(/\/dist\/games\/([^/?]+\.js)(?:\?|$)/);
-  const moduleName = match?.[1] ?? null;
-  return moduleName === 'catalog.js' ? null : moduleName;
+  const pathname = new URL(url).pathname.replace(/^\//, '');
+  const source = Object.entries(readViteManifest()).find(([, entry]) => entry.file === pathname)?.[0];
+  return source?.startsWith('src/games/') ? `${basename(source, '.ts')}.js` : null;
+}
+
+interface ViteManifestEntry {
+  file: string;
+  src?: string;
+}
+
+let viteManifest: Record<string, ViteManifestEntry> | null = null;
+
+function readViteManifest(): Record<string, ViteManifestEntry> {
+  viteManifest ??= JSON.parse(
+    readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'),
+  ) as Record<string, ViteManifestEntry>;
+  return viteManifest;
+}
+
+function builtModuleUrl(source: string): string {
+  const entry = readViteManifest()[source];
+  if (!entry) throw new Error(`Missing Vite manifest entry for ${source}`);
+  return `/${entry.file}`;
 }
 
 function normalizeRadians(angle: number): number {
@@ -263,25 +283,14 @@ test.describe('Game rules', () => {
     }
   });
 
-  test('initial parking experience preloads its complete critical module graph', () => {
+  test('Vite owns production module loading and emits hashed assets', () => {
     const index = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
-    const preloads = [...index.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)]
-      .map((match) => match[1]);
+    const builtIndex = readFileSync(join(process.cwd(), 'dist/index.html'), 'utf8');
 
-    expect(preloads).toEqual([
-      './dist/main.js?v=15',
-      './dist/games/catalog.js',
-      './dist/core/game.js',
-      './dist/core/render.js',
-      './dist/core/levelselect.js',
-      './dist/games/parking.js',
-      './dist/games/parkingPhysics.js',
-      './dist/games/parkingConstants.js',
-      './dist/games/parkingGeometry.js',
-      './dist/games/parkingLevels.js',
-      './dist/games/parkingRoute.js',
-    ]);
-    expect(index).toContain('<script type="module" src="./dist/main.js?v=15"></script>');
+    expect(index).not.toContain('modulepreload');
+    expect(index).toContain('<script type="module" src="/src/main.ts"></script>');
+    expect(builtIndex).toMatch(/<script type="module" crossorigin src="\/assets\/[^\"]+-[A-Za-z0-9_-]+\.js"><\/script>/);
+    expect(builtIndex).toMatch(/<link rel="stylesheet" crossorigin href="\/assets\/[^\"]+-[A-Za-z0-9_-]+\.css">/);
   });
 
   test('sudoku hints reduce final score', () => {
@@ -489,8 +498,8 @@ test.describe('Game rules', () => {
     await page.goto('/#/chess');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const result = await page.evaluate(async () => {
-      const { ChessGame } = await import('/dist/games/chess.js');
+    const result = await page.evaluate(async (moduleUrl) => {
+      const { ChessGame } = await import(moduleUrl);
       const game = new ChessGame() as any;
       const emptyBoard = () => Array.from({ length: 8 }, () => Array(8).fill(null));
       const noCastling = { w: { K: false, Q: false }, b: { K: false, Q: false } };
@@ -525,7 +534,7 @@ test.describe('Game rules', () => {
 
       game.destroy();
       return { checkingMoveAllowed, selfCheckMoveAllowed, throughCheckCastleAllowed };
-    });
+    }, builtModuleUrl('src/games/chess.ts'));
 
     expect(result).toEqual({
       checkingMoveAllowed: true,
@@ -538,8 +547,8 @@ test.describe('Game rules', () => {
     await page.goto('/#/checkers');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const result = await page.evaluate(async () => {
-      const { CheckersGame } = await import('/dist/games/checkers.js');
+    const result = await page.evaluate(async (moduleUrl) => {
+      const { CheckersGame } = await import(moduleUrl);
       const game = new CheckersGame() as any;
       game.board = Array.from({ length: 8 }, () => Array(8).fill(0));
       game.board[1][5] = 1;
@@ -560,7 +569,7 @@ test.describe('Game rules', () => {
       };
       game.destroy();
       return outcome;
-    });
+    }, builtModuleUrl('src/games/checkers.ts'));
 
     expect(result.ordinaryMoveIncluded).toBe(false);
     expect(result.currentPlayer).toBe(1);
@@ -572,8 +581,8 @@ test.describe('Game rules', () => {
     await page.goto('/#/minesweeper');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const result = await page.evaluate(async () => {
-      const { MinesweeperGame } = await import('/dist/games/minesweeper.js');
+    const result = await page.evaluate(async (moduleUrl) => {
+      const { MinesweeperGame } = await import(moduleUrl);
       const game = new MinesweeperGame() as any;
       game.init();
       game.beginAt(4, 4);
@@ -588,7 +597,7 @@ test.describe('Game rules', () => {
       };
       game.destroy();
       return outcome;
-    });
+    }, builtModuleUrl('src/games/minesweeper.ts'));
 
     expect(result.firstCell).toBeGreaterThanOrEqual(0);
     expect(result.safeAreaHasMine).toBe(false);
@@ -599,8 +608,8 @@ test.describe('Game rules', () => {
     await page.goto('/#/2048');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const hasWon = await page.evaluate(async () => {
-      const { Game2048 } = await import('/dist/games/game2048.js');
+    const hasWon = await page.evaluate(async (moduleUrl) => {
+      const { Game2048 } = await import(moduleUrl);
       const game = new Game2048() as any;
       game.init();
       game.gameState = 'playing';
@@ -609,7 +618,7 @@ test.describe('Game rules', () => {
       const result = game.hasWon;
       game.destroy();
       return result;
-    });
+    }, builtModuleUrl('src/games/game2048.ts'));
 
     expect(hasWon).toBe(false);
   });
@@ -618,14 +627,14 @@ test.describe('Game rules', () => {
     await page.goto('/#/luckycase');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async (moduleUrl) => {
       localStorage.setItem('luckycase', JSON.stringify({
         coins: 0,
         collection: [],
         totalOpens: 20,
         totalValue: 0,
       }));
-      const { LuckyCaseGame } = await import('/dist/games/luckycase.js');
+      const { LuckyCaseGame } = await import(moduleUrl);
       const game = new LuckyCaseGame() as any;
       game.init();
       const recoveredCoins = game.save.coins;
@@ -644,7 +653,7 @@ test.describe('Game rules', () => {
       };
       game.destroy();
       return outcome;
-    });
+    }, builtModuleUrl('src/games/luckycase.ts'));
 
     expect(result).toEqual({
       recoveredCoins: 250,
@@ -657,8 +666,8 @@ test.describe('Game rules', () => {
     await page.goto('/#/solitaire');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
-    const result = await page.evaluate(async () => {
-      const { SolitaireGame } = await import('/dist/games/solitaire.js');
+    const result = await page.evaluate(async (moduleUrl) => {
+      const { SolitaireGame } = await import(moduleUrl);
       const game = new SolitaireGame() as any;
       game.init();
       game.phase = 'playing';
@@ -676,7 +685,7 @@ test.describe('Game rules', () => {
       };
       game.destroy();
       return outcome;
-    });
+    }, builtModuleUrl('src/games/solitaire.ts'));
 
     expect(result).toEqual({
       foundations: 4,
@@ -767,10 +776,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    expect([...new Set(gameModules)].sort()).toEqual([
-      'parking.js', 'parkingConstants.js', 'parkingGeometry.js',
-      'parkingLevels.js', 'parkingPhysics.js', 'parkingRoute.js',
-    ]);
+    expect([...new Set(gameModules)]).toEqual(['parking.js']);
   });
 
   test('parking is the first game and default entry is playable', async ({ page }) => {

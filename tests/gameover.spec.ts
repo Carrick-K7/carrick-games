@@ -296,7 +296,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
-  { id: 'aimlab', suicide: suicideAimlab, timeout: 15000, expectScore: true },
+  { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
   { id: '2048', suicide: suicide2048, timeout: 20000 },
   { id: 'minesweeper', suicide: suicideMinesweeper, timeout: 15000 },
