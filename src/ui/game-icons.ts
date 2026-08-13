@@ -23,6 +23,7 @@ export const GAME_ICONS: Record<string, string> = {
   galaga: ICON('M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3'),
   stacker: ICON('M2 17 12 22 22 17M2 12 12 17 22 12M12 2 12 22M12 2 2 7l10 5 10-5-10-5z'),
   iwanna: ICON('M5 12h14M12 5v14'),
+  iceberg: ICON('M12 2v5m0 10v5M2 12h5m10 0h5M12 12 8.1 8.1m7.8 7.8L12 12m0 0 3.9-3.9M8.1 15.9 12 12'),
   aimlab: ICON('M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zm0 4a6 6 0 1 0 0 12 6 6 0 1 0 0-12zm0 4a2 2 0 1 0 0 4 2 2 0 1 0 0-4'),
   texashold: ICON('M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'),
   connectfour: ICON('M12 20V10m6 10V4M6 20v-4'),

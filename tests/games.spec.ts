@@ -33,6 +33,16 @@ import {
   parkingRouteIsClear,
 } from '../src/games/parking';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
+import {
+  ICEBERG_MAP,
+  MAP_COLS,
+  MAP_ROWS,
+  PICKUP_SPOTS,
+  PLAYER_START,
+  SPAWN_POINTS,
+  isSolidTile,
+  isWalkable,
+} from '../src/games/icebergMap';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -147,6 +157,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
 
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
+  { id: 'iceberg', keys: ['w', 'a', 's', 'd', 'r', '1', '2', ' '], delayMs: 2000 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
@@ -177,11 +188,11 @@ const ALL_GAME_IDS = [
 test.describe('Game rules', () => {
   test('published game catalog matches source and README', () => {
     const ids = GAMES.map((g) => g.id);
-    expect(ids).toHaveLength(25);
+    expect(ids).toHaveLength(26);
     expect(new Set(ids).size).toBe(ids.length);
 
     const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
-    expect(readme).toContain('Carrick Games currently ships 25 playable games');
+    expect(readme).toContain('Carrick Games currently ships 26 playable games');
     const readmeNames = [...readme.matchAll(/^\| ([^|]+?) \| [^|]+? \| (?:Casual|Action|Puzzle|Board & Card) \|$/gm)]
       .map((match) => match[1]);
     expect(readmeNames).toHaveLength(ids.length);
@@ -246,6 +257,7 @@ test.describe('Game rules', () => {
       'flappybird.ts',
       'galaga.ts',
       'game2048.ts',
+      'iceberg.ts',
       'iwanna.ts',
       'minesweeper.ts',
       'parking.ts',
@@ -494,6 +506,54 @@ test.describe('Game rules', () => {
     expect(badRoutes).toEqual([]);
   });
 
+  test('iceberg map is a closed, connected battleground', () => {
+    expect(ICEBERG_MAP).toHaveLength(MAP_ROWS);
+    for (const row of ICEBERG_MAP) {
+      expect(row).toHaveLength(MAP_COLS);
+    }
+
+    // solid outer border
+    for (let c = 0; c < MAP_COLS; c++) {
+      expect(isSolidTile(c, 0)).toBe(true);
+      expect(isSolidTile(c, MAP_ROWS - 1)).toBe(true);
+    }
+    for (let r = 0; r < MAP_ROWS; r++) {
+      expect(isSolidTile(0, r)).toBe(true);
+      expect(isSolidTile(MAP_COLS - 1, r)).toBe(true);
+    }
+
+    // start, spawns, and pickups sit on walkable tiles
+    expect(isWalkable(Math.floor(PLAYER_START.x), Math.floor(PLAYER_START.y))).toBe(true);
+    expect(SPAWN_POINTS.length).toBeGreaterThanOrEqual(6);
+    for (const point of SPAWN_POINTS) {
+      expect(isWalkable(Math.floor(point.x), Math.floor(point.y))).toBe(true);
+    }
+    expect(PICKUP_SPOTS.length).toBeGreaterThanOrEqual(4);
+    for (const spot of PICKUP_SPOTS) {
+      expect(isWalkable(Math.floor(spot.x), Math.floor(spot.y))).toBe(true);
+    }
+
+    // every spawn point is reachable from the player start (BFS)
+    const startKey = `${Math.floor(PLAYER_START.x)},${Math.floor(PLAYER_START.y)}`;
+    const seen = new Set<string>([startKey]);
+    const queue: [number, number][] = [[Math.floor(PLAYER_START.x), Math.floor(PLAYER_START.y)]];
+    while (queue.length > 0) {
+      const [c, r] = queue.shift() as [number, number];
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nc = c + dc;
+        const nr = r + dr;
+        const key = `${nc},${nr}`;
+        if (nc < 0 || nr < 0 || nc >= MAP_COLS || nr >= MAP_ROWS) continue;
+        if (seen.has(key) || isSolidTile(nc, nr)) continue;
+        seen.add(key);
+        queue.push([nc, nr]);
+      }
+    }
+    for (const point of SPAWN_POINTS) {
+      expect(seen.has(`${Math.floor(point.x)},${Math.floor(point.y)}`)).toBe(true);
+    }
+  });
+
   test('chess legal moves preserve king safety and castling rules', async ({ page }) => {
     await page.goto('/#/chess');
     await expect(page.locator('#actionBtn')).toBeEnabled();
@@ -719,7 +779,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(gameItems.first()).toBeVisible();
     expect(await gameItems.count()).toBeGreaterThan(0);
     await expect(page.locator('.game-list-group-label')).toHaveText(['休闲', '动作', '益智', '棋牌']);
-    await expect(page.locator('#librarySummary')).toHaveText('25 款游戏 · 4 个分类');
+    await expect(page.locator('#librarySummary')).toHaveText('26 款游戏 · 4 个分类');
 
     const firstNameFontSize = await gameItems.first().locator('.game-list-name').evaluate((el) =>
       parseFloat(window.getComputedStyle(el).fontSize)
@@ -756,17 +816,17 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('category filters expose counts and narrow the visible library', async ({ page }) => {
     const filters = page.locator('.category-chip');
     await expect(filters).toHaveCount(5);
-    await expect(filters.locator('.category-chip-count')).toHaveText(['25', '8', '5', '7', '5']);
+    await expect(filters.locator('.category-chip-count')).toHaveText(['26', '8', '6', '7', '5']);
 
     await page.locator('.category-chip[data-group="action"]').click();
     await expect(page.locator('.category-chip[data-group="action"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.game-list-group-label')).toHaveText(['动作']);
-    await expect(page.locator('.game-list-item')).toHaveCount(5);
+    await expect(page.locator('.game-list-item')).toHaveCount(6);
     await expect(page.locator('.game-list-item[data-id="iwanna"]')).toBeVisible();
     await expect(page.locator('.game-list-item[data-id="snake"]')).toHaveCount(0);
 
     await page.locator('.category-chip[data-group="all"]').click();
-    await expect(page.locator('.game-list-item')).toHaveCount(25);
+    await expect(page.locator('.game-list-item')).toHaveCount(26);
     await expect(page.locator('#selectedGameLabel')).toHaveText('休闲 / 停车');
   });
 
@@ -941,7 +1001,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('all 25 games are registered in the list', async ({ page }) => {
+  test('all 26 games are registered in the list', async ({ page }) => {
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await expect(item).toBeVisible();

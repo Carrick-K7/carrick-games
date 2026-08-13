@@ -550,6 +550,43 @@ export const GAMES: GameMeta[] = [
       ],
     },
   },
+  {
+    id: 'iceberg',
+    group: 'action', order: 7.5, icon: 'iceberg', // heads the Action family
+    name: 'Iceberg Strike',
+    nameZh: '冰封突袭',
+    desc: 'CS-style wave FPS on the frozen Iceberg map. Hold the line with rifle and pistol against waves of soldiers.',
+    descZh: '类 CS 的波次 FPS,战场是冰封的 Iceberg 地图。用步枪与手枪坚守阵地,击退一波波士兵。',
+    loader: () => import('./iceberg.js').then((m) => m.IcebergGame),
+    canvasSize: { width: 960, height: 540 },
+    controls: {
+      keyboard: [
+        { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+        { keys: ['↑', '←', '↓', '→'], action: 'Move', actionZh: '移动' },
+        { keys: ['Mouse'], action: 'Look / Fire', actionZh: '瞄准 / 射击' },
+        { keys: ['Space'], action: 'Fire', actionZh: '射击' },
+        { keys: ['Shift'], action: 'Sprint', actionZh: '冲刺' },
+        { keys: ['R'], action: 'Reload', actionZh: '换弹' },
+        { keys: ['1', '2'], action: 'Rifle / Pistol', actionZh: '步枪 / 手枪' },
+        { keys: ['P'], action: 'Pause', actionZh: '暂停' },
+        { keys: ['M'], action: 'Mute', actionZh: '静音' },
+      ],
+      keyboardPanel: [
+        { label: 'W', key: 'w', aliases: ['ArrowUp'] },
+        { label: 'A', key: 'a', aliases: ['ArrowLeft'] },
+        { label: 'S', key: 's', aliases: ['ArrowDown'] },
+        { label: 'D', key: 'd', aliases: ['ArrowRight'] },
+        { label: 'R', key: 'r' },
+        { label: '1', key: '1' },
+        { label: '2', key: '2' },
+        { label: 'P', key: 'p' },
+      ],
+      touch: [
+        { icon: 'swipe', action: 'Left side: move, right side: aim', actionZh: '左侧移动,右侧转向' },
+        { icon: 'tap', action: 'Tap fire / reload buttons', actionZh: '点击开火 / 换弹按钮' },
+      ],
+    },
+  },
 ];
 
 export interface GameGroup {

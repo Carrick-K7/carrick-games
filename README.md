@@ -8,7 +8,7 @@ Current release line: `0.1.x`.
 
 ## Games
 
-Carrick Games currently ships 25 playable games:
+Carrick Games currently ships 26 playable games:
 
 | Game | Chinese | Type |
 |------|---------|------|
@@ -20,6 +20,7 @@ Carrick Games currently ships 25 playable games:
 | Breakout | 打砖块 | Casual |
 | Pong | 乒乓 | Casual |
 | Stacker | 堆叠方块 | Casual |
+| Iceberg Strike | 冰封突袭 | Action |
 | I Wanna | I Wanna | Action |
 | Space Shooter | 太空射击 | Action |
 | Galaga | 大战役 | Action |
