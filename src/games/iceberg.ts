@@ -66,6 +66,8 @@ interface Enemy {
   walkPhase: number;
   hitFlash: number;
   shootTimer: number;
+  burstLeft: number;
+  burstT: number;
   strafeT: number;
   strafeDir: number;
   repathT: number;
@@ -73,6 +75,8 @@ interface Enemy {
   pathI: number;
   targetX: number;
   targetY: number;
+  offX: number;
+  offY: number;
   lostT: number;
   variant: number;
   flashT: number;
@@ -206,11 +210,11 @@ function makeSoldierCanvas(draw: (c: CanvasRenderingContext2D) => void): HTMLCan
 }
 
 function drawSoldierBody(c: CanvasRenderingContext2D, variant: number, frame: string) {
-  const jacket = variant === 0 ? '#c3ccd4' : '#93a7bc';
-  const jacketDark = variant === 0 ? '#9fb0bf' : '#74889e';
-  const pants = '#57677a';
-  const boots = '#333a44';
-  const helmet = '#46546b';
+  const jacket = variant === 0 ? '#5d7185' : '#4e6378';
+  const jacketDark = variant === 0 ? '#48596c' : '#3c4d60';
+  const pants = '#44566b';
+  const boots = '#2c333d';
+  const helmet = '#36455c';
   const skin = '#e8b98a';
 
   // soft ground shadow
@@ -290,17 +294,17 @@ function getSoldierFrames(): SoldierFrames {
       c.beginPath();
       c.ellipse(32, 56, 30, 9, 0, 0, Math.PI * 2);
       c.fill();
-      c.fillStyle = '#c3ccd4';
+      c.fillStyle = '#5d7185';
       c.fillRect(8, 42, 40, 22);
-      c.fillStyle = '#9fb0bf';
+      c.fillStyle = '#48596c';
       c.fillRect(8, 54, 40, 6);
       c.fillStyle = '#e8b98a';
       c.fillRect(6, 44, 12, 12);
-      c.fillStyle = '#46546b';
+      c.fillStyle = '#36455c';
       c.fillRect(4, 42, 12, 8);
-      c.fillStyle = '#57677a';
+      c.fillStyle = '#44566b';
       c.fillRect(46, 44, 14, 18);
-      c.fillStyle = '#333a44';
+      c.fillStyle = '#2c333d';
       c.fillRect(56, 42, 6, 20);
       c.fillStyle = '#2b3038';
       c.fillRect(2, 58, 26, 5);
@@ -551,7 +555,7 @@ export class IcebergGame extends BaseGame {
   private kills = 0;
   private wave = 0;
   private waveState: 'intermission' | 'active' = 'intermission';
-  private waveTimer = 1.6;
+  private waveTimer = 5;
   private bannerKey: string | null = null;
   private bannerT = 0;
   private enemies: Enemy[] = [];
@@ -600,7 +604,7 @@ export class IcebergGame extends BaseGame {
       {
         name: 'RIFLE',
         nameZh: '突击步枪',
-        dmg: 14,
+        dmg: 16,
         rate: 0.105,
         magSize: 30,
         mag: 30,
@@ -614,7 +618,7 @@ export class IcebergGame extends BaseGame {
       {
         name: 'PISTOL',
         nameZh: '手枪',
-        dmg: 22,
+        dmg: 26,
         rate: 0.26,
         magSize: 12,
         mag: 12,
@@ -649,9 +653,9 @@ export class IcebergGame extends BaseGame {
     this.kills = 0;
     this.wave = 0;
     this.waveState = 'intermission';
-    this.waveTimer = 1.6;
+    this.waveTimer = 5;
     this.bannerKey = 'getReady';
-    this.bannerT = 2.4;
+    this.bannerT = 5;
     this.enemies = [];
     this.tracers = [];
     this.particles = [];
@@ -744,20 +748,25 @@ export class IcebergGame extends BaseGame {
       }
       if (this.paused) return;
       if (e.type === 'mousedown' && e.button === 0) {
+        const locked = document.pointerLockElement === this.canvas;
         this.lookDrag = { lastX: e.clientX, lastY: e.clientY, moved: 0 };
-        if (document.pointerLockElement !== this.canvas) {
+        if (!locked) {
           try {
             this.canvas.requestPointerLock();
           } catch {
             // pointer lock unavailable — drag-to-look fallback still works
           }
         }
-        this.firing = true;
-        this.triggerPulse = !this.weapon().auto;
+        if (locked) {
+          // already aiming with the mouse: the click itself fires
+          this.firing = true;
+          this.triggerPulse = !this.weapon().auto;
+        }
       } else if (e.type === 'mouseup' && e.button === 0) {
         const drag = this.lookDrag;
         this.lookDrag = null;
-        if (document.pointerLockElement !== this.canvas && drag && drag.moved < 6 && this.triggerPulse) {
+        if (document.pointerLockElement !== this.canvas && drag && drag.moved < 6) {
+          // no pointer lock: a clean click fires a single shot
           this.triggerPulse = false;
           this.tryFire();
         }
@@ -998,32 +1007,42 @@ export class IcebergGame extends BaseGame {
     this.bannerKey = 'wave';
     this.bannerT = 2.2;
     const count = Math.min(2 + this.wave, 9);
-    const ordered = SPAWN_POINTS
+    const byDistance = SPAWN_POINTS
       .slice()
       .sort((a, b) => {
         const da = Math.hypot(a.x - this.px, a.y - this.py);
         const db = Math.hypot(b.x - this.px, b.y - this.py);
         return da - db;
-      })
-      .filter((p) => Math.hypot(p.x - this.px, p.y - this.py) >= 5);
+      });
+    // Wave 1 gives the player breathing room: spawn from mid-far points only.
+    const pool =
+      this.wave === 1
+        ? byDistance.filter((p) => {
+            const d = Math.hypot(p.x - this.px, p.y - this.py);
+            return d >= 7.5 && d <= 14;
+          })
+        : byDistance.filter((p) => Math.hypot(p.x - this.px, p.y - this.py) >= 5);
+    const spawnSpeed = this.wave === 1 ? 2.1 : 2.6;
     for (let i = 0; i < count; i++) {
-      const spot = ordered[i % ordered.length];
-      this.enemies.push(this.makeEnemy(spot.x, spot.y, i * 0.35));
+      const spot = pool[i % Math.max(1, pool.length)];
+      this.enemies.push(this.makeEnemy(spot.x, spot.y, i * 0.35, spawnSpeed));
     }
     this.sfx.wave();
   }
 
-  private makeEnemy(x: number, y: number, spawnT: number): Enemy {
+  private makeEnemy(x: number, y: number, spawnT: number, speed: number): Enemy {
     return {
       x,
       y,
       hp: 100,
       state: 'chase',
       dir: Math.random() * Math.PI * 2,
-      speed: 2.8,
+      speed,
       walkPhase: Math.random() * 10,
       hitFlash: 0,
       shootTimer: 0.8 + Math.random() * 1.4,
+      burstLeft: 0,
+      burstT: 0,
       strafeT: Math.random() * 2,
       strafeDir: Math.random() < 0.5 ? -1 : 1,
       repathT: 0,
@@ -1031,6 +1050,8 @@ export class IcebergGame extends BaseGame {
       pathI: 0,
       targetX: x,
       targetY: y,
+      offX: (Math.random() - 0.5) * 2.8,
+      offY: (Math.random() - 0.5) * 2.8,
       lostT: 0,
       variant: Math.random() < 0.5 ? 0 : 1,
       flashT: 0,
@@ -1094,11 +1115,11 @@ export class IcebergGame extends BaseGame {
       en.repathT -= dt;
       if (en.repathT <= 0) {
         en.repathT = 0.4;
-        en.path = this.findPath(en.x, en.y, this.px, this.py);
+        en.path = this.findPath(en.x, en.y, this.px + en.offX, this.py + en.offY);
         en.pathI = 0;
       }
-      if (dist > 4 && en.path && en.pathI < en.path.length) {
-        this.followPath(en, dt, 1.6);
+      if (dist > 6.5 && en.path && en.pathI < en.path.length) {
+        this.followPath(en, dt, 1.5);
       } else {
         // strafe sideways only when it keeps line of sight
         const strafeDx = Math.sin(en.dir) * en.strafeDir * 0.3;
@@ -1108,10 +1129,21 @@ export class IcebergGame extends BaseGame {
         }
       }
 
+      // burst fire: short controlled bursts with a clear pause between them
       en.shootTimer -= dt;
       if (en.shootTimer <= 0 && dist < 13) {
-        en.shootTimer = 0.65 + Math.random() * 0.3;
-        this.enemyShoot(en, dist);
+        en.burstLeft = this.wave <= 2 ? 2 : 3;
+        en.burstT = 0;
+        en.shootTimer = 999;
+      }
+      if (en.burstLeft > 0) {
+        en.burstT -= dt;
+        if (en.burstT <= 0) {
+          en.burstLeft--;
+          en.burstT = 0.18;
+          this.enemyShoot(en, dist);
+          if (en.burstLeft <= 0) en.shootTimer = 1.3 + Math.random() * 0.7;
+        }
       }
     } else if (en.state === 'chase') {
       en.repathT -= dt;
@@ -1230,7 +1262,7 @@ export class IcebergGame extends BaseGame {
 
   private enemyShoot(en: Enemy, dist: number) {
     en.flashT = 0.09;
-    const spread = 0.035 + dist * 0.005;
+    const spread = 0.05 + dist * 0.006;
     const ang = Math.atan2(this.py - en.y, this.px - en.x) + (Math.random() - 0.5) * 2 * spread;
     const dirX = Math.cos(ang);
     const dirY = Math.sin(ang);
@@ -1241,7 +1273,7 @@ export class IcebergGame extends BaseGame {
     const wall = castRay(en.x, en.y, dirX, dirY, dist + 0.4);
     if (t > 0 && perp < 0.3 && wall.dist >= dist - 0.2) {
       const falloff = 1 - 0.25 * (dist / 13);
-      const dmg = Math.round((12 + Math.random() * 7) * falloff);
+      const dmg = Math.round((8 + Math.random() * 5) * falloff);
       this.hurtPlayer(dmg, en.x, en.y);
     }
     this.sfx.enemyShot();
@@ -1759,6 +1791,21 @@ export class IcebergGame extends BaseGame {
       ctx.font = `12px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.8)';
       ctx.fillText(zh ? `敌军 ${alive}` : `HOSTILES ${alive}`, W / 2, 96);
+    }
+
+    // opening controls hint — fades out once the fight gets going
+    if (this.wave <= 1 && this.bannerT > 0 && !this.paused) {
+      const hint =
+        zh
+          ? 'WASD 移动 · 鼠标瞄准 · 左键/空格射击 · R 换弹 · 1/2 切换武器'
+          : 'WASD MOVE · MOUSE AIM · CLICK/SPACE FIRE · R RELOAD · 1/2 WEAPONS';
+      ctx.font = `14px ${font}`;
+      const width = ctx.measureText(hint).width;
+      ctx.fillStyle = `rgba(8,16,30,${Math.min(0.62, this.bannerT * 0.35)})`;
+      ctx.fillRect(W / 2 - width / 2 - 14, H - 96, width + 28, 30);
+      ctx.fillStyle = `rgba(241,245,249,${Math.min(0.95, this.bannerT)})`;
+      ctx.textAlign = 'center';
+      ctx.fillText(hint, W / 2, H - 80);
     }
 
     // minimap

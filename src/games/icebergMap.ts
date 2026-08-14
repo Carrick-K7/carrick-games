@@ -14,7 +14,7 @@ export const ICEBERG_MAP: string[] = [
   '#..........#...........#',
   '#..K...C....#....K.....#',
   '#....S......#.....S....#',
-  '#P..K.......#....C.....#',
+  '#P........K.#....C.....#',
   '#..........H...........#',
   '#..CA..S...........K.H.#',
   '#.......#........#.....#',
@@ -78,7 +78,7 @@ function scanPositions(match: (ch: string) => string | null): MapPoint[] {
 
 export const PLAYER_START: MapPoint & { angle: number } = (() => {
   const found = scanPositions((ch) => (ch === 'P' ? 'P' : null));
-  return { ...(found[0] ?? { x: 2.5, y: 4.5 }), angle: 0.35 };
+  return { ...(found[0] ?? { x: 2.5, y: 4.5 }), angle: 0.45 };
 })();
 
 export const SPAWN_POINTS: MapPoint[] = scanPositions((ch) =>

@@ -268,7 +268,7 @@ async function suicideSolitaire(page: Page) {
 
 async function suicideIceberg(page: Page) {
   // Stand still in the open: wave one rushes in and shoots you down.
-  await page.waitForTimeout(14000);
+  await page.waitForTimeout(17000);
 }
 
 async function suicideTexashold(page: Page) {
@@ -300,7 +300,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
-  { id: 'iceberg', suicide: suicideIceberg, timeout: 25000, expectScore: true },
+  { id: 'iceberg', suicide: suicideIceberg, timeout: 30000, expectScore: true },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
