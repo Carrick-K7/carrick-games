@@ -673,15 +673,37 @@ export class IcebergGame extends BaseGame {
     this.reloadTouch = null;
     this.resetScoreReport();
     this.hudStateCache = '';
+    if (!this.boundBlur) {
+      this.boundBlur = () => this.clearTransientInput();
+      window.addEventListener('blur', this.boundBlur);
+      this.registerCleanup(() => {
+        if (this.boundBlur) window.removeEventListener('blur', this.boundBlur);
+        this.boundBlur = null;
+      });
+    }
     this.syncDebugState();
   }
+
+  private clearTransientInput() {
+    this.keys.clear();
+    this.firing = false;
+    this.triggerPulse = false;
+    this.lookDrag = null;
+    this.moveTouch = null;
+    this.lookTouch = null;
+    this.fireTouch = null;
+    this.reloadTouch = null;
+  }
+
+  private boundBlur: (() => void) | null = null;
 
   private syncDebugState() {
     const alive = this.enemies.filter((e) => !e.dead).length;
     const key = `${this.wave},${alive},${this.kills},${this.hp},${this.gameOver ? 1 : 0}`;
-    if (key === this.hudStateCache) return;
-    this.hudStateCache = key;
-    this.canvas.dataset.icebergState = key;
+    if (key !== this.hudStateCache) {
+      this.hudStateCache = key;
+      this.canvas.dataset.icebergState = key;
+    }
   }
 
   destroy() {
@@ -710,6 +732,7 @@ export class IcebergGame extends BaseGame {
         const key = e.key;
         if (key === 'p' || key === 'P') {
           this.paused = !this.paused;
+          if (this.paused) this.clearTransientInput();
           return;
         }
         if (key === 'm' || key === 'M') {
@@ -720,6 +743,7 @@ export class IcebergGame extends BaseGame {
         if (key === 'Escape') {
           if (document.pointerLockElement !== this.canvas) {
             this.paused = true;
+            this.clearTransientInput();
           }
           return;
         }
@@ -864,6 +888,7 @@ export class IcebergGame extends BaseGame {
     }
     this.reloading = true;
     this.reloadT = w.reload;
+    this.triggerPulse = false;
     this.sfx.reload();
   }
 
@@ -1022,9 +1047,10 @@ export class IcebergGame extends BaseGame {
             return d >= 7.5 && d <= 14;
           })
         : byDistance.filter((p) => Math.hypot(p.x - this.px, p.y - this.py) >= 5);
+    const spawnPool = pool.length > 0 ? pool : byDistance;
     const spawnSpeed = this.wave === 1 ? 2.1 : 2.6;
     for (let i = 0; i < count; i++) {
-      const spot = pool[i % Math.max(1, pool.length)];
+      const spot = spawnPool[i % Math.max(1, spawnPool.length)];
       this.enemies.push(this.makeEnemy(spot.x, spot.y, i * 0.35, spawnSpeed));
     }
     this.sfx.wave();
@@ -1256,6 +1282,15 @@ export class IcebergGame extends BaseGame {
         en.x += (ddx / d) * push * dt * 4;
         en.y += (ddy / d) * push * dt * 4;
       }
+    }
+    // never overlap the player
+    const pdx = en.x - this.px;
+    const pdy = en.y - this.py;
+    const pd = Math.hypot(pdx, pdy);
+    if (pd > 0.001 && pd < 0.7) {
+      const push = ((0.7 - pd) / 0.7) * 0.5;
+      en.x += (pdx / pd) * push * dt * 4;
+      en.y += (pdy / pd) * push * dt * 4;
     }
     if (moved) en.walkPhase += speed * dt * 2.6;
   }
@@ -1557,19 +1592,20 @@ export class IcebergGame extends BaseGame {
       tex: HTMLCanvasElement;
       width: number;
       height: number;
+      scale: number;
       ground: boolean;
       flash?: boolean;
     }
     const sprites: SpriteItem[] = [];
     for (const p of this.pickups) {
       const tex = getPickupSprite(p.kind);
-      sprites.push({ depth: 0, x: p.x, y: p.y - 0.35 + Math.sin(p.t * 2.4) * 0.08, tex, width: 40, height: 40, ground: false });
+      sprites.push({ depth: 0, x: p.x, y: p.y - 0.35 + Math.sin(p.t * 2.4) * 0.08, tex, width: 40, height: 40, scale: 0.55, ground: false });
     }
     const soldier = getSoldierFrames();
     for (const en of this.enemies) {
       if (en.spawnT > 0) continue;
       if (en.dead) {
-        sprites.push({ depth: 0, x: en.x, y: en.y, tex: soldier.dead, width: 64, height: 96, ground: true });
+        sprites.push({ depth: 0, x: en.x, y: en.y, tex: soldier.dead, width: 64, height: 96, scale: 1, ground: true });
         continue;
       }
       let frame: HTMLCanvasElement;
@@ -1581,7 +1617,7 @@ export class IcebergGame extends BaseGame {
         const step = Math.floor(en.walkPhase) % 2;
         frame = soldier.frames[step === 0 ? 1 : 2];
       }
-      sprites.push({ depth: 0, x: en.x, y: en.y - 0.45, tex: frame, width: 64, height: 96, ground: false, flash: en.flashT > 0 });
+      sprites.push({ depth: 0, x: en.x, y: en.y - 0.45, tex: frame, width: 64, height: 96, scale: 1, ground: false, flash: en.flashT > 0 });
     }
 
     for (const sp of sprites) {
@@ -1603,7 +1639,7 @@ export class IcebergGame extends BaseGame {
       const ty = invDet * (-planeY * dx + planeX * dy);
       if (ty <= 0.06) continue;
       const screenX = Math.floor((rw / 2) * (1 + tx / ty));
-      const spriteH = Math.max(2, rh / ty);
+      const spriteH = Math.max(2, (rh / ty) * sp.scale);
       const aspect = sp.tex.width / sp.tex.height;
       const spriteW = spriteH * aspect;
       const drawStartY = Math.floor(rh / 2 - spriteH / 2 + (sp.ground ? spriteH / 2 : 0));
