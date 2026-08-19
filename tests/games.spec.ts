@@ -34,12 +34,13 @@ import {
 } from '../src/games/parking';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
 import {
+  BOMB_SITES,
   ICEBERG_MAP,
   MAP_COLS,
   MAP_ROWS,
-  PICKUP_SPOTS,
   PLAYER_START,
-  SPAWN_POINTS,
+  T_SPAWN_POINTS,
+  findMapPath,
   isSolidTile,
   isWalkable,
 } from '../src/games/icebergMap';
@@ -157,7 +158,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
 
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'iceberg', keys: ['w', 'a', 's', 'd', 'r', '1', '2', ' '], delayMs: 2000 },
+  { id: 'iceberg', keys: ['w', 'a', 's', 'd', 'r', 'e', '1', '2', '3', '4', '5', '6', ' '], delayMs: 2500 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
@@ -522,35 +523,19 @@ test.describe('Game rules', () => {
       expect(isSolidTile(MAP_COLS - 1, r)).toBe(true);
     }
 
-    // start, spawns, and pickups sit on walkable tiles
+    // CT start, T spawns, and bomb sites sit on walkable tiles
     expect(isWalkable(Math.floor(PLAYER_START.x), Math.floor(PLAYER_START.y))).toBe(true);
-    expect(SPAWN_POINTS.length).toBeGreaterThanOrEqual(6);
-    for (const point of SPAWN_POINTS) {
+    expect(T_SPAWN_POINTS.length).toBeGreaterThanOrEqual(6);
+    for (const point of T_SPAWN_POINTS) {
       expect(isWalkable(Math.floor(point.x), Math.floor(point.y))).toBe(true);
     }
-    expect(PICKUP_SPOTS.length).toBeGreaterThanOrEqual(4);
-    for (const spot of PICKUP_SPOTS) {
-      expect(isWalkable(Math.floor(spot.x), Math.floor(spot.y))).toBe(true);
-    }
-
-    // every spawn point is reachable from the player start (BFS)
-    const startKey = `${Math.floor(PLAYER_START.x)},${Math.floor(PLAYER_START.y)}`;
-    const seen = new Set<string>([startKey]);
-    const queue: [number, number][] = [[Math.floor(PLAYER_START.x), Math.floor(PLAYER_START.y)]];
-    while (queue.length > 0) {
-      const [c, r] = queue.shift() as [number, number];
-      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nc = c + dc;
-        const nr = r + dr;
-        const key = `${nc},${nr}`;
-        if (nc < 0 || nr < 0 || nc >= MAP_COLS || nr >= MAP_ROWS) continue;
-        if (seen.has(key) || isSolidTile(nc, nr)) continue;
-        seen.add(key);
-        queue.push([nc, nr]);
+    expect(BOMB_SITES).toHaveLength(2);
+    for (const site of BOMB_SITES) {
+      expect(isWalkable(Math.floor(site.x), Math.floor(site.y))).toBe(true);
+      expect(findMapPath(PLAYER_START.x, PLAYER_START.y, site.x, site.y)).not.toBeNull();
+      for (const point of T_SPAWN_POINTS) {
+        expect(findMapPath(point.x, point.y, site.x, site.y)).not.toBeNull();
       }
-    }
-    for (const point of SPAWN_POINTS) {
-      expect(seen.has(`${Math.floor(point.x)},${Math.floor(point.y)}`)).toBe(true);
     }
   });
 
