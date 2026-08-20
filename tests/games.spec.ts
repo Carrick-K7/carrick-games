@@ -34,16 +34,20 @@ import {
 } from '../src/games/parking';
 import { calculateSudokuScore } from '../src/games/sudokuScore';
 import {
-  BOMB_SITES,
+  BUY_ZONE,
+  CT_SPAWNS,
   ICEBERG_MAP,
   MAP_COLS,
   MAP_ROWS,
-  PLAYER_START,
-  T_SPAWN_POINTS,
+  NADE_PICKUPS,
+  T_SPAWNS,
+  TILE,
   findMapPath,
+  inBuyZone,
   isSolidTile,
   isWalkable,
-} from '../src/games/icebergMap';
+} from '../src/games/counterstrikeMap';
+import { WEAPONS } from '../src/games/counterstrikeRules';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -158,7 +162,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
 
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'iceberg', keys: ['w', 'a', 's', 'd', 'r', 'e', '1', '2', '3', '4', '5', '6', ' '], delayMs: 2500 },
+  { id: 'counterstrike', keys: ['w', 'a', 's', 'd', 'r', 'b', 'q', '1', '2', '3', '4', 'g', ' '], delayMs: 2500 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
@@ -258,7 +262,7 @@ test.describe('Game rules', () => {
       'flappybird.ts',
       'galaga.ts',
       'game2048.ts',
-      'iceberg.ts',
+      'counterstrike.ts',
       'iwanna.ts',
       'minesweeper.ts',
       'parking.ts',
@@ -507,7 +511,7 @@ test.describe('Game rules', () => {
     expect(badRoutes).toEqual([]);
   });
 
-  test('iceberg map is a closed, connected battleground', () => {
+  test('fy_iceworld is a closed, connected four-room arena', () => {
     expect(ICEBERG_MAP).toHaveLength(MAP_ROWS);
     for (const row of ICEBERG_MAP) {
       expect(row).toHaveLength(MAP_COLS);
@@ -523,18 +527,37 @@ test.describe('Game rules', () => {
       expect(isSolidTile(MAP_COLS - 1, r)).toBe(true);
     }
 
-    // CT start, T spawns, and bomb sites sit on walkable tiles
-    expect(isWalkable(Math.floor(PLAYER_START.x), Math.floor(PLAYER_START.y))).toBe(true);
-    expect(T_SPAWN_POINTS.length).toBeGreaterThanOrEqual(6);
-    for (const point of T_SPAWN_POINTS) {
-      expect(isWalkable(Math.floor(point.x), Math.floor(point.y))).toBe(true);
+    // the center 2x2 cross is open and is the buyzone
+    for (let c = BUY_ZONE.col; c < BUY_ZONE.col + BUY_ZONE.cols; c++) {
+      for (let r = BUY_ZONE.row; r < BUY_ZONE.row + BUY_ZONE.rows; r++) {
+        expect(isWalkable(c, r)).toBe(true);
+      }
     }
-    expect(BOMB_SITES).toHaveLength(2);
-    for (const site of BOMB_SITES) {
-      expect(isWalkable(Math.floor(site.x), Math.floor(site.y))).toBe(true);
-      expect(findMapPath(PLAYER_START.x, PLAYER_START.y, site.x, site.y)).not.toBeNull();
-      for (const point of T_SPAWN_POINTS) {
-        expect(findMapPath(point.x, point.y, site.x, site.y)).not.toBeNull();
+    const center = { x: (BUY_ZONE.col + 0.5) * TILE, y: (BUY_ZONE.row + 0.5) * TILE };
+    expect(inBuyZone(center.x, center.y)).toBe(true);
+
+    // CT spawns sit on the blue (left) half, T spawns on the red (right) half,
+    // and every spawn has a valid weapon underneath it.
+    expect(CT_SPAWNS.length).toBeGreaterThanOrEqual(6);
+    expect(T_SPAWNS.length).toBeGreaterThanOrEqual(6);
+    for (const point of CT_SPAWNS) {
+      expect(point.x).toBeLessThan(MAP_COLS * TILE * 0.5);
+      expect(isWalkable(Math.floor(point.x / TILE), Math.floor(point.y / TILE))).toBe(true);
+      expect(WEAPONS[point.weapon]).toBeTruthy();
+    }
+    for (const point of T_SPAWNS) {
+      expect(point.x).toBeGreaterThan(MAP_COLS * TILE * 0.5);
+      expect(isWalkable(Math.floor(point.x / TILE), Math.floor(point.y / TILE))).toBe(true);
+      expect(WEAPONS[point.weapon]).toBeTruthy();
+    }
+    for (const pickup of NADE_PICKUPS) {
+      expect(isWalkable(Math.floor(pickup.x / TILE), Math.floor(pickup.y / TILE))).toBe(true);
+    }
+
+    // the map is fully connected: every CT spawn reaches every T spawn
+    for (const ct of CT_SPAWNS) {
+      for (const t of T_SPAWNS) {
+        expect(findMapPath(ct.x, ct.y, t.x, t.y)).not.toBeNull();
       }
     }
   });

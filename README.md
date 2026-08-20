@@ -20,7 +20,7 @@ Carrick Games currently ships 26 playable games:
 | Breakout | 打砖块 | Casual |
 | Pong | 乒乓 | Casual |
 | Stacker | 堆叠方块 | Casual |
-| Iceberg Strike | 冰封突袭 | Action |
+| Counter-Strike | 反恐精英 | Action |
 | I Wanna | I Wanna | Action |
 | Space Shooter | 太空射击 | Action |
 | Galaga | 大战役 | Action |

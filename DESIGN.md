@@ -194,7 +194,7 @@ Do not create large explanatory screens inside games. The app already renders co
 The 0.1.x release line includes 26 published games. The four primary families are intentionally broad and follow familiar App Store game-category language. Keep this list aligned with `src/games/catalog.ts` and `README.md`.
 
 - Casual: Parking, Lucky Case, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
-- Action: Iceberg Strike, I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
+- Action: Counter-Strike, I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
 - Puzzle: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku.
 - Board & Card: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
 

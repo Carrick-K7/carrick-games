@@ -266,13 +266,13 @@ async function suicideSolitaire(page: Page) {
   await page.waitForTimeout(2000);
 }
 
-async function suicideIceberg(page: Page) {
-  // Iceberg is objective-based now: standing still lets the T side execute,
-  // plant/defend the bomb, and close the short match.
+async function suicideCounterstrike(page: Page) {
+  // fy_iceworld is elimination-based: standing at spawn lets the T bots grab
+  // their spawn guns, win rounds, and close the first-to-3 match.
   await page.waitForFunction(
     () => document.getElementById('gameCanvas')?.dataset.gameResult != null,
     undefined,
-    { timeout: 70000 },
+    { timeout: 150000 },
   );
 }
 
@@ -305,7 +305,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
-  { id: 'iceberg', suicide: suicideIceberg, timeout: 80000, expectScore: true },
+  { id: 'counterstrike', suicide: suicideCounterstrike, timeout: 160000, expectScore: true },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
