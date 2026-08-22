@@ -97,10 +97,13 @@ export class GachaSfx {
     this.noise(0.3, 0.12, 4200, 'highpass', 0.05);
   }
 
-  /** Strip lands on the prize. */
+  /** Strip lands on the prize: heavy clunk with a trailing knock. */
   land() {
     this.tone(180, 0.14, 'sine', 0.4, 60);
     this.noise(0.1, 0.2, 700);
+    // Rear knock: the reel settles into its slot.
+    this.tone(140, 0.08, 'sine', 0.22, 55, 0.1);
+    this.noise(0.05, 0.12, 520, 'lowpass', 0.1);
   }
 
   /**

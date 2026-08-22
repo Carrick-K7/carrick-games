@@ -36,7 +36,7 @@ import {
   type GachaOpenMode,
 } from './gachaModes.js';
 
-type Screen = 'menu' | 'opening' | 'result' | 'gallery' | 'stats';
+type Screen = 'menu' | 'unlock' | 'opening' | 'result' | 'gallery' | 'stats';
 
 interface Particle {
   x: number;
@@ -50,6 +50,7 @@ interface Particle {
 }
 
 const RESULT_PARTICLES_TIERS = new Set(['classified', 'covert', 'rarespecial']);
+const UNLOCK_DURATION = 1.0; // seconds of case-unlock prelude before the reel
 
 export class GachaGame extends BaseGame {
   /**
@@ -71,6 +72,7 @@ export class GachaGame extends BaseGame {
   private notify = '';
   private notifyTimer = 0;
   private statsPage = 0;
+  private unlockT = 0;
   private startedOnce = false;
 
   constructor(host?: GameHost) {
@@ -88,6 +90,7 @@ export class GachaGame extends BaseGame {
     this.revealT = 0;
     this.particles = [];
     this.statsPage = 0;
+    this.unlockT = 0;
     this.isNewItem = false;
   }
 
@@ -106,7 +109,8 @@ export class GachaGame extends BaseGame {
 
   /* ─── Opening flow ─── */
 
-  private startOpening() {
+  /** Menu click on the case: roll, record, and play the unlock prelude. */
+  private startUnlock() {
     // Roll once per draw (both tier and item come from the same RNG).
     this.roll = rollGachaItem(this.random);
     const roll = this.roll;
@@ -122,11 +126,19 @@ export class GachaGame extends BaseGame {
     writeGachaStats(this.stats);
     this.isNewItem = !hadItem;
 
-    const ctx = this.buildModeContext(roll);
-    this.animMode = createOpeningMode(this.animModeIndex, ctx);
+    this.unlockT = 0;
+    this.screen = 'unlock';
+    this.canvas.dataset.gachaScreen = 'unlock';
+    this.canvas.dataset.gachaTier = roll.tier.id;
+    this.sfx.caseOpen();
+  }
+
+  /** Unlock prelude complete: build the reel mode and spin. */
+  private beginReel() {
+    if (!this.roll) return;
+    this.animMode = createOpeningMode(this.animModeIndex, this.buildModeContext(this.roll));
     this.screen = 'opening';
     this.canvas.dataset.gachaScreen = 'opening';
-    this.canvas.dataset.gachaTier = roll.tier.id;
   }
 
   private buildModeContext(roll: GachaRoll): GachaOpenContext {
@@ -201,6 +213,14 @@ export class GachaGame extends BaseGame {
       return;
     }
 
+    if (this.screen === 'unlock') {
+      this.unlockT += dt;
+      if (this.unlockT >= UNLOCK_DURATION) {
+        this.beginReel();
+      }
+      return;
+    }
+
     if (this.screen === 'opening' && this.animMode) {
       if (this.animMode.update(dt)) {
         this.finishOpening();
@@ -217,6 +237,7 @@ export class GachaGame extends BaseGame {
 
     switch (this.screen) {
       case 'menu': this.drawMenu(ctx, palette); break;
+      case 'unlock': this.drawUnlock(ctx); break;
       case 'opening': this.drawOpening(ctx); break;
       case 'result': this.drawResult(ctx); break;
       case 'gallery': this.drawGallery(ctx, palette); break;
@@ -248,6 +269,7 @@ export class GachaGame extends BaseGame {
 
   private drawMenu(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
     const zh = this.isZhLang();
+    const t = performance.now() / 1000;
 
     // Header
     fillRoundedPanel(ctx, 20, 10, this.width - 40, 36, palette, 10);
@@ -260,72 +282,60 @@ export class GachaGame extends BaseGame {
     ctx.fillStyle = palette.muted;
     ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const pullsText = zh ? `累计 ${this.stats.totalPulls} 抽` : `Pulls: ${this.stats.totalPulls}`;
-    ctx.fillText(pullsText, this.width - 148, 28);
+    ctx.fillText(pullsText, this.width - 196, 28);
+    this.drawTextButton(ctx, this.hitPrizes(), '🏛');
     this.drawTextButton(ctx, this.hitStats(), '📊');
     this.drawTextButton(ctx, this.hitSound(), this.sfx.enabled ? '🔊' : '🔇');
 
-    // Case visual
+    // Case — the whole point of the screen, centered and breathing.
     const cx = this.width / 2;
-    this.drawCase(ctx, cx, 142, 170, 120);
+    const caseW = 190;
+    const caseH = 128;
+    this.drawCase(ctx, cx, 196, caseW, caseH);
 
-    // Mode label / switcher
+    // Animated tap hint below the case.
+    const hintY = 300;
+    const pulse = 0.55 + 0.45 * Math.sin(t * 3);
+    const arrowBob = Math.sin(t * 2.4) * 4;
+    ctx.globalAlpha = pulse;
+    ctx.font = '700 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = palette.primary;
+    ctx.fillText(zh ? '点击箱子开箱' : 'Click the case to open', cx, hintY);
+    ctx.globalAlpha = 1;
+    ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = palette.primary;
+    ctx.fillText('▼', cx, hintY + 26 + arrowBob);
+
+    // Mode label / switcher (only when more than one animation exists)
     if (openingModeCount() > 1) {
       const label = openingModeLabel(this.animModeIndex);
       ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'center';
       ctx.fillStyle = palette.muted;
-      ctx.fillText(
-        zh ? `动画:${label.nameZh} ◂ ▸` : `Mode: ${label.name} ◂ ▸`,
-        cx, 218,
-      );
+      ctx.fillText(zh ? `动画:${label.nameZh} ◂ ▸` : `Mode: ${label.name} ◂ ▸`, cx, 348);
     }
 
-    // Tier legend (prize showcase entry)
-    this.drawTierLegend(ctx, palette, 20, 228, this.width - 40, 66);
+    // Compact tier odds strip (prize grading at a glance).
+    this.drawTierLegend(ctx, palette, 20, 372, this.width - 40, 56);
 
-    // OPEN button
-    const openBtn = this.hitOpen();
-    ctx.save();
-    const grad = ctx.createLinearGradient(0, openBtn.y, 0, openBtn.y + openBtn.h);
-    grad.addColorStop(0, '#39C5BB');
-    grad.addColorStop(1, '#0d9488');
-    ctx.fillStyle = grad;
-    roundRectPath(ctx, openBtn.x, openBtn.y, openBtn.w, openBtn.h, 10);
-    ctx.fill();
-    ctx.restore();
-    ctx.font = '700 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#062622';
-    ctx.textAlign = 'center';
-    ctx.fillText(zh ? '开箱 · 点击任意处' : 'OPEN · click anywhere', openBtn.x + openBtn.w / 2, openBtn.y + openBtn.h / 2 + 1);
-
-    // Side buttons
-    this.drawTextButton(ctx, this.hitGallery(), zh ? '🏛 全部奖品' : '🏛 PRIZES');
-    this.drawTextButton(ctx, this.hitStatsSmall(), zh ? '📈 统计' : '📈 STATS');
-
-    // Hints
+    // Key hints
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = palette.muted;
-    const blink = Math.sin(performance.now() / 400) > 0;
-    if (blink) {
-      ctx.fillText(
-        zh ? 'Space 开箱 · R 返回 · M 音效 · Shift+R 重置统计' : 'Space open · R menu · M sound · Shift+R reset stats',
-        this.width / 2, this.height - 14,
-      );
-    }
+    ctx.fillText(
+      zh ? 'R 返回 · M 音效 · Shift+R 重置统计' : 'R menu · M sound · Shift+R reset stats',
+      this.width / 2, this.height - 14,
+    );
   }
 
-  private drawCase(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number) {
+  /** Case with optional unlock motion: slight shake and a tilting lid. */
+  private drawCase(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, lidOpen = 0, shake = 0) {
     const hw = w / 2;
     const hh = h / 2;
-    const bob = Math.sin(performance.now() / 600) * 4;
+    const bob = Math.sin(performance.now() / 600) * 4 + shake;
 
     ctx.save();
-    ctx.translate(cx, cy + bob);
-
-    // Glow
-    ctx.shadowColor = 'rgba(57,197,187,0.6)';
-    ctx.shadowBlur = 30;
+    ctx.translate(cx + bob, cy);
 
     // Body
     const grad = ctx.createLinearGradient(0, -hh, 0, hh);
@@ -334,24 +344,45 @@ export class GachaGame extends BaseGame {
     ctx.fillStyle = grad;
     roundRectPath(ctx, -hw, -hh + 14, w, h - 14, 8);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
-    // Lid
+    // Inner glow when the lid opens
+    if (lidOpen > 0) {
+      const glow = ctx.createRadialGradient(0, -hh + 24, 4, 0, -hh + 24, w * 0.9);
+      glow.addColorStop(0, `rgba(255,240,190,${0.55 * lidOpen})`);
+      glow.addColorStop(1, 'rgba(255,240,190,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(-hw, -hh, w, h);
+      ctx.font = '56px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.globalAlpha = lidOpen;
+      ctx.fillText('✨', 0, -hh + 40);
+      ctx.globalAlpha = 1;
+    }
+
+    // Lid — tilts back around its top-left corner as it opens.
+    ctx.save();
+    ctx.translate(-hw - 3, -hh + 4);
+    if (lidOpen > 0) {
+      ctx.rotate(-lidOpen * 0.6);
+      ctx.translate(0, -lidOpen * 26);
+    }
     ctx.fillStyle = '#394b5e';
-    roundRectPath(ctx, -hw - 3, -hh + 4, w + 6, 24, 7);
+    roundRectPath(ctx, 0, 0, w + 6, 24, 7);
     ctx.fill();
-    roundRectPath(ctx, -hw + 6, -hh + 6, w - 12, 30, 5);
+    roundRectPath(ctx, 9, 2, w - 12, 30, 5);
     ctx.fillStyle = '#4a6076';
     ctx.fill();
+    ctx.restore();
 
     // Center emblem
     ctx.fillStyle = 'rgba(255,255,255,0.09)';
     roundRectPath(ctx, -hw + 18, -hh + 44, w - 36, h - 62, 6);
     ctx.fill();
-    ctx.font = '34px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '40px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🎁', 0, 12);
+    ctx.fillText('🎁', 0, 14);
 
     // Latch
     ctx.fillStyle = '#e4ae39';
@@ -384,6 +415,55 @@ export class GachaGame extends BaseGame {
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.font = '9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillText(`${GACHA_POOL[tier.id].length}${zh ? ' 件' : ' items'}`, sx + segW / 2, y + 52);
+    }
+  }
+
+  /* ─── Unlock prelude (case shakes, lid opens, light bursts) ─── */
+
+  private drawUnlock(ctx: CanvasRenderingContext2D) {
+    const zh = this.isZhLang();
+    const dark = this.isDarkTheme();
+    const t = this.unlockT / UNLOCK_DURATION; // 0..1
+
+    // Background dims toward the case, then brightens into the reel.
+    ctx.fillStyle = dark ? 'rgba(7,11,18,0.92)' : 'rgba(250,250,250,0.92)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = dark ? '#f8fafc' : '#0f172a';
+    ctx.fillText(zh ? '解锁中…' : 'UNLOCKING…', this.width / 2, 30);
+
+    const cx = this.width / 2;
+    const cy = 206;
+    const shake = t < 0.45 ? Math.sin(t * 90) * 7 * (1 - t / 0.45) : 0;
+    const lidOpen = Math.min(1, Math.max(0, (t - 0.35) / 0.5));
+    this.drawCase(ctx, cx, cy, 190, 128, lidOpen, shake);
+
+    // Light rays when the lid opens
+    if (lidOpen > 0) {
+      ctx.save();
+      ctx.translate(cx, cy - 38);
+      ctx.globalAlpha = lidOpen;
+      ctx.strokeStyle = 'rgba(255,232,160,0.8)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i - 4.5) * 0.16 + Math.sin(t * 6 + i) * 0.03;
+        const len = 60 + 90 * lidOpen;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    // Flash just before the reel takes over
+    if (t > 0.86) {
+      ctx.fillStyle = `rgba(255,244,200,${(t - 0.86) / 0.14 * 0.35})`;
+      ctx.fillRect(0, 0, this.width, this.height);
     }
   }
 
@@ -503,9 +583,10 @@ export class GachaGame extends BaseGame {
     this.drawTextButton(ctx, this.hitBack(), zh ? '← 返回' : '← BACK');
 
     // One tier row per grade: label column + item cards.
+    const maxItems = Math.max(...GACHA_TIERS.map((tier) => GACHA_POOL[tier.id].length));
     const labelW = 128;
     const gap = 8;
-    const cardW = (this.width - 40 - labelW - gap * (4 - 1)) / 4;
+    const cardW = (this.width - 40 - labelW - gap * (maxItems - 1)) / maxItems;
     const cardH = 60;
     const rowPitch = cardH + 22;
     let y = 58;
@@ -543,31 +624,49 @@ export class GachaGame extends BaseGame {
     x: number, y: number, w: number, h: number,
     tier: GachaTier, item: GachaItem, owned: number,
   ) {
+    const locked = owned <= 0;
     const grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, shade(tier.color, -0.05));
-    grad.addColorStop(1, shade(tier.color, -0.45));
+    if (locked) {
+      // Not pulled yet: gray silhouette until won.
+      grad.addColorStop(0, '#3f4650');
+      grad.addColorStop(1, '#252a31');
+    } else {
+      grad.addColorStop(0, shade(tier.color, -0.05));
+      grad.addColorStop(1, shade(tier.color, -0.45));
+    }
     ctx.fillStyle = grad;
     roundRectPath(ctx, x, y, w, h, 8);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.strokeStyle = locked ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
     roundRectPath(ctx, x, y, w, h, 8);
     ctx.stroke();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (locked) {
+      // Not pulled yet: gray silhouette until won (item still readable).
+      ctx.globalAlpha = 0.32;
+      ctx.font = '22px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 8);
+      ctx.globalAlpha = 1;
+      ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = 'rgba(226,232,240,0.45)';
+      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 14), x + w / 2, y + h / 2 + 16);
+      return;
+    }
+
     ctx.font = '22px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 8);
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = '#f8fafc';
     ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 14), x + w / 2, y + h / 2 + 18);
 
-    if (owned > 0) {
-      ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = '#ffd700';
-      ctx.textAlign = 'right';
-      ctx.fillText(`x${owned}`, x + w - 6, y + 12);
-    }
+    ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'right';
+    ctx.fillText(`x${owned}`, x + w - 6, y + 12);
   }
 
   /* ─── Stats ─── */
@@ -632,17 +731,19 @@ export class GachaGame extends BaseGame {
       const allItems = GACHA_TIERS.flatMap((tier) => GACHA_POOL[tier.id].map((item) => ({ item, tier })));
       const cardW = 100;
       const cardH = 52;
-      const gapX = (this.width - 60 - cardW * 5) / 4;
+      const cols = 5;
+      const gapX = (this.width - 60 - cardW * cols) / (cols - 1);
       let idx = 0;
       const rowStartY = 58;
+      const rows = Math.ceil(allItems.length / cols);
       for (const entry of allItems) {
-        const col = idx % 5;
-        const row = Math.floor(idx / 5);
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
         this.drawItemCard(ctx, 30 + col * (cardW + gapX), rowStartY + row * (cardH + 8), cardW, cardH, entry.tier, entry.item, this.stats.itemCounts[entry.item.id] ?? 0);
         idx++;
       }
 
-      const hy = rowStartY + 4 * (cardH + 8) + 12;
+      const hy = rowStartY + rows * (cardH + 8) + 10;
       ctx.textAlign = 'left';
       ctx.fillStyle = palette.text;
       ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
@@ -722,9 +823,7 @@ export class GachaGame extends BaseGame {
 
   private hitSound() { return { x: this.width - 94, y: 15, w: 28, h: 26 }; }
   private hitStats() { return { x: this.width - 140, y: 15, w: 40, h: 26 }; }
-  private hitStatsSmall() { return { x: this.width - 190, y: 310, w: 150, h: 48 }; }
-  private hitGallery() { return { x: 40, y: 310, w: 150, h: 48 }; }
-  private hitOpen() { return { x: this.width / 2 - 115, y: 308, w: 230, h: 52 }; }
+  private hitPrizes() { return { x: this.width - 186, y: 15, w: 40, h: 26 }; }
   private hitBack() { return { x: this.width - 110, y: 15, w: 72, h: 26 }; }
   private hitAgain() { return { x: this.width / 2 - 132, y: 402, w: 124, h: 44 }; }
   private hitMenuBtn() { return { x: this.width / 2 + 8, y: 402, w: 124, h: 44 }; }
@@ -741,7 +840,7 @@ export class GachaGame extends BaseGame {
       if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
 
       if ((e.key === 'r' || e.key === 'R') && e.shiftKey) {
-        if (this.screen !== 'opening') this.resetStats();
+        if (this.screen !== 'unlock' && this.screen !== 'opening') this.resetStats();
         return;
       }
       if (e.key === 'm' || e.key === 'M') {
@@ -749,9 +848,9 @@ export class GachaGame extends BaseGame {
         if (this.sfx.enabled) this.sfx.prime();
         return;
       }
-      // While a reel is running, nothing but the sound toggle responds:
-      // the animation always runs to completion on its own.
-      if (this.screen === 'opening') return;
+      // While a prelude or reel is running, nothing but the sound toggle
+      // responds: the animation always runs to completion on its own.
+      if (this.screen === 'unlock' || this.screen === 'opening') return;
       if (e.key === 'Escape') {
         if (this.screen === 'gallery' || this.screen === 'stats' || this.screen === 'result') this.gotoMenu();
         return;
@@ -764,10 +863,10 @@ export class GachaGame extends BaseGame {
         if (this.screen === 'menu') {
           this.sfx.prime();
           this.sfx.click();
-          this.startOpening();
+          this.startUnlock();
         } else if (this.screen === 'result') {
           this.sfx.click();
-          this.startOpening();
+          this.startUnlock();
         }
         return;
       }
@@ -797,38 +896,38 @@ export class GachaGame extends BaseGame {
 
     switch (this.screen) {
       case 'menu': {
-        if (this.canvasHit(x, y, this.hitGallery())) { this.sfx.click(); this.screen = 'gallery'; this.canvas.dataset.gachaScreen = 'gallery'; return; }
-        if (this.canvasHit(x, y, this.hitStatsSmall())) { this.sfx.click(); this.statsPage = 0; this.screen = 'stats'; this.canvas.dataset.gachaScreen = 'stats'; return; }
-        if (this.canvasHit(x, y, this.hitSound())) { this.sfx.enabled = !this.sfx.enabled; if (this.sfx.enabled) this.sfx.prime(); return; }
+        if (this.canvasHit(x, y, this.hitPrizes())) { this.sfx.click(); this.screen = 'gallery'; this.canvas.dataset.gachaScreen = 'gallery'; return; }
         if (this.canvasHit(x, y, this.hitStats())) { this.sfx.click(); this.statsPage = 0; this.screen = 'stats'; this.canvas.dataset.gachaScreen = 'stats'; return; }
+        if (this.canvasHit(x, y, this.hitSound())) { this.sfx.enabled = !this.sfx.enabled; if (this.sfx.enabled) this.sfx.prime(); return; }
         // Mode switcher (only when > 1 mode registered)
         if (openingModeCount() > 1) {
-          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 218) < 12) {
+          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 348) < 12) {
             this.animModeIndex = (this.animModeIndex - 1 + openingModeCount()) % openingModeCount();
             this.sfx.click();
             return;
           }
-          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 218) < 12) {
+          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 348) < 12) {
             this.animModeIndex = (this.animModeIndex + 1) % openingModeCount();
             this.sfx.click();
             return;
           }
         }
-        // Click anywhere starts the draw
+        // Click the case (or anywhere on stage) → unlock prelude, then reel.
         this.sfx.click();
-        this.startOpening();
+        this.startUnlock();
         return;
       }
+      case 'unlock':
       case 'opening': {
-        // The reel runs to completion on its own; input is ignored.
+        // The prelude and the reel run to completion on their own.
         return;
       }
       case 'result': {
-        if (this.canvasHit(x, y, this.hitAgain())) { this.sfx.click(); this.startOpening(); return; }
+        if (this.canvasHit(x, y, this.hitAgain())) { this.sfx.click(); this.startUnlock(); return; }
         if (this.canvasHit(x, y, this.hitMenuBtn())) { this.sfx.click(); this.gotoMenu(); return; }
         // Click elsewhere also pulls again (fast loop experience)
         this.sfx.click();
-        this.startOpening();
+        this.startUnlock();
         return;
       }
       case 'gallery': {

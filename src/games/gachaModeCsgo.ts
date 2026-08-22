@@ -1,20 +1,29 @@
 /*
- * "CSGO Roulette" — the classic case-opening reveal.
+ * "CSGO Roulette" — the classic case-opening reveal, tuned for legibility.
  *
- * A horizontal strip of rarity-colored item cards scrolls with constant
- * deceleration (CS:GO-style physics: velocity ramps linearly down to
- * zero) and lands with the winning item exactly inside the center
- * highlight window. Tick sounds fire every time a card boundary crosses
- * the window line; pitch and loudness track strip speed.
+ * The strip moves in clearly readable card steps: each card advances
+ * into the center highlight window with its own eased segment, so every
+ * cell's item and rarity color can be seen before the next one arrives.
+ * Steps start brisk and slow gradually; the winning card lands exactly
+ * inside the center window, then flashes.
+ *
+ * Probabilities: every card in the strip is drawn with the same two-level
+ * roll as the real draw — tier by official color odds, item by its weight
+ * inside the tier — so the on-screen strip is a fair probability sample.
  *
  * The reel always runs to completion on its own — there is no
  * user-initiated skipping. While it spins, the card currently under the
- * center line is read out in the “current cell” line right below it, so
- * the player always sees exactly what is in the winning slot.
+ * center line is read out right below it (name + rarity), so the player
+ * always sees exactly what is in the winning slot.
  */
 
 import type { GachaSfx } from './gachaAudio.js';
-import { GACHA_POOL, GACHA_TIERS, type GachaItem } from './gachaData.js';
+import {
+  GACHA_TIERS,
+  rollGachaItem,
+  type GachaItem,
+  type GachaTier,
+} from './gachaData.js';
 import type { GachaOpenContext, GachaOpenMode, GachaOpenModeFactory } from './gachaModes.js';
 
 // ── Layout ──
@@ -25,16 +34,24 @@ const REEL_Y = 150;
 const REEL_H = 170;
 const READOUT_Y = REEL_Y + REEL_H + 30;
 
-// ── Physics ──
-const TIME_TOTAL = 4.0;     // seconds of spinning
-const WIN_INDEX = 46;       // winner card position in the strip (0-based)
-const STRIP_CARDS = 54;     // total cards in the strip
+// ── Motion: one eased step per card, readable pace ──
+const STEP_FAST = 0.36;  // seconds per card at the start
+const STEP_SLOW = 0.70;  // seconds per card near the end
+const FINAL_STEP = 0.4;  // seconds for the last partial step
+const LAND_FLASH = 0.45;
 
-export const CSGO_STRIP_DURATION = TIME_TOTAL;
+const WIN_INDEX = 14;    // winner card position in the strip (0-based)
+const STRIP_CARDS = 22;  // total cards in the strip
 
 interface StripCard {
   item: GachaItem;
-  tier: typeof GACHA_TIERS[number];
+  tier: GachaTier;
+}
+
+interface Step {
+  from: number;
+  to: number;
+  duration: number;
 }
 
 export class CsgoStripMode implements GachaOpenMode {
@@ -44,14 +61,14 @@ export class CsgoStripMode implements GachaOpenMode {
   private readonly sfx: GachaSfx;
   private readonly dark: boolean;
   private cards: StripCard[] = [];
+  private steps: Step[] = [];
   private elapsed = 0;
   private traveled = 0;
   private totalDistance = 0;
-  private accel = 0;
-  private startVelocity = 0;
+  private totalTime = 0;
+  private stepCursor = 0;
   private landed = false;
   private landFlash = 0;
-  private lastTickedCenter = -1;
   private started = false;
   private readonly viewportLeft: number;
   private readonly viewportRight: number;
@@ -68,24 +85,21 @@ export class CsgoStripMode implements GachaOpenMode {
     if (this.started) return;
     this.started = true;
 
-    const rng = Math.random;
     const winner = this.ctx.roll;
-    const allItems: StripCard[] = GACHA_TIERS.flatMap((tier) =>
-      GACHA_POOL[tier.id].map((item) => ({ item, tier })),
-    );
 
+    // Strip content: every cell is rolled with the real two-level odds
+    // (color odds first, then item weight inside the color).
     const cards: StripCard[] = [];
     for (let i = 0; i < STRIP_CARDS; i++) {
       if (i === WIN_INDEX) {
         cards.push({ item: winner.item, tier: winner.tier });
         continue;
       }
-      // Decoy: uniform over all items, but avoid showing the winner card
-      // near the winner slot so the landing stays readable.
-      let pick: StripCard;
-      do {
-        pick = allItems[Math.floor(rng() * allItems.length)];
-      } while (pick.item.id === winner.item.id && Math.abs(i - WIN_INDEX) < 8);
+      let pick = rollGachaItem();
+      // Keep the winner cell a surprise: avoid its item near the winner slot.
+      while (pick.item.id === winner.item.id && Math.abs(i - WIN_INDEX) < 6) {
+        pick = rollGachaItem();
+      }
       cards.push(pick);
     }
     this.cards = cards;
@@ -93,9 +107,20 @@ export class CsgoStripMode implements GachaOpenMode {
     // Distance the strip must travel so card WIN_INDEX lands centered.
     const cx = this.ctx.width / 2;
     this.totalDistance = this.viewportLeft + WIN_INDEX * CARD_PITCH - (cx - CARD_W / 2);
-    // Constant deceleration from v0 to 0 over TIME_TOTAL: v0 = 2D/T, a = v0/T.
-    this.accel = (2 * this.totalDistance) / (TIME_TOTAL * TIME_TOTAL);
-    this.startVelocity = this.accel * TIME_TOTAL;
+
+    // Per-card step schedule: full card steps, then the partial remainder.
+    const fullSteps = Math.floor(this.totalDistance / CARD_PITCH);
+    const remainder = this.totalDistance - fullSteps * CARD_PITCH;
+    this.steps = [];
+    for (let i = 0; i < fullSteps; i++) {
+      const t = fullSteps > 1 ? i / (fullSteps - 1) : 0;
+      const duration = STEP_FAST + (STEP_SLOW - STEP_FAST) * t;
+      this.steps.push({ from: i * CARD_PITCH, to: (i + 1) * CARD_PITCH, duration });
+    }
+    if (remainder > 1) {
+      this.steps.push({ from: fullSteps * CARD_PITCH, to: this.totalDistance, duration: FINAL_STEP });
+    }
+    this.totalTime = this.steps.reduce((acc, step) => acc + step.duration, 0);
 
     this.sfx.caseOpen();
   }
@@ -111,27 +136,39 @@ export class CsgoStripMode implements GachaOpenMode {
   update(dt: number): boolean {
     if (!this.started) this.start();
 
-    this.elapsed = Math.min(TIME_TOTAL, this.elapsed + dt);
-    const t = this.elapsed;
-    // s(t) = v0·t − ½·a·t², v(t) = v0 − a·t
-    this.traveled = this.startVelocity * t - 0.5 * this.accel * t * t;
-    if (!this.landed && this.elapsed >= TIME_TOTAL) {
+    this.elapsed = Math.min(this.totalTime, this.elapsed + dt);
+
+    // Locate the active step by cumulative time.
+    let cumulative = 0;
+    let activeStep = this.steps.length - 1;
+    for (let i = 0; i < this.steps.length; i++) {
+      const step = this.steps[i];
+      if (this.elapsed < cumulative + step.duration) {
+        activeStep = i;
+        break;
+      }
+      cumulative += step.duration;
+    }
+    const step = this.steps[activeStep];
+    const u = Math.min(1, Math.max(0, (this.elapsed - cumulative) / step.duration));
+    this.traveled = step.from + (step.to - step.from) * easeInOutCubic(u);
+
+    // One tick per card step; steps get slower over time, so early steps
+    // tick high-pitched and late ones low.
+    if (activeStep !== this.stepCursor && !this.landed) {
+      this.stepCursor = activeStep;
+      if (activeStep > 0) {
+        const dur = this.steps[activeStep].duration;
+        const speed = 1 - (dur - STEP_FAST) / (STEP_SLOW - STEP_FAST);
+        this.sfx.tick(Math.max(0, Math.min(1, speed)));
+      }
+    }
+
+    if (!this.landed && this.elapsed >= this.totalTime) {
       this.land();
     }
 
     if (this.landFlash > 0) this.landFlash = Math.max(0, this.landFlash - dt);
-
-    // Tick when a card boundary crosses the window center line.
-    const cx = this.ctx.width / 2;
-    const centerAt = this.traveled + (cx - this.viewportLeft);
-    const centerIndex = Math.floor(centerAt / CARD_PITCH);
-    if (centerIndex !== this.lastTickedCenter) {
-      if (this.lastTickedCenter >= 0 && centerIndex > this.lastTickedCenter) {
-        const speedRatio = Math.max(0, Math.min(1, (this.startVelocity - this.accel * this.elapsed) / this.startVelocity));
-        this.sfx.tick(speedRatio);
-      }
-      this.lastTickedCenter = centerIndex;
-    }
 
     return this.landed && this.landFlash <= 0;
   }
@@ -139,8 +176,8 @@ export class CsgoStripMode implements GachaOpenMode {
   private land() {
     if (this.landed) return;
     this.landed = true;
-    this.landFlash = 0.45;
-    this.elapsed = TIME_TOTAL;
+    this.landFlash = LAND_FLASH;
+    this.elapsed = this.totalTime;
     this.traveled = this.totalDistance;
     this.sfx.land();
     this.sfx.reveal(GACHA_TIERS.findIndex((t) => t.id === this.ctx.roll.tier.id));
@@ -160,24 +197,11 @@ export class CsgoStripMode implements GachaOpenMode {
     const firstVisible = Math.max(0, Math.floor((this.traveled - CARD_W) / CARD_PITCH));
     const lastVisible = Math.min(this.cards.length - 1, Math.floor((this.traveled + (this.viewportRight - this.viewportLeft) + CARD_W) / CARD_PITCH));
 
-    const speedRatio = Math.max(0, Math.min(1, (this.startVelocity - this.accel * Math.min(this.elapsed, TIME_TOTAL)) / this.startVelocity));
-
-    // Motion streaks first (under the cards) so card content stays legible.
-    if (speedRatio > 0.5 && !this.landed) {
-      ctx.fillStyle = '#ffffff';
-      for (let i = firstVisible; i <= lastVisible; i++) {
-        const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
-        ctx.globalAlpha = 0.14 * speedRatio;
-        ctx.fillRect(x - CARD_W * 0.55, REEL_Y + REEL_H * 0.2, CARD_W * 0.55, REEL_H * 0.6);
-      }
-      ctx.globalAlpha = 1;
-    }
-
     for (let i = firstVisible; i <= lastVisible; i++) {
       const card = this.cards[i];
       const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
       const isWinner = i === WIN_INDEX;
-      this.drawCard(ctx, x, card, isWinner, speedRatio);
+      this.drawCard(ctx, x, card, isWinner);
     }
 
     // Center highlight window
@@ -221,27 +245,25 @@ export class CsgoStripMode implements GachaOpenMode {
     const tier = current.tier;
     const name = this.ctx.zh ? current.item.nameZh : current.item.name;
     const tierName = this.ctx.zh ? tier.nameZh : tier.name;
-    const label = this.landed
-      ? `${current.item.emoji} ${name} · ${tierName}`
-      : `${current.item.emoji} ${name} · ${tierName}`;
+    const label = `${current.item.emoji} ${name} · ${tierName}`;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '700 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = tier.color;
     ctx.fillText(label, cx, READOUT_Y);
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = this.dark ? 'rgba(148,163,184,0.9)' : 'rgba(91,107,128,0.9)';
-    ctx.fillText(this.ctx.zh ? `格子内容 · ${(tier.odds * 100).toFixed(2)}%` : `Cell content · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 20);
+    ctx.fillText(this.ctx.zh ? `格子内容 · ${(tier.odds * 100).toFixed(2)}%` : `Cell content · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 22);
   }
 
-  private drawCard(ctx: CanvasRenderingContext2D, x: number, card: StripCard, isWinner: boolean, speedRatio: number) {
+  private drawCard(ctx: CanvasRenderingContext2D, x: number, card: StripCard, isWinner: boolean) {
     if (x > this.ctx.width || x + CARD_W < 0) return;
 
     const tier = card.tier;
 
     // Card gradient (rarity tint)
-    const top = isWinner && this.landed ? tier.color : shade(tier.color, this.landed || speedRatio < 0.3 ? 0 : -0.12);
+    const top = isWinner && this.landed ? tier.color : shade(tier.color, this.landed ? 0 : -0.10);
     const bottom = shade(tier.color, -0.45);
     const grad = ctx.createLinearGradient(x, REEL_Y, x, REEL_Y + REEL_H);
     grad.addColorStop(0, top);
@@ -259,7 +281,7 @@ export class CsgoStripMode implements GachaOpenMode {
 
     // Rarity ribbon
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    roundRectPath(ctx, x + CARD_W / 2 - 34, REEL_Y + REEL_H - 26, 68, 12, 3);
+    roundRectPath(ctx, x + CARD_W / 2 - 42, REEL_Y + REEL_H - 26, 84, 12, 3);
     ctx.fill();
     ctx.fillStyle = shade(tier.color, -0.55);
     ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
@@ -268,19 +290,23 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 20);
 
     // Item emoji
-    ctx.font = '36px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '40px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(card.item.emoji, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 10);
 
     // Item name
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 12), x + CARD_W / 2, REEL_Y + REEL_H / 2 + 34);
+    ctx.fillText(this.ctx.zh ? card.item.nameZh : card.item.name, x + CARD_W / 2, REEL_Y + REEL_H / 2 + 38);
 
     ctx.restore();
   }
 }
 
 // ── helpers ──
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
 
 function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -302,10 +328,6 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
-}
-
-function truncate(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
 }
 
 export const createCsgoStripMode: GachaOpenModeFactory = {

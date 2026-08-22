@@ -702,15 +702,15 @@ test.describe('Game rules', () => {
       game.init();
       game.sfx.enabled = false;
 
-      // Force a gold (rarespecial) roll: tier rng=0.9999, item rng=0 → first gold item.
+      // Force a gold (rarespecial) roll: tier rng=0.9999, item rng=0 → gold 1.
       const sequence = [0.9999, 0];
       game.random = () => sequence.shift() ?? 0;
 
-      game.startOpening();
-      const screenDuringSpin = game.screen;
+      game.startUnlock();
+      const screenDuringUnlock = game.screen;
       const openStats = JSON.parse(JSON.stringify(game.stats));
 
-      // Drive the strip animation to completion.
+      // Drive the unlock prelude and the strip animation to completion.
       let guard = 0;
       while (game.screen !== 'result' && guard < 4000) {
         game.update(1 / 60);
@@ -724,10 +724,10 @@ test.describe('Game rules', () => {
       const storageWasCleared = localStorage.getItem('gacha-stats') === null;
 
       game.destroy();
-      return { screenDuringSpin, openStats, finalStats, resetStats, storageWasCleared };
+      return { screenDuringUnlock, openStats, finalStats, resetStats, storageWasCleared };
     }, builtModuleUrl('src/games/gacha.ts'));
 
-    expect(result.screenDuringSpin).toBe('opening');
+    expect(result.screenDuringUnlock).toBe('unlock');
     // Stats are recorded at open time, before the animation ends.
     expect(result.openStats.totalPulls).toBe(1);
     expect(result.openStats.tierCounts.rarespecial).toBe(1);

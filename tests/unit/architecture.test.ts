@@ -109,6 +109,7 @@ describe('Gacha odds and pool', () => {
       for (const item of GACHA_POOL[tier.id]) {
         expect(ids.has(item.id)).toBe(false);
         ids.add(item.id);
+        expect(item.weight).toBeGreaterThan(0);
       }
     }
   });
@@ -118,9 +119,37 @@ describe('Gacha odds and pool', () => {
     expect(gold.tier.id).toBe('rarespecial');
     const blue = rollGachaItem(() => 0.00001);
     expect(blue.tier.id).toBe('milspec');
-    // The same constant rng also picks the item: near-1 → last of the tier.
-    expect(gold.item.id).toBe('knife-gamma');
-    expect(blue.item.id).toBe('ak-blueprint');
+    // The same constant rng also picks the item: near-1 → last of the tier,
+    // near-0 → first of the tier (weighted walk).
+    expect(gold.item.id).toBe('gold-2');
+    expect(blue.item.id).toBe('mil-1');
+  });
+
+  it('distributes items inside a tier by weight', () => {
+    let gold1 = 0;
+    let gold2 = 0;
+    for (let step = 1; step <= 1000; step++) {
+      // Two-phase rng: tier always at the top of the interval (gold),
+      // item sweeps the whole [0,1) interval.
+      const itemPos = step / 1001;
+      let first = true;
+      const twoPhase = () => {
+        if (first) {
+          first = false;
+          return 0.99999;
+        }
+        return itemPos;
+      };
+      const roll = rollGachaItem(twoPhase);
+      expect(roll.tier.id).toBe('rarespecial');
+      if (roll.item.id === 'gold-1') gold1++;
+      else if (roll.item.id === 'gold-2') gold2++;
+    }
+    // 1000 rolls across the item interval: gold-1 (60%) and gold-2 (40%).
+    expect(gold1).toBeGreaterThan(500);
+    expect(gold2).toBeGreaterThan(200);
+    expect(gold1).toBeLessThan(700);
+    expect(gold2).toBeLessThan(500);
   });
 });
 
