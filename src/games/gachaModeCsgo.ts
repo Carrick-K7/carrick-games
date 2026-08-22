@@ -188,10 +188,19 @@ export class CsgoStripMode implements GachaOpenMode {
 
     const cx = this.ctx.width / 2;
     const cy = REEL_Y + REEL_H / 2;
+    const dark = this.dark;
 
-    // Reel backdrop
-    ctx.fillStyle = this.dark ? 'rgba(8,12,20,0.9)' : 'rgba(244,246,250,0.9)';
-    ctx.fillRect(this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28);
+    // Reel backdrop — glass track
+    const trackGrad = ctx.createLinearGradient(0, REEL_Y - 14, 0, REEL_Y + REEL_H + 14);
+    trackGrad.addColorStop(0, dark ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.7)');
+    trackGrad.addColorStop(1, dark ? 'rgba(255,255,255,0.012)' : 'rgba(255,255,255,0.4)');
+    ctx.fillStyle = trackGrad;
+    roundRectPath(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18);
+    ctx.fill();
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(17,24,39,0.08)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18);
+    ctx.stroke();
 
     // Visible card range
     const firstVisible = Math.max(0, Math.floor((this.traveled - CARD_W) / CARD_PITCH));
@@ -204,40 +213,45 @@ export class CsgoStripMode implements GachaOpenMode {
       this.drawCard(ctx, x, card, isWinner);
     }
 
-    // Center highlight window
+    // Center highlight window — soft inner glow, not a hard box
     const winX = cx - CARD_W / 2;
-    ctx.fillStyle = this.dark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.08)';
+    const winGrad = ctx.createRadialGradient(cx, cy, 20, cx, cy, CARD_W * 0.9);
+    winGrad.addColorStop(0, dark ? 'rgba(255,255,255,0.10)' : 'rgba(17,24,39,0.07)');
+    winGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = winGrad;
     ctx.fillRect(winX, REEL_Y - 6, CARD_W, REEL_H + 12);
 
     if (this.landed && this.landFlash > 0) {
       ctx.save();
-      ctx.strokeStyle = `rgba(255,255,255,${this.landFlash * 2})`;
+      ctx.strokeStyle = `rgba(255,255,255,${this.landFlash * 1.8})`;
       ctx.lineWidth = 2;
       ctx.strokeRect(winX - 2, REEL_Y - 8, CARD_W + 4, REEL_H + 16);
       ctx.restore();
     }
 
-    // Frame + center line
-    ctx.strokeStyle = this.dark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.35)';
+    // Center line — fine hairlines with rounded caps
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.22)' : 'rgba(17,24,39,0.3)';
     ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(this.viewportLeft - 20, cy);
-    ctx.lineTo(cx - CARD_W / 2 - 8, cy);
-    ctx.moveTo(cx + CARD_W / 2 + 8, cy);
-    ctx.lineTo(this.viewportRight + 20, cy);
+    ctx.moveTo(this.viewportLeft - 16, cy);
+    ctx.lineTo(cx - CARD_W / 2 - 10, cy);
+    ctx.moveTo(cx + CARD_W / 2 + 10, cy);
+    ctx.lineTo(this.viewportRight + 16, cy);
     ctx.stroke();
+    ctx.lineCap = 'butt';
 
-    // Marker triangles
-    ctx.fillStyle = '#f8fafc';
+    // Marker — soft chevrons, premium accent
+    ctx.fillStyle = dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.9)';
     ctx.beginPath();
-    ctx.moveTo(cx - CARD_W / 2 - 16, cy - 9);
-    ctx.lineTo(cx - CARD_W / 2 - 6, cy);
-    ctx.lineTo(cx - CARD_W / 2 - 16, cy + 9);
+    ctx.moveTo(cx - CARD_W / 2 - 18, cy - 8);
+    ctx.lineTo(cx - CARD_W / 2 - 7, cy);
+    ctx.lineTo(cx - CARD_W / 2 - 18, cy + 8);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(cx + CARD_W / 2 + 16, cy - 9);
-    ctx.lineTo(cx + CARD_W / 2 + 6, cy);
-    ctx.lineTo(cx + CARD_W / 2 + 16, cy + 9);
+    ctx.moveTo(cx + CARD_W / 2 + 18, cy - 8);
+    ctx.lineTo(cx + CARD_W / 2 + 7, cy);
+    ctx.lineTo(cx + CARD_W / 2 + 18, cy + 8);
     ctx.fill();
 
     // Current-cell readout: what the winning slot holds right now.
@@ -249,54 +263,59 @@ export class CsgoStripMode implements GachaOpenMode {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = tier.color;
     ctx.fillText(label, cx, READOUT_Y);
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = this.dark ? 'rgba(148,163,184,0.9)' : 'rgba(91,107,128,0.9)';
-    ctx.fillText(this.ctx.zh ? `格子内容 · ${(tier.odds * 100).toFixed(2)}%` : `Cell content · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 22);
+    ctx.fillStyle = dark ? 'rgba(148,163,184,0.65)' : 'rgba(91,107,128,0.7)';
+    ctx.fillText(this.ctx.zh ? `当前格 · ${(tier.odds * 100).toFixed(2)}%` : `Cell · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 22);
   }
 
   private drawCard(ctx: CanvasRenderingContext2D, x: number, card: StripCard, isWinner: boolean) {
     if (x > this.ctx.width || x + CARD_W < 0) return;
 
     const tier = card.tier;
+    const dark = this.dark;
 
-    // Card gradient (rarity tint)
-    const top = isWinner && this.landed ? tier.color : shade(tier.color, this.landed ? 0 : -0.10);
-    const bottom = shade(tier.color, -0.45);
+    // Sheet: glassy neutral base, rarity-tinted gradient on top
     const grad = ctx.createLinearGradient(x, REEL_Y, x, REEL_Y + REEL_H);
-    grad.addColorStop(0, top);
-    grad.addColorStop(1, bottom);
+    if (isWinner && this.landed) {
+      grad.addColorStop(0, tier.color);
+      grad.addColorStop(1, shade(tier.color, -0.5));
+    } else {
+      grad.addColorStop(0, dark ? shade(tier.color, -0.62) : shade(tier.color, -0.05));
+      grad.addColorStop(1, dark ? shade(tier.color, -0.75) : shade(tier.color, -0.45));
+    }
 
     ctx.save();
-    roundRectPath(ctx, x, REEL_Y, CARD_W, REEL_H, 9);
+    roundRectPath(ctx, x, REEL_Y, CARD_W, REEL_H, 14);
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = isWinner && this.landed ? '#ffffff' : 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = isWinner && this.landed ? 2 : 1;
+    // Inner hairline
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, x + 0.5, REEL_Y + 0.5, CARD_W - 1, REEL_H - 1, 13.5);
     ctx.stroke();
 
-    // Rarity ribbon
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    roundRectPath(ctx, x + CARD_W / 2 - 42, REEL_Y + REEL_H - 26, 84, 12, 3);
+    // Rarity chip — small pill under the item
+    ctx.fillStyle = dark ? 'rgba(9,11,16,0.55)' : 'rgba(255,255,255,0.75)';
+    roundRectPath(ctx, x + CARD_W / 2 - 34, REEL_Y + REEL_H - 30, 68, 16, 8);
     ctx.fill();
-    ctx.fillStyle = shade(tier.color, -0.55);
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = dark ? '#e6edf5' : '#3d4a5c';
+    ctx.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 20);
+    ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 22);
 
     // Item emoji
-    ctx.font = '40px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(card.item.emoji, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 10);
+    ctx.font = '38px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(card.item.emoji, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 12);
 
     // Item name
-    ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillText(this.ctx.zh ? card.item.nameZh : card.item.name, x + CARD_W / 2, REEL_Y + REEL_H / 2 + 38);
+    ctx.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = dark ? '#f1f5f9' : '#ffffff';
+    ctx.fillText(this.ctx.zh ? card.item.nameZh : card.item.name, x + CARD_W / 2, REEL_Y + REEL_H / 2 + 36);
 
     ctx.restore();
   }

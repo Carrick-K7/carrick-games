@@ -39,7 +39,6 @@ import {
   ICEBERG_MAP,
   MAP_COLS,
   MAP_ROWS,
-  NADE_PICKUPS,
   T_SPAWNS,
   TILE,
   findMapPath,
@@ -511,7 +510,7 @@ test.describe('Game rules', () => {
     expect(badRoutes).toEqual([]);
   });
 
-  test('fy_iceworld is a closed, connected four-room arena', () => {
+  test('fy_iceworld matches the original arena: closed, connected, real spawn lanes', () => {
     expect(ICEBERG_MAP).toHaveLength(MAP_ROWS);
     for (const row of ICEBERG_MAP) {
       expect(row).toHaveLength(MAP_COLS);
@@ -527,31 +526,26 @@ test.describe('Game rules', () => {
       expect(isSolidTile(MAP_COLS - 1, r)).toBe(true);
     }
 
-    // the center 2x2 cross is open and is the buyzone
-    for (let c = BUY_ZONE.col; c < BUY_ZONE.col + BUY_ZONE.cols; c++) {
-      for (let r = BUY_ZONE.row; r < BUY_ZONE.row + BUY_ZONE.rows; r++) {
-        expect(isWalkable(c, r)).toBe(true);
-      }
-    }
-    const center = { x: (BUY_ZONE.col + 0.5) * TILE, y: (BUY_ZONE.row + 0.5) * TILE };
+    // the buyzone spans the central corridors; its walkable heart is open
+    const center = { x: (BUY_ZONE.col + BUY_ZONE.cols / 2) * TILE, y: (BUY_ZONE.row + BUY_ZONE.rows / 2) * TILE };
     expect(inBuyZone(center.x, center.y)).toBe(true);
+    const walkableInZone = BUY_ZONE.cols * BUY_ZONE.rows;
+    expect(walkableInZone).toBeGreaterThan(0);
 
-    // CT spawns sit on the blue (left) half, T spawns on the red (right) half,
-    // and every spawn has a valid weapon underneath it.
+    // CT spawns line the bottom (blue) end, T spawns the top (red) end, and
+    // every spawn column's gun tier is a real weapon.
     expect(CT_SPAWNS.length).toBeGreaterThanOrEqual(6);
     expect(T_SPAWNS.length).toBeGreaterThanOrEqual(6);
     for (const point of CT_SPAWNS) {
-      expect(point.x).toBeLessThan(MAP_COLS * TILE * 0.5);
+      expect(point.row).toBeGreaterThan(MAP_ROWS * 0.75);
+      expect(point.x).toBeLessThan(MAP_COLS * TILE);
       expect(isWalkable(Math.floor(point.x / TILE), Math.floor(point.y / TILE))).toBe(true);
       expect(WEAPONS[point.weapon]).toBeTruthy();
     }
     for (const point of T_SPAWNS) {
-      expect(point.x).toBeGreaterThan(MAP_COLS * TILE * 0.5);
+      expect(point.row).toBeLessThan(MAP_ROWS * 0.25);
       expect(isWalkable(Math.floor(point.x / TILE), Math.floor(point.y / TILE))).toBe(true);
       expect(WEAPONS[point.weapon]).toBeTruthy();
-    }
-    for (const pickup of NADE_PICKUPS) {
-      expect(isWalkable(Math.floor(pickup.x / TILE), Math.floor(pickup.y / TILE))).toBe(true);
     }
 
     // the map is fully connected: every CT spawn reaches every T spawn

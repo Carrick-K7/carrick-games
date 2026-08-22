@@ -513,7 +513,16 @@ export async function prepareGame(name: string) {
   updateGameTitle();
   updateGameDesc();
   renderControls();
+  updateFullscreenToggle(meta);
   setStartOverlay(true);
+}
+
+/** Some games opt out of the shell fullscreen control (e.g. kiosk-style UX). */
+function updateFullscreenToggle(meta: GameMeta) {
+  const btn = document.getElementById('fullscreenBtn');
+  if (!btn) return;
+  // Inline style: .icon-btn's display:flex would otherwise override [hidden].
+  btn.style.display = meta.fullscreen === false ? 'none' : '';
 }
 
 function startPreparedGame() {

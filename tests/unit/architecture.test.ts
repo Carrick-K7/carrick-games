@@ -114,42 +114,50 @@ describe('Gacha odds and pool', () => {
     }
   });
 
+  it('keeps the placeholder pool sizes at 蓝15/紫8/粉5/红3/金2', () => {
+    expect(GACHA_POOL.milspec).toHaveLength(15);
+    expect(GACHA_POOL.restricted).toHaveLength(8);
+    expect(GACHA_POOL.classified).toHaveLength(5);
+    expect(GACHA_POOL.covert).toHaveLength(3);
+    expect(GACHA_POOL.rarespecial).toHaveLength(2);
+    // Placeholder ids follow the tier prefix: rarespecial-1 = 金1.
+    expect(GACHA_POOL.rarespecial[0].id).toBe('rarespecial-1');
+    expect(GACHA_POOL.milspec[0].id).toBe('milspec-1');
+  });
+
   it('rolls gold at the top of the odds interval and blue at the bottom', () => {
     const gold = rollGachaItem(() => 0.99999);
     expect(gold.tier.id).toBe('rarespecial');
     const blue = rollGachaItem(() => 0.00001);
     expect(blue.tier.id).toBe('milspec');
     // The same constant rng also picks the item: near-1 → last of the tier,
-    // near-0 → first of the tier (weighted walk).
-    expect(gold.item.id).toBe('gold-2');
-    expect(blue.item.id).toBe('mil-1');
+    // near-0 → first of the tier (uniform inside the tier, weight 1).
+    expect(gold.item.id).toBe('rarespecial-2');
+    expect(blue.item.id).toBe('milspec-1');
   });
 
-  it('distributes items inside a tier by weight', () => {
-    let gold1 = 0;
-    let gold2 = 0;
+  it('distributes items inside a tier uniformly by default', () => {
+    let first = 0;
+    let last = 0;
     for (let step = 1; step <= 1000; step++) {
       // Two-phase rng: tier always at the top of the interval (gold),
       // item sweeps the whole [0,1) interval.
       const itemPos = step / 1001;
-      let first = true;
+      let phase = 0;
       const twoPhase = () => {
-        if (first) {
-          first = false;
-          return 0.99999;
-        }
-        return itemPos;
+        phase++;
+        return phase === 1 ? 0.99999 : itemPos;
       };
       const roll = rollGachaItem(twoPhase);
       expect(roll.tier.id).toBe('rarespecial');
-      if (roll.item.id === 'gold-1') gold1++;
-      else if (roll.item.id === 'gold-2') gold2++;
+      if (roll.item.id === 'rarespecial-1') first++;
+      else if (roll.item.id === 'rarespecial-2') last++;
     }
-    // 1000 rolls across the item interval: gold-1 (60%) and gold-2 (40%).
-    expect(gold1).toBeGreaterThan(500);
-    expect(gold2).toBeGreaterThan(200);
-    expect(gold1).toBeLessThan(700);
-    expect(gold2).toBeLessThan(500);
+    // Two items with equal weight: ~500/500.
+    expect(first).toBeGreaterThan(420);
+    expect(last).toBeGreaterThan(420);
+    expect(first).toBeLessThan(580);
+    expect(last).toBeLessThan(580);
   });
 });
 

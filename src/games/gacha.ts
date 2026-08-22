@@ -1,16 +1,20 @@
 /*
  * Gacha — CS:GO-style case opening with official rarity odds.
  *
- * Screens: menu (case + tier legend + open) → opening (mode-driven reel)
- * → result (rarity reveal), plus gallery (prize showcase) and stats
- * (pull statistics). Free draws: statistics are the only economy.
+ * Screens: menu (case + tier strip + hint) → unlock (case shake + lid)
+ * → opening (mode-driven reel) → result (rarity reveal), plus gallery
+ * (prize showcase) and stats (pull statistics). Free draws: statistics
+ * are the only economy.
+ *
+ * Visual language: modern, minimal, premium — dark glass panels, soft
+ * gradients, hairline borders, restrained glow. Not pixel art: this
+ * game renders the same design in both shell style modes.
  *
  * Opening animations are pluggable through src/games/gachaModes.ts; the
  * menu shows a mode switcher automatically once more than one exists.
  */
 
 import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
-import { fillRoundedPanel, getRetroPalette } from '../core/render.js';
 import { GachaSfx } from './gachaAudio.js';
 import {
   GACHA_POOL,
@@ -50,7 +54,63 @@ interface Particle {
 }
 
 const RESULT_PARTICLES_TIERS = new Set(['classified', 'covert', 'rarespecial']);
-const UNLOCK_DURATION = 1.0; // seconds of case-unlock prelude before the reel
+const UNLOCK_DURATION = 1.05; // seconds of case-unlock prelude before the reel
+
+/* ───────── Modern design tokens ───────── */
+
+interface GachaPalette {
+  bgTop: string;
+  bgBottom: string;
+  text: string;
+  textDim: string;
+  textFaint: string;
+  panel: string;       // glass panel fill
+  panelBorder: string;
+  panelBorderSoft: string;
+  accent: string;
+  accentSoft: string;
+  cardFillTop: string; // sheet for item cards
+  cardFillBottom: string;
+  stroke: string;
+  glow: string;
+}
+
+function palette(dark: boolean): GachaPalette {
+  if (dark) {
+    return {
+      bgTop: '#0c0f14',
+      bgBottom: '#10141b',
+      text: '#eef1f6',
+      textDim: 'rgba(238,241,246,0.62)',
+      textFaint: 'rgba(238,241,246,0.38)',
+      panel: 'rgba(255,255,255,0.045)',
+      panelBorder: 'rgba(255,255,255,0.10)',
+      panelBorderSoft: 'rgba(255,255,255,0.06)',
+      accent: '#7dd3fc',
+      accentSoft: 'rgba(125,211,252,0.14)',
+      cardFillTop: 'rgba(255,255,255,0.05)',
+      cardFillBottom: 'rgba(255,255,255,0.015)',
+      stroke: 'rgba(255,255,255,0.12)',
+      glow: 'rgba(125,211,252,0.16)',
+    };
+  }
+  return {
+    bgTop: '#f4f6fa',
+    bgBottom: '#e9edf3',
+    text: '#111827',
+    textDim: 'rgba(17,24,39,0.62)',
+    textFaint: 'rgba(17,24,39,0.38)',
+    panel: 'rgba(255,255,255,0.72)',
+    panelBorder: 'rgba(17,24,39,0.08)',
+    panelBorderSoft: 'rgba(17,24,39,0.05)',
+    accent: '#0284c7',
+    accentSoft: 'rgba(2,132,199,0.09)',
+    cardFillTop: 'rgba(255,255,255,0.85)',
+    cardFillBottom: 'rgba(255,255,255,0.6)',
+    stroke: 'rgba(17,24,39,0.10)',
+    glow: 'rgba(2,132,199,0.10)',
+  };
+}
 
 export class GachaGame extends BaseGame {
   /**
@@ -231,34 +291,33 @@ export class GachaGame extends BaseGame {
   /* ─── Draw ─── */
 
   draw(ctx: CanvasRenderingContext2D) {
-    const palette = getRetroPalette(this.isDarkTheme());
-    ctx.fillStyle = this.isDarkTheme() ? '#0b0f19' : '#fafafa';
-    ctx.fillRect(0, 0, this.width, this.height);
+    const p = palette(this.isDarkTheme());
+    drawBg(ctx, this.width, this.height, p);
 
     switch (this.screen) {
-      case 'menu': this.drawMenu(ctx, palette); break;
-      case 'unlock': this.drawUnlock(ctx); break;
-      case 'opening': this.drawOpening(ctx); break;
-      case 'result': this.drawResult(ctx); break;
-      case 'gallery': this.drawGallery(ctx, palette); break;
-      case 'stats': this.drawStats(ctx, palette); break;
+      case 'menu': this.drawMenu(ctx, p); break;
+      case 'unlock': this.drawUnlock(ctx, p); break;
+      case 'opening': this.drawOpening(ctx, p); break;
+      case 'result': this.drawResult(ctx, p); break;
+      case 'gallery': this.drawGallery(ctx, p); break;
+      case 'stats': this.drawStats(ctx, p); break;
     }
 
     // Particle overlay
-    for (const p of this.particles) {
-      const alpha = Math.max(0, p.life / p.maxLife);
+    for (const particle of this.particles) {
+      const alpha = Math.max(0, particle.life / particle.maxLife);
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      ctx.fillStyle = particle.color;
+      ctx.fillRect(particle.x - particle.size / 2, particle.y - particle.size / 2, particle.size, particle.size);
     }
     ctx.globalAlpha = 1;
 
     // Notification
     if (this.notifyTimer > 0) {
-      ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = this.isDarkTheme() ? '#f8fafc' : '#0f172a';
+      ctx.fillStyle = p.text;
       ctx.globalAlpha = Math.min(1, this.notifyTimer);
       ctx.fillText(this.notify, this.width / 2, 60);
       ctx.globalAlpha = 1;
@@ -267,190 +326,246 @@ export class GachaGame extends BaseGame {
 
   /* ─── Menu ─── */
 
-  private drawMenu(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
+  private drawMenu(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
     const t = performance.now() / 1000;
 
-    // Header
-    fillRoundedPanel(ctx, 20, 10, this.width - 40, 36, palette, 10);
-    ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    // Header bar
+    glassPanel(ctx, 24, 14, this.width - 48, 40, p, 12);
+    ctx.font = '600 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = palette.text;
-    ctx.fillText('🎰 ' + (zh ? '抽卡 · 开箱模拟' : 'GACHA · CASE SIM'), 36, 28);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = palette.muted;
-    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    const pullsText = zh ? `累计 ${this.stats.totalPulls} 抽` : `Pulls: ${this.stats.totalPulls}`;
-    ctx.fillText(pullsText, this.width - 196, 28);
-    this.drawTextButton(ctx, this.hitPrizes(), '🏛');
-    this.drawTextButton(ctx, this.hitStats(), '📊');
-    this.drawTextButton(ctx, this.hitSound(), this.sfx.enabled ? '🔊' : '🔇');
+    ctx.fillStyle = p.text;
+    ctx.fillText(zh ? '抽卡' : 'Gacha', 42, 34);
+    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(zh ? `已抽取 ${this.stats.totalPulls} 次` : `${this.stats.totalPulls} pulls`, 42, 50);
 
-    // Case — the whole point of the screen, centered and breathing.
+    // Right-side icon chips
+    this.chipButton(ctx, this.hitPrizes(), zh ? '奖品' : 'PRIZES', p);
+    this.chipButton(ctx, this.hitStats(), zh ? '统计' : 'STATS', p);
+    this.chipButton(ctx, this.hitSound(), this.sfx.enabled ? (zh ? '声音' : 'SOUND') : (zh ? '静音' : 'MUTED'), p);
+
+    // Case — hero object, centered.
     const cx = this.width / 2;
-    const caseW = 190;
-    const caseH = 128;
-    this.drawCase(ctx, cx, 196, caseW, caseH);
+    this.drawCase(ctx, cx, 205, 200, 134);
 
-    // Animated tap hint below the case.
-    const hintY = 300;
-    const pulse = 0.55 + 0.45 * Math.sin(t * 3);
-    const arrowBob = Math.sin(t * 2.4) * 4;
-    ctx.globalAlpha = pulse;
-    ctx.font = '700 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    // Animated hint
+    const hintY = 312;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.6);
+    const arrowBob = Math.sin(t * 2.2) * 3;
+    ctx.globalAlpha = 0.55 + 0.45 * pulse;
+    ctx.font = '500 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = palette.primary;
+    ctx.fillStyle = p.textDim;
     ctx.fillText(zh ? '点击箱子开箱' : 'Click the case to open', cx, hintY);
     ctx.globalAlpha = 1;
-    ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = palette.primary;
-    ctx.fillText('▼', cx, hintY + 26 + arrowBob);
+    ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.accent;
+    ctx.fillText('▾', cx, hintY + 18 + arrowBob);
 
-    // Mode label / switcher (only when more than one animation exists)
+    // Mode switcher (only when more than one animation exists)
     if (openingModeCount() > 1) {
       const label = openingModeLabel(this.animModeIndex);
       ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = palette.muted;
-      ctx.fillText(zh ? `动画:${label.nameZh} ◂ ▸` : `Mode: ${label.name} ◂ ▸`, cx, 348);
+      ctx.fillStyle = p.textDim;
+      ctx.fillText(zh ? `动画 · ${label.nameZh} ◂ ▸` : `Mode · ${label.name} ◂ ▸`, cx, 356);
     }
 
-    // Compact tier odds strip (prize grading at a glance).
-    this.drawTierLegend(ctx, palette, 20, 372, this.width - 40, 56);
+    // Tier odds strip
+    this.drawTierStrip(ctx, p, 24, 382, this.width - 48, 52);
 
     // Key hints
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = palette.muted;
+    ctx.fillStyle = p.textFaint;
     ctx.fillText(
       zh ? 'R 返回 · M 音效 · Shift+R 重置统计' : 'R menu · M sound · Shift+R reset stats',
-      this.width / 2, this.height - 14,
+      this.width / 2, this.height - 13,
     );
   }
 
-  /** Case with optional unlock motion: slight shake and a tilting lid. */
+  private chipButton(
+    ctx: CanvasRenderingContext2D,
+    hit: { x: number; y: number; w: number; h: number },
+    label: string,
+    p: GachaPalette,
+    accentText = false,
+  ) {
+    const dark = this.isDarkTheme();
+    ctx.fillStyle = dark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.75)';
+    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = p.panelBorder;
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
+    ctx.stroke();
+    ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = accentText ? p.accent : p.textDim;
+    ctx.fillText(label, hit.x + hit.w / 2, hit.y + hit.h / 2 + 1);
+  }
+
   private drawCase(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, lidOpen = 0, shake = 0) {
     const hw = w / 2;
     const hh = h / 2;
-    const bob = Math.sin(performance.now() / 600) * 4 + shake;
+    const bob = Math.sin(performance.now() / 640) * 3.5 + shake;
+    const dark = this.isDarkTheme();
+    const accentColor = dark ? '#7dd3fc' : '#0284c7';
 
     ctx.save();
     ctx.translate(cx + bob, cy);
 
-    // Body
-    const grad = ctx.createLinearGradient(0, -hh, 0, hh);
-    grad.addColorStop(0, '#2b3947');
-    grad.addColorStop(1, '#141c26');
-    ctx.fillStyle = grad;
-    roundRectPath(ctx, -hw, -hh + 14, w, h - 14, 8);
+    // Soft ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, hh - 6, hw * 0.62, 10, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Body — dark glass with metal sheen
+    const grad = ctx.createLinearGradient(0, -hh, 0, hh);
+    grad.addColorStop(0, dark ? '#2c3644' : '#cbd5e1');
+    grad.addColorStop(0.5, dark ? '#1b222d' : '#94a3b8');
+    grad.addColorStop(1, dark ? '#12161d' : '#64748b');
+    ctx.fillStyle = grad;
+    roundRectPath(ctx, -hw, -hh + 14, w, h - 14, 16);
+    ctx.fill();
+
+    // Hairline sheen
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, -hw + 0.5, -hh + 14.5, w - 1, h - 15, 16);
+    ctx.stroke();
 
     // Inner glow when the lid opens
     if (lidOpen > 0) {
-      const glow = ctx.createRadialGradient(0, -hh + 24, 4, 0, -hh + 24, w * 0.9);
-      glow.addColorStop(0, `rgba(255,240,190,${0.55 * lidOpen})`);
-      glow.addColorStop(1, 'rgba(255,240,190,0)');
+      const glow = ctx.createRadialGradient(0, -hh + 26, 4, 0, -hh + 26, w * 0.9);
+      glow.addColorStop(0, `rgba(255,244,205,${0.6 * lidOpen})`);
+      glow.addColorStop(1, 'rgba(255,244,205,0)');
       ctx.fillStyle = glow;
       ctx.fillRect(-hw, -hh, w, h);
       ctx.font = '56px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = lidOpen;
-      ctx.fillText('✨', 0, -hh + 40);
+      ctx.fillText('✦', 0, -hh + 44);
       ctx.globalAlpha = 1;
     }
 
     // Lid — tilts back around its top-left corner as it opens.
     ctx.save();
-    ctx.translate(-hw - 3, -hh + 4);
+    ctx.translate(-hw - 3, -hh + 6);
     if (lidOpen > 0) {
-      ctx.rotate(-lidOpen * 0.6);
-      ctx.translate(0, -lidOpen * 26);
+      ctx.rotate(-lidOpen * 0.55);
+      ctx.translate(0, -lidOpen * 30);
     }
-    ctx.fillStyle = '#394b5e';
-    roundRectPath(ctx, 0, 0, w + 6, 24, 7);
+    const lidGrad = ctx.createLinearGradient(0, 0, 0, 30);
+    lidGrad.addColorStop(0, dark ? '#3a4554' : '#e2e8f0');
+    lidGrad.addColorStop(1, dark ? '#242c38' : '#94a3b8');
+    ctx.fillStyle = lidGrad;
+    roundRectPath(ctx, 0, 0, w + 6, 24, 10);
     ctx.fill();
-    roundRectPath(ctx, 9, 2, w - 12, 30, 5);
-    ctx.fillStyle = '#4a6076';
-    ctx.fill();
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, 0.5, 0.5, w + 5, 23, 10);
+    ctx.stroke();
     ctx.restore();
 
-    // Center emblem
-    ctx.fillStyle = 'rgba(255,255,255,0.09)';
-    roundRectPath(ctx, -hw + 18, -hh + 44, w - 36, h - 62, 6);
+    // Emblem — centered rarity-agnostic spark (monochrome, premium)
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRectPath(ctx, -hw + 20, -hh + 46, w - 40, h - 64, 12);
     ctx.fill();
+    ctx.strokeStyle = dark ? 'rgba(125,211,252,0.35)' : 'rgba(2,132,199,0.4)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, -hw + 20.5, -hh + 46.5, w - 41, h - 65, 12);
+    ctx.stroke();
     ctx.font = '40px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🎁', 0, 14);
+    ctx.globalAlpha = 0.9;
+    ctx.fillText('◇', 0, 16);
+    ctx.globalAlpha = 1;
 
-    // Latch
-    ctx.fillStyle = '#e4ae39';
-    roundRectPath(ctx, -14, 26, 28, 12, 3);
+    // Latch — accent hairline
+    ctx.fillStyle = dark ? 'rgba(125,211,252,0.75)' : 'rgba(2,132,199,0.75)';
+    roundRectPath(ctx, -13, 26, 26, 3, 1.5);
     ctx.fill();
+
+    // Ambient glow behind the box
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(performance.now() / 900);
+    ctx.fillStyle = accentColor;
+    ctx.globalAlpha = 0.10;
+    ctx.fillRect(-hw - 16, -hh - 10, w + 32, h + 24);
+    ctx.globalAlpha = 1;
 
     ctx.restore();
   }
 
-  private drawTierLegend(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>, x: number, y: number, w: number, h: number) {
+  private drawTierStrip(ctx: CanvasRenderingContext2D, p: GachaPalette, x: number, y: number, w: number, h: number) {
     const zh = this.isZhLang();
-    const gap = 6;
+    const gap = 8;
     const segW = (w - gap * (GACHA_TIERS.length - 1)) / GACHA_TIERS.length;
+
     for (let i = 0; i < GACHA_TIERS.length; i++) {
       const tier = GACHA_TIERS[i];
       const sx = x + i * (segW + gap);
-      const grad = ctx.createLinearGradient(sx, y, sx, y + h);
-      grad.addColorStop(0, tier.color);
-      grad.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = grad;
-      roundRectPath(ctx, sx, y, segW, h, 7);
+
+      // Glass cell
+      ctx.fillStyle = p.cardFillTop;
+      roundRectPath(ctx, sx, y, segW, h, 10);
       ctx.fill();
+      ctx.strokeStyle = p.panelBorderSoft;
+      ctx.lineWidth = 1;
+      roundRectPath(ctx, sx, y, segW, h, 10);
+      ctx.stroke();
+
+      // Accent hairline on top edge
+      ctx.fillStyle = tier.color;
+      ctx.globalAlpha = 0.85;
+      roundRectPath(ctx, sx + segW / 2 - 14, y, 28, 2.5, 1.2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(tier.nameZh, sx + segW / 2, y + 14);
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(`${(tier.odds * 100).toFixed(2)}%`, sx + segW / 2, y + 34);
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.font = '9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(`${GACHA_POOL[tier.id].length}${zh ? ' 件' : ' items'}`, sx + segW / 2, y + 52);
+      ctx.fillStyle = p.text;
+      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(tier.nameZh, sx + segW / 2, y + 18);
+      ctx.fillStyle = tier.color;
+      ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(`${(tier.odds * 100).toFixed(2)}%`, sx + segW / 2, y + 36);
+      void zh;
     }
   }
 
-  /* ─── Unlock prelude (case shakes, lid opens, light bursts) ─── */
+  /* ─── Unlock prelude ─── */
 
-  private drawUnlock(ctx: CanvasRenderingContext2D) {
+  private drawUnlock(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
-    const dark = this.isDarkTheme();
-    const t = this.unlockT / UNLOCK_DURATION; // 0..1
+    const t = this.unlockT / UNLOCK_DURATION;
 
-    // Background dims toward the case, then brightens into the reel.
-    ctx.fillStyle = dark ? 'rgba(7,11,18,0.92)' : 'rgba(250,250,250,0.92)';
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = dark ? '#f8fafc' : '#0f172a';
-    ctx.fillText(zh ? '解锁中…' : 'UNLOCKING…', this.width / 2, 30);
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(zh ? '解锁中…' : 'UNLOCKING…', this.width / 2, 34);
 
     const cx = this.width / 2;
-    const cy = 206;
-    const shake = t < 0.45 ? Math.sin(t * 90) * 7 * (1 - t / 0.45) : 0;
+    const cy = 216;
+    const shake = t < 0.45 ? Math.sin(t * 82) * 6 * (1 - t / 0.45) : 0;
     const lidOpen = Math.min(1, Math.max(0, (t - 0.35) / 0.5));
-    this.drawCase(ctx, cx, cy, 190, 128, lidOpen, shake);
+    this.drawCase(ctx, cx, cy, 200, 134, lidOpen, shake);
 
-    // Light rays when the lid opens
     if (lidOpen > 0) {
       ctx.save();
-      ctx.translate(cx, cy - 38);
+      ctx.translate(cx, cy - 46);
       ctx.globalAlpha = lidOpen;
-      ctx.strokeStyle = 'rgba(255,232,160,0.8)';
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i - 4.5) * 0.16 + Math.sin(t * 6 + i) * 0.03;
-        const len = 60 + 90 * lidOpen;
+      ctx.strokeStyle = 'rgba(255,238,180,0.75)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 12; i++) {
+        const a = -Math.PI / 2 + (i - 5.5) * 0.15 + Math.sin(t * 6 + i) * 0.03;
+        const len = 70 + 100 * lidOpen;
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
@@ -460,162 +575,163 @@ export class GachaGame extends BaseGame {
       ctx.globalAlpha = 1;
     }
 
-    // Flash just before the reel takes over
     if (t > 0.86) {
-      ctx.fillStyle = `rgba(255,244,200,${(t - 0.86) / 0.14 * 0.35})`;
+      ctx.fillStyle = `rgba(255,246,214,${(t - 0.86) / 0.14 * 0.34})`;
       ctx.fillRect(0, 0, this.width, this.height);
     }
   }
 
   /* ─── Opening (mode-driven) ─── */
 
-  private drawOpening(ctx: CanvasRenderingContext2D) {
+  private drawOpening(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     if (!this.animMode) return;
     this.animMode.draw(ctx);
 
     const zh = this.isZhLang();
-    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = this.isDarkTheme() ? '#f8fafc' : '#0f172a';
-    ctx.fillText(zh ? '开箱中…' : 'OPENING…', this.width / 2, 26);
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(zh ? '开箱中…' : 'OPENING…', this.width / 2, 28);
   }
 
   /* ─── Result ─── */
 
-  private drawResult(ctx: CanvasRenderingContext2D) {
+  private drawResult(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     if (!this.roll) return;
     const zh = this.isZhLang();
-    const dark = this.isDarkTheme();
     const tier = this.roll.tier;
     const item = this.roll.item;
     const owned = this.stats.itemCounts[item.id] ?? 0;
     const cx = this.width / 2;
 
-    // Rarity radial background
-    const grad = ctx.createRadialGradient(cx, this.height / 2 - 20, 20, cx, this.height / 2 - 20, 340);
+    // Rarity radial wash
+    const grad = ctx.createRadialGradient(cx, this.height / 2 - 26, 20, cx, this.height / 2 - 26, 340);
     grad.addColorStop(0, tier.glow);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Tier headline
-    ctx.font = '700 18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    // Tier kicker
+    ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = tier.color;
-    ctx.fillText(`★ ${tier.nameZh} · ${(tier.odds * 100).toFixed(2)}% ★`, cx, 34);
+    ctx.fillText(`${tier.nameZh.toUpperCase()} · ${(tier.odds * 100).toFixed(2)}%`, cx, 38);
 
     // Card
-    const cw = 250;
-    const chh = 292;
+    const cw = 252;
+    const chh = 296;
     const pop = Math.min(1, this.revealT * 3);
-    const scale = 0.85 + 0.15 * easeOutBack(pop);
+    const scale = 0.86 + 0.14 * easeOutBack(pop);
     ctx.save();
-    ctx.translate(cx, 214);
+    ctx.translate(cx, 216);
     ctx.scale(scale, scale);
+
+    // Sheet
+    const sheetGrad = ctx.createLinearGradient(-cw / 2, -chh / 2, cw / 2, chh / 2);
+    sheetGrad.addColorStop(0, this.isDarkTheme() ? 'rgba(38,44,54,0.98)' : 'rgba(255,255,255,0.98)');
+    sheetGrad.addColorStop(1, this.isDarkTheme() ? 'rgba(18,21,27,0.98)' : 'rgba(237,241,247,0.98)');
+    ctx.fillStyle = sheetGrad;
     ctx.shadowColor = tier.glow;
-    ctx.shadowBlur = 36;
-    const cardGrad = ctx.createLinearGradient(-cw / 2, 0, cw / 2, 0);
-    cardGrad.addColorStop(0, tier.color);
-    cardGrad.addColorStop(1, shade(tier.color, -0.4));
-    ctx.fillStyle = cardGrad;
-    roundRectPath(ctx, -cw / 2, -chh / 2, cw, chh, 14);
+    ctx.shadowBlur = 48;
+    roundRectPath(ctx, -cw / 2, -chh / 2, cw, chh, 22);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+
+    // Rarity border (gradient frame)
+    const frame = ctx.createLinearGradient(0, -chh / 2, 0, chh / 2);
+    frame.addColorStop(0, tier.color);
+    frame.addColorStop(1, shade(tier.color, -0.5));
+    ctx.strokeStyle = frame;
     ctx.lineWidth = 2;
-    roundRectPath(ctx, -cw / 2, -chh / 2, cw, chh, 14);
+    roundRectPath(ctx, -cw / 2, -chh / 2, cw, chh, 22);
+    ctx.stroke();
+    ctx.strokeStyle = this.isDarkTheme() ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, -cw / 2 + 3, -chh / 2 + 3, cw - 6, chh - 6, 19);
     ctx.stroke();
 
     // NEW badge
     if (this.isNewItem) {
-      ctx.rotate(-0.12);
-      ctx.fillStyle = '#ffd700';
-      roundRectPath(ctx, cw / 2 - 52, -chh / 2 + 8, 46, 22, 5);
+      ctx.save();
+      ctx.rotate(-0.1);
+      ctx.fillStyle = tier.color;
+      roundRectPath(ctx, cw / 2 - 58, -chh / 2 + 12, 46, 20, 10);
       ctx.fill();
-      ctx.fillStyle = '#3a2c00';
-      ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(zh ? '新!NEW' : 'NEW!', cw / 2 - 29, -chh / 2 + 19);
-      ctx.rotate(0.12);
+      ctx.fillStyle = '#12151b';
+      ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(zh ? 'NEW' : 'NEW', cw / 2 - 35, -chh / 2 + 22);
+      ctx.restore();
     }
 
-    ctx.font = '52px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(item.emoji, 0, -34);
-    ctx.font = '700 18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(truncate(item.nameZh, 16), 0, 52);
+    // Content
+    ctx.font = '56px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.text;
+    ctx.fillText(item.emoji, 0, -38);
+    ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(truncate(item.nameZh, 14), 0, 44);
     ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(truncate(item.name, 26), 0, 82);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(
-      zh ? `拥有 ${owned} ×` : `Owned: ${owned}`,
-      0, 108,
-    );
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(truncate(item.name, 30), 0, 74);
+    ctx.fillStyle = tier.color;
+    ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
+    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, 116);
     ctx.restore();
 
-    // Buttons
+    // Buttons — one primary action only
     const again = this.hitAgain();
-    const menu = this.hitMenuBtn();
-    this.drawTextButton(ctx, again, zh ? '再抽一次' : 'DRAW AGAIN', true);
-    this.drawTextButton(ctx, menu, zh ? '返回菜单' : 'MENU');
-
-    // Hint
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = dark ? '#94a3b8' : '#5b6b80';
-    ctx.fillText(zh ? '空格 = 再抽一次' : 'Space = draw again', cx, this.height - 14);
+    this.primaryButton(ctx, again, zh ? '再抽一次' : 'DRAW AGAIN', p);
   }
 
   /* ─── Gallery (prize showcase, all prizes on one page) ─── */
 
-  private drawGallery(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
+  private drawGallery(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
 
-    fillRoundedPanel(ctx, 20, 10, this.width - 40, 36, palette, 10);
-    ctx.font = '700 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    glassPanel(ctx, 24, 14, this.width - 48, 40, p, 12);
+    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = palette.text;
-    ctx.fillText(zh ? '🏛 全部奖品' : '🏛 ALL PRIZES', 36, 28);
-    this.drawTextButton(ctx, this.hitBack(), zh ? '← 返回' : '← BACK');
+    ctx.fillStyle = p.text;
+    ctx.fillText(zh ? '全部奖品' : 'ALL PRIZES', 42, 34);
+    this.chipButton(ctx, this.hitBack(), zh ? '菜单' : 'MENU', p);
 
-    // One tier row per grade: label column + item cards.
-    const maxItems = Math.max(...GACHA_TIERS.map((tier) => GACHA_POOL[tier.id].length));
-    const labelW = 128;
-    const gap = 8;
-    const cardW = (this.width - 40 - labelW - gap * (maxItems - 1)) / maxItems;
-    const cardH = 60;
-    const rowPitch = cardH + 22;
-    let y = 58;
-
-    for (const tier of GACHA_TIERS) {
-      // Tier label column
+    // Rarity legend row: swatch + name, one per grade.
+    const legendW = (this.width - 48 - 8 * (GACHA_TIERS.length - 1)) / GACHA_TIERS.length;
+    for (let i = 0; i < GACHA_TIERS.length; i++) {
+      const tier = GACHA_TIERS[i];
+      const x = 24 + i * (legendW + 8);
       ctx.textAlign = 'left';
       ctx.fillStyle = tier.color;
-      ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(tier.nameZh, 30, y + 12);
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = palette.muted;
-      ctx.fillText(zh ? tier.name : tier.nameZh, 30, y + 26);
-      ctx.fillStyle = tier.color;
-      ctx.font = '700 10px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillText(`${(tier.odds * 100).toFixed(2)}%`, 30, y + 40);
-      ctx.fillStyle = palette.muted;
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(`${GACHA_POOL[tier.id].length}${zh ? ' 项' : ''}`, 30, y + 52);
+      roundRectPath(ctx, x, 68, 3, 14, 1.5);
+      ctx.fill();
+      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(tier.nameZh, x + 9, 71);
+      ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(`${GACHA_POOL[tier.id].length} · ${(tier.odds * 100).toFixed(2)}%`, x + 9, 84);
+    }
 
-      // Item cards
-      const items = GACHA_POOL[tier.id];
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const x = 30 + labelW + i * (cardW + gap);
-        const owned = this.stats.itemCounts[item.id] ?? 0;
-        this.drawItemCard(ctx, x, y, cardW, cardH, tier, item, owned);
-      }
-      y += rowPitch;
+    // Compact grid: all prizes on one page. High tiers first.
+    const perLine = 6;
+    const gap = 8;
+    const cardW = (this.width - 48 - gap * (perLine - 1)) / perLine;
+    const cardH = 52;
+    const startY = 104;
+    const items: { item: GachaItem; tier: GachaTier }[] = [];
+    for (const tierId of [...GACHA_TIER_ORDER].reverse()) {
+      const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
+      for (const item of GACHA_POOL[tierId]) items.push({ item, tier });
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const col = i % perLine;
+      const row = Math.floor(i / perLine);
+      const x = 24 + col * (cardW + gap);
+      const y = startY + row * (cardH + 6);
+      const owned = this.stats.itemCounts[items[i].item.id] ?? 0;
+      this.drawItemCard(ctx, x, y, cardW, cardH, items[i].tier, items[i].item, owned, p);
     }
   }
 
@@ -623,130 +739,140 @@ export class GachaGame extends BaseGame {
     ctx: CanvasRenderingContext2D,
     x: number, y: number, w: number, h: number,
     tier: GachaTier, item: GachaItem, owned: number,
+    p: GachaPalette,
   ) {
     const locked = owned <= 0;
+    const dark = this.isDarkTheme();
+
+    // Sheet
     const grad = ctx.createLinearGradient(x, y, x, y + h);
     if (locked) {
-      // Not pulled yet: gray silhouette until won.
-      grad.addColorStop(0, '#3f4650');
-      grad.addColorStop(1, '#252a31');
+      grad.addColorStop(0, dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)');
+      grad.addColorStop(1, dark ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.3)');
     } else {
-      grad.addColorStop(0, shade(tier.color, -0.05));
-      grad.addColorStop(1, shade(tier.color, -0.45));
+      grad.addColorStop(0, p.cardFillTop);
+      grad.addColorStop(1, p.cardFillBottom);
     }
     ctx.fillStyle = grad;
-    roundRectPath(ctx, x, y, w, h, 8);
+    roundRectPath(ctx, x, y, w, h, 10);
     ctx.fill();
-    ctx.strokeStyle = locked ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.4)';
+
+    // Border: rarity hairline when owned, neutral when locked
+    ctx.strokeStyle = locked ? p.panelBorderSoft : p.panelBorder;
     ctx.lineWidth = 1;
-    roundRectPath(ctx, x, y, w, h, 8);
+    roundRectPath(ctx, x, y, w, h, 10);
     ctx.stroke();
+
+    // Rarity top edge
+    if (!locked) {
+      ctx.fillStyle = tier.color;
+      ctx.globalAlpha = 0.9;
+      roundRectPath(ctx, x + w / 2 - 12, y + 5, 24, 2, 1);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (locked) {
-      // Not pulled yet: gray silhouette until won (item still readable).
-      ctx.globalAlpha = 0.32;
-      ctx.font = '22px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 8);
+      ctx.globalAlpha = 0.3;
+      ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = dark ? '#cbd5e1' : '#475569';
+      ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 6);
       ctx.globalAlpha = 1;
-      ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = 'rgba(226,232,240,0.45)';
-      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 14), x + w / 2, y + h / 2 + 16);
+      ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 8), x + w / 2, y + h / 2 + 16);
       return;
     }
 
-    ctx.font = '22px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 8);
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 14), x + w / 2, y + h / 2 + 18);
+    ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 6);
+    ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 8), x + w / 2, y + h / 2 + 16);
 
-    ctx.font = '700 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#ffd700';
+    ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.textFaint;
     ctx.textAlign = 'right';
-    ctx.fillText(`x${owned}`, x + w - 6, y + 12);
+    ctx.fillText(`×${owned}`, x + w - 6, y + h / 2 - 12);
   }
 
   /* ─── Stats ─── */
 
-  private drawStats(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
+  private drawStats(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
     const total = this.stats.totalPulls;
 
-    fillRoundedPanel(ctx, 20, 10, this.width - 40, 36, palette, 10);
-    ctx.font = '700 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    glassPanel(ctx, 24, 14, this.width - 48, 40, p, 12);
+    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = palette.text;
-    ctx.fillText(zh ? '📈 抽取统计' : '📈 PULL STATS', 36, 28);
-    this.drawTextButton(ctx, this.hitBack(), zh ? '← 返回' : '← BACK');
+    ctx.fillStyle = p.text;
+    ctx.fillText(zh ? '抽取统计' : 'PULL STATS', 42, 34);
+    this.chipButton(ctx, this.hitBack(), zh ? '菜单' : 'MENU', p);
 
     if (this.statsPage === 0) {
-      // Total
+      // Total pulls — hero number
       ctx.textAlign = 'center';
-      ctx.fillStyle = palette.primary;
-      ctx.font = '700 26px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(String(total), this.width / 2, 74);
+      ctx.font = '600 30px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.text;
+      ctx.fillText(String(total), this.width / 2, 92);
       ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = palette.muted;
-      ctx.fillText(zh ? '累计抽取次数' : 'Total pulls', this.width / 2, 96);
+      ctx.fillStyle = p.textDim;
+      ctx.fillText(zh ? '累计抽取次数' : 'TOTAL PULLS', this.width / 2, 118);
 
-      // Per-tier bars (oldest → newest tier order)
-      const barX = 56;
-      const barW = this.width - 210;
-      let y = 118;
+      // Per-tier bars (high tiers first)
+      const barX = 64;
+      const barW = this.width - 240;
+      let y = 150;
       for (const tierId of [...GACHA_TIER_ORDER].reverse()) {
         const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
         const count = this.stats.tierCounts[tierId];
         const pct = total > 0 ? (count / total) * 100 : 0;
         ctx.textAlign = 'left';
-        ctx.fillStyle = tier.color;
-        ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillText(`${tier.nameZh}`, 30, y);
-        ctx.fillStyle = this.isDarkTheme() ? '#1e293b' : '#e2e8f0';
-        roundRectPath(ctx, barX, y - 7, barW, 14, 7);
+        ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = p.textDim;
+        ctx.fillText(tier.nameZh, 36, y);
+
+        // Track + fill
+        ctx.fillStyle = this.isDarkTheme() ? 'rgba(255,255,255,0.06)' : 'rgba(17,24,39,0.07)';
+        roundRectPath(ctx, barX, y - 6, barW, 12, 6);
         ctx.fill();
         if (pct > 0) {
           ctx.fillStyle = tier.color;
-          roundRectPath(ctx, barX, y - 7, Math.max(3, (barW * pct) / 100), 14, 7);
+          roundRectPath(ctx, barX, y - 6, Math.max(3, (barW * pct) / 100), 12, 6);
           ctx.fill();
         }
-        ctx.fillStyle = palette.text;
-        ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+        ctx.fillStyle = p.text;
+        ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
-        ctx.fillText(`${count}`, this.width - 116, y);
-        ctx.fillStyle = palette.muted;
-        ctx.fillText(`${pct.toFixed(1)}%`, this.width - 76, y);
-        y += 30;
+        ctx.fillText(String(count), this.width - 146, y);
+        ctx.fillStyle = p.textFaint;
+        ctx.fillText(`${pct.toFixed(1)}%`, this.width - 84, y);
+        y += 34;
       }
-
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = palette.muted;
-      ctx.fillText(zh ? '官方概率:蓝 79.92% · 紫 15.98% · 粉 3.20% · 红 0.64% · 金 0.26%' : 'Official odds: 79.92% / 15.98% / 3.20% / 0.64% / 0.26%', 30, this.height - 74);
     } else {
-      // Item counts grid + recent history
+      // Item counts + recent pulls
       const allItems = GACHA_TIERS.flatMap((tier) => GACHA_POOL[tier.id].map((item) => ({ item, tier })));
-      const cardW = 100;
-      const cardH = 52;
-      const cols = 5;
+      const cardW = 88;
+      const cardH = 48;
+      const cols = 6;
       const gapX = (this.width - 60 - cardW * cols) / (cols - 1);
       let idx = 0;
-      const rowStartY = 58;
+      const rowStartY = 70;
       const rows = Math.ceil(allItems.length / cols);
       for (const entry of allItems) {
         const col = idx % cols;
         const row = Math.floor(idx / cols);
-        this.drawItemCard(ctx, 30 + col * (cardW + gapX), rowStartY + row * (cardH + 8), cardW, cardH, entry.tier, entry.item, this.stats.itemCounts[entry.item.id] ?? 0);
+        this.drawItemCard(ctx, 30 + col * (cardW + gapX), rowStartY + row * (cardH + 6), cardW, cardH, entry.tier, entry.item, this.stats.itemCounts[entry.item.id] ?? 0, p);
         idx++;
       }
 
-      const hy = rowStartY + rows * (cardH + 8) + 10;
+      const hy = rowStartY + rows * (cardH + 6) + 8;
       ctx.textAlign = 'left';
-      ctx.fillStyle = palette.text;
-      ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.text;
       ctx.fillText(zh ? '最近抽取' : 'RECENT PULLS', 30, hy);
       const recent = this.stats.history.slice(0, 12);
       let hx = 30;
@@ -754,79 +880,85 @@ export class GachaGame extends BaseGame {
         const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
         const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
         if (!tier || !item) continue;
-        ctx.font = '16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.font = '15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = tier.color;
-        ctx.fillText(item.emoji, hx + 14, hy + 22);
+        ctx.fillStyle = p.textDim;
+        ctx.fillText(item.emoji, hx + 12, hy + 20);
         ctx.beginPath();
         ctx.fillStyle = tier.color;
-        ctx.arc(hx + 14, hy + 36, 3, 0, Math.PI * 2);
+        ctx.arc(hx + 12, hy + 34, 2.5, 0, Math.PI * 2);
         ctx.fill();
-        hx += 46;
-        if (hx > this.width - 40) break;
+        hx += 40;
+        if (hx > this.width - 50) break;
       }
       if (recent.length === 0) {
         ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = palette.muted;
-        ctx.fillText(zh ? '还没有抽取记录' : 'No pulls yet', 30, hy + 22);
+        ctx.fillStyle = p.textFaint;
+        ctx.fillText(zh ? '还没有抽取记录' : 'No pulls yet', 30, hy + 20);
       }
     }
 
-    this.drawPager(ctx, this.statsPage, 2, palette);
+    this.pager(ctx, this.statsPage, 2, p);
 
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillStyle = palette.muted;
-    ctx.fillText('Shift+R ' + (zh ? '重置统计' : 'reset stats'), this.width - 30, this.height - 14);
+    ctx.fillStyle = p.textFaint;
+    ctx.fillText('Shift+R ' + (zh ? '重置统计' : 'reset stats'), this.width - 26, this.height - 12);
   }
 
-  private drawPager(ctx: CanvasRenderingContext2D, page: number, totalPages: number, palette: ReturnType<typeof getRetroPalette>) {
-    const zh = this.isZhLang();
-    const y = this.height - 34;
-    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  private pager(ctx: CanvasRenderingContext2D, page: number, totalPages: number, p: GachaPalette) {
+    const y = this.height - 30;
+    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = palette.text;
+    ctx.fillStyle = p.textDim;
     ctx.fillText(`${page + 1} / ${totalPages}`, this.width / 2, y);
-    ctx.fillStyle = page > 0 ? palette.primary : palette.muted;
+    ctx.fillStyle = page > 0 ? p.textDim : p.textFaint;
     ctx.textAlign = 'left';
-    ctx.fillText('◀', 150, y);
-    ctx.fillStyle = page < totalPages - 1 ? palette.primary : palette.muted;
+    ctx.fillText('‹', 168, y);
+    ctx.fillStyle = page < totalPages - 1 ? p.textDim : p.textFaint;
     ctx.textAlign = 'right';
-    ctx.fillText('▶', this.width - 150, y);
+    ctx.fillText('›', this.width - 168, y);
   }
 
   /* ─── Shared drawing helpers ─── */
 
-  private drawTextButton(
+  private primaryButton(
     ctx: CanvasRenderingContext2D,
     hit: { x: number; y: number; w: number; h: number },
     label: string,
-    accent = false,
+    p: GachaPalette,
   ) {
     const dark = this.isDarkTheme();
-    ctx.fillStyle = accent ? (dark ? '#14262b' : '#d9f1ee') : (dark ? '#111826' : '#eef2f7');
-    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, 8);
+    const grad = ctx.createLinearGradient(0, hit.y, 0, hit.y + hit.h);
+    if (dark) {
+      grad.addColorStop(0, 'rgba(125,211,252,0.2)');
+      grad.addColorStop(1, 'rgba(125,211,252,0.08)');
+    } else {
+      grad.addColorStop(0, 'rgba(2,132,199,0.14)');
+      grad.addColorStop(1, 'rgba(2,132,199,0.05)');
+    }
+    ctx.fillStyle = grad;
+    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
     ctx.fill();
-    ctx.strokeStyle = accent ? '#39C5BB' : (dark ? '#263445' : '#d3dce6');
+    ctx.strokeStyle = dark ? 'rgba(125,211,252,0.5)' : 'rgba(2,132,199,0.45)';
     ctx.lineWidth = 1;
-    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, 8);
+    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
     ctx.stroke();
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = accent ? '#39C5BB' : (dark ? '#cbd5e1' : '#334155');
+    ctx.fillStyle = dark ? '#bae6fd' : '#075985';
     ctx.fillText(label, hit.x + hit.w / 2, hit.y + hit.h / 2 + 1);
   }
 
   /* ─── Hit regions ─── */
 
-  private hitSound() { return { x: this.width - 94, y: 15, w: 28, h: 26 }; }
-  private hitStats() { return { x: this.width - 140, y: 15, w: 40, h: 26 }; }
-  private hitPrizes() { return { x: this.width - 186, y: 15, w: 40, h: 26 }; }
-  private hitBack() { return { x: this.width - 110, y: 15, w: 72, h: 26 }; }
-  private hitAgain() { return { x: this.width / 2 - 132, y: 402, w: 124, h: 44 }; }
-  private hitMenuBtn() { return { x: this.width / 2 + 8, y: 402, w: 124, h: 44 }; }
+  private hitSound() { return { x: this.width - 138, y: 22, w: 58, h: 24 }; }
+  private hitStats() { return { x: this.width - 196, y: 22, w: 52, h: 24 }; }
+  private hitPrizes() { return { x: this.width - 254, y: 22, w: 52, h: 24 }; }
+  private hitBack() { return { x: this.width - 104, y: 22, w: 56, h: 24 }; }
+  private hitAgain() { return { x: this.width / 2 - 92, y: 402, w: 184, h: 44 }; }
 
   private canvasHit(x: number, y: number, r: { x: number; y: number; w: number; h: number }): boolean {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -890,9 +1022,9 @@ export class GachaGame extends BaseGame {
       clientY = touch.clientY;
     }
 
-    const p = this.canvasPoint(clientX, clientY);
-    if (!p) return;
-    const { x, y } = p;
+    const pt = this.canvasPoint(clientX, clientY);
+    if (!pt) return;
+    const { x, y } = pt;
 
     switch (this.screen) {
       case 'menu': {
@@ -901,18 +1033,18 @@ export class GachaGame extends BaseGame {
         if (this.canvasHit(x, y, this.hitSound())) { this.sfx.enabled = !this.sfx.enabled; if (this.sfx.enabled) this.sfx.prime(); return; }
         // Mode switcher (only when > 1 mode registered)
         if (openingModeCount() > 1) {
-          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 348) < 12) {
+          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 356) < 12) {
             this.animModeIndex = (this.animModeIndex - 1 + openingModeCount()) % openingModeCount();
             this.sfx.click();
             return;
           }
-          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 348) < 12) {
+          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 356) < 12) {
             this.animModeIndex = (this.animModeIndex + 1) % openingModeCount();
             this.sfx.click();
             return;
           }
         }
-        // Click the case (or anywhere on stage) → unlock prelude, then reel.
+        // Click the case → unlock prelude, then reel.
         this.sfx.click();
         this.startUnlock();
         return;
@@ -923,9 +1055,6 @@ export class GachaGame extends BaseGame {
         return;
       }
       case 'result': {
-        if (this.canvasHit(x, y, this.hitAgain())) { this.sfx.click(); this.startUnlock(); return; }
-        if (this.canvasHit(x, y, this.hitMenuBtn())) { this.sfx.click(); this.gotoMenu(); return; }
-        // Click elsewhere also pulls again (fast loop experience)
         this.sfx.click();
         this.startUnlock();
         return;
@@ -936,15 +1065,46 @@ export class GachaGame extends BaseGame {
       }
       case 'stats': {
         if (this.canvasHit(x, y, this.hitBack())) { this.sfx.click(); this.gotoMenu(); return; }
-        if (this.canvasHit(x, y, { x: 120, y: this.height - 44, w: 60, h: 24 }) && this.statsPage > 0) { this.statsPage = 0; this.sfx.click(); return; }
-        if (this.canvasHit(x, y, { x: this.width - 180, y: this.height - 44, w: 60, h: 24 }) && this.statsPage < 1) { this.statsPage = 1; this.sfx.click(); return; }
+        if (this.canvasHit(x, y, { x: 130, y: this.height - 44, w: 60, h: 24 }) && this.statsPage > 0) { this.statsPage = 0; this.sfx.click(); return; }
+        if (this.canvasHit(x, y, { x: this.width - 190, y: this.height - 44, w: 60, h: 24 }) && this.statsPage < 1) { this.statsPage = 1; this.sfx.click(); return; }
         return;
       }
     }
   }
 }
 
-// ── tiny shared helpers ──
+/* ── drawing helpers ── */
+
+function drawBg(ctx: CanvasRenderingContext2D, width: number, height: number, p: GachaPalette) {
+  const grad = ctx.createLinearGradient(0, 0, width * 0.25, height);
+  grad.addColorStop(0, p.bgTop);
+  grad.addColorStop(1, p.bgBottom);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Soft ambient accent
+  const ambient = ctx.createRadialGradient(width / 2, height * 0.35, 30, width / 2, height * 0.35, width * 0.75);
+  ambient.addColorStop(0, p.glow);
+  ambient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = ambient;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function glassPanel(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  p: GachaPalette,
+  radius: number,
+) {
+  ctx.fillStyle = p.panel;
+  roundRectPath(ctx, x, y, w, h, radius);
+  ctx.fill();
+  ctx.strokeStyle = p.panelBorder;
+  ctx.lineWidth = 1;
+  roundRectPath(ctx, x, y, w, h, radius);
+  ctx.stroke();
+}
+
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();

@@ -28,6 +28,8 @@ export interface GameMeta {
     touch?: { icon: 'tap' | 'swipe' | 'swipe-up' | 'swipe-down' | 'swipe-left' | 'swipe-right' | 'hold'; action: string; actionZh: string }[];
   };
   canvasSize: { width: number; height: number };
+  /** Games can opt out of the shell fullscreen control. Defaults to true. */
+  fullscreen?: boolean;
 }
 
 export const GAMES: GameMeta[] = [
@@ -523,6 +525,7 @@ export const GAMES: GameMeta[] = [
     descZh: 'CSGO 分级开箱:官方概率、转轮揭晓动画与抽取统计。',
     loader: () => import('./gacha.js').then((m) => m.GachaGame),
     canvasSize: { width: 640, height: 480 },
+    fullscreen: false,
     controls: {
       keyboard: [
         { keys: ['Space'], action: 'Open / draw again', actionZh: '开箱 / 再抽一次' },
