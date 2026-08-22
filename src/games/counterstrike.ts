@@ -59,8 +59,8 @@ import {
   type WeaponId,
 } from './counterstrikeRules.js';
 
-const W = 960;
-const H = 540;
+const W = 1280;
+const H = 720;
 const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
 const MAX_DIST = 620;
 const FOG_START = 190;
@@ -304,9 +304,9 @@ export class CounterStrikeGame extends BaseGame {
 
   private readonly renderCanvas = document.createElement('canvas');
   private readonly renderCtx = this.renderCanvas.getContext('2d');
-  private zBuffer = new Float32Array(480);
-  private rw = 480;
-  private rh = 270;
+  private zBuffer = new Float32Array(640);
+  private rw = 640;
+  private rh = 360;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -991,8 +991,8 @@ export class CounterStrikeGame extends BaseGame {
             this.clickBuyMenu(point.x, point.y);
             continue;
           }
-          const fireHit = Math.hypot(point.x - (this.width - 88), point.y - (this.height - 84)) <= 50;
-          const reloadHit = Math.hypot(point.x - (this.width - 88), point.y - (this.height - 164)) <= 38;
+          const fireHit = Math.hypot(point.x - (this.width - 104), point.y - (this.height - 100)) <= 58;
+          const reloadHit = Math.hypot(point.x - (this.width - 104), point.y - (this.height - 196)) <= 44;
           if (point.x < this.width * 0.45 && !fireHit && !reloadHit) {
             if (!this.moveTouch) {
               this.moveTouch = { id: t.identifier, ax: point.x, ay: point.y, dx: 0, dy: 0 };
@@ -1017,7 +1017,7 @@ export class CounterStrikeGame extends BaseGame {
             const dx = point.x - this.moveTouch.ax;
             const dy = point.y - this.moveTouch.ay;
             const len = Math.hypot(dx, dy);
-            const maxR = 58;
+            const maxR = 66;
             if (len > maxR) {
               this.moveTouch.dx = (dx / len) * maxR;
               this.moveTouch.dy = (dy / len) * maxR;
@@ -1048,8 +1048,8 @@ export class CounterStrikeGame extends BaseGame {
   private clickBuyMenu(x: number, y: number) {
     const rect = this.buyMenuRect();
     if (x < rect.x || x > rect.x + rect.w || y < rect.y || y > rect.y + rect.h) return;
-    const rowY = rect.y + 56;
-    const rowH = 21;
+    const rowY = rect.y + 64;
+    const rowH = 25;
     const catRows = 8;
     if (this.buyCat === -1) {
       if (x < rect.x + rect.w / 2) {
@@ -1078,8 +1078,8 @@ export class CounterStrikeGame extends BaseGame {
 
   private updateBuyHover(x: number, y: number) {
     const rect = this.buyMenuRect();
-    const rowY = rect.y + 56;
-    const rowH = 21;
+    const rowY = rect.y + 64;
+    const rowH = 25;
     if (x < rect.x || x > rect.x + rect.w || y < rowY || y > rect.y + rect.h) {
       this.hoverCat = -1;
       this.hoverItem = -1;
@@ -1096,9 +1096,9 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   private buyMenuRect() {
-    const w = 400;
-    const h = 246;
-    return { x: (W - w) / 2, y: (H - h) / 2 - 10, w, h };
+    const w = 480;
+    const h = 292;
+    return { x: (W - w) / 2, y: (H - h) / 2 - 14, w, h };
   }
 
   // ── Weapons ────────────────────────────────────────────────────────────────
@@ -1636,8 +1636,8 @@ export class CounterStrikeGame extends BaseGame {
     if (this.keys.has('a') || this.keys.has('arrowleft')) fx -= 1;
     if (this.keys.has('d') || this.keys.has('arrowright')) fx += 1;
     if (this.moveTouch) {
-      fx = this.moveTouch.dx / 58;
-      fy = -this.moveTouch.dy / 58;
+      fx = this.moveTouch.dx / 66;
+      fy = -this.moveTouch.dy / 66;
     }
     p.walk = this.keys.has('shift');
     p.crouch = this.keys.has('control') || this.keys.has('ctrl');
@@ -2048,10 +2048,31 @@ export class CounterStrikeGame extends BaseGame {
 
   // ── Drawing ────────────────────────────────────────────────────────────────
 
+  /** Shadowed HUD text so white/yellow readouts stay crisp over bright ice. */
+  private hudText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    align: CanvasTextAlign,
+    font: string,
+    fill: string,
+    shadow = true,
+  ) {
+    ctx.font = font;
+    ctx.textAlign = align;
+    if (shadow) {
+      ctx.fillStyle = 'rgba(6,12,24,0.72)';
+      ctx.fillText(text, x + 2, y + 2);
+    }
+    ctx.fillStyle = fill;
+    ctx.fillText(text, x, y);
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     const pixel = this.isPixelMode();
-    this.rw = pixel ? 320 : 480;
-    this.rh = pixel ? 180 : 270;
+    this.rw = pixel ? 320 : 640;
+    this.rh = pixel ? 180 : 360;
     if (this.renderCanvas.width !== this.rw) {
       this.renderCanvas.width = this.rw;
       this.renderCanvas.height = this.rh;
@@ -2078,11 +2099,11 @@ export class CounterStrikeGame extends BaseGame {
       ctx.fillStyle = '#f1f5f9';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = 'bold 28px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(zh ? '已暂停' : 'PAUSED', W / 2, H / 2 - 18);
-      ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = 'bold 34px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(zh ? '已暂停' : 'PAUSED', W / 2, H / 2 - 22);
+      ctx.font = '17px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = 'rgba(241,245,249,0.8)';
-      ctx.fillText(zh ? '按 P 继续' : 'PRESS P TO RESUME', W / 2, H / 2 + 18);
+      ctx.fillText(zh ? '按 P 继续' : 'PRESS P TO RESUME', W / 2, H / 2 + 22);
     }
 
     if (this.gameOver) {
@@ -2334,11 +2355,12 @@ export class CounterStrikeGame extends BaseGame {
     if (this.gameOver || !p.alive || this.phase !== 'live') return;
     const w = this.activeWeapon(p);
     if (!w) return;
-    const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 4 : 0;
-    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 5 : 0;
+    const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 5 : 0;
+    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 6 : 0;
     const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
     ctx.save();
-    ctx.translate(W / 2 + 120 + swayX, H + 60);
+    ctx.translate(W / 2 + 150 + swayX, H + 76);
+    ctx.scale(1.25, 1.25);
     ctx.rotate(-0.32 - p.recoil * 0.9 + reloadDip);
     ctx.translate(0, -bobY);
 
@@ -2412,25 +2434,15 @@ export class CounterStrikeGame extends BaseGame {
       : this.phase === 'freeze'
         ? `FREEZE ${Math.ceil(this.phaseTimer)}`
         : '';
-    ctx.fillStyle = 'rgba(8,16,30,0.55)';
-    ctx.fillRect(W / 2 - 110, 10, 220, 36);
-    ctx.textAlign = 'left';
-    ctx.font = `bold 16px ${font}`;
-    ctx.fillStyle = '#7fb2ff';
-    ctx.fillText(`CT ${this.ctWins}`, W / 2 - 100, 28);
-    ctx.textAlign = 'center';
-    ctx.font = `bold 20px ${mono}`;
-    ctx.fillStyle = '#f5f5f0';
-    ctx.fillText(timerText, W / 2, 28);
-    ctx.textAlign = 'right';
-    ctx.font = `bold 16px ${font}`;
-    ctx.fillStyle = '#ff9a8a';
-    ctx.fillText(`${this.tWins} T`, W / 2 + 100, 28);
+    ctx.fillStyle = 'rgba(8,16,30,0.58)';
+    ctx.fillRect(W / 2 - 140, 14, 280, 46);
+    this.hudText(ctx, `CT ${this.ctWins}`, W / 2 - 126, 37, 'left', `bold 19px ${font}`, '#7fb2ff');
+    this.hudText(ctx, timerText, W / 2, 37, 'center', `bold 26px ${mono}`, '#f5f5f0');
+    this.hudText(ctx, `${this.tWins} T`, W / 2 + 126, 37, 'right', `bold 19px ${font}`, '#ff9a8a');
 
     // Round / phase label.
     ctx.textAlign = 'center';
-    ctx.font = `13px ${font}`;
-    ctx.fillStyle = 'rgba(241,245,249,0.85)';
+    ctx.font = `15px ${font}`;
     const label = this.phase === 'freeze'
       ? (zh ? '冻结时间 · 购买区在地图中央' : 'FREEZE · BUYZONE IS IN THE CENTER')
       : this.phase === 'live' && this.liveT <= ROUND.buyTime
@@ -2438,36 +2450,29 @@ export class CounterStrikeGame extends BaseGame {
         : this.phase === 'live'
           ? (zh ? `回合 ${this.round} · 先到 ${ROUND.winScore} 回合获胜` : `ROUND ${this.round} · FIRST TO ${ROUND.winScore}`)
           : '';
-    ctx.fillText(label, W / 2, 58);
+    this.hudText(ctx, label, W / 2, 76, 'center', `15px ${font}`, 'rgba(241,245,249,0.92)');
 
     if (this.liveMsg > 0) {
-      ctx.font = `bold 26px ${font}`;
-      ctx.fillStyle = `rgba(255,240,170,${Math.min(1, this.liveMsg)})`;
-      ctx.fillText(zh ? '冲! 冲! 冲!' : 'GO GO GO!', W / 2, 104);
+      this.hudText(ctx, zh ? '冲! 冲! 冲!' : 'GO GO GO!', W / 2, 138, 'center', `bold 32px ${font}`, `rgba(255,240,170,${Math.min(1, this.liveMsg)})`);
     }
 
     if (this.buyHintT > 0) {
-      ctx.fillStyle = `rgba(255,210,74,${Math.min(1, this.buyHintT)})`;
-      ctx.font = `bold 14px ${font}`;
-      ctx.fillText(zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', W / 2, 124);
+      this.hudText(ctx, zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', W / 2, 168, 'center', `bold 17px ${font}`, `rgba(255,210,74,${Math.min(1, this.buyHintT)})`);
     }
 
     if (this.canBuy() && !this.buyOpen) {
-      ctx.fillStyle = 'rgba(255,210,74,0.9)';
-      ctx.font = `bold 13px ${font}`;
-      ctx.fillText(zh ? '按 B 购买 (购买区内)' : 'PRESS B TO BUY (IN BUYZONE)', W / 2, H / 2 + 92);
+      this.hudText(ctx, zh ? '按 B 购买 (购买区内)' : 'PRESS B TO BUY (IN BUYZONE)', W / 2, H / 2 + 120, 'center', `bold 16px ${font}`, 'rgba(255,210,74,0.95)');
     }
 
     // ── Kill feed (top right).
     ctx.textAlign = 'right';
-    ctx.font = `12px ${font}`;
     this.feed.forEach((entry, i) => {
       ctx.globalAlpha = Math.min(1, entry.life);
-      ctx.fillStyle = 'rgba(8,16,30,0.5)';
-      const width = ctx.measureText(entry.text).width + 14;
-      ctx.fillRect(W - width - 10, 10 + i * 19, width, 18);
-      ctx.fillStyle = entry.color;
-      ctx.fillText(entry.text, W - 16, 19 + i * 19);
+      ctx.font = `bold 14px ${font}`;
+      ctx.fillStyle = 'rgba(8,16,30,0.52)';
+      const width = ctx.measureText(entry.text).width + 18;
+      ctx.fillRect(W - width - 12, 12 + i * 23, width, 21);
+      this.hudText(ctx, entry.text, W - 20, 23 + i * 23, 'right', `bold 14px ${font}`, entry.color, false);
       ctx.globalAlpha = 1;
     });
 
@@ -2476,54 +2481,39 @@ export class CounterStrikeGame extends BaseGame {
 
     // ── Bottom-left: health + armor.
     const p = this.player();
-    const hpY = H - 26;
+    const hpY = H - 32;
     ctx.fillStyle = '#e23b3b';
-    ctx.fillRect(16, hpY - 9, 16, 16);
+    ctx.fillRect(18, hpY - 12, 20, 20);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(20, hpY - 5, 8, 8);
-    ctx.fillRect(18, hpY - 2, 12, 2);
-    ctx.textAlign = 'left';
-    ctx.font = `bold 24px ${mono}`;
-    ctx.fillStyle = p.hp > 60 ? '#e8f4ff' : p.hp > 30 ? '#ffd24a' : '#ff6a5e';
-    ctx.fillText(String(p.hp), 38, hpY + 1);
+    ctx.fillRect(23, hpY - 6, 10, 10);
+    ctx.fillRect(21, hpY - 2, 14, 2);
+    this.hudText(ctx, String(p.hp), 48, hpY, 'left', `bold 32px ${mono}`, p.hp > 60 ? '#e8f4ff' : p.hp > 30 ? '#ffd24a' : '#ff6a5e');
     ctx.fillStyle = '#7fa8d4';
-    ctx.fillRect(86, hpY - 9, 14, 14);
+    ctx.fillRect(104, hpY - 11, 17, 17);
     ctx.fillStyle = '#dbe9f7';
-    ctx.fillRect(91, hpY - 5, 4, 7);
-    ctx.font = `bold 17px ${mono}`;
-    ctx.fillStyle = '#bcd4ec';
-    ctx.fillText(String(p.armor), 106, hpY + 1);
-    ctx.font = `12px ${font}`;
-    ctx.fillStyle = 'rgba(241,245,249,0.75)';
-    ctx.fillText(zh ? '护甲' : 'ARMOR', 106, hpY + 16);
+    ctx.fillRect(110, hpY - 6, 5, 8);
+    this.hudText(ctx, String(p.armor), 128, hpY, 'left', `bold 22px ${mono}`, '#bcd4ec');
+    this.hudText(ctx, zh ? '护甲' : 'ARMOR', 128, hpY + 20, 'left', `13px ${font}`, 'rgba(241,245,249,0.8)');
 
     // ── Bottom-right: weapon name, ammo, money.
     const w = this.activeWeapon(p);
-    ctx.textAlign = 'right';
-    ctx.font = `bold 14px ${font}`;
-    ctx.fillStyle = '#ffd24a';
-    if (w) ctx.fillText(p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, W - 18, H - 50);
-    ctx.font = `bold 22px ${mono}`;
-    if (w && w.def.slot !== 'knife' && p.slot !== 'nade') {
-      ctx.fillStyle = w.mag === 0 ? '#ff6a5e' : '#f5f5f0';
-      ctx.fillText(`${w.mag} / ${w.reserve}`, W - 18, H - 26);
+    if (w) {
+      this.hudText(ctx, p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, W - 22, H - 62, 'right', `bold 17px ${font}`, '#ffd24a');
     }
-    ctx.font = `bold 17px ${mono}`;
-    ctx.fillStyle = '#8ee04d';
-    ctx.fillText(`$${p.money}`, W - 18, H - 10);
+    if (w && w.def.slot !== 'knife' && p.slot !== 'nade') {
+      this.hudText(ctx, `${w.mag} / ${w.reserve}`, W - 22, H - 32, 'right', `bold 28px ${mono}`, w.mag === 0 ? '#ff6a5e' : '#f5f5f0');
+    }
+    this.hudText(ctx, `$${p.money}`, W - 22, H - 12, 'right', `bold 22px ${mono}`, '#8ee04d');
 
     if (p.reloading && w) {
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(W - 150, H - 42, 132, 5);
+      ctx.fillRect(W - 190, H - 50, 168, 6);
       ctx.fillStyle = '#ffd24a';
-      ctx.fillRect(W - 150, H - 42, 132 * Math.min(1, 1 - p.reloadT / w.def.reload), 5);
+      ctx.fillRect(W - 190, H - 50, 168 * Math.min(1, 1 - p.reloadT / w.def.reload), 6);
     }
 
     if (!this.sfx.enabled) {
-      ctx.textAlign = 'left';
-      ctx.font = `12px ${font}`;
-      ctx.fillStyle = 'rgba(241,245,249,0.8)';
-      ctx.fillText(zh ? '静音' : 'MUTED', 16, 82);
+      this.hudText(ctx, zh ? '静音' : 'MUTED', 20, 130, 'left', `14px ${font}`, 'rgba(241,245,249,0.85)');
     }
 
     // ── Crosshair (only while alive).
@@ -2531,28 +2521,28 @@ export class CounterStrikeGame extends BaseGame {
       const spreadPx = this.crosshairGap();
       const cx = W / 2;
       const cy = H / 2;
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - spreadPx - 8); ctx.lineTo(cx, cy - spreadPx - 1);
-      ctx.moveTo(cx, cy + spreadPx + 1); ctx.lineTo(cx, cy + spreadPx + 8);
-      ctx.moveTo(cx - spreadPx - 8, cy); ctx.lineTo(cx - spreadPx - 1, cy);
-      ctx.moveTo(cx + spreadPx + 1, cy); ctx.lineTo(cx + spreadPx + 8, cy);
+      ctx.moveTo(cx, cy - spreadPx - 10); ctx.lineTo(cx, cy - spreadPx - 1);
+      ctx.moveTo(cx, cy + spreadPx + 1); ctx.lineTo(cx, cy + spreadPx + 10);
+      ctx.moveTo(cx - spreadPx - 10, cy); ctx.lineTo(cx - spreadPx - 1, cy);
+      ctx.moveTo(cx + spreadPx + 1, cy); ctx.lineTo(cx + spreadPx + 10, cy);
       ctx.stroke();
       ctx.strokeStyle = '#00e05a';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
       if (this.hitmarker > 0) {
         const a = this.hitmarker / 0.14;
         ctx.strokeStyle = this.hitmarkerKill ? `rgba(255,90,80,${a})` : `rgba(255,255,255,${a})`;
-        ctx.lineWidth = 2;
-        const r = 10;
+        ctx.lineWidth = 2.5;
+        const r = 12;
         ctx.beginPath();
-        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r + 5, cy - r + 5);
-        ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx - r + 5, cy + r - 5);
-        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx + r - 5, cy - r + 5);
-        ctx.moveTo(cx + r, cy + r); ctx.lineTo(cx + r - 5, cy + r - 5);
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r + 6, cy - r + 6);
+        ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx - r + 6, cy + r - 6);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx + r - 6, cy - r + 6);
+        ctx.moveTo(cx + r, cy + r); ctx.lineTo(cx + r - 6, cy + r - 6);
         ctx.stroke();
       }
     }
@@ -2578,15 +2568,15 @@ export class CounterStrikeGame extends BaseGame {
 
     // ── Spectate banner.
     if (!p.alive && !this.gameOver) {
-      ctx.fillStyle = 'rgba(8,16,30,0.6)';
-      ctx.fillRect(0, H / 2 - 36, W, 72);
+      ctx.fillStyle = 'rgba(8,16,30,0.62)';
+      ctx.fillRect(0, H / 2 - 46, W, 92);
       ctx.textAlign = 'center';
-      ctx.font = `bold 22px ${font}`;
+      ctx.font = `bold 28px ${font}`;
       ctx.fillStyle = '#ff9a8a';
-      ctx.fillText(zh ? '你阵亡了' : 'YOU WERE KILLED', W / 2, H / 2 - 14);
-      ctx.font = `14px ${font}`;
-      ctx.fillStyle = 'rgba(241,245,249,0.85)';
-      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', W / 2, H / 2 + 14);
+      ctx.fillText(zh ? '你阵亡了' : 'YOU WERE KILLED', W / 2, H / 2 - 16);
+      ctx.font = `16px ${font}`;
+      ctx.fillStyle = 'rgba(241,245,249,0.88)';
+      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', W / 2, H / 2 + 18);
     }
 
     // ── Round result banner.
@@ -2597,31 +2587,31 @@ export class CounterStrikeGame extends BaseGame {
           ? (zh ? '反恐精英获胜!' : 'Counter-Terrorists Win!')
           : (zh ? '恐怖分子获胜!' : 'Terrorists Win!');
       const color = this.roundDraw ? '#ffd24a' : this.roundWinner === 'CT' ? '#7fb2ff' : '#ff9a8a';
-      ctx.fillStyle = 'rgba(8,16,30,0.6)';
-      ctx.fillRect(0, 126, W, 70);
+      ctx.fillStyle = 'rgba(8,16,30,0.62)';
+      ctx.fillRect(0, 160, W, 84);
       ctx.textAlign = 'center';
-      ctx.font = `bold 26px ${font}`;
+      ctx.font = `bold 32px ${font}`;
       ctx.fillStyle = color;
-      ctx.fillText(text, W / 2, 150);
-      ctx.font = `14px ${font}`;
-      ctx.fillStyle = 'rgba(241,245,249,0.85)';
-      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, W / 2, 176);
+      ctx.fillText(text, W / 2, 190);
+      ctx.font = `16px ${font}`;
+      ctx.fillStyle = 'rgba(241,245,249,0.88)';
+      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, W / 2, 222);
     }
   }
 
   private crosshairGap(): number {
     const p = this.player();
     const w = this.activeWeapon(p);
-    if (!w) return 6;
-    const base = w.def.spread * 1300 + 2;
-    const moving = p.moving && !p.walk ? 7 : p.moving ? 3.5 : 0;
-    return base + moving + p.recoil * 140;
+    if (!w) return 7;
+    const base = w.def.spread * 1500 + 3;
+    const moving = p.moving && !p.walk ? 9 : p.moving ? 4.5 : 0;
+    return base + moving + p.recoil * 170;
   }
 
   private drawRadar(ctx: CanvasRenderingContext2D) {
-    const size = 84;
-    const mx = 8;
-    const my = 8;
+    const size = 100;
+    const mx = 10;
+    const my = 10;
     const scale = size / MAP_PIXEL;
     ctx.fillStyle = 'rgba(16,38,22,0.75)';
     ctx.fillRect(mx - 3, my - 3, size + 6, size + 6);
@@ -2657,10 +2647,10 @@ export class CounterStrikeGame extends BaseGame {
     ctx.rotate(this.angle);
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(4.5, 0);
-    ctx.lineTo(-3, -3);
-    ctx.lineTo(-1.5, 0);
-    ctx.lineTo(-3, 3);
+    ctx.moveTo(5.5, 0);
+    ctx.lineTo(-3.5, -3.5);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-3.5, 3.5);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -2681,34 +2671,34 @@ export class CounterStrikeGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold 18px ${font}`;
+    ctx.font = `bold 21px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(zh ? '购买装备 (BUY EQUIPMENT)' : 'BUY EQUIPMENT', rect.x + rect.w / 2, rect.y + 20);
-    ctx.font = `bold 13px ${mono}`;
+    ctx.fillText(zh ? '购买装备 (BUY EQUIPMENT)' : 'BUY EQUIPMENT', rect.x + rect.w / 2, rect.y + 24);
+    ctx.font = `bold 15px ${mono}`;
     ctx.fillStyle = '#8ee04d';
-    ctx.fillText(`$${p.money}`, rect.x + rect.w / 2, rect.y + 38);
+    ctx.fillText(`$${p.money}`, rect.x + rect.w / 2, rect.y + 46);
 
-    const rowY = rect.y + 56;
-    const rowH = 21;
-    const leftX = rect.x + 8;
-    const rightX = rect.x + rect.w / 2 + 6;
+    const rowY = rect.y + 64;
+    const rowH = 25;
+    const leftX = rect.x + 10;
+    const rightX = rect.x + rect.w / 2 + 8;
 
     BUY_CATEGORIES.forEach((category, i) => {
       const y = rowY + i * rowH;
       const hover = this.buyCat === -1 && this.hoverCat === i;
       const active = this.buyCat === i;
       ctx.fillStyle = active ? 'rgba(255,210,74,0.28)' : hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
-      ctx.fillRect(leftX - 2, y - 9, rect.w / 2 - 10, rowH);
+      ctx.fillRect(leftX - 2, y - 11, rect.w / 2 - 12, rowH);
       ctx.textAlign = 'left';
-      ctx.font = `13px ${font}`;
+      ctx.font = `15px ${font}`;
       ctx.fillStyle = active ? '#ffd24a' : '#e8eef5';
-      ctx.fillText(`${i + 1}  ${zh ? category.labelZh : category.label}`, leftX + 6, y);
+      ctx.fillText(`${i + 1}  ${zh ? category.labelZh : category.label}`, leftX + 8, y);
     });
 
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath();
-    ctx.moveTo(rect.x + rect.w / 2, rect.y + 48);
-    ctx.lineTo(rect.x + rect.w / 2, rect.y + rect.h - 8);
+    ctx.moveTo(rect.x + rect.w / 2, rect.y + 56);
+    ctx.lineTo(rect.x + rect.w / 2, rect.y + rect.h - 10);
     ctx.stroke();
 
     if (this.buyCat >= 0) {
@@ -2719,66 +2709,66 @@ export class CounterStrikeGame extends BaseGame {
         const hover = this.hoverItem === i;
         const affordable = p.money >= item.price;
         ctx.fillStyle = hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
-        ctx.fillRect(rightX - 2, y - 9, rect.w / 2 - 10, rowH);
+        ctx.fillRect(rightX - 2, y - 11, rect.w / 2 - 12, rowH);
         ctx.textAlign = 'left';
-        ctx.font = `12px ${font}`;
+        ctx.font = `14px ${font}`;
         ctx.fillStyle = affordable ? '#e8eef5' : 'rgba(232,238,245,0.4)';
-        ctx.fillText(`${i + 1}  ${item.name}`, rightX + 6, y);
+        ctx.fillText(`${i + 1}  ${item.name}`, rightX + 8, y);
         ctx.textAlign = 'right';
-        ctx.font = `11px ${mono}`;
+        ctx.font = `13px ${mono}`;
         ctx.fillStyle = affordable ? '#8ee04d' : 'rgba(142,224,77,0.4)';
-        ctx.fillText(`$${item.price}`, rect.x + rect.w - 12, y);
+        ctx.fillText(`$${item.price}`, rect.x + rect.w - 14, y);
       });
     }
 
     ctx.textAlign = 'center';
-    ctx.font = `11px ${font}`;
+    ctx.font = `12px ${font}`;
     ctx.fillStyle = 'rgba(232,238,245,0.7)';
     ctx.fillText(
       zh ? '数字键选择 · B/ESC 关闭 · 0 返回' : 'NUMBER KEYS · B/ESC CLOSE · 0 BACK',
       rect.x + rect.w / 2,
-      rect.y + rect.h - 12,
+      rect.y + rect.h - 16,
     );
   }
 
   private drawScoreboard(ctx: CanvasRenderingContext2D) {
     const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const mono = 'ui-monospace, SFMono-Regular, monospace';
-    const bw = 360;
+    const bw = 440;
     const bx = (W - bw) / 2;
-    const by = 76;
-    const bh = 264;
+    const by = 92;
+    const bh = 320;
     ctx.fillStyle = 'rgba(8,16,30,0.92)';
     ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = 'rgba(255,210,74,0.5)';
     ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold 17px ${font}`;
+    ctx.font = `bold 21px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bx + bw / 2, by + 20);
+    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bx + bw / 2, by + 26);
 
     const cols: { team: Team; title: string; color: string; x: number }[] = [
-      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: bx + 20 },
-      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bx + bw / 2 + 12 },
+      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: bx + 24 },
+      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bx + bw / 2 + 16 },
     ];
     for (const col of cols) {
       ctx.textAlign = 'left';
-      ctx.font = `bold 12px ${font}`;
+      ctx.font = `bold 14px ${font}`;
       ctx.fillStyle = col.color;
-      ctx.fillText(col.title, col.x, by + 40);
+      ctx.fillText(col.title, col.x, by + 52);
       const members = this.fighters.filter((f) => f.team === col.team);
       members.forEach((f, i) => {
-        const y = by + 62 + i * 27;
+        const y = by + 78 + i * 32;
         const dead = !f.alive;
         ctx.fillStyle = dead ? 'rgba(232,238,245,0.4)' : '#e8eef5';
-        ctx.font = `12px ${font}`;
+        ctx.font = `14px ${font}`;
         ctx.fillText(f.name, col.x, y);
-        ctx.font = `11px ${mono}`;
+        ctx.font = `13px ${mono}`;
         ctx.textAlign = 'right';
-        ctx.fillText(`${f.kills}/${f.deaths}`, col.x + 116, y);
+        ctx.fillText(`${f.kills}/${f.deaths}`, col.x + 142, y);
         ctx.fillStyle = '#8ee04d';
-        ctx.fillText(`$${f.money}`, col.x + 162, y);
+        ctx.fillText(`$${f.money}`, col.x + 198, y);
         ctx.textAlign = 'left';
       });
     }
@@ -2790,39 +2780,39 @@ export class CounterStrikeGame extends BaseGame {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, 58, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, 66, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, 26, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, 30, 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.28)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(92, H - 92, 58, 0, Math.PI * 2);
+      ctx.arc(104, H - 104, 66, 0, Math.PI * 2);
       ctx.stroke();
     }
     const fireActive = !!this.fireTouch;
     ctx.fillStyle = fireActive ? 'rgba(240,90,80,0.75)' : 'rgba(240,90,80,0.4)';
     ctx.beginPath();
-    ctx.arc(W - 88, H - 84, 44, 0, Math.PI * 2);
+    ctx.arc(W - 104, H - 100, 52, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '开火' : 'FIRE', W - 88, H - 84);
+    ctx.font = 'bold 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(zh ? '开火' : 'FIRE', W - 104, H - 100);
     const reloadActive = !!this.reloadTouch;
     ctx.fillStyle = reloadActive ? 'rgba(57,197,187,0.75)' : 'rgba(57,197,187,0.4)';
     ctx.beginPath();
-    ctx.arc(W - 88, H - 164, 30, 0, Math.PI * 2);
+    ctx.arc(W - 104, H - 196, 36, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '换弹' : 'R', W - 88, H - 164);
-    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(zh ? '换弹' : 'R', W - 104, H - 196);
+    ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText(zh ? '左:移动  右:视角' : 'LEFT: MOVE  RIGHT: LOOK', W / 2, H - 14);
+    ctx.fillText(zh ? '左:移动  右:视角' : 'LEFT: MOVE  RIGHT: LOOK', W / 2, H - 16);
   }
 }

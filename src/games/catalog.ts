@@ -560,7 +560,7 @@ export const GAMES: GameMeta[] = [
     desc: 'First-person CS 1.6 rounds on fy_iceworld. Grab the gun under your spawn, buy at the exposed center buyzone, and win the match.',
     descZh: '第一人称 CS 1.6 警匪回合对战,战场是经典 fy_iceworld。捡起出生点的枪,在中央购买区补给,率先赢下比赛。',
     loader: () => import('./counterstrike.js').then((m) => m.CounterStrikeGame),
-    canvasSize: { width: 960, height: 540 },
+    canvasSize: { width: 1280, height: 720 },
     controls: {
       keyboard: [
         { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
