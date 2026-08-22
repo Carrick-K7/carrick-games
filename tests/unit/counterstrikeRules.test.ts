@@ -99,8 +99,8 @@ describe('Counter-Strike 1.6 rules (fy_iceworld port)', () => {
     expect(zones.size).toBeGreaterThanOrEqual(2);
 
     expect(matchWinner({ ctWins: ROUND.winScore, tWins: 0 })).toBe('CT');
-    expect(matchWinner({ ctWins: 2, tWins: ROUND.winScore })).toBe('T');
-    expect(matchWinner({ ctWins: 2, tWins: 2 })).toBeNull();
+    expect(matchWinner({ ctWins: 1, tWins: ROUND.winScore })).toBe('T');
+    expect(matchWinner({ ctWins: ROUND.winScore - 1, tWins: ROUND.winScore - 1 })).toBeNull();
     expect(matchScore(10, 3, true)).toBe(10 * 150 + 3 * 500 + 1000);
   });
 });
