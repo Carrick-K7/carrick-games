@@ -13,7 +13,7 @@ Carrick Games currently ships 26 playable games:
 | Game | Chinese | Type |
 |------|---------|------|
 | Parking | 停车 | Casual |
-| Lucky Case | 头彩 | Casual |
+| Gacha | 抽卡 | Casual |
 | Snake | 贪吃蛇 | Casual |
 | Flappy Bird | 像素鸟 | Casual |
 | Doodle Jump | 涂鸦跳跃 | Casual |

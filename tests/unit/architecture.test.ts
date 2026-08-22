@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { clampFrameDelta, shellSnapshotKey } from '../../src/core/game';
 import { getStoredRecord, readStoredRecords, saveStoredRecord } from '../../src/core/storage';
 import { GAMES } from '../../src/games/catalog';
-import { parseLuckyCaseSave } from '../../src/games/luckycaseStorage';
+import {
+  GACHA_POOL,
+  GACHA_TIERS,
+  gachaOddsAreValid,
+  rollGachaItem,
+} from '../../src/games/gachaData';
+import { GACHA_HISTORY_LIMIT, defaultGachaStats, parseGachaStats } from '../../src/games/gachaStorage';
 import { canPlaceOnFoundation, canPlaceOnTableau } from '../../src/games/solitaireRules';
 import { evaluatePreflopStrength, hasFlushDraw, hasStraightDraw } from '../../src/games/texasholdRules';
 
@@ -51,10 +57,70 @@ describe('safe persistence', () => {
     expect(getStoredRecord('snake', storage)).toBe(10);
   });
 
-  it('normalizes malformed Lucky Case saves', () => {
-    expect(parseLuckyCaseSave('{bad').coins).toBe(5000);
-    expect(parseLuckyCaseSave(JSON.stringify({ coins: 20, collection: [], totalOpens: 2, totalValue: 5 })))
-      .toEqual({ coins: 20, collection: [], totalOpens: 2, totalValue: 5 });
+  it('normalizes malformed Gacha stats saves', () => {
+    const fallback = parseGachaStats('{bad');
+    expect(fallback.totalPulls).toBe(0);
+    expect(fallback.tierCounts.milspec).toBe(0);
+    expect(fallback.history).toEqual([]);
+
+    const normalized = parseGachaStats(JSON.stringify({
+      totalPulls: -4,
+      tierCounts: { milspec: 3, rarespecial: 2, unknown: 9 },
+      itemCounts: { knife: 1, bad: -2 },
+      history: [
+        { itemId: 'knife', tierId: 'rarespecial', at: 1 },
+        { itemId: '', tierId: 'rarespecial', at: 2 },
+        { itemId: 'ghost', tierId: 'not-a-tier', at: 3 },
+        'not-an-object',
+      ],
+    }));
+    expect(normalized.totalPulls).toBe(0);
+    expect(normalized.tierCounts.milspec).toBe(3);
+    expect(normalized.tierCounts.rarespecial).toBe(2);
+    expect(normalized.tierCounts).not.toHaveProperty('unknown');
+    expect(normalized.itemCounts).toEqual({ knife: 1 });
+    expect(normalized.history).toHaveLength(1);
+  });
+
+  it('caps Gacha history at the configured limit', () => {
+    const raw = JSON.stringify({
+      totalPulls: 200,
+      tierCounts: { milspec: 200 },
+      itemCounts: {},
+      history: Array.from({ length: 200 }, (_, i) =>
+        ({ itemId: `item-${i}`, tierId: 'milspec', at: i })),
+    });
+    const parsed = parseGachaStats(raw);
+    expect(parsed.history).toHaveLength(GACHA_HISTORY_LIMIT);
+  });
+});
+
+describe('Gacha odds and pool', () => {
+  it('defines the five CS:GO tiers with odds summing to exactly 1', () => {
+    expect(GACHA_TIERS).toHaveLength(5);
+    expect(gachaOddsAreValid()).toBe(true);
+    expect(GACHA_TIERS.map((t) => t.odds).join(',')).toBe('0.7992,0.1598,0.032,0.0064,0.0026');
+  });
+
+  it('gives every tier at least one prize with a unique id', () => {
+    const ids = new Set<string>();
+    for (const tier of GACHA_TIERS) {
+      expect(GACHA_POOL[tier.id].length).toBeGreaterThan(0);
+      for (const item of GACHA_POOL[tier.id]) {
+        expect(ids.has(item.id)).toBe(false);
+        ids.add(item.id);
+      }
+    }
+  });
+
+  it('rolls gold at the top of the odds interval and blue at the bottom', () => {
+    const gold = rollGachaItem(() => 0.99999);
+    expect(gold.tier.id).toBe('rarespecial');
+    const blue = rollGachaItem(() => 0.00001);
+    expect(blue.tier.id).toBe('milspec');
+    // The same constant rng also picks the item: near-1 → last of the tier.
+    expect(gold.item.id).toBe('knife-gamma');
+    expect(blue.item.id).toBe('ak-blueprint');
   });
 });
 

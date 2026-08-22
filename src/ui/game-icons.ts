@@ -2,7 +2,7 @@
 const ICON = (d: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 export const GAME_ICONS: Record<string, string> = {
   parking: ICON('M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M9 17v2m6-2v2M8 12h0m8 0h0'),
-  luckycase: ICON('M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8M12 2v10M8 6l4-4 4 4M4 10h16'),
+  gacha: ICON('M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10'),
   snake: ICON('M3 17l6-6-6-6M9 17l6-6-6-6M15 17l6-6-6-6'),
   breakout: ICON('M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6 0h4a2 2 0 0 0 2-2v-4m0-6V5a2 2 0 0 0-2-2h-4'),
   bubbleshooter: ICON('M22 12A10 10 0 1 1 12 2M12 6v6l4 2'),

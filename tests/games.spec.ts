@@ -170,7 +170,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
 ];
 
 const CLICK_GAMES: GameProfile[] = [
-  { id: 'luckycase', clicks: 1, delayMs: 1000 },
+  { id: 'gacha', clicks: 2, delayMs: 1500 },
   { id: 'minesweeper', clicks: 3, delayMs: 1500 },
   { id: 'checkers', clicks: 2, delayMs: 1500 },
   { id: 'solitaire', clicks: 2, delayMs: 1500 },
@@ -691,43 +691,55 @@ test.describe('Game rules', () => {
     expect(hasWon).toBe(false);
   });
 
-  test('Lucky Case recovers from an empty balance and supports an explicit reset', async ({ page }) => {
-    await page.goto('/#/luckycase');
+  test('Gacha records deterministic pulls, persists stats, and supports reset', async ({ page }) => {
+    await page.goto('/#/gacha');
     await expect(page.locator('#actionBtn')).toBeEnabled();
 
     const result = await page.evaluate(async (moduleUrl) => {
-      localStorage.setItem('luckycase', JSON.stringify({
-        coins: 0,
-        collection: [],
-        totalOpens: 20,
-        totalValue: 0,
-      }));
-      const { LuckyCaseGame } = await import(moduleUrl);
-      const game = new LuckyCaseGame() as any;
+      localStorage.removeItem('gacha-stats');
+      const { GachaGame } = await import(moduleUrl);
+      const game = new GachaGame() as any;
       game.init();
-      const recoveredCoins = game.save.coins;
+      game.sfx.enabled = false;
 
-      localStorage.setItem('luckycase', JSON.stringify({
-        coins: 123,
-        collection: [{ id: 'test', count: 1 }],
-        totalOpens: 2,
-        totalValue: 10,
-      }));
+      // Force a gold (rarespecial) roll: tier rng=0.9999, item rng=0 → first gold item.
+      const sequence = [0.9999, 0];
+      game.random = () => sequence.shift() ?? 0;
+
+      game.startOpening();
+      const screenDuringSpin = game.screen;
+      const openStats = JSON.parse(JSON.stringify(game.stats));
+
+      // Drive the strip animation to completion.
+      let guard = 0;
+      while (game.screen !== 'result' && guard < 4000) {
+        game.update(1 / 60);
+        guard++;
+      }
+      const finalStats = JSON.parse(JSON.stringify(game.stats));
+
+      // Reset via Shift+R.
       game.handleInput(new KeyboardEvent('keydown', { key: 'R', shiftKey: true }));
-      const outcome = {
-        recoveredCoins,
-        resetCoins: game.save.coins,
-        storageWasCleared: localStorage.getItem('luckycase') === null,
-      };
-      game.destroy();
-      return outcome;
-    }, builtModuleUrl('src/games/luckycase.ts'));
+      const resetStats = JSON.parse(JSON.stringify(game.stats));
+      const storageWasCleared = localStorage.getItem('gacha-stats') === null;
 
-    expect(result).toEqual({
-      recoveredCoins: 250,
-      resetCoins: 5000,
-      storageWasCleared: true,
-    });
+      game.destroy();
+      return { screenDuringSpin, openStats, finalStats, resetStats, storageWasCleared };
+    }, builtModuleUrl('src/games/gacha.ts'));
+
+    expect(result.screenDuringSpin).toBe('opening');
+    // Stats are recorded at open time, before the animation ends.
+    expect(result.openStats.totalPulls).toBe(1);
+    expect(result.openStats.tierCounts.rarespecial).toBe(1);
+    expect(result.openStats.history).toHaveLength(1);
+    // Finish state: gold item counted in itemCounts; history kept in memory.
+    expect(result.finalStats.totalPulls).toBe(1);
+    expect(result.finalStats.tierCounts.rarespecial).toBe(1);
+    expect(Object.values(result.finalStats.itemCounts)[0]).toBe(1);
+    // Reset restores defaults and clears storage.
+    expect(result.resetStats.totalPulls).toBe(0);
+    expect(result.resetStats.history).toHaveLength(0);
+    expect(result.storageWasCleared).toBe(true);
   });
 
   test('solitaire can select and move a face-up tableau sequence', async ({ page }) => {

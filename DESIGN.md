@@ -178,7 +178,7 @@ Game-over, pause, win, and start overlays should use:
 All terminal win, loss, completion, and game-over states use
 `BaseGame.drawResultOverlay()`. This keeps result hierarchy, tone, spacing,
 theme behavior, style-mode behavior, and the testable canvas result state
-consistent. The only published exception is Lucky Case, which has no terminal
+consistent. The only published exception is Gacha, which has no terminal
 state.
 
 The standard terminal primary action is Space, Enter, click, or tap, detected
@@ -193,7 +193,7 @@ Do not create large explanatory screens inside games. The app already renders co
 
 The 0.1.x release line includes 26 published games. The four primary families are intentionally broad and follow familiar App Store game-category language. Keep this list aligned with `src/games/catalog.ts` and `README.md`.
 
-- Casual: Parking, Lucky Case, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
+- Casual: Parking, Gacha, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
 - Action: Counter-Strike, I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
 - Puzzle: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku.
 - Board & Card: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
