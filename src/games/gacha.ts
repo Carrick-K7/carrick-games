@@ -70,13 +70,11 @@ export class GachaGame extends BaseGame {
   private particles: Particle[] = [];
   private notify = '';
   private notifyTimer = 0;
-  private galleryPage = 0;
   private statsPage = 0;
-  private skipRequested = false;
   private startedOnce = false;
 
   constructor(host?: GameHost) {
-    super(host ?? createDefaultGameHost('gameCanvas', 600, 420));
+    super(host ?? createDefaultGameHost('gameCanvas', 640, 480));
     this.stats = loadGachaStats();
   }
 
@@ -89,7 +87,6 @@ export class GachaGame extends BaseGame {
     this.roll = null;
     this.revealT = 0;
     this.particles = [];
-    this.galleryPage = 0;
     this.statsPage = 0;
     this.isNewItem = false;
   }
@@ -127,7 +124,6 @@ export class GachaGame extends BaseGame {
 
     const ctx = this.buildModeContext(roll);
     this.animMode = createOpeningMode(this.animModeIndex, ctx);
-    this.skipRequested = false;
     this.screen = 'opening';
     this.canvas.dataset.gachaScreen = 'opening';
     this.canvas.dataset.gachaTier = roll.tier.id;
@@ -206,9 +202,7 @@ export class GachaGame extends BaseGame {
     }
 
     if (this.screen === 'opening' && this.animMode) {
-      const skip = this.skipRequested;
-      this.skipRequested = false;
-      if (this.animMode.update(dt, skip)) {
+      if (this.animMode.update(dt)) {
         this.finishOpening();
       }
     }
@@ -272,7 +266,7 @@ export class GachaGame extends BaseGame {
 
     // Case visual
     const cx = this.width / 2;
-    this.drawCase(ctx, cx, 128, 150, 108);
+    this.drawCase(ctx, cx, 142, 170, 120);
 
     // Mode label / switcher
     if (openingModeCount() > 1) {
@@ -282,12 +276,12 @@ export class GachaGame extends BaseGame {
       ctx.fillStyle = palette.muted;
       ctx.fillText(
         zh ? `动画:${label.nameZh} ◂ ▸` : `Mode: ${label.name} ◂ ▸`,
-        cx, 200,
+        cx, 218,
       );
     }
 
     // Tier legend (prize showcase entry)
-    this.drawTierLegend(ctx, palette, 20, 214, this.width - 40, 60);
+    this.drawTierLegend(ctx, palette, 20, 228, this.width - 40, 66);
 
     // OPEN button
     const openBtn = this.hitOpen();
@@ -400,17 +394,11 @@ export class GachaGame extends BaseGame {
     this.animMode.draw(ctx);
 
     const zh = this.isZhLang();
-    ctx.font = '700 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = this.isDarkTheme() ? '#f8fafc' : '#0f172a';
     ctx.fillText(zh ? '开箱中…' : 'OPENING…', this.width / 2, 26);
-
-    if (this.animMode.canSkip()) {
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = this.isDarkTheme() ? '#94a3b8' : '#5b6b80';
-      ctx.fillText(zh ? '点击/空格跳过' : 'Click / Space to skip', this.width / 2, REEL_STATUS_Y);
-    }
   }
 
   /* ─── Result ─── */
@@ -425,7 +413,7 @@ export class GachaGame extends BaseGame {
     const cx = this.width / 2;
 
     // Rarity radial background
-    const grad = ctx.createRadialGradient(cx, this.height / 2 - 10, 20, cx, this.height / 2 - 10, 320);
+    const grad = ctx.createRadialGradient(cx, this.height / 2 - 20, 20, cx, this.height / 2 - 20, 340);
     grad.addColorStop(0, tier.glow);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
@@ -439,12 +427,12 @@ export class GachaGame extends BaseGame {
     ctx.fillText(`★ ${tier.nameZh} · ${(tier.odds * 100).toFixed(2)}% ★`, cx, 34);
 
     // Card
-    const cw = 230;
-    const chh = 268;
+    const cw = 250;
+    const chh = 292;
     const pop = Math.min(1, this.revealT * 3);
     const scale = 0.85 + 0.15 * easeOutBack(pop);
     ctx.save();
-    ctx.translate(cx, 190);
+    ctx.translate(cx, 214);
     ctx.scale(scale, scale);
     ctx.shadowColor = tier.glow;
     ctx.shadowBlur = 36;
@@ -501,7 +489,7 @@ export class GachaGame extends BaseGame {
     ctx.fillText(zh ? '空格 = 再抽一次' : 'Space = draw again', cx, this.height - 14);
   }
 
-  /* ─── Gallery (prize showcase) ─── */
+  /* ─── Gallery (prize showcase, all prizes on one page) ─── */
 
   private drawGallery(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
     const zh = this.isZhLang();
@@ -514,34 +502,40 @@ export class GachaGame extends BaseGame {
     ctx.fillText(zh ? '🏛 全部奖品' : '🏛 ALL PRIZES', 36, 28);
     this.drawTextButton(ctx, this.hitBack(), zh ? '← 返回' : '← BACK');
 
-    const perPage = 2;
-    const totalPages = Math.ceil(GACHA_TIERS.length / perPage);
-    if (this.galleryPage >= totalPages) this.galleryPage = 0;
-    const start = this.galleryPage * perPage;
-    const tiers = GACHA_TIERS.slice(start, start + perPage);
+    // One tier row per grade: label column + item cards.
+    const labelW = 128;
+    const gap = 8;
+    const cardW = (this.width - 40 - labelW - gap * (4 - 1)) / 4;
+    const cardH = 60;
+    const rowPitch = cardH + 22;
+    let y = 58;
 
-    let y = 62;
-    for (const tier of tiers) {
-      // Tier header
-      ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    for (const tier of GACHA_TIERS) {
+      // Tier label column
+      ctx.textAlign = 'left';
       ctx.fillStyle = tier.color;
-      ctx.fillText(`${tier.nameZh} ${tier.name} · ${(tier.odds * 100).toFixed(2)}%`, 36, y);
+      ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(tier.nameZh, 30, y + 12);
+      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = palette.muted;
+      ctx.fillText(zh ? tier.name : tier.nameZh, 30, y + 26);
+      ctx.fillStyle = tier.color;
+      ctx.font = '700 10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(`${(tier.odds * 100).toFixed(2)}%`, 30, y + 40);
+      ctx.fillStyle = palette.muted;
+      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(`${GACHA_POOL[tier.id].length}${zh ? ' 项' : ''}`, 30, y + 52);
 
+      // Item cards
       const items = GACHA_POOL[tier.id];
-      const cardW = 130;
-      const cardH = 66;
-      const gapX = (this.width - 40 - 20 - cardW * 4) / 3;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const x = 30 + i * (cardW + gapX);
+        const x = 30 + labelW + i * (cardW + gap);
         const owned = this.stats.itemCounts[item.id] ?? 0;
-        this.drawItemCard(ctx, x, y + 14, cardW, cardH, tier, item, owned);
+        this.drawItemCard(ctx, x, y, cardW, cardH, tier, item, owned);
       }
-      y += 14 + cardH + 40;
-      if (y > this.height - 70) break;
+      y += rowPitch;
     }
-
-    this.drawPager(ctx, this.galleryPage, totalPages, palette);
   }
 
   private drawItemCard(
@@ -728,12 +722,12 @@ export class GachaGame extends BaseGame {
 
   private hitSound() { return { x: this.width - 94, y: 15, w: 28, h: 26 }; }
   private hitStats() { return { x: this.width - 140, y: 15, w: 40, h: 26 }; }
-  private hitStatsSmall() { return { x: this.width - 160, y: 280, w: 120, h: 44 }; }
-  private hitGallery() { return { x: 40, y: 280, w: 120, h: 44 }; }
-  private hitOpen() { return { x: this.width / 2 - 100, y: 290, w: 200, h: 48 }; }
+  private hitStatsSmall() { return { x: this.width - 190, y: 310, w: 150, h: 48 }; }
+  private hitGallery() { return { x: 40, y: 310, w: 150, h: 48 }; }
+  private hitOpen() { return { x: this.width / 2 - 115, y: 308, w: 230, h: 52 }; }
   private hitBack() { return { x: this.width - 110, y: 15, w: 72, h: 26 }; }
-  private hitAgain() { return { x: this.width / 2 - 125, y: 348, w: 118, h: 40 }; }
-  private hitMenuBtn() { return { x: this.width / 2 + 7, y: 348, w: 118, h: 40 }; }
+  private hitAgain() { return { x: this.width / 2 - 132, y: 402, w: 124, h: 44 }; }
+  private hitMenuBtn() { return { x: this.width / 2 + 8, y: 402, w: 124, h: 44 }; }
 
   private canvasHit(x: number, y: number, r: { x: number; y: number; w: number; h: number }): boolean {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -755,6 +749,9 @@ export class GachaGame extends BaseGame {
         if (this.sfx.enabled) this.sfx.prime();
         return;
       }
+      // While a reel is running, nothing but the sound toggle responds:
+      // the animation always runs to completion on its own.
+      if (this.screen === 'opening') return;
       if (e.key === 'Escape') {
         if (this.screen === 'gallery' || this.screen === 'stats' || this.screen === 'result') this.gotoMenu();
         return;
@@ -768,9 +765,6 @@ export class GachaGame extends BaseGame {
           this.sfx.prime();
           this.sfx.click();
           this.startOpening();
-        } else if (this.screen === 'opening') {
-          this.sfx.click();
-          this.skipRequested = true;
         } else if (this.screen === 'result') {
           this.sfx.click();
           this.startOpening();
@@ -803,18 +797,18 @@ export class GachaGame extends BaseGame {
 
     switch (this.screen) {
       case 'menu': {
-        if (this.canvasHit(x, y, this.hitGallery())) { this.sfx.click(); this.galleryPage = 0; this.screen = 'gallery'; this.canvas.dataset.gachaScreen = 'gallery'; return; }
+        if (this.canvasHit(x, y, this.hitGallery())) { this.sfx.click(); this.screen = 'gallery'; this.canvas.dataset.gachaScreen = 'gallery'; return; }
         if (this.canvasHit(x, y, this.hitStatsSmall())) { this.sfx.click(); this.statsPage = 0; this.screen = 'stats'; this.canvas.dataset.gachaScreen = 'stats'; return; }
         if (this.canvasHit(x, y, this.hitSound())) { this.sfx.enabled = !this.sfx.enabled; if (this.sfx.enabled) this.sfx.prime(); return; }
         if (this.canvasHit(x, y, this.hitStats())) { this.sfx.click(); this.statsPage = 0; this.screen = 'stats'; this.canvas.dataset.gachaScreen = 'stats'; return; }
         // Mode switcher (only when > 1 mode registered)
         if (openingModeCount() > 1) {
-          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 202) < 12) {
+          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 218) < 12) {
             this.animModeIndex = (this.animModeIndex - 1 + openingModeCount()) % openingModeCount();
             this.sfx.click();
             return;
           }
-          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 202) < 12) {
+          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 218) < 12) {
             this.animModeIndex = (this.animModeIndex + 1) % openingModeCount();
             this.sfx.click();
             return;
@@ -826,8 +820,7 @@ export class GachaGame extends BaseGame {
         return;
       }
       case 'opening': {
-        this.sfx.click();
-        this.skipRequested = true;
+        // The reel runs to completion on its own; input is ignored.
         return;
       }
       case 'result': {
@@ -840,9 +833,6 @@ export class GachaGame extends BaseGame {
       }
       case 'gallery': {
         if (this.canvasHit(x, y, this.hitBack())) { this.sfx.click(); this.gotoMenu(); return; }
-        const totalPages = Math.ceil(GACHA_TIERS.length / 2);
-        if (this.canvasHit(x, y, { x: 120, y: this.height - 44, w: 60, h: 24 }) && this.galleryPage > 0) { this.galleryPage--; this.sfx.click(); return; }
-        if (this.canvasHit(x, y, { x: this.width - 180, y: this.height - 44, w: 60, h: 24 }) && this.galleryPage < totalPages - 1) { this.galleryPage++; this.sfx.click(); return; }
         return;
       }
       case 'stats': {
@@ -888,5 +878,3 @@ function easeOutBack(t: number): number {
   const c3 = c1 + 1;
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 }
-
-const REEL_STATUS_Y = 320;

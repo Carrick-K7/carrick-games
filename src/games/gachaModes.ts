@@ -23,15 +23,13 @@ export interface GachaOpenContext {
 export interface GachaOpenMode {
   readonly id: string;
   /**
-   * Advance the animation by dt seconds. `skip` is true when the user
-   * asked to jump straight to the result (honored only when canSkip()).
-   * Returns true once the mode is finished. The winning item is always
-   * settled on screen in the final frame before this returns true.
+   * Advance the animation by dt seconds. Returns true once the mode is
+   * finished. The winning item is always settled on screen in the final
+   * frame before this returns true. Animations run to completion on
+   * their own — there is no user-initiated stopping.
    */
-  update(dt: number, skip: boolean): boolean;
+  update(dt: number): boolean;
   draw(ctx: CanvasRenderingContext2D): void;
-  /** True when the user may skip straight to the result. */
-  canSkip(): boolean;
 }
 
 export interface GachaOpenModeFactory {

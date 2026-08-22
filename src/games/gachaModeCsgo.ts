@@ -6,6 +6,11 @@
  * zero) and lands with the winning item exactly inside the center
  * highlight window. Tick sounds fire every time a card boundary crosses
  * the window line; pitch and loudness track strip speed.
+ *
+ * The reel always runs to completion on its own — there is no
+ * user-initiated skipping. While it spins, the card currently under the
+ * center line is read out in the “current cell” line right below it, so
+ * the player always sees exactly what is in the winning slot.
  */
 
 import type { GachaSfx } from './gachaAudio.js';
@@ -13,11 +18,12 @@ import { GACHA_POOL, GACHA_TIERS, type GachaItem } from './gachaData.js';
 import type { GachaOpenContext, GachaOpenMode, GachaOpenModeFactory } from './gachaModes.js';
 
 // ── Layout ──
-const CARD_W = 110;
-const CARD_GAP = 8;
+const CARD_W = 124;
+const CARD_GAP = 12;
 const CARD_PITCH = CARD_W + CARD_GAP;
-const REEL_Y = 128;
-const REEL_H = 148;
+const REEL_Y = 150;
+const REEL_H = 170;
+const READOUT_Y = REEL_Y + REEL_H + 30;
 
 // ── Physics ──
 const TIME_TOTAL = 4.0;     // seconds of spinning
@@ -58,15 +64,10 @@ export class CsgoStripMode implements GachaOpenMode {
     this.viewportRight = ctx.width - 40;
   }
 
-  canSkip(): boolean {
-    return this.elapsed > 0.7 && !this.landed;
-  }
-
   start() {
     if (this.started) return;
     this.started = true;
 
-    const zh = this.ctx.zh;
     const rng = Math.random;
     const winner = this.ctx.roll;
     const allItems: StripCard[] = GACHA_TIERS.flatMap((tier) =>
@@ -99,20 +100,23 @@ export class CsgoStripMode implements GachaOpenMode {
     this.sfx.caseOpen();
   }
 
-  update(dt: number, skip: boolean): boolean {
+  /** The card currently occupying the center highlight window. */
+  private centerCard(): StripCard {
+    const cx = this.ctx.width / 2;
+    const centerAt = this.traveled + (cx - this.viewportLeft);
+    const index = Math.max(0, Math.min(this.cards.length - 1, Math.floor(centerAt / CARD_PITCH)));
+    return this.cards[index];
+  }
+
+  update(dt: number): boolean {
     if (!this.started) this.start();
 
-    if (skip && this.canSkip()) {
+    this.elapsed = Math.min(TIME_TOTAL, this.elapsed + dt);
+    const t = this.elapsed;
+    // s(t) = v0·t − ½·a·t², v(t) = v0 − a·t
+    this.traveled = this.startVelocity * t - 0.5 * this.accel * t * t;
+    if (!this.landed && this.elapsed >= TIME_TOTAL) {
       this.land();
-    } else {
-      this.elapsed = Math.min(TIME_TOTAL, this.elapsed + dt);
-      const t = this.elapsed;
-      // s(t) = v0·t − ½·a·t², v(t) = v0 − a·t
-      this.traveled = this.startVelocity * t - 0.5 * this.accel * t * t;
-      if (!this.landed && this.elapsed >= TIME_TOTAL) {
-        this.traveled = this.totalDistance;
-        this.land();
-      }
     }
 
     if (this.landFlash > 0) this.landFlash = Math.max(0, this.landFlash - dt);
@@ -147,10 +151,9 @@ export class CsgoStripMode implements GachaOpenMode {
 
     const cx = this.ctx.width / 2;
     const cy = REEL_Y + REEL_H / 2;
-    const dark = this.dark;
 
     // Reel backdrop
-    ctx.fillStyle = dark ? 'rgba(8,12,20,0.9)' : 'rgba(244,246,250,0.9)';
+    ctx.fillStyle = this.dark ? 'rgba(8,12,20,0.9)' : 'rgba(244,246,250,0.9)';
     ctx.fillRect(this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28);
 
     // Visible card range
@@ -159,25 +162,27 @@ export class CsgoStripMode implements GachaOpenMode {
 
     const speedRatio = Math.max(0, Math.min(1, (this.startVelocity - this.accel * Math.min(this.elapsed, TIME_TOTAL)) / this.startVelocity));
 
+    // Motion streaks first (under the cards) so card content stays legible.
+    if (speedRatio > 0.5 && !this.landed) {
+      ctx.fillStyle = '#ffffff';
+      for (let i = firstVisible; i <= lastVisible; i++) {
+        const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
+        ctx.globalAlpha = 0.14 * speedRatio;
+        ctx.fillRect(x - CARD_W * 0.55, REEL_Y + REEL_H * 0.2, CARD_W * 0.55, REEL_H * 0.6);
+      }
+      ctx.globalAlpha = 1;
+    }
+
     for (let i = firstVisible; i <= lastVisible; i++) {
       const card = this.cards[i];
       const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
       const isWinner = i === WIN_INDEX;
-
-      // Motion streaks at high speed
-      if (speedRatio > 0.5 && !this.landed) {
-        ctx.globalAlpha = 0.18 * speedRatio;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x - CARD_W * 0.5, REEL_Y + REEL_H * 0.2, CARD_W * 0.5, REEL_H * 0.6);
-        ctx.globalAlpha = 1;
-      }
-
       this.drawCard(ctx, x, card, isWinner, speedRatio);
     }
 
     // Center highlight window
     const winX = cx - CARD_W / 2;
-    ctx.fillStyle = dark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.08)';
+    ctx.fillStyle = this.dark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.08)';
     ctx.fillRect(winX, REEL_Y - 6, CARD_W, REEL_H + 12);
 
     if (this.landed && this.landFlash > 0) {
@@ -189,7 +194,7 @@ export class CsgoStripMode implements GachaOpenMode {
     }
 
     // Frame + center line
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.35)';
+    ctx.strokeStyle = this.dark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(this.viewportLeft - 20, cy);
@@ -210,6 +215,24 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.lineTo(cx + CARD_W / 2 + 6, cy);
     ctx.lineTo(cx + CARD_W / 2 + 16, cy + 9);
     ctx.fill();
+
+    // Current-cell readout: what the winning slot holds right now.
+    const current = this.centerCard();
+    const tier = current.tier;
+    const name = this.ctx.zh ? current.item.nameZh : current.item.name;
+    const tierName = this.ctx.zh ? tier.nameZh : tier.name;
+    const label = this.landed
+      ? `${current.item.emoji} ${name} · ${tierName}`
+      : `${current.item.emoji} ${name} · ${tierName}`;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = tier.color;
+    ctx.fillText(label, cx, READOUT_Y);
+    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = this.dark ? 'rgba(148,163,184,0.9)' : 'rgba(91,107,128,0.9)';
+    ctx.fillText(this.ctx.zh ? `格子内容 · ${(tier.odds * 100).toFixed(2)}%` : `Cell content · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 20);
   }
 
   private drawCard(ctx: CanvasRenderingContext2D, x: number, card: StripCard, isWinner: boolean, speedRatio: number) {
@@ -225,7 +248,7 @@ export class CsgoStripMode implements GachaOpenMode {
     grad.addColorStop(1, bottom);
 
     ctx.save();
-    roundRectPath(ctx, x, REEL_Y, CARD_W, REEL_H, 8);
+    roundRectPath(ctx, x, REEL_Y, CARD_W, REEL_H, 9);
     ctx.fillStyle = grad;
     ctx.fill();
 
@@ -236,22 +259,22 @@ export class CsgoStripMode implements GachaOpenMode {
 
     // Rarity ribbon
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    roundRectPath(ctx, x + CARD_W / 2 - 26, REEL_Y + REEL_H - 22, 52, 10, 3);
+    roundRectPath(ctx, x + CARD_W / 2 - 34, REEL_Y + REEL_H - 26, 68, 12, 3);
     ctx.fill();
     ctx.fillStyle = shade(tier.color, -0.55);
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 17);
+    ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 20);
 
     // Item emoji
-    ctx.font = '30px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(card.item.emoji, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 6);
+    ctx.font = '36px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(card.item.emoji, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 10);
 
     // Item name
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 12), x + CARD_W / 2, REEL_Y + REEL_H / 2 + 30);
+    ctx.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 12), x + CARD_W / 2, REEL_Y + REEL_H / 2 + 34);
 
     ctx.restore();
   }

@@ -522,7 +522,7 @@ export const GAMES: GameMeta[] = [
     desc: 'CS:GO-grade case opening. Official odds, strip spin reveal, and pull statistics.',
     descZh: 'CSGO 分级开箱:官方概率、转轮揭晓动画与抽取统计。',
     loader: () => import('./gacha.js').then((m) => m.GachaGame),
-    canvasSize: { width: 600, height: 420 },
+    canvasSize: { width: 640, height: 480 },
     controls: {
       keyboard: [
         { keys: ['Space'], action: 'Open / draw again', actionZh: '开箱 / 再抽一次' },
