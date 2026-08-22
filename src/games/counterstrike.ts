@@ -21,15 +21,16 @@ import {
   CT_SPAWNS,
   ICEBERG_MAP,
   MAP_COLS,
-  MAP_PIXEL,
+  MAP_PIXEL_X,
+  MAP_PIXEL_Y,
   MAP_ROWS,
-  NADE_PICKUPS,
   T_SPAWNS,
   TILE,
   TileKind,
   castRay,
   findMapPath,
   hasLineOfSight,
+  nearestWalkableTile,
   inBuyZone,
   isSolidTile,
   solidCircle,
@@ -62,14 +63,14 @@ import {
 const W = 1280;
 const H = 720;
 const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
-const MAX_DIST = 620;
-const FOG_START = 190;
+const MAX_DIST = 1500;
+const FOG_START = 430;
 const WALL_H = TILE; // 30
-const EYE = 9;
-const EYE_CROUCH = 6;
-const PLAYER_RADIUS = 11;
-const SOLDIER_H = 20; // world height of a soldier sprite
-const BOT_VISION = 320;
+const EYE = 24;
+const EYE_CROUCH = 16;
+const PLAYER_RADIUS = 15;
+const SOLDIER_H = 56; // world height of a soldier sprite
+const BOT_VISION = 480;
 const MAX_HP = ROUND.maxHp;
 const MAX_ARMOR = ROUND.maxArmor;
 const MOUSE_SENS = 0.0022;
@@ -266,6 +267,7 @@ export class CounterStrikeGame extends BaseGame {
   private tWins = 0;
   private ctLossStreak = 0;
   private tLossStreak = 0;
+  private roundKillBase = new Map<Fighter, number>();
   private roundWinner: Team | null = null;
   private roundDraw = false;
   private liveMsg = 0;
@@ -514,7 +516,10 @@ export class CounterStrikeGame extends BaseGame {
     const alive = this.fighters.filter((f) => f.alive).length;
     const p = this.player();
     const t0 = this.fighters[4];
-    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|${this.px.toFixed(0)},${this.py.toFixed(0)},$${p.money},a${((this.angle * 180) / Math.PI).toFixed(0)}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}`;
+    const allPts = this.fighters
+      .map((f) => `${f.x.toFixed(0)},${f.y.toFixed(0)}${f.alive ? '' : ',x'}`)
+      .join(';');
+    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|CTW${this.ctWins},TW${this.tWins}|${this.px.toFixed(0)},${this.py.toFixed(0)},$${p.money},a${((this.angle * 180) / Math.PI).toFixed(0)}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}|${allPts}`;
     if (key !== this.hudStateCache) {
       this.hudStateCache = key;
       this.canvas.dataset.counterstrikeState = key;
@@ -541,14 +546,14 @@ export class CounterStrikeGame extends BaseGame {
     this.particles = [];
     this.smokes = [];
 
+    // Ground guns at the real map's armoury rows: one per spawn column,
+    // two rows per team (the knives/USPs/rifles row and the SMG row).
     this.ground = [
       ...CT_SPAWNS.map((sp) => ({ ...this.groundWeapon(sp.x, sp.y, sp.weapon), fixed: true })),
       ...T_SPAWNS.map((sp) => ({ ...this.groundWeapon(sp.x, sp.y, sp.weapon), fixed: true })),
-      ...NADE_PICKUPS.map((n) => ({
-        x: n.x, y: n.y, kind: 'nade' as const, nade: n.nade, mag: 0, reserve: 0, fixed: true,
-      })),
     ];
 
+    this.roundKillBase = new Map(this.fighters.map((f) => [f, f.kills] as const));
     const ctSpawns = shuffle(CT_SPAWNS).slice(0, 4);
     const tSpawns = shuffle(T_SPAWNS).slice(0, 4);
     for (let i = 0; i < 4; i++) {
@@ -613,7 +618,7 @@ export class CounterStrikeGame extends BaseGame {
 
   private removeGroundItemAt(x: number, y: number, weaponId: WeaponId) {
     const index = this.ground.findIndex(
-      (item) => item.kind === 'weapon' && item.weaponId === weaponId && Math.hypot(item.x - x, item.y - y) < TILE * 0.7,
+      (item) => item.kind === 'weapon' && item.weaponId === weaponId && Math.hypot(item.x - x, item.y - y) < TILE * 3,
     );
     if (index >= 0) this.ground.splice(index, 1);
   }
@@ -1268,7 +1273,7 @@ export class CounterStrikeGame extends BaseGame {
     }
     f.nades[kind]--;
     const dir = f === this.player() ? this.angle : f.angle;
-    const speed = 260;
+    const speed = 400;
     this.grenades.push({
       x: f.x + Math.cos(dir) * 14,
       y: f.y + Math.sin(dir) * 14,
@@ -1591,7 +1596,38 @@ export class CounterStrikeGame extends BaseGame {
       this.liveMsg = Math.max(0, this.liveMsg - dt);
       this.buyHintT = Math.max(0, this.buyHintT - dt);
       if (this.roundTimer <= 0) {
-        this.finishRound(null);
+        // Time runs out: more survivors wins; equal survivors fall back
+        // to the side with more round kills.
+        const ctAlive = this.aliveCount('CT');
+        const tAlive = this.aliveCount('T');
+        let winner: Team | null = ctAlive > tAlive ? 'CT' : tAlive > ctAlive ? 'T' : null;
+        if (!winner) {
+          let ctKills = 0;
+          let tKills = 0;
+          for (const f of this.fighters) {
+            const diff = f.kills - (this.roundKillBase.get(f) ?? f.kills);
+            if (f.team === 'CT') ctKills += diff;
+            else tKills += diff;
+          }
+          winner = ctKills > tKills ? 'CT' : tKills > ctKills ? 'T' : null;
+        }
+        if (!winner) {
+          // Last-resort tiebreaks so a round always resolves: surviving HP,
+          // then alternation by round number.
+          let ctHp = 0;
+          let tHp = 0;
+          for (const f of this.fighters) {
+            if (!f.alive) continue;
+            if (f.team === 'CT') ctHp += f.hp;
+            else tHp += f.hp;
+          }
+          if (ctHp !== tHp) {
+            winner = ctHp > tHp ? 'CT' : 'T';
+          } else {
+            winner = this.round % 2 === 1 ? 'CT' : 'T';
+          }
+        }
+        this.finishRound(winner);
         return;
       }
 
@@ -1747,12 +1783,12 @@ export class CounterStrikeGame extends BaseGame {
   private preferredRange(weapon: WeaponDef): number {
     if (weapon.slot === 'knife') return 0;
     switch (weapon.sound) {
-      case 'sniper': return 250;
-      case 'rifle': return 185;
-      case 'mg': return 160;
-      case 'shotgun': return 55;
-      case 'smg': return 105;
-      default: return 95;
+      case 'sniper': return 420;
+      case 'rifle': return 300;
+      case 'mg': return 260;
+      case 'shotgun': return 80;
+      case 'smg': return 170;
+      default: return 150;
     }
   }
 
@@ -1849,21 +1885,38 @@ export class CounterStrikeGame extends BaseGame {
     bot.path = null;
   }
 
+  // Fixed sweep points so bots systematically cover the whole arena
+  // instead of randomly circling: crossing, both ends, both flanks.
+  private static readonly SWEEP_POINTS: [number, number][] = [
+    [720, 840], [720, 250], [720, 1430], [135, 840], [1305, 840],
+    [150, 200], [1290, 200], [150, 1480], [1290, 1480],
+  ];
+
   private botRoam(bot: Fighter, dt: number, speed: number) {
     bot.roamT -= dt;
     if (bot.roamT <= 0 || !bot.path || bot.pathI >= bot.path.length) {
       const roll = Math.random();
       let tx: number;
       let ty: number;
-      if (roll < 0.45) {
-        tx = (7.5 + Math.random()) * TILE;
-        ty = (7.5 + Math.random()) * TILE;
+      if (roll < 0.65) {
+        const pick = CounterStrikeGame.SWEEP_POINTS[
+          Math.floor(Math.random() * CounterStrikeGame.SWEEP_POINTS.length)
+        ] as [number, number];
+        tx = pick[0];
+        ty = pick[1];
       } else {
-        const cx = bot.team === 'CT' ? 10.5 : 4.5;
-        const spread = bot.team === 'CT' ? 1 : -1;
-        tx = (cx + spread * Math.random() * 3) * TILE;
-        ty = (Math.random() < 0.5 ? 3.5 : 11.5 + Math.random()) * TILE;
+        // Push into the enemy end of the arena.
+        tx = 90 + Math.random() * (MAP_PIXEL_X - 180);
+        ty = bot.team === 'CT'
+          ? 120 + Math.random() * 320
+          : MAP_PIXEL_Y - 440 + Math.random() * 320;
       }
+      const spot = nearestWalkableTile(
+        Math.floor(tx / TILE),
+        Math.floor(ty / TILE),
+      );
+      tx = (spot.col + 0.5) * TILE;
+      ty = (spot.row + 0.5) * TILE;
       bot.roamT = 2.5 + Math.random() * 3;
       bot.roamX = tx;
       bot.roamY = ty;
@@ -1980,9 +2033,9 @@ export class CounterStrikeGame extends BaseGame {
     for (const f of this.fighters) {
       if (!f.alive) continue;
       const d = Math.hypot(f.x - g.x, f.y - g.y);
-      if (d > 110) continue;
+      if (d > 140) continue;
       if (!hasLineOfSight(g.x, g.y, f.x, f.y)) continue;
-      const falloff = 1 - 0.75 * (d / 110);
+      const falloff = 1 - 0.75 * (d / 140);
       const armored = f.armor > 0;
       const dmg = Math.round((armored ? 45 : 98) * falloff);
       const result = { dmg: Math.max(1, dmg), armorDmg: armored ? Math.max(0, Math.round(53 * falloff)) : 0 };
@@ -1996,17 +2049,17 @@ export class CounterStrikeGame extends BaseGame {
     for (const f of this.fighters) {
       if (!f.alive) continue;
       const d = Math.hypot(f.x - g.x, f.y - g.y);
-      if (d > 160) continue;
+      if (d > 230) continue;
       if (!hasLineOfSight(g.x, g.y, f.x, f.y)) continue;
       const facing = Math.cos(f.angle - Math.atan2(g.y - f.y, g.x - f.x));
-      const strength = (facing > 0.35 ? 2.2 : 1.1) * (1 - d / 190);
+      const strength = (facing > 0.35 ? 2.2 : 1.1) * (1 - d / 270);
       f.flashT = Math.max(f.flashT, Math.min(2.6, strength + 0.15));
     }
   }
 
   private popSmoke(g: Grenade) {
     this.sfx.smokePop();
-    this.smokes.push({ x: g.x, y: g.y, r: 8, maxR: 44, life: 18, maxLife: 18 });
+    this.smokes.push({ x: g.x, y: g.y, r: 12, maxR: 110, life: 18, maxLife: 18 });
   }
 
   private updateFx(dt: number) {
@@ -2359,7 +2412,7 @@ export class CounterStrikeGame extends BaseGame {
     const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 6 : 0;
     const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
     ctx.save();
-    ctx.translate(W / 2 + 150 + swayX, H + 76);
+    ctx.translate(W / 2 + 150 + swayX, H - 150);
     ctx.scale(1.25, 1.25);
     ctx.rotate(-0.32 - p.recoil * 0.9 + reloadDip);
     ctx.translate(0, -bobY);
@@ -2532,6 +2585,8 @@ export class CounterStrikeGame extends BaseGame {
       ctx.strokeStyle = '#00e05a';
       ctx.lineWidth = 1.5;
       ctx.stroke();
+      ctx.fillStyle = '#00e05a';
+      ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
 
       if (this.hitmarker > 0) {
         const a = this.hitmarker / 0.14;
@@ -2602,32 +2657,34 @@ export class CounterStrikeGame extends BaseGame {
   private crosshairGap(): number {
     const p = this.player();
     const w = this.activeWeapon(p);
-    if (!w) return 7;
-    const base = w.def.spread * 1500 + 3;
-    const moving = p.moving && !p.walk ? 9 : p.moving ? 4.5 : 0;
-    return base + moving + p.recoil * 170;
+    if (!w) return 8;
+    const moveMul = p.moving ? (p.walk ? 1.35 : 1.9) : p.crouch ? 0.55 : 1;
+    const angular = w.def.spread * moveMul + p.recoil * 0.55;
+    // rw/2 (640) over tan(half FOV 33°) → screen pixels per radian ≈ 985
+    return 4 + angular * 985 + (p.moving ? 2 : 0);
   }
 
   private drawRadar(ctx: CanvasRenderingContext2D) {
     const size = 100;
     const mx = 10;
     const my = 10;
-    const scale = size / MAP_PIXEL;
+    const sx = size / MAP_PIXEL_X;
+    const sy = size / MAP_PIXEL_Y;
     ctx.fillStyle = 'rgba(16,38,22,0.75)';
     ctx.fillRect(mx - 3, my - 3, size + 6, size + 6);
     ctx.fillStyle = 'rgba(160,200,170,0.35)';
     for (let r = 0; r < MAP_ROWS; r++) {
       for (let c = 0; c < MAP_COLS; c++) {
         if (ICEBERG_MAP[r][c] !== TileKind.Wall) continue;
-        ctx.fillRect(mx + c * TILE * scale, my + r * TILE * scale, TILE * scale - 0.4, TILE * scale - 0.4);
+        ctx.fillRect(mx + c * TILE * sx, my + r * TILE * sy, TILE * sx - 0.3, TILE * sy - 0.3);
       }
     }
     ctx.strokeStyle = 'rgba(255,210,74,0.5)';
     ctx.strokeRect(
-      mx + BUY_ZONE_RECT.x * scale,
-      my + BUY_ZONE_RECT.y * scale,
-      BUY_ZONE_RECT.w * scale,
-      BUY_ZONE_RECT.h * scale,
+      mx + BUY_ZONE_RECT.x * sx,
+      my + BUY_ZONE_RECT.y * sy,
+      BUY_ZONE_RECT.w * sx,
+      BUY_ZONE_RECT.h * sy,
     );
 
     const player = this.player();
@@ -2636,14 +2693,14 @@ export class CounterStrikeGame extends BaseGame {
       if (!f.alive) continue;
       if (f.team === 'CT') {
         ctx.fillStyle = f === player ? '#ffffff' : '#6fa4f0';
-        ctx.fillRect(mx + f.x * scale - 2, my + f.y * scale - 2, 4, 4);
+        ctx.fillRect(mx + f.x * sx - 2, my + f.y * sy - 2, 4, 4);
       } else if (spectator || this.seenByTeam(f, 'CT')) {
         ctx.fillStyle = '#ff7a66';
-        ctx.fillRect(mx + f.x * scale - 2, my + f.y * scale - 2, 4, 4);
+        ctx.fillRect(mx + f.x * sx - 2, my + f.y * sy - 2, 4, 4);
       }
     }
     ctx.save();
-    ctx.translate(mx + this.px * scale, my + this.py * scale);
+    ctx.translate(mx + this.px * sx, my + this.py * sy);
     ctx.rotate(this.angle);
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();

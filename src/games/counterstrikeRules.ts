@@ -65,9 +65,9 @@ export interface WeaponDef {
   sound: WeaponSound;
 }
 
-// fy_iceworld is 480px wide; CS players run at up to 250 u/s. Scaling 0.36
-// keeps the "cross the map" pacing close to the original ~7 second rush.
-export const SPEED_SCALE = 0.36;
+// The tile grid mirrors the original map at 1 tile = 32 map units, so
+// pixels ≈ map units × 0.94; CS players run at up to 250 u/s.
+export const SPEED_SCALE = 0.94;
 export const WALK_MULT = 0.52; // walk (Shift) speed multiplier
 export const CROUCH_MULT = 1 / 3; // crouch speed multiplier
 
@@ -95,7 +95,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   glock: weapon({
     id: 'glock', name: '9x19mm Sidearm', slot: 'secondary', team: 'T',
     price: 400, mag: 20, reserve: 120, interval: 0.15, reload: 2.2,
-    killReward: 300, speedUnits: 250, spread: 0.022, kick: 0.008, range: 260, falloff: 0.35,
+    killReward: 300, speedUnits: 250, spread: 0.022, kick: 0.008, range: 430, falloff: 0.35,
     dmg: { head: 96, chest: 23, stomach: 28, legs: 17 },
     armorDmg: { head: 50, chest: 12, stomach: 15 },
     sound: 'pistol',
@@ -103,7 +103,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   usp: weapon({
     id: 'usp', name: 'KM .45 Tactical', slot: 'secondary', team: 'CT',
     price: 500, mag: 12, reserve: 100, interval: 0.15, reload: 2.4,
-    killReward: 300, speedUnits: 250, spread: 0.02, kick: 0.009, range: 260, falloff: 0.35,
+    killReward: 300, speedUnits: 250, spread: 0.02, kick: 0.009, range: 430, falloff: 0.35,
     dmg: { head: 132, chest: 33, stomach: 41, legs: 24 },
     armorDmg: { head: 66, chest: 16, stomach: 20 },
     sound: 'pistol',
@@ -111,7 +111,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   p228: weapon({
     id: 'p228', name: '228 Compact', slot: 'secondary', team: 'both',
     price: 600, mag: 13, reserve: 52, interval: 0.133, reload: 2.4,
-    killReward: 300, speedUnits: 250, spread: 0.024, kick: 0.011, range: 260, falloff: 0.35,
+    killReward: 300, speedUnits: 250, spread: 0.024, kick: 0.011, range: 430, falloff: 0.35,
     dmg: { head: 124, chest: 31, stomach: 36, legs: 23 },
     armorDmg: { head: 77, chest: 19, stomach: 24 },
     sound: 'pistol',
@@ -119,7 +119,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   deagle: weapon({
     id: 'deagle', name: 'Night Hawk .50C', slot: 'secondary', team: 'both',
     price: 650, mag: 7, reserve: 35, interval: 0.24, reload: 2.2,
-    killReward: 300, speedUnits: 250, spread: 0.034, kick: 0.03, range: 300, falloff: 0.3,
+    killReward: 300, speedUnits: 250, spread: 0.034, kick: 0.03, range: 500, falloff: 0.3,
     dmg: { head: 212, chest: 52, stomach: 65, legs: 38 },
     armorDmg: { head: 159, chest: 39, stomach: 49 },
     sound: 'pistol',
@@ -127,7 +127,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   fiveseven: weapon({
     id: 'fiveseven', name: 'ES Five-Seven', slot: 'secondary', team: 'CT',
     price: 750, mag: 20, reserve: 100, interval: 0.15, reload: 2.2,
-    killReward: 300, speedUnits: 250, spread: 0.022, kick: 0.009, range: 260, falloff: 0.35,
+    killReward: 300, speedUnits: 250, spread: 0.022, kick: 0.009, range: 430, falloff: 0.35,
     dmg: { head: 76, chest: 19, stomach: 23, legs: 14 },
     armorDmg: { head: 57, chest: 14, stomach: 17 },
     sound: 'pistol',
@@ -135,7 +135,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   elite: weapon({
     id: 'elite', name: '.40 Dual Elites', slot: 'secondary', team: 'T',
     price: 800, mag: 30, reserve: 120, interval: 0.133, reload: 2.5,
-    killReward: 300, speedUnits: 250, spread: 0.03, kick: 0.01, range: 250, falloff: 0.4,
+    killReward: 300, speedUnits: 250, spread: 0.03, kick: 0.01, range: 420, falloff: 0.4,
     dmg: { head: 140, chest: 34, stomach: 42, legs: 24 },
     armorDmg: { head: 73, chest: 18, stomach: 22 },
     sound: 'pistol',
@@ -143,7 +143,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   m3: weapon({
     id: 'm3', name: 'Leone 12 Gauge Super', slot: 'primary', team: 'both',
     price: 1700, mag: 8, reserve: 32, interval: 0.857, reload: 4.6,
-    killReward: 300, speedUnits: 230, spread: 0.045, kick: 0.045, range: 140, falloff: 0.6,
+    killReward: 300, speedUnits: 230, spread: 0.045, kick: 0.045, range: 200, falloff: 0.6,
     pellets: 8,
     dmg: { head: 86, chest: 21, stomach: 27, legs: 16 },
     armorDmg: { head: 61, chest: 11, stomach: 13 },
@@ -152,7 +152,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   xm1014: weapon({
     id: 'xm1014', name: 'Leone YG1265 Auto Shotgun', slot: 'primary', team: 'both',
     price: 3000, mag: 7, reserve: 32, interval: 0.333, reload: 3.4,
-    killReward: 300, speedUnits: 240, spread: 0.05, kick: 0.04, range: 150, falloff: 0.55,
+    killReward: 300, speedUnits: 240, spread: 0.05, kick: 0.04, range: 210, falloff: 0.55,
     pellets: 6, auto: true,
     dmg: { head: 76, chest: 19, stomach: 24, legs: 14 },
     armorDmg: { head: 43, chest: 11, stomach: 12 },
@@ -161,7 +161,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   tmp: weapon({
     id: 'tmp', name: 'Schmidt Machine Pistol', slot: 'primary', team: 'CT',
     price: 1250, mag: 18, reserve: 72, interval: 0.08, reload: 2.5,
-    killReward: 300, speedUnits: 250, spread: 0.038, kick: 0.008, range: 290, falloff: 0.32,
+    killReward: 300, speedUnits: 250, spread: 0.038, kick: 0.008, range: 460, falloff: 0.32,
     auto: true,
     dmg: { head: 76, chest: 19, stomach: 23, legs: 14 },
     armorDmg: { head: 38, chest: 9, stomach: 11 },
@@ -170,7 +170,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   mac10: weapon({
     id: 'mac10', name: 'Ingram MAC-10', slot: 'primary', team: 'T',
     price: 1400, mag: 30, reserve: 100, interval: 0.075, reload: 2.5,
-    killReward: 300, speedUnits: 250, spread: 0.052, kick: 0.011, range: 270, falloff: 0.35,
+    killReward: 300, speedUnits: 250, spread: 0.052, kick: 0.011, range: 440, falloff: 0.35,
     auto: true,
     dmg: { head: 112, chest: 28, stomach: 35, legs: 20 },
     armorDmg: { head: 53, chest: 13, stomach: 16 },
@@ -179,7 +179,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   mp5: weapon({
     id: 'mp5', name: 'KM Sub-Machine Gun', slot: 'primary', team: 'both',
     price: 1500, mag: 30, reserve: 120, interval: 0.1, reload: 2.6,
-    killReward: 300, speedUnits: 250, spread: 0.04, kick: 0.01, range: 300, falloff: 0.3,
+    killReward: 300, speedUnits: 250, spread: 0.04, kick: 0.01, range: 480, falloff: 0.3,
     auto: true,
     dmg: { head: 100, chest: 25, stomach: 31, legs: 18 },
     armorDmg: { head: 50, chest: 12, stomach: 15 },
@@ -188,7 +188,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   ump45: weapon({
     id: 'ump45', name: 'KM UMP45', slot: 'primary', team: 'both',
     price: 1700, mag: 25, reserve: 100, interval: 0.12, reload: 2.8,
-    killReward: 300, speedUnits: 250, spread: 0.036, kick: 0.012, range: 300, falloff: 0.3,
+    killReward: 300, speedUnits: 250, spread: 0.036, kick: 0.012, range: 480, falloff: 0.3,
     auto: true,
     dmg: { head: 112, chest: 28, stomach: 35, legs: 21 },
     armorDmg: { head: 58, chest: 14, stomach: 18 },
@@ -197,7 +197,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   p90: weapon({
     id: 'p90', name: 'ES C90', slot: 'primary', team: 'both',
     price: 2350, mag: 50, reserve: 100, interval: 0.09, reload: 3.3,
-    killReward: 300, speedUnits: 245, spread: 0.042, kick: 0.009, range: 300, falloff: 0.3,
+    killReward: 300, speedUnits: 245, spread: 0.042, kick: 0.009, range: 480, falloff: 0.3,
     auto: true,
     dmg: { head: 80, chest: 20, stomach: 25, legs: 15 },
     armorDmg: { head: 60, chest: 15, stomach: 18 },
@@ -206,7 +206,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   galil: weapon({
     id: 'galil', name: 'IDF Defender', slot: 'primary', team: 'T',
     price: 2000, mag: 35, reserve: 90, interval: 0.1, reload: 2.8,
-    killReward: 300, speedUnits: 240, spread: 0.052, kick: 0.016, range: 400, falloff: 0.25,
+    killReward: 300, speedUnits: 240, spread: 0.052, kick: 0.016, range: 640, falloff: 0.25,
     auto: true,
     dmg: { head: 116, chest: 29, stomach: 36, legs: 21 },
     armorDmg: { head: 89, chest: 22, stomach: 28 },
@@ -215,7 +215,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   famas: weapon({
     id: 'famas', name: 'Clarion 5.56', slot: 'primary', team: 'CT',
     price: 2250, mag: 25, reserve: 90, interval: 0.1, reload: 2.8,
-    killReward: 300, speedUnits: 240, spread: 0.05, kick: 0.015, range: 400, falloff: 0.25,
+    killReward: 300, speedUnits: 240, spread: 0.05, kick: 0.015, range: 640, falloff: 0.25,
     auto: true,
     dmg: { head: 116, chest: 29, stomach: 36, legs: 21 },
     armorDmg: { head: 81, chest: 20, stomach: 25 },
@@ -224,7 +224,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   ak47: weapon({
     id: 'ak47', name: 'CV-47', slot: 'primary', team: 'T',
     price: 2500, mag: 30, reserve: 90, interval: 0.1, reload: 2.5,
-    killReward: 300, speedUnits: 221, spread: 0.055, kick: 0.022, range: 420, falloff: 0.25,
+    killReward: 300, speedUnits: 221, spread: 0.055, kick: 0.022, range: 660, falloff: 0.25,
     auto: true,
     dmg: { head: 140, chest: 35, stomach: 43, legs: 26 },
     armorDmg: { head: 108, chest: 27, stomach: 33 },
@@ -233,7 +233,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   sg552: weapon({
     id: 'sg552', name: 'Krieg 552', slot: 'primary', team: 'T',
     price: 3500, mag: 30, reserve: 90, interval: 0.1, reload: 2.8,
-    killReward: 300, speedUnits: 235, spread: 0.048, kick: 0.017, range: 420, falloff: 0.25,
+    killReward: 300, speedUnits: 235, spread: 0.048, kick: 0.017, range: 660, falloff: 0.25,
     auto: true,
     dmg: { head: 128, chest: 32, stomach: 40, legs: 24 },
     armorDmg: { head: 89, chest: 22, stomach: 28 },
@@ -242,7 +242,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   m4a1: weapon({
     id: 'm4a1', name: 'Maverick M4A1 Carbine', slot: 'primary', team: 'CT',
     price: 3100, mag: 30, reserve: 90, interval: 0.1, reload: 3.0,
-    killReward: 300, speedUnits: 230, spread: 0.046, kick: 0.016, range: 420, falloff: 0.25,
+    killReward: 300, speedUnits: 230, spread: 0.046, kick: 0.016, range: 660, falloff: 0.25,
     auto: true,
     dmg: { head: 124, chest: 31, stomach: 38, legs: 23 },
     armorDmg: { head: 86, chest: 21, stomach: 27 },
@@ -260,7 +260,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   scout: weapon({
     id: 'scout', name: 'Schmidt Scout', slot: 'primary', team: 'both',
     price: 2750, mag: 10, reserve: 90, interval: 0.6, reload: 2.7,
-    killReward: 300, speedUnits: 260, spread: 0.012, kick: 0.03, range: 900, falloff: 0.05,
+    killReward: 300, speedUnits: 260, spread: 0.012, kick: 0.03, range: 1500, falloff: 0.05,
     dmg: { head: 296, chest: 74, stomach: 92, legs: 55 },
     armorDmg: { head: 251, chest: 62, stomach: 78 },
     sound: 'sniper',
@@ -268,7 +268,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   awp: weapon({
     id: 'awp', name: 'Magnum Sniper Rifle', slot: 'primary', team: 'both',
     price: 4750, mag: 10, reserve: 30, interval: 1.46, reload: 3.6,
-    killReward: 100, speedUnits: 210, spread: 0.005, kick: 0.05, range: 900, falloff: 0.02,
+    killReward: 100, speedUnits: 210, spread: 0.005, kick: 0.05, range: 1500, falloff: 0.02,
     dmg: { head: 456, chest: 114, stomach: 142, legs: 85 },
     armorDmg: { head: 444, chest: 111, stomach: 138 },
     sound: 'sniper',
@@ -276,7 +276,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   g3sg1: weapon({
     id: 'g3sg1', name: 'D3/AU-1', slot: 'primary', team: 'T',
     price: 5000, mag: 20, reserve: 90, interval: 0.2, reload: 3.2,
-    killReward: 300, speedUnits: 210, spread: 0.016, kick: 0.03, range: 900, falloff: 0.08,
+    killReward: 300, speedUnits: 210, spread: 0.016, kick: 0.03, range: 1500, falloff: 0.08,
     auto: true,
     dmg: { head: 316, chest: 79, stomach: 98, legs: 59 },
     armorDmg: { head: 260, chest: 65, stomach: 81 },
@@ -285,7 +285,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   sg550: weapon({
     id: 'sg550', name: 'Krieg 550 Commando', slot: 'primary', team: 'CT',
     price: 4200, mag: 30, reserve: 90, interval: 0.2, reload: 3.2,
-    killReward: 300, speedUnits: 210, spread: 0.016, kick: 0.028, range: 900, falloff: 0.08,
+    killReward: 300, speedUnits: 210, spread: 0.016, kick: 0.028, range: 1500, falloff: 0.08,
     auto: true,
     dmg: { head: 276, chest: 69, stomach: 86, legs: 51 },
     armorDmg: { head: 200, chest: 50, stomach: 62 },
@@ -294,7 +294,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   m249: weapon({
     id: 'm249', name: 'M249', slot: 'primary', team: 'both',
     price: 5750, mag: 100, reserve: 200, interval: 0.092, reload: 4.7,
-    killReward: 300, speedUnits: 220, spread: 0.062, kick: 0.017, range: 380, falloff: 0.3,
+    killReward: 300, speedUnits: 220, spread: 0.062, kick: 0.017, range: 560, falloff: 0.3,
     auto: true,
     dmg: { head: 124, chest: 31, stomach: 38, legs: 23 },
     // Faithful CS 1.6 quirk: the M249's damage table is identical with or
@@ -345,9 +345,9 @@ export const SECONDARY_AMMO_PRICE = 25;
 export const ROUND = {
   freezeTime: 4,
   buyTime: 15, // seconds into the live round that the center buyzone stays open
-  roundTime: 60,
+  roundTime: 40, // fy_iceworld rounds are quick and decisive
   postTime: 3,
-  winScore: 3, // first team to 3 round wins takes the match
+  winScore: 2, // first team to two round wins takes the match (browser session pace)
   maxHp: 100,
   maxArmor: 100,
 };

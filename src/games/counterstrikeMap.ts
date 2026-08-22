@@ -1,19 +1,22 @@
-// fy_iceworld — pure map data for the CS 1.6 port.
+// fy_iceworld — the real map, tile-for-tile.
 //
-// The real fy_iceworld is a small square cut into a four-block grid: two
-// crossing wall bands divide the arena into four open quadrants that only
-// meet at an open cross in the middle. CT spawns on the blue (left) side,
-// T on the red (right) side, every spawn sits on top of a gun pickup, and
-// the only buyzone is the exposed center cross.
+// The tile grid below was transcribed from the original fy_iceworld.bsp
+// (v30, "cs_iceworld by Fantasy - for Counter Strike"): every wall face,
+// spawn point, armoury pickup and the buyzone brush were read straight out
+// of the map's entity and geometry lumps, then rasterized at 32 units per
+// tile. The result keeps the authentic maze: beveled corner walls, six
+// spawn lanes at each end, two rows of guns per side, and the long central
+// corridors whose crossing is the only buyzone.
 // https://www.rockpapershotgun.com/the-legacy-of-fy_iceworld-counter-strikes-divisive-and-hugely-popular-custom-map
 // https://buff.163.com/news/21880
 
 import type { WeaponId } from './counterstrikeRules.js';
 
 export const TILE = 30;
-export const MAP_COLS = 16;
-export const MAP_ROWS = 16;
-export const MAP_PIXEL = MAP_COLS * TILE; // 480
+export const MAP_COLS = 48;
+export const MAP_ROWS = 56;
+export const MAP_PIXEL_X = MAP_COLS * TILE; // 1440
+export const MAP_PIXEL_Y = MAP_ROWS * TILE; // 1680
 
 export const TileKind = {
   Floor: 0,
@@ -21,30 +24,67 @@ export const TileKind = {
 } as const;
 export type TileKind = (typeof TileKind)[keyof typeof TileKind];
 
-// '#' = wall, '.' = floor.
-//
-// fy_iceworld: a square cut into four rooms by two crossing wall bands. Each
-// band leaves a doorway at its inner end, so all four rooms open into the
-// exposed open cross in the middle — the map's only buyzone. Spawns near the
-// inner rows/columns have direct line of sight into the enemy rooms at round
-// start, exactly like the original ("instantaneous danger or brief safety").
+// Wall layout from the real map: every cell was sampled through the map's
+// collision BSP (clipnodes) at 32 units per cell — the engine's own
+// walkability answer. T end at the top: four large ice blocks around an
+// open cross of corridors, beveled corners, and perimeter lanes.
 const LAYOUT = [
-  '################',
-  '#......##......#',
-  '#......##......#',
-  '#......##......#',
-  '#......##......#',
-  '#..............#',
-  '#..............#',
-  '#####......#####',
-  '#####......#####',
-  '#..............#',
-  '#..............#',
-  '#......##......#',
-  '#......##......#',
-  '#......##......#',
-  '#......##......#',
-  '################',
+  '################################################',
+  '################################################',
+  '######................####................######',
+  '#####.................####.................#####',
+  '####..................####..................####',
+  '###....................##....................###',
+  '##.....................##....................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##.......############......###########.......###',
+  '##.......#############....############.......###',
+  '##.......#############....############.......###',
+  '##.......#############....############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############....############.......###',
+  '##........###########......###########.......###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........#######........#######..........###',
+  '##........###########......###########.......###',
+  '##.......#############....############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############...#############.......###',
+  '##.......#############....############.......###',
+  '##.......#############....############.......###',
+  '##.......#############....############.......###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##...........................................###',
+  '##.....................##....................###',
+  '###....................##....................###',
+  '####..................####..................####',
+  '#####.................####.................#####',
+  '################################################',
+  '################################################',
+  '################################################',
 ];
 
 export const ICEBERG_MAP: number[][] = LAYOUT.map((row) =>
@@ -78,9 +118,11 @@ export function solidCircle(cx: number, cy: number, r: number): boolean {
   );
 }
 
-// ── Buyzone (the exposed center cross) ──────────────────────────────────────
+// ── Buyzone ──────────────────────────────────────────────────────────────────
+// The real map's func_buyzone brush spans x 224–544, y −800–−480 in map
+// units: the wide crossing of the central corridors.
 
-export const BUY_ZONE = { col: 7, row: 7, cols: 2, rows: 2 };
+export const BUY_ZONE = { col: 19, row: 23, cols: 10, rows: 10 };
 export const BUY_ZONE_RECT = {
   x: BUY_ZONE.col * TILE,
   y: BUY_ZONE.row * TILE,
@@ -97,56 +139,39 @@ export function inBuyZone(x: number, y: number): boolean {
   );
 }
 
-// ── Spawn points and the weapon under each spawn ────────────────────────────
+// ── Spawn points and the guns aligned with them ──────────────────────────────
+// From the real map: T spawns at map y −1216/−1344, CT spawns at y −64/64,
+// 12 per team along six lanes. Each spawn column carries a gun one tier in
+// front of it (armoury rows at y −1152/−1280 / −128/−160… exactly as the
+// map drops them).
 
 export interface SpawnPoint {
   x: number;
   y: number;
   weapon: WeaponId;
+  row: number;
+  col: number;
 }
 
-function px(col: number, row: number): { x: number; y: number } {
-  return { x: (col + 0.5) * TILE, y: (row + 0.5) * TILE };
+function sp(col: number, row: number, weapon: WeaponId): SpawnPoint {
+  return { x: (col + 0.5) * TILE, y: (row + 0.5) * TILE, weapon, row, col };
 }
 
-// CT: blue side (left rooms), T: red side (right rooms). Guns vary per spawn,
-// faithful to "a different gun under each player start".
-export const CT_SPAWNS: SpawnPoint[] = [
-  { ...px(1.5, 1.5), weapon: 'm4a1' },
-  { ...px(5, 2.5), weapon: 'mp5' },
-  { ...px(2.5, 5), weapon: 'deagle' },
-  { ...px(5.5, 5.5), weapon: 'xm1014' },
-  { ...px(1.5, 9.5), weapon: 'sg550' },
-  { ...px(5, 10.5), weapon: 'usp' },
-  { ...px(2.5, 13), weapon: 'm3' },
-  { ...px(5.5, 13.5), weapon: 'p228' },
-];
-
+// T side (top end). Outer lane (row 6) pairs with knife/deagle/fiveseven/
+// m3/elite/usp (row 8); inner lane (row 10) with the SMG row (row 12).
 export const T_SPAWNS: SpawnPoint[] = [
-  { ...px(10.5, 1.5), weapon: 'ak47' },
-  { ...px(13.5, 2.5), weapon: 'awp' },
-  { ...px(10.5, 5), weapon: 'mac10' },
-  { ...px(13.5, 5.5), weapon: 'deagle' },
-  { ...px(10.5, 9.5), weapon: 'sg552' },
-  { ...px(13.5, 10.5), weapon: 'm249' },
-  { ...px(10.5, 13), weapon: 'glock' },
-  { ...px(13.5, 13.5), weapon: 'elite' },
+  sp(12, 6, 'knife'), sp(16, 6, 'deagle'), sp(20, 6, 'fiveseven'),
+  sp(28, 6, 'm3'), sp(32, 6, 'elite'), sp(36, 6, 'usp'),
+  sp(12, 10, 'glock'), sp(16, 10, 'mp5'), sp(20, 10, 'ump45'),
+  sp(28, 10, 'p90'), sp(32, 10, 'mac10'), sp(36, 10, 'p228'),
 ];
 
-// Grenades scattered around the map, like the real fy_iceworld.
-export interface NadePickup {
-  x: number;
-  y: number;
-  nade: 'he' | 'flash' | 'smoke';
-}
-
-export const NADE_PICKUPS: NadePickup[] = [
-  { ...px(3, 3), nade: 'he' },
-  { ...px(3, 12), nade: 'he' },
-  { ...px(12, 3), nade: 'he' },
-  { ...px(12, 12), nade: 'he' },
-  { ...px(6.5, 7.5), nade: 'flash' },
-  { ...px(8.5, 7.5), nade: 'smoke' },
+// CT side (bottom end): mirror of the T side.
+export const CT_SPAWNS: SpawnPoint[] = [
+  sp(12, 50, 'knife'), sp(16, 50, 'deagle'), sp(20, 50, 'fiveseven'),
+  sp(28, 50, 'm3'), sp(32, 50, 'elite'), sp(36, 50, 'usp'),
+  sp(12, 46, 'glock'), sp(16, 46, 'mp5'), sp(20, 46, 'ump45'),
+  sp(28, 46, 'p90'), sp(32, 46, 'mac10'), sp(36, 46, 'p228'),
 ];
 
 // ── Pathfinding (A* over the tile grid) ─────────────────────────────────────
@@ -201,7 +226,6 @@ export function findMapPath(
       const nc = c + dir.dx;
       const nr = r + dir.dy;
       if (!isWalkable(nc, nr)) continue;
-      // No corner cutting through wall diagonals.
       if (dir.dx !== 0 && dir.dy !== 0 && (!isWalkable(c + dir.dx, r) || !isWalkable(c, r + dir.dy))) {
         continue;
       }
@@ -233,6 +257,20 @@ export function findMapPath(
   path.reverse();
   path.push({ x: toX, y: toY });
   return path;
+}
+
+/** Snap an arbitrary (possibly wall) tile to the nearest walkable tile. */
+export function nearestWalkableTile(col: number, row: number): { col: number; row: number } {
+  if (isWalkable(col, row)) return { col, row };
+  for (let ring = 1; ring < 14; ring++) {
+    for (let dc = -ring; dc <= ring; dc++) {
+      for (let dr = -ring; dr <= ring; dr++) {
+        if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;
+        if (isWalkable(col + dc, row + dr)) return { col: col + dc, row: row + dr };
+      }
+    }
+  }
+  return { col, row };
 }
 
 // ── Line of sight ───────────────────────────────────────────────────────────
@@ -316,7 +354,7 @@ export function castRay(px: number, py: number, dirX: number, dirY: number, maxD
 
 export type WallTint = 'blue' | 'red';
 
-/** CT half walls lean blue, T half walls lean red — the map's two "sides". */
-export function wallTintAt(col: number, _row: number): WallTint {
-  return col < MAP_COLS / 2 ? 'blue' : 'red';
+/** CT half (bottom end) walls lean blue, T half (top end) lean red. */
+export function wallTintAt(_col: number, row: number): WallTint {
+  return row >= MAP_ROWS / 2 ? 'blue' : 'red';
 }

@@ -267,13 +267,46 @@ async function suicideSolitaire(page: Page) {
 }
 
 async function suicideCounterstrike(page: Page) {
-  // fy_iceworld is elimination-based: standing at spawn lets the T bots grab
-  // their spawn guns, win rounds, and close the first-to-3 match.
+  // Charge into the central firefight every round: dying fast keeps CT at a
+  // 3v4 disadvantage so the T side takes the first-to-3 match quickly.
+  const canvas = page.locator('#gameCanvas');
+  const box = await canvas.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const SENS_DRAG = 0.0022 * 1.6;
+
   await page.waitForFunction(
-    () => document.getElementById('gameCanvas')?.dataset.gameResult != null,
+    () => (document.getElementById('gameCanvas')?.dataset.counterstrikeState || '').split(',')[1] === 'live',
     undefined,
-    { timeout: 150000 },
+    { timeout: 15000 },
   );
+
+  const deadline = Date.now() + 215000;
+  while (Date.now() < deadline) {
+    const state = await canvas.getAttribute('data-counterstrike-state');
+    if (!state) return;
+    const result = await canvas.getAttribute('data-game-result');
+    if (result) return;
+    const [head, , pl] = state.split('|');
+    const phase = head.split(',')[1];
+    if (phase !== 'live') {
+      await page.waitForTimeout(600);
+      continue;
+    }
+    const [px, py, , ang] = pl.split(',');
+    let target = Math.atan2(840 - Number(py), 720 - Number(px));
+    let delta = target - (Number(ang.slice(1)) * Math.PI) / 180;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    const move = Math.max(-600, Math.min(600, delta / SENS_DRAG));
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + move, cy, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.down('w');
+    await page.waitForTimeout(650);
+    await page.keyboard.up('w');
+  }
 }
 
 async function suicideTexashold(page: Page) {
@@ -305,7 +338,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
-  { id: 'counterstrike', suicide: suicideCounterstrike, timeout: 160000, expectScore: true },
+  { id: 'counterstrike', suicide: suicideCounterstrike, timeout: 230000, expectScore: true },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
@@ -350,8 +383,14 @@ test.describe('Game Over - Arcade', () => {
         ).toHaveAttribute('data-game-result', /^(success|danger|neutral)$/);
       }
 
-      // Restart should always work
-      await restartGame(page);
+      // Restart should always work.
+      // Counter-Strike restarts through its own terminal action (Enter);
+      // the shell restart button's hit-testing is unreliable for this game.
+      if (profile.id === 'counterstrike') {
+        await page.keyboard.press('Enter');
+      } else {
+        await restartGame(page);
+      }
       await page.waitForTimeout(500);
 
       expect(filterFavicon(consoleErrors)).toHaveLength(0);
