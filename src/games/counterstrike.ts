@@ -1,11 +1,12 @@
-// Counter-Strike — a faithful single-map CS 1.6 port on fy_iceworld.
+// Counter-Strike — a first-person CS 1.6 port on fy_iceworld.
 //
-// Top-down team-deathmatch rounds with the classic CS 1.6 rule set: T vs CT,
-// $800 start money, weapon pickups under every spawn, the exposed center
-// buyzone, round wins/loss bonuses, armor + helmet, grenades, headshots, and
-// a first-to-3 match. Weapons, damage tables (armored/unarmored), prices,
-// rates, movement speeds, and the buy menu follow the CS 1.6 references in
-// counterstrikeRules.ts.
+// Classic CS 1.6 rule set on the famous four-room ice arena: T vs CT
+// elimination rounds, $800 start money, guns under every spawn, the exposed
+// center buyzone, armor + helmet, grenades, headshots, kill feed, radar, and
+// a first-to-3 match. The renderer is a HiDPI raycaster (procedural ice
+// textures, billboard soldiers, per-stripe depth); weapons, damage tables,
+// prices, rates, movement speeds, and the buy menu follow the CS 1.6
+// references in counterstrikeRules.ts.
 
 import {
   BaseGame,
@@ -14,23 +15,25 @@ import {
   type GameShellSnapshot,
 } from '../core/game.js';
 import { Sfx } from './counterstrikeAudio.js';
+import { getGrenadeSprite, getSoldierFrames, getWallTexture, getWeaponSprite } from './counterstrikeAssets.js';
 import {
   BUY_ZONE_RECT,
   CT_SPAWNS,
   ICEBERG_MAP,
   MAP_COLS,
-  MAP_ROWS,
   MAP_PIXEL,
+  MAP_ROWS,
   NADE_PICKUPS,
   T_SPAWNS,
   TILE,
   TileKind,
+  castRay,
   findMapPath,
   hasLineOfSight,
   inBuyZone,
   isSolidTile,
-  raycastWall,
   solidCircle,
+  wallTintAt,
   type MapPathPoint,
 } from './counterstrikeMap.js';
 import {
@@ -56,12 +59,20 @@ import {
   type WeaponId,
 } from './counterstrikeRules.js';
 
-const W = MAP_PIXEL; // 480
-const H = MAP_PIXEL;
+const W = 960;
+const H = 540;
+const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
+const MAX_DIST = 620;
+const FOG_START = 190;
+const WALL_H = TILE; // 30
+const EYE = 9;
+const EYE_CROUCH = 6;
 const PLAYER_RADIUS = 11;
+const SOLDIER_H = 20; // world height of a soldier sprite
 const BOT_VISION = 320;
 const MAX_HP = ROUND.maxHp;
 const MAX_ARMOR = ROUND.maxArmor;
+const MOUSE_SENS = 0.0022;
 
 const CT_BOT_NAMES = ['Gordon', 'Shephard', 'Riley'];
 const T_BOT_NAMES = ['Sasha', 'Vlad', 'Rustam', 'Yuri'];
@@ -158,6 +169,7 @@ interface Fighter {
   roamX: number;
   roamY: number;
   roamT: number;
+  variant: number;
 }
 
 interface GroundItem {
@@ -174,8 +186,10 @@ interface GroundItem {
 interface Tracer {
   x1: number;
   y1: number;
+  z1: number;
   x2: number;
   y2: number;
+  z2: number;
   life: number;
   maxLife: number;
   color: string;
@@ -184,8 +198,10 @@ interface Tracer {
 interface Particle {
   x: number;
   y: number;
+  z: number;
   vx: number;
   vy: number;
+  vz: number;
   life: number;
   maxLife: number;
   size: number;
@@ -236,6 +252,10 @@ export class CounterStrikeGame extends BaseGame {
   private grenades: Grenade[] = [];
   private feed: FeedEntry[] = [];
 
+  private px = 0;
+  private py = 0;
+  private angle = 0;
+
   private phase: Phase = 'freeze';
   private phaseTimer = ROUND.freezeTime;
   private roundTimer = ROUND.roundTime;
@@ -256,8 +276,6 @@ export class CounterStrikeGame extends BaseGame {
   private keys = new Set<string>();
   private firing = false;
   private triggerPulse = false;
-  private aimX = 0;
-  private aimY = 0;
   private mouseX = 0;
   private mouseY = 0;
   private scoreboardHeld = false;
@@ -273,24 +291,28 @@ export class CounterStrikeGame extends BaseGame {
 
   private touchMode = false;
   private moveTouch: { id: number; ax: number; ay: number; dx: number; dy: number } | null = null;
-  private aimTouch: { id: number; lastX: number; lastY: number; moved: number } | null = null;
+  private lookTouch: { id: number; lastX: number; lastY: number } | null = null;
   private fireTouch: { id: number } | null = null;
+  private reloadTouch: { id: number } | null = null;
 
-  private floorShades: number[] = [];
+  private lookDrag: { lastX: number; lastY: number; moved: number } | null = null;
   private hudStateCache = '';
   private readonly sfx = new Sfx();
   private boundBlur: (() => void) | null = null;
   private boundContextMenu: ((e: Event) => void) | null = null;
+  private boundPointerLockChange: (() => void) | null = null;
+
+  private readonly renderCanvas = document.createElement('canvas');
+  private readonly renderCtx = this.renderCanvas.getContext('2d');
+  private zBuffer = new Float32Array(480);
+  private rw = 480;
+  private rh = 270;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
     this.touchMode =
       typeof window !== 'undefined' &&
       ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0);
-    this.floorShades = Array.from(
-      { length: MAP_COLS * MAP_ROWS },
-      (_, i) => 0.86 + ((i * 17 + Math.floor(i / MAP_COLS) * 7) % 13) / 100,
-    );
   }
 
   override getShellSnapshot(): GameShellSnapshot {
@@ -357,6 +379,7 @@ export class CounterStrikeGame extends BaseGame {
       roamX: 0,
       roamY: 0,
       roamT: 0,
+      variant: Math.random() < 0.5 ? 0 : 1,
     };
   }
 
@@ -426,6 +449,22 @@ export class CounterStrikeGame extends BaseGame {
         this.boundContextMenu = null;
       });
     }
+    if (!this.boundPointerLockChange) {
+      this.boundPointerLockChange = () => {
+        if (document.pointerLockElement !== this.canvas) {
+          this.firing = false;
+          this.triggerPulse = false;
+          this.lookDrag = null;
+        }
+      };
+      document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+      this.registerCleanup(() => {
+        if (this.boundPointerLockChange) {
+          document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+        }
+        this.boundPointerLockChange = null;
+      });
+    }
   }
 
   private clearTransientInput() {
@@ -433,18 +472,29 @@ export class CounterStrikeGame extends BaseGame {
     this.firing = false;
     this.triggerPulse = false;
     this.scoreboardHeld = false;
+    this.lookDrag = null;
     this.clearTouch();
   }
 
   private clearTouch() {
     this.moveTouch = null;
-    this.aimTouch = null;
+    this.lookTouch = null;
     this.fireTouch = null;
+    this.reloadTouch = null;
   }
 
   destroy() {
     this.stop();
     this.sfx.close();
+  }
+
+  override stop() {
+    super.stop();
+    try {
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+    } catch {
+      // best-effort
+    }
   }
 
   private player(): Fighter {
@@ -456,11 +506,15 @@ export class CounterStrikeGame extends BaseGame {
     return p.kills * 150 + this.ctWins * 500;
   }
 
+  private eye(): number {
+    return this.player().crouch ? EYE_CROUCH : EYE;
+  }
+
   private syncDebugState() {
     const alive = this.fighters.filter((f) => f.alive).length;
-    const t0 = this.fighters[4];
     const p = this.player();
-    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|${p.x.toFixed(0)},${p.y.toFixed(0)},$${p.money}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}`;
+    const t0 = this.fighters[4];
+    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|${this.px.toFixed(0)},${this.py.toFixed(0)},$${p.money},a${((this.angle * 180) / Math.PI).toFixed(0)}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}`;
     if (key !== this.hudStateCache) {
       this.hudStateCache = key;
       this.canvas.dataset.counterstrikeState = key;
@@ -474,6 +528,7 @@ export class CounterStrikeGame extends BaseGame {
     this.phase = 'freeze';
     this.phaseTimer = ROUND.freezeTime;
     this.roundTimer = ROUND.roundTime;
+    this.liveT = 0;
     this.postTimer = 0;
     this.roundWinner = null;
     this.roundDraw = false;
@@ -486,7 +541,6 @@ export class CounterStrikeGame extends BaseGame {
     this.particles = [];
     this.smokes = [];
 
-    // Rebuild the fixed pickups: every spawn gun + scattered grenades.
     this.ground = [
       ...CT_SPAWNS.map((sp) => ({ ...this.groundWeapon(sp.x, sp.y, sp.weapon), fixed: true })),
       ...T_SPAWNS.map((sp) => ({ ...this.groundWeapon(sp.x, sp.y, sp.weapon), fixed: true })),
@@ -538,7 +592,6 @@ export class CounterStrikeGame extends BaseGame {
     f.strafeT = 0;
     if (!f.keepLoadout) this.defaultLoadout(f);
 
-    // Claim the gun under the spawn, like the real fy_iceworld.
     const def = WEAPONS[spawn.weapon];
     if (def.slot === 'primary') {
       if (!f.primary) {
@@ -552,8 +605,9 @@ export class CounterStrikeGame extends BaseGame {
     }
     this.removeGroundItemAt(spawn.x, spawn.y, spawn.weapon);
     if (f === this.player()) {
-      this.aimX = f.x + 60;
-      this.aimY = f.y;
+      this.px = spawn.x;
+      this.py = spawn.y;
+      this.angle = 0;
     }
   }
 
@@ -607,7 +661,7 @@ export class CounterStrikeGame extends BaseGame {
     }
     for (const f of this.fighters) {
       const won = f.team === winner;
-      f.money = clampMoney(f.money + (won ? ECONOMY.winMoney : lossMoney(won ? 0 : (ctWon ? this.tLossStreak : this.ctLossStreak))));
+      f.money = clampMoney(f.money + (won ? ECONOMY.winMoney : lossMoney(ctWon ? this.tLossStreak : this.ctLossStreak)));
     }
 
     if (ctWon) this.sfx.roundWon();
@@ -628,7 +682,7 @@ export class CounterStrikeGame extends BaseGame {
     return this.fighters.filter((f) => f.team === team && f.alive).length;
   }
 
-  // ── Buying (freezetime, center buyzone only) ───────────────────────────────
+  // ── Buying (buytime, center buyzone only) ─────────────────────────────────
 
   private canBuy(): boolean {
     const p = this.player();
@@ -640,7 +694,7 @@ export class CounterStrikeGame extends BaseGame {
       !this.gameOver &&
       !this.paused &&
       p.alive &&
-      inBuyZone(p.x, p.y)
+      inBuyZone(this.px, this.py)
     );
   }
 
@@ -767,7 +821,14 @@ export class CounterStrikeGame extends BaseGame {
         }
         if (key === 'p') {
           this.paused = !this.paused;
-          if (this.paused) this.clearTransientInput();
+          if (this.paused) {
+            this.clearTransientInput();
+            try {
+              if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+            } catch {
+              // best-effort
+            }
+          }
           return;
         }
         if (key === 'm') {
@@ -808,6 +869,13 @@ export class CounterStrikeGame extends BaseGame {
         if (key === 'tab') {
           e.preventDefault();
           this.scoreboardHeld = true;
+          return;
+        }
+        if (key === 'escape') {
+          if (document.pointerLockElement !== this.canvas) {
+            this.paused = true;
+            this.clearTransientInput();
+          }
           return;
         }
         if (this.phase === 'live' && this.player().alive) {
@@ -854,10 +922,15 @@ export class CounterStrikeGame extends BaseGame {
         this.mouseX = point.x;
         this.mouseY = point.y;
         if (this.buyOpen) this.updateBuyHover(point.x, point.y);
-        const p = this.player();
-        this.aimX = point.x;
-        this.aimY = point.y;
-        if (p.alive) p.angle = Math.atan2(point.y - p.y, point.x - p.x);
+        if (document.pointerLockElement === this.canvas) {
+          this.angle += e.movementX * MOUSE_SENS;
+        } else if (this.lookDrag) {
+          const dx = e.clientX - this.lookDrag.lastX;
+          this.angle += dx * MOUSE_SENS * 1.6;
+          this.lookDrag.moved += Math.abs(dx);
+          this.lookDrag.lastX = e.clientX;
+          this.lookDrag.lastY = e.clientY;
+        }
         return;
       }
       if (e.type === 'mousedown') {
@@ -872,15 +945,35 @@ export class CounterStrikeGame extends BaseGame {
           this.clickBuyMenu(point.x, point.y);
           return;
         }
+        const locked = document.pointerLockElement === this.canvas;
+        this.lookDrag = { lastX: e.clientX, lastY: e.clientY, moved: 0 };
+        if (!locked) {
+          try {
+            const lockRequest = this.canvas.requestPointerLock();
+            void lockRequest.catch(() => {});
+          } catch {
+            // pointer lock unavailable — drag-to-look fallback still works
+          }
+        }
         const p = this.player();
-        if (!p.alive) return;
-        if (this.phase === 'live') {
+        if (locked && p.alive && this.phase === 'live') {
           this.firing = true;
           this.triggerPulse = true;
         }
         return;
       }
       if (e.type === 'mouseup' && e.button === 0) {
+        const drag = this.lookDrag;
+        this.lookDrag = null;
+        if (
+          document.pointerLockElement !== this.canvas &&
+          drag &&
+          drag.moved < 6 &&
+          this.phase === 'live' &&
+          this.player().alive
+        ) {
+          this.triggerPulse = true;
+        }
         this.firing = false;
       }
       return;
@@ -898,23 +991,23 @@ export class CounterStrikeGame extends BaseGame {
             this.clickBuyMenu(point.x, point.y);
             continue;
           }
-          if (point.x < this.width * 0.4 && point.y > this.height * 0.35) {
+          const fireHit = Math.hypot(point.x - (this.width - 88), point.y - (this.height - 84)) <= 50;
+          const reloadHit = Math.hypot(point.x - (this.width - 88), point.y - (this.height - 164)) <= 38;
+          if (point.x < this.width * 0.45 && !fireHit && !reloadHit) {
             if (!this.moveTouch) {
               this.moveTouch = { id: t.identifier, ax: point.x, ay: point.y, dx: 0, dy: 0 };
             }
-          } else if (Math.hypot(point.x - (this.width - 62), point.y - (this.height - 62)) <= 46) {
-            if (!this.fireTouch) {
+          } else if (fireHit) {
+            if (this.phase === 'live' && this.player().alive) {
               this.fireTouch = { id: t.identifier };
-              const p = this.player();
-              if (p.alive && this.phase === 'live') {
-                this.firing = true;
-                this.triggerPulse = true;
-              }
+              this.firing = true;
+              this.triggerPulse = true;
             }
-          } else if (point.x >= this.width - 120 && point.y >= this.height - 160 && point.y <= this.height - 100) {
+          } else if (reloadHit) {
+            this.reloadTouch = { id: t.identifier };
             this.startReload(this.player());
-          } else if (!this.aimTouch) {
-            this.aimTouch = { id: t.identifier, lastX: point.x, lastY: point.y, moved: 0 };
+          } else if (!this.lookTouch) {
+            this.lookTouch = { id: t.identifier, lastX: point.x, lastY: point.y };
           }
         }
       } else if (e.type === 'touchmove' && !this.paused) {
@@ -924,7 +1017,7 @@ export class CounterStrikeGame extends BaseGame {
             const dx = point.x - this.moveTouch.ax;
             const dy = point.y - this.moveTouch.ay;
             const len = Math.hypot(dx, dy);
-            const maxR = 56;
+            const maxR = 58;
             if (len > maxR) {
               this.moveTouch.dx = (dx / len) * maxR;
               this.moveTouch.dy = (dy / len) * maxR;
@@ -932,34 +1025,21 @@ export class CounterStrikeGame extends BaseGame {
               this.moveTouch.dx = dx;
               this.moveTouch.dy = dy;
             }
-          } else if (this.aimTouch && t.identifier === this.aimTouch.id) {
-            const p = this.player();
-            this.aimTouch.moved += Math.abs(point.x - this.aimTouch.lastX) + Math.abs(point.y - this.aimTouch.lastY);
-            this.aimTouch.lastX = point.x;
-            this.aimTouch.lastY = point.y;
-            this.aimX = point.x;
-            this.aimY = point.y;
-            if (p.alive) p.angle = Math.atan2(point.y - p.y, point.x - p.x);
+          } else if (this.lookTouch && t.identifier === this.lookTouch.id) {
+            this.angle += (point.x - this.lookTouch.lastX) * 0.008;
+            this.lookTouch.lastX = point.x;
+            this.lookTouch.lastY = point.y;
           }
         }
       } else if (e.type === 'touchend' || e.type === 'touchcancel') {
         for (const t of e.changedTouches) {
           if (this.moveTouch && t.identifier === this.moveTouch.id) this.moveTouch = null;
+          if (this.lookTouch && t.identifier === this.lookTouch.id) this.lookTouch = null;
           if (this.fireTouch && t.identifier === this.fireTouch.id) {
             this.fireTouch = null;
             this.firing = false;
           }
-          if (this.aimTouch && t.identifier === this.aimTouch.id) {
-            if (this.aimTouch.moved < 8) {
-              const p = this.player();
-              if (p.alive && this.phase === 'live') {
-                this.firing = true;
-                this.triggerPulse = true;
-                this.firing = false;
-              }
-            }
-            this.aimTouch = null;
-          }
+          if (this.reloadTouch && t.identifier === this.reloadTouch.id) this.reloadTouch = null;
         }
       }
     }
@@ -1187,10 +1267,8 @@ export class CounterStrikeGame extends BaseGame {
       return;
     }
     f.nades[kind]--;
-    const target = { x: this.aimX, y: this.aimY };
-    const dir = Math.atan2(target.y - f.y, target.x - f.x);
-    const dist = Math.hypot(target.x - f.x, target.y - f.y);
-    const speed = Math.min(300, Math.max(120, dist * 1.4));
+    const dir = f === this.player() ? this.angle : f.angle;
+    const speed = 260;
     this.grenades.push({
       x: f.x + Math.cos(dir) * 14,
       y: f.y + Math.sin(dir) * 14,
@@ -1234,10 +1312,10 @@ export class CounterStrikeGame extends BaseGame {
       const a = angle + (Math.random() - 0.5) * 2 * spread;
       const dirX = Math.cos(a);
       const dirY = Math.sin(a);
-      const wallDist = raycastWall(shooter.x, shooter.y, dirX, dirY, w.def.range);
+      const wallHit = castRay(shooter.x, shooter.y, dirX, dirY, w.def.range);
 
       let best: Fighter | null = null;
-      let bestT = wallDist;
+      let bestT = wallHit.dist;
       for (const target of this.fighters) {
         if (!target.alive || target.team === shooter.team) continue;
         const dx = target.x - shooter.x;
@@ -1252,26 +1330,19 @@ export class CounterStrikeGame extends BaseGame {
 
       if (best) {
         this.tracers.push({
-          x1: shooter.x + dirX * 14,
-          y1: shooter.y + dirY * 14,
-          x2: best.x,
-          y2: best.y,
-          life: 0.07,
-          maxLife: 0.07,
-          color: '#ffe9a8',
+          x1: shooter.x + dirX * 12, y1: shooter.y + dirY * 12, z1: 8,
+          x2: best.x, y2: best.y, z2: 8,
+          life: 0.07, maxLife: 0.07, color: '#ffe9a8',
         });
         const zone = rollHitZone(shooter.moving, shooter.crouch);
         this.damageFighter(best, shooter, w.def, zone, bestT);
       } else {
         this.tracers.push({
-          x1: shooter.x + dirX * 14,
-          y1: shooter.y + dirY * 14,
-          x2: shooter.x + dirX * (wallDist - 2),
-          y2: shooter.y + dirY * (wallDist - 2),
-          life: 0.07,
-          maxLife: 0.07,
-          color: '#ffe9a8',
+          x1: shooter.x + dirX * 12, y1: shooter.y + dirY * 12, z1: 8,
+          x2: shooter.x + dirX * (wallHit.dist - 2), y2: shooter.y + dirY * (wallHit.dist - 2), z2: 8,
+          life: 0.07, maxLife: 0.07, color: '#ffe9a8',
         });
+        this.spawnImpact(shooter.x + dirX * (wallHit.dist - 2), shooter.y + dirY * (wallHit.dist - 2));
       }
     }
     this.sfx.shoot(w.def.sound, w.silenced);
@@ -1362,7 +1433,6 @@ export class CounterStrikeGame extends BaseGame {
       this.firing = false;
       this.triggerPulse = false;
     }
-    // Drop the active weapon, like CS.
     const w = this.activeWeapon(victim);
     if (w && w.def.slot !== 'knife') {
       this.ground.push({
@@ -1389,13 +1459,31 @@ export class CounterStrikeGame extends BaseGame {
       const a = Math.random() * Math.PI * 2;
       const sp = 24 + Math.random() * 60;
       this.particles.push({
-        x, y,
+        x, y, z: 4 + Math.random() * 10,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp,
+        vz: 30 + Math.random() * 60,
         life: 0.4,
         maxLife: 0.4,
         size: 2 + Math.random() * 2,
         color: '#b3212e',
+      });
+    }
+  }
+
+  private spawnImpact(x: number, y: number) {
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 10 + Math.random() * 40;
+      this.particles.push({
+        x, y, z: 6 + Math.random() * 6,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        vz: 20 + Math.random() * 30,
+        life: 0.25,
+        maxLife: 0.25,
+        size: 1.5 + Math.random() * 2,
+        color: '#e8f2fa',
       });
     }
   }
@@ -1421,7 +1509,7 @@ export class CounterStrikeGame extends BaseGame {
     if (!solidCircle(f.x, f.y + dy, PLAYER_RADIUS)) f.y += dy;
     f.moving = true;
     f.walkPhase += speed * mult * dt * 0.05;
-    if (!f.isBot && !f.crouch) this.sfx.footstep(false);
+    if (f === this.player() && !f.crouch) this.sfx.footstep(false);
   }
 
   private separateFighters() {
@@ -1540,40 +1628,49 @@ export class CounterStrikeGame extends BaseGame {
       if (p.reloadT <= 0) this.finishReload(p);
     }
 
+    // First-person movement: forward/strafe relative to the view angle.
     let fx = 0;
     let fy = 0;
-    if (this.keys.has('w') || this.keys.has('arrowup')) fy -= 1;
-    if (this.keys.has('s') || this.keys.has('arrowdown')) fy += 1;
+    if (this.keys.has('w') || this.keys.has('arrowup')) fy += 1;
+    if (this.keys.has('s') || this.keys.has('arrowdown')) fy -= 1;
     if (this.keys.has('a') || this.keys.has('arrowleft')) fx -= 1;
     if (this.keys.has('d') || this.keys.has('arrowright')) fx += 1;
     if (this.moveTouch) {
-      fx = this.moveTouch.dx / 56;
-      fy = this.moveTouch.dy / 56;
+      fx = this.moveTouch.dx / 58;
+      fy = -this.moveTouch.dy / 58;
     }
     p.walk = this.keys.has('shift');
     p.crouch = this.keys.has('control') || this.keys.has('ctrl');
     const w = this.activeWeapon(p);
     const speed = (w ? w.def.speedUnits : 250) * SPEED_SCALE;
-    this.moveFighter(p, fx, fy, dt, speed);
+    const len = Math.hypot(fx, fy);
+    if (len > 0.01) {
+      const cos = Math.cos(this.angle);
+      const sin = Math.sin(this.angle);
+      const worldX = cos * (fy / len) + -sin * (fx / len);
+      const worldY = sin * (fy / len) + cos * (fx / len);
+      this.moveFighter(p, worldX, worldY, dt, speed);
+      this.px = p.x;
+      this.py = p.y;
+    } else {
+      p.moving = false;
+    }
 
-    if (this.firing || this.triggerPulse) {
-      if (p.flashT <= 0 && !p.reloading && p.fireCd <= 0) {
-        if (p.slot === 'nade') {
-          if (this.triggerPulse) {
+    // Firing.
+    if (p.flashT <= 0 && !p.reloading && p.fireCd <= 0) {
+      if (p.slot === 'nade') {
+        if (this.triggerPulse) {
+          this.triggerPulse = false;
+          this.throwNade(p);
+        }
+      } else {
+        const weapon = this.activeWeapon(p);
+        if (weapon) {
+          if (weapon.def.auto) {
+            if (this.firing || this.triggerPulse) this.fireShot(p, p.angle);
+          } else if (this.triggerPulse) {
             this.triggerPulse = false;
-            this.throwNade(p);
-          }
-        } else if (this.firing) {
-          if (this.firing && p.fireCd <= 0) {
-            const weapon = this.activeWeapon(p);
-            if (weapon) {
-              if (weapon.def.auto) {
-                if (p.fireCd <= 0) this.fireShot(p, p.angle);
-              } else if (this.triggerPulse) {
-                this.triggerPulse = false;
-                this.fireShot(p, p.angle);
-              }
-            }
+            this.fireShot(p, p.angle);
           }
         }
       }
@@ -1600,7 +1697,6 @@ export class CounterStrikeGame extends BaseGame {
     if (!weapon) return;
     const speed = weapon.def.speedUnits * SPEED_SCALE;
 
-    // Blinded bots wander slowly and hold fire.
     if (bot.flashT > 0) {
       bot.angle += dt * 0.8;
       this.moveFighter(bot, Math.cos(bot.angle), Math.sin(bot.angle), dt, speed * 0.3);
@@ -1625,7 +1721,6 @@ export class CounterStrikeGame extends BaseGame {
       return;
     }
 
-    // Investigate last known position, then roam.
     if (bot.lastSeenT < 2.2) {
       this.botNavigate(bot, bot.lastSeenX, bot.lastSeenY, dt, speed * 0.9);
       if (Math.hypot(bot.lastSeenX - bot.x, bot.lastSeenY - bot.y) < 24) bot.lastSeenT = 3;
@@ -1669,7 +1764,6 @@ export class CounterStrikeGame extends BaseGame {
     const dist = Math.hypot(dx, dy);
     const targetAngle = Math.atan2(dy, dx);
 
-    // Acquiring a target: aim error starts wide and settles.
     bot.aimErr = Math.max(0.02 + (1 - bot.skill) * 0.05, bot.aimErr - dt * (0.5 + bot.skill));
 
     let delta = targetAngle - bot.angle;
@@ -1678,7 +1772,6 @@ export class CounterStrikeGame extends BaseGame {
     bot.angle += delta * Math.min(1, dt * 9);
     const aimOff = Math.abs(delta);
 
-    // Movement: strafe and keep the weapon's preferred range.
     const pref = this.preferredRange(weapon.def);
     bot.strafeT -= dt;
     if (bot.strafeT <= 0) {
@@ -1700,7 +1793,6 @@ export class CounterStrikeGame extends BaseGame {
     }
     this.moveFighter(bot, moveX, moveY, dt, speed);
 
-    // Shooting.
     if (weapon.def.slot === 'knife') {
       if (dist < 30 && bot.fireCd <= 0) {
         bot.altSwing = Math.random() < 0.4;
@@ -1875,8 +1967,10 @@ export class CounterStrikeGame extends BaseGame {
       this.particles.push({
         x: g.x,
         y: g.y,
+        z: 4 + Math.random() * 16,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp,
+        vz: 30 + Math.random() * 120,
         life: 0.5,
         maxLife: 0.5,
         size: 2 + Math.random() * 4,
@@ -1922,6 +2016,9 @@ export class CounterStrikeGame extends BaseGame {
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vz -= 260 * dt;
+      if (p.z < 0) p.z = 0;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
     for (const s of this.smokes) {
@@ -1933,47 +2030,42 @@ export class CounterStrikeGame extends BaseGame {
     this.feed = this.feed.filter((entry) => entry.life > 0);
   }
 
+  // ── 3D projection helpers ──────────────────────────────────────────────────
+
+  private project(wx: number, wy: number, h: number): { x: number; y: number; depth: number } | null {
+    const dirX = Math.cos(this.angle);
+    const dirY = Math.sin(this.angle);
+    const planeX = -dirY * HALF_FOV_TAN;
+    const planeY = dirX * HALF_FOV_TAN;
+    const dx = wx - this.px;
+    const dy = wy - this.py;
+    const invDet = 1 / (planeX * dirY - dirX * planeY);
+    const tx = invDet * (dirY * dx - dirX * dy);
+    const ty = invDet * (-planeY * dx + planeX * dy);
+    if (ty <= 0.05) return null;
+    return { x: (this.rw / 2) * (1 + tx / ty), y: this.rh / 2 - ((h - this.eye()) * this.rh) / ty, depth: ty };
+  }
+
   // ── Drawing ────────────────────────────────────────────────────────────────
 
   draw(ctx: CanvasRenderingContext2D) {
-    this.drawMap(ctx);
-    this.drawGround(ctx);
-    for (const s of this.smokes) {
-      ctx.fillStyle = 'rgba(190,196,204,0.5)';
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
+    const pixel = this.isPixelMode();
+    this.rw = pixel ? 320 : 480;
+    this.rh = pixel ? 180 : 270;
+    if (this.renderCanvas.width !== this.rw) {
+      this.renderCanvas.width = this.rw;
+      this.renderCanvas.height = this.rh;
     }
-    this.drawFighters(ctx);
-    for (const g of this.grenades) {
-      ctx.fillStyle = g.type === 'he' ? '#3a5f3a' : g.type === 'flash' ? '#c7ced9' : '#8a8f98';
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      if (g.type === 'he' && g.fuse < 0.7 && Math.floor(g.fuse * 12) % 2 === 0) {
-        ctx.fillStyle = '#f5c46a';
-        ctx.beginPath();
-        ctx.arc(g.x, g.y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    for (const tr of this.tracers) {
-      ctx.globalAlpha = Math.max(0, tr.life / tr.maxLife) * 0.8;
-      ctx.strokeStyle = tr.color;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(tr.x1, tr.y1);
-      ctx.lineTo(tr.x2, tr.y2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    for (const p of this.particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, p.size, p.size);
-      ctx.globalAlpha = 1;
-    }
+    const rctx = this.renderCtx;
+    if (!rctx) return;
 
+    this.drawWorld(rctx);
+
+    ctx.imageSmoothingEnabled = !pixel;
+    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, 0, 0, W, H);
+
+    this.drawProjectedFx(ctx);
+    this.drawViewmodel(ctx);
     this.drawHud(ctx);
     if (this.buyOpen) this.drawBuyMenu(ctx);
     if (this.scoreboardHeld && !this.gameOver) this.drawScoreboard(ctx);
@@ -2009,165 +2101,303 @@ export class CounterStrikeGame extends BaseGame {
     }
   }
 
-  private drawMap(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#0e1a26';
-    ctx.fillRect(0, 0, W, H);
-    for (let r = 0; r < MAP_ROWS; r++) {
-      for (let c = 0; c < MAP_COLS; c++) {
-        const kind = ICEBERG_MAP[r][c];
-        const x = c * TILE;
-        const y = r * TILE;
-        const shade = this.floorShades[r * MAP_COLS + c];
-        if (kind === TileKind.Floor) {
-          const leftHalf = c < 8;
-          const base = leftHalf ? [207, 229, 246] : [233, 222, 219];
-          ctx.fillStyle = `rgb(${Math.round(base[0] * shade)},${Math.round(base[1] * shade)},${Math.round(base[2] * shade)})`;
-          ctx.fillRect(x, y, TILE, TILE);
-        } else {
-          const leftHalf = c < 8;
-          const base = leftHalf ? [170, 205, 232] : [214, 183, 180];
-          ctx.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
-          ctx.fillRect(x, y, TILE, TILE);
-          ctx.fillStyle = 'rgba(255,255,255,0.35)';
-          ctx.fillRect(x, y, TILE, 4);
-          ctx.fillStyle = 'rgba(20,40,60,0.22)';
-          ctx.fillRect(x, y + TILE - 3, TILE, 3);
+  private drawWorld(rctx: CanvasRenderingContext2D) {
+    const rw = this.rw;
+    const rh = this.rh;
+
+    // Ice sky.
+    const sky = rctx.createLinearGradient(0, 0, 0, rh);
+    sky.addColorStop(0, '#9cc4e8');
+    sky.addColorStop(0.6, '#cfe2f2');
+    sky.addColorStop(1, '#e9f2fa');
+    rctx.fillStyle = sky;
+    rctx.fillRect(0, 0, rw, rh);
+
+    const dirX = Math.cos(this.angle);
+    const dirY = Math.sin(this.angle);
+    const planeX = -dirY * HALF_FOV_TAN;
+    const planeY = dirX * HALF_FOV_TAN;
+
+    for (let col = 0; col < rw; col++) {
+      const camX = (2 * col) / rw - 1;
+      const rayX = dirX + planeX * camX;
+      const rayY = dirY + planeY * camX;
+      const hit = castRay(this.px, this.py, rayX, rayY, MAX_DIST);
+      this.zBuffer[col] = hit.dist;
+
+      const lineHeight = (rh * WALL_H) / Math.max(hit.dist, 1e-4);
+      const wallTop = rh / 2 - lineHeight / 2;
+      const wallBot = rh / 2 + lineHeight / 2;
+      const fog = Math.max(0, Math.min(1, (hit.dist - FOG_START) / (MAX_DIST - FOG_START)));
+
+      // Ice floor.
+      const floorShade = Math.max(0.62, 0.92 - hit.dist / (MAX_DIST * 1.7));
+      const fr = Math.round((198 + fog * 36) * floorShade);
+      const fg = Math.round((218 + fog * 30) * floorShade);
+      const fb = Math.round((233 + fog * 18) * floorShade);
+      rctx.fillStyle = `rgb(${fr},${fg},${fb})`;
+      rctx.fillRect(col, Math.max(0, wallBot), 1, rh - Math.max(0, wallBot));
+
+      if (hit.dist < MAX_DIST - 0.5 && hit.kind !== TileKind.Floor) {
+        const tint = wallTintAt(hit.col, hit.row);
+        const tex = getWallTexture(tint);
+        const texX = Math.min(63, Math.floor(hit.wallX * 64));
+        rctx.drawImage(tex, texX, 0, 1, 64, col, wallTop, 1, lineHeight);
+        if (hit.side === 1) {
+          rctx.fillStyle = 'rgba(40,70,100,0.22)';
+          rctx.fillRect(col, wallTop, 1, lineHeight);
         }
+        if (fog > 0.02) {
+          rctx.fillStyle = `rgba(233,242,250,${fog * 0.9})`;
+          rctx.fillRect(col, wallTop, 1, lineHeight);
+        }
+      } else {
+        rctx.fillStyle = `rgba(233,242,250,${0.75 + fog * 0.25})`;
+        rctx.fillRect(col, wallTop, 1, lineHeight);
       }
     }
-    // Team side markers.
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 44px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = 'rgba(80,130,200,0.22)';
-    ctx.fillText('CT', 3.75 * TILE, 8 * TILE);
-    ctx.fillStyle = 'rgba(210,90,70,0.22)';
-    ctx.fillText('T', 12.25 * TILE, 8 * TILE);
 
-    // Center buyzone.
-    ctx.fillStyle = 'rgba(255,210,74,0.14)';
-    ctx.fillRect(BUY_ZONE_RECT.x, BUY_ZONE_RECT.y, BUY_ZONE_RECT.w, BUY_ZONE_RECT.h);
-    ctx.strokeStyle = 'rgba(255,210,74,0.55)';
-    ctx.setLineDash([5, 4]);
-    ctx.strokeRect(BUY_ZONE_RECT.x + 0.5, BUY_ZONE_RECT.y + 0.5, BUY_ZONE_RECT.w - 1, BUY_ZONE_RECT.h - 1);
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(255,210,74,0.9)';
-    ctx.font = 'bold 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText('$', BUY_ZONE_RECT.x + BUY_ZONE_RECT.w / 2, BUY_ZONE_RECT.y + BUY_ZONE_RECT.h / 2 + 1);
+    this.drawSprites(rctx);
+    this.drawSmokes(rctx);
   }
 
-  private drawGround(ctx: CanvasRenderingContext2D) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    for (const item of this.ground) {
-      if (item.kind === 'weapon' && item.weaponId) {
-        ctx.save();
-        ctx.translate(item.x, item.y);
-        ctx.rotate(0.5);
-        ctx.fillStyle = '#232a35';
-        ctx.fillRect(-8, -2.5, 16, 5);
-        ctx.fillStyle = '#39424f';
-        ctx.fillRect(4, -1.5, 9, 3);
-        ctx.fillStyle = '#4a3b2c';
-        ctx.fillRect(1, 2.5, 3, 5);
-        ctx.restore();
-        ctx.fillStyle = 'rgba(15,23,42,0.55)';
-        ctx.fillRect(item.x - 20, item.y - 26, 40, 12);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
-        ctx.fillText(WEAPON_SHORT[item.weaponId], item.x, item.y - 17);
-      } else if (item.kind === 'nade' && item.nade) {
-        ctx.fillStyle = item.nade === 'he' ? '#2f6b34' : item.nade === 'flash' ? '#c7ced9' : '#6f757f';
-        ctx.beginPath();
-        ctx.arc(item.x, item.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
-        ctx.fillText(item.nade === 'he' ? 'HE' : item.nade === 'flash' ? 'FLASH' : 'SMOKE', item.x, item.y - 9);
-      }
+  private drawSprites(rctx: CanvasRenderingContext2D) {
+    const rh = this.rh;
+    const dirX = Math.cos(this.angle);
+    const dirY = Math.sin(this.angle);
+    const planeX = -dirY * HALF_FOV_TAN;
+    const planeY = dirX * HALF_FOV_TAN;
+
+    interface SpriteItem {
+      depth: number;
+      x: number;
+      y: number;
+      h: number; // world height of the sprite
+      liftY: number; // world height the sprite base floats above the ground
+      groundY: number;
+      tex: HTMLCanvasElement;
+      flash?: boolean;
+      playerName?: string;
     }
-  }
 
-  private drawFighters(ctx: CanvasRenderingContext2D) {
+    const sprites: SpriteItem[] = [];
     const player = this.player();
-    const spectator = !player.alive;
 
-    // Sort so we draw the player on top.
-    const drawOrder = [...this.fighters].sort((a, b) => (a === player ? 1 : 0) - (b === player ? 1 : 0));
-
-    ctx.textBaseline = 'alphabetic';
-    for (const f of drawOrder) {
-      const isEnemy = f !== player && f.team !== player.team;
-      // Hide enemies the player's team cannot currently see (fog of war).
-      if (isEnemy && !spectator && !this.seenByTeam(f, player.team)) continue;
+    for (const f of this.fighters) {
+      const frames = getSoldierFrames(f.team, f.variant);
       if (!f.alive) {
         if (f.deadT > 2.2) continue;
-        ctx.globalAlpha = Math.max(0, 1 - f.deadT / 2.2);
-        ctx.fillStyle = f.team === 'CT' ? '#5a6f88' : '#7a5a52';
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(15,23,42,0.5)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+        sprites.push({ depth: 0, x: f.x, y: f.y, h: 8, liftY: 0, groundY: 0, tex: frames.dead });
         continue;
       }
-      const color = f.team === 'CT' ? (f === player ? '#4f8bff' : '#2f6ff2') : '#d94f43';
-      const radius = f.crouch ? 9 : 11;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(12,20,32,0.65)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      if (f === player) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-      // Aim direction + gun.
-      const tipX = f.x + Math.cos(f.angle) * (radius + 8);
-      const tipY = f.y + Math.sin(f.angle) * (radius + 8);
-      ctx.strokeStyle = '#1c232d';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(f.x + Math.cos(f.angle) * radius * 0.4, f.y + Math.sin(f.angle) * radius * 0.4);
-      ctx.lineTo(tipX, tipY);
-      ctx.stroke();
+      let frame: HTMLCanvasElement;
       if (f.muzzle > 0) {
-        ctx.fillStyle = 'rgba(255,224,130,0.95)';
-        ctx.beginPath();
-        ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        frame = frames.frames[3];
+      } else if (f.moving) {
+        const step = Math.floor(f.walkPhase * 2) % 2;
+        frame = frames.frames[step === 0 ? 1 : 2];
+      } else {
+        frame = frames.frames[0];
       }
-      if (f.hitFlash > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+      const item: SpriteItem = {
+        depth: 0, x: f.x, y: f.y, h: SOLDIER_H, liftY: 0, groundY: 0, tex: frame,
+        flash: f.muzzle > 0,
+      };
+      if (f === player) item.playerName = f.name;
+      sprites.push(item);
+    }
+
+    for (const item of this.ground) {
+      const tex = item.kind === 'weapon' && item.weaponId
+        ? getWeaponSprite(item.weaponId)
+        : item.nade
+          ? getGrenadeSprite(item.nade)
+          : null;
+      if (!tex) continue;
+      sprites.push({ depth: 0, x: item.x, y: item.y, h: 6, liftY: 0, groundY: 0, tex });
+    }
+
+    for (const g of this.grenades) {
+      sprites.push({ depth: 0, x: g.x, y: g.y, h: 5, liftY: 6, groundY: 0, tex: getGrenadeSprite(g.type) });
+    }
+
+    // Compute depth and screen position.
+    for (const sp of sprites) {
+      const dx = sp.x - this.px;
+      const dy = sp.y - this.py;
+      const invDet = 1 / (planeX * dirY - dirX * planeY);
+      const ty = invDet * (-planeY * dx + planeX * dy);
+      if (ty <= 0.05) {
+        sp.depth = -1;
+        continue;
       }
-      if (f.flashT > 0) {
-        ctx.fillStyle = '#ffe9a8';
-        ctx.font = 'bold 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('!', f.x, f.y - radius - 8);
+      sp.depth = ty;
+      const proj = this.project(sp.x, sp.y, 0);
+      if (!proj) {
+        sp.depth = -1;
+        continue;
       }
-      if (f.helmet) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, radius - 2, Math.PI, Math.PI * 2);
-        ctx.stroke();
+      sp.groundY = proj.y;
+    }
+    sprites.sort((a, b) => b.depth - a.depth);
+
+    for (const sp of sprites) {
+      if (sp.depth <= 0.05) continue;
+      const ty = sp.depth;
+      const proj = this.project(sp.x, sp.y, 0);
+      if (!proj) continue;
+      const centerX = proj.x;
+      const spriteH = Math.max(2, (rh * sp.h) / ty);
+      const aspect = sp.tex.width / sp.tex.height;
+      const spriteW = spriteH * aspect;
+      const top = sp.groundY - (rh * sp.liftY) / ty - spriteH;
+      const drawStartY = Math.floor(top);
+      const drawStartX = Math.floor(centerX - spriteW / 2);
+      const drawEndX = Math.min(this.rw, drawStartX + spriteW);
+      const texW = sp.tex.width;
+      const texH = sp.tex.height;
+      for (let stripe = Math.max(0, drawStartX); stripe < drawEndX; stripe++) {
+        if (ty >= this.zBuffer[stripe]) continue;
+        const texX = Math.floor(((stripe - drawStartX) / spriteW) * texW);
+        rctx.drawImage(
+          sp.tex,
+          Math.min(texW - 1, texX), 0, 1, texH,
+          stripe, drawStartY, 1, spriteH,
+        );
       }
-      if (!f.isBot || spectator) {
-        ctx.fillStyle = f === player ? '#ffffff' : 'rgba(240,245,255,0.85)';
-        ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(f === player ? 'YOU' : f.name, f.x, f.y - radius - 8);
+      if (sp.flash) {
+        rctx.fillStyle = 'rgba(255,214,110,0.95)';
+        rctx.beginPath();
+        rctx.arc(centerX + spriteW * 0.2, drawStartY + spriteH * 0.55, Math.max(2, spriteH * 0.09), 0, Math.PI * 2);
+        rctx.fill();
+      }
+      if (sp.playerName) {
+        rctx.fillStyle = 'rgba(255,255,255,0.9)';
+        rctx.font = `${Math.max(6, Math.round(spriteH * 0.16))}px ui-monospace, SFMono-Regular, monospace`;
+        rctx.textAlign = 'center';
+        rctx.fillText(sp.playerName, centerX, drawStartY - 4);
       }
     }
+  }
+
+  private drawSmokes(rctx: CanvasRenderingContext2D) {
+    const rh = this.rh;
+    for (const s of this.smokes) {
+      const proj = this.project(s.x, s.y, s.maxR / 2);
+      if (!proj) continue;
+      const radius = (rh * s.r) / proj.depth;
+      if (radius < 1) continue;
+      const centerY = proj.y;
+      const drawStartX = Math.max(0, Math.floor(proj.x - radius));
+      const drawEndX = Math.min(this.rw, Math.ceil(proj.x + radius));
+      for (let stripe = drawStartX; stripe < drawEndX; stripe++) {
+        if (proj.depth >= this.zBuffer[stripe]) continue;
+        const off = (stripe - proj.x) / radius;
+        if (Math.abs(off) > 1) continue;
+        const alpha = Math.sqrt(Math.max(0, 1 - off * off)) * 0.5;
+        rctx.fillStyle = `rgba(196,202,212,${alpha.toFixed(3)})`;
+        rctx.fillRect(stripe, Math.floor(centerY - radius), 1, Math.ceil(radius * 2));
+      }
+    }
+  }
+
+  private drawProjectedFx(ctx: CanvasRenderingContext2D) {
+    const sx = W / this.rw;
+    const sy = H / this.rh;
+    for (const tr of this.tracers) {
+      const a = this.project(tr.x1, tr.y1, tr.z1);
+      const b = this.project(tr.x2, tr.y2, tr.z2);
+      if (!a || !b) continue;
+      const alpha = Math.max(0, tr.life / tr.maxLife) * 0.85;
+      ctx.strokeStyle = tr.color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(a.x * sx, a.y * sy);
+      ctx.lineTo(b.x * sx, b.y * sy);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    for (const p of this.particles) {
+      const proj = this.project(p.x, p.y, p.z);
+      if (!proj) continue;
+      const size = Math.max(1.5, (p.size * 40) / proj.depth) * sx;
+      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(proj.x * sx, proj.y * sy, size, size);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawViewmodel(ctx: CanvasRenderingContext2D) {
+    const p = this.player();
+    if (this.gameOver || !p.alive || this.phase !== 'live') return;
+    const w = this.activeWeapon(p);
+    if (!w) return;
+    const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 4 : 0;
+    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 5 : 0;
+    const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
+    ctx.save();
+    ctx.translate(W / 2 + 120 + swayX, H + 60);
+    ctx.rotate(-0.32 - p.recoil * 0.9 + reloadDip);
+    ctx.translate(0, -bobY);
+
+    const sound = w.def.sound;
+    const body = sound === 'sniper' ? '#263746' : sound === 'shotgun' ? '#3d352a' : '#2b3038';
+    const dark = '#1e232b';
+    const grip = '#4a3b2c';
+    let barrel = 150;
+    if (sound === 'sniper') barrel = 300;
+    else if (sound === 'rifle') barrel = 220;
+    else if (sound === 'mg') barrel = 200;
+    else if (sound === 'smg') barrel = 140;
+    else if (sound === 'pistol') barrel = 70;
+
+    if (w.def.slot === 'knife') {
+      ctx.fillStyle = '#a9bccd';
+      ctx.fillRect(-20, -26, 110, 10);
+      ctx.beginPath();
+      ctx.moveTo(88, -25);
+      ctx.lineTo(124, -16);
+      ctx.lineTo(88, -14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.fillRect(-34, -28, 18, 26);
+    } else {
+      ctx.fillStyle = body;
+      ctx.fillRect(-30, -26, 120, 34);
+      ctx.fillStyle = dark;
+      ctx.fillRect(52, -20, barrel, 22);
+      if (sound === 'sniper') {
+        ctx.fillStyle = '#3d5570';
+        ctx.fillRect(40, -32, 20, 12);
+      }
+      if (sound === 'shotgun') {
+        ctx.fillStyle = '#5c4a33';
+        ctx.fillRect(40, -20, 24, 40);
+      }
+      if (sound === 'mg') {
+        ctx.fillStyle = '#3a4a3a';
+        ctx.fillRect(-6, -8, 20, 26);
+      }
+      ctx.fillStyle = grip;
+      ctx.fillRect(4, -8, 16, 46);
+      ctx.fillStyle = dark;
+      ctx.fillRect(-40, -28, 16, 36);
+      if (p.muzzle > 0) {
+        const size = 14 + p.muzzle * 300;
+        ctx.fillStyle = 'rgba(255,224,130,0.95)';
+        ctx.beginPath();
+        ctx.arc(barrel + 40, -9, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,246,214,0.95)';
+        ctx.beginPath();
+        ctx.arc(barrel + 40, -9, size * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   private drawHud(ctx: CanvasRenderingContext2D) {
@@ -2183,55 +2413,61 @@ export class CounterStrikeGame extends BaseGame {
         ? `FREEZE ${Math.ceil(this.phaseTimer)}`
         : '';
     ctx.fillStyle = 'rgba(8,16,30,0.55)';
-    ctx.fillRect(W / 2 - 96, 8, 192, 34);
+    ctx.fillRect(W / 2 - 110, 10, 220, 36);
     ctx.textAlign = 'left';
-    ctx.font = `bold 15px ${font}`;
+    ctx.font = `bold 16px ${font}`;
     ctx.fillStyle = '#7fb2ff';
-    ctx.fillText(`CT ${this.ctWins}`, W / 2 - 88, 26);
+    ctx.fillText(`CT ${this.ctWins}`, W / 2 - 100, 28);
     ctx.textAlign = 'center';
-    ctx.font = `bold 18px ${mono}`;
+    ctx.font = `bold 20px ${mono}`;
     ctx.fillStyle = '#f5f5f0';
-    ctx.fillText(timerText, W / 2, 26);
+    ctx.fillText(timerText, W / 2, 28);
     ctx.textAlign = 'right';
-    ctx.font = `bold 15px ${font}`;
+    ctx.font = `bold 16px ${font}`;
     ctx.fillStyle = '#ff9a8a';
-    ctx.fillText(`${this.tWins} T`, W / 2 + 88, 26);
+    ctx.fillText(`${this.tWins} T`, W / 2 + 100, 28);
 
     // Round / phase label.
     ctx.textAlign = 'center';
-    ctx.font = `12px ${font}`;
+    ctx.font = `13px ${font}`;
     ctx.fillStyle = 'rgba(241,245,249,0.85)';
     const label = this.phase === 'freeze'
       ? (zh ? '冻结时间 · 购买区在地图中央' : 'FREEZE · BUYZONE IS IN THE CENTER')
       : this.phase === 'live' && this.liveT <= ROUND.buyTime
-        ? (zh ? `购买时间 ${Math.ceil(ROUND.buyTime - this.liveT)}s · 购买区在地图中央` : `BUY TIME ${Math.ceil(ROUND.buyTime - this.liveT)}s · CENTER BUYZONE`)
+        ? (zh ? `购买时间 ${Math.ceil(ROUND.buyTime - this.liveT)}s · 中央购买区` : `BUY TIME ${Math.ceil(ROUND.buyTime - this.liveT)}s · CENTER BUYZONE`)
         : this.phase === 'live'
           ? (zh ? `回合 ${this.round} · 先到 ${ROUND.winScore} 回合获胜` : `ROUND ${this.round} · FIRST TO ${ROUND.winScore}`)
           : '';
-    ctx.fillText(label, W / 2, 52);
+    ctx.fillText(label, W / 2, 58);
 
     if (this.liveMsg > 0) {
-      ctx.font = `bold 24px ${font}`;
+      ctx.font = `bold 26px ${font}`;
       ctx.fillStyle = `rgba(255,240,170,${Math.min(1, this.liveMsg)})`;
-      ctx.fillText(zh ? '冲! 冲! 冲!' : 'GO GO GO!', W / 2, 92);
+      ctx.fillText(zh ? '冲! 冲! 冲!' : 'GO GO GO!', W / 2, 104);
     }
 
     if (this.buyHintT > 0) {
       ctx.fillStyle = `rgba(255,210,74,${Math.min(1, this.buyHintT)})`;
+      ctx.font = `bold 14px ${font}`;
+      ctx.fillText(zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', W / 2, 124);
+    }
+
+    if (this.canBuy() && !this.buyOpen) {
+      ctx.fillStyle = 'rgba(255,210,74,0.9)';
       ctx.font = `bold 13px ${font}`;
-      ctx.fillText(zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', W / 2, 112);
+      ctx.fillText(zh ? '按 B 购买 (购买区内)' : 'PRESS B TO BUY (IN BUYZONE)', W / 2, H / 2 + 92);
     }
 
     // ── Kill feed (top right).
     ctx.textAlign = 'right';
-    ctx.font = `11px ${font}`;
+    ctx.font = `12px ${font}`;
     this.feed.forEach((entry, i) => {
       ctx.globalAlpha = Math.min(1, entry.life);
       ctx.fillStyle = 'rgba(8,16,30,0.5)';
-      const width = ctx.measureText(entry.text).width + 12;
-      ctx.fillRect(W - width - 8, 10 + i * 17, width, 16);
+      const width = ctx.measureText(entry.text).width + 14;
+      ctx.fillRect(W - width - 10, 10 + i * 19, width, 18);
       ctx.fillStyle = entry.color;
-      ctx.fillText(entry.text, W - 14, 18 + i * 17);
+      ctx.fillText(entry.text, W - 16, 19 + i * 19);
       ctx.globalAlpha = 1;
     });
 
@@ -2240,87 +2476,89 @@ export class CounterStrikeGame extends BaseGame {
 
     // ── Bottom-left: health + armor.
     const p = this.player();
-    const hpY = H - 24;
+    const hpY = H - 26;
     ctx.fillStyle = '#e23b3b';
-    ctx.fillRect(14, hpY - 8, 14, 14);
+    ctx.fillRect(16, hpY - 9, 16, 16);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(18, hpY - 4, 6, 6);
-    ctx.fillRect(16, hpY - 2, 10, 2);
+    ctx.fillRect(20, hpY - 5, 8, 8);
+    ctx.fillRect(18, hpY - 2, 12, 2);
     ctx.textAlign = 'left';
-    ctx.font = `bold 22px ${mono}`;
+    ctx.font = `bold 24px ${mono}`;
     ctx.fillStyle = p.hp > 60 ? '#e8f4ff' : p.hp > 30 ? '#ffd24a' : '#ff6a5e';
-    ctx.fillText(String(p.hp), 34, hpY + 1);
+    ctx.fillText(String(p.hp), 38, hpY + 1);
     ctx.fillStyle = '#7fa8d4';
-    ctx.fillRect(74, hpY - 8, 12, 12);
+    ctx.fillRect(86, hpY - 9, 14, 14);
     ctx.fillStyle = '#dbe9f7';
-    ctx.fillRect(78, hpY - 5, 4, 6);
-    ctx.font = `bold 15px ${mono}`;
+    ctx.fillRect(91, hpY - 5, 4, 7);
+    ctx.font = `bold 17px ${mono}`;
     ctx.fillStyle = '#bcd4ec';
-    ctx.fillText(String(p.armor), 92, hpY + 1);
-    ctx.font = `11px ${font}`;
+    ctx.fillText(String(p.armor), 106, hpY + 1);
+    ctx.font = `12px ${font}`;
     ctx.fillStyle = 'rgba(241,245,249,0.75)';
-    ctx.fillText(zh ? '护甲' : 'ARMOR', 92, hpY + 13);
+    ctx.fillText(zh ? '护甲' : 'ARMOR', 106, hpY + 16);
 
     // ── Bottom-right: weapon name, ammo, money.
     const w = this.activeWeapon(p);
     ctx.textAlign = 'right';
-    ctx.font = `bold 13px ${font}`;
+    ctx.font = `bold 14px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    if (w) ctx.fillText(p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, W - 16, H - 48);
-    ctx.font = `bold 19px ${mono}`;
+    if (w) ctx.fillText(p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, W - 18, H - 50);
+    ctx.font = `bold 22px ${mono}`;
     if (w && w.def.slot !== 'knife' && p.slot !== 'nade') {
       ctx.fillStyle = w.mag === 0 ? '#ff6a5e' : '#f5f5f0';
-      ctx.fillText(`${w.mag} / ${w.reserve}`, W - 16, H - 26);
+      ctx.fillText(`${w.mag} / ${w.reserve}`, W - 18, H - 26);
     }
-    ctx.font = `bold 15px ${mono}`;
+    ctx.font = `bold 17px ${mono}`;
     ctx.fillStyle = '#8ee04d';
-    ctx.fillText(`$${p.money}`, W - 16, H - 10);
+    ctx.fillText(`$${p.money}`, W - 18, H - 10);
 
     if (p.reloading && w) {
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(W - 130, H - 40, 114, 5);
+      ctx.fillRect(W - 150, H - 42, 132, 5);
       ctx.fillStyle = '#ffd24a';
-      ctx.fillRect(W - 130, H - 40, 114 * Math.min(1, 1 - p.reloadT / w.def.reload), 5);
+      ctx.fillRect(W - 150, H - 42, 132 * Math.min(1, 1 - p.reloadT / w.def.reload), 5);
     }
 
     if (!this.sfx.enabled) {
       ctx.textAlign = 'left';
-      ctx.font = `11px ${font}`;
+      ctx.font = `12px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.8)';
-      ctx.fillText(zh ? '静音' : 'MUTED', 14, 78);
+      ctx.fillText(zh ? '静音' : 'MUTED', 16, 82);
     }
 
-    // ── Crosshair at the aim point.
-    const spreadPx = this.crosshairGap();
-    const cx = this.aimX;
-    const cy = this.aimY;
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - spreadPx - 7); ctx.lineTo(cx, cy - spreadPx - 1);
-    ctx.moveTo(cx, cy + spreadPx + 1); ctx.lineTo(cx, cy + spreadPx + 7);
-    ctx.moveTo(cx - spreadPx - 7, cy); ctx.lineTo(cx - spreadPx - 1, cy);
-    ctx.moveTo(cx + spreadPx + 1, cy); ctx.lineTo(cx + spreadPx + 7, cy);
-    ctx.stroke();
-    ctx.strokeStyle = '#00e05a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    if (this.hitmarker > 0) {
-      const a = this.hitmarker / 0.14;
-      ctx.strokeStyle = this.hitmarkerKill ? `rgba(255,90,80,${a})` : `rgba(255,255,255,${a})`;
+    // ── Crosshair (only while alive).
+    if (p.alive) {
+      const spreadPx = this.crosshairGap();
+      const cx = W / 2;
+      const cy = H / 2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
       ctx.lineWidth = 2;
-      const r = 9;
       ctx.beginPath();
-      ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r + 5, cy - r + 5);
-      ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx - r + 5, cy + r - 5);
-      ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx + r - 5, cy - r + 5);
-      ctx.moveTo(cx + r, cy + r); ctx.lineTo(cx + r - 5, cy + r - 5);
+      ctx.moveTo(cx, cy - spreadPx - 8); ctx.lineTo(cx, cy - spreadPx - 1);
+      ctx.moveTo(cx, cy + spreadPx + 1); ctx.lineTo(cx, cy + spreadPx + 8);
+      ctx.moveTo(cx - spreadPx - 8, cy); ctx.lineTo(cx - spreadPx - 1, cy);
+      ctx.moveTo(cx + spreadPx + 1, cy); ctx.lineTo(cx + spreadPx + 8, cy);
       ctx.stroke();
+      ctx.strokeStyle = '#00e05a';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (this.hitmarker > 0) {
+        const a = this.hitmarker / 0.14;
+        ctx.strokeStyle = this.hitmarkerKill ? `rgba(255,90,80,${a})` : `rgba(255,255,255,${a})`;
+        ctx.lineWidth = 2;
+        const r = 10;
+        ctx.beginPath();
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r + 5, cy - r + 5);
+        ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx - r + 5, cy + r - 5);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx + r - 5, cy - r + 5);
+        ctx.moveTo(cx + r, cy + r); ctx.lineTo(cx + r - 5, cy + r - 5);
+        ctx.stroke();
+      }
     }
 
     // ── Damage vignette.
-    if (this.damageFlash > 0 || p.hp < 35) {
+    if (this.damageFlash > 0 || (p.hp < 35 && p.alive)) {
       const pulse = p.hp < 35 && p.alive ? 0.12 + Math.sin(performance.now() / 300) * 0.07 : 0;
       const alpha = Math.max(this.damageFlash * 0.8, pulse);
       if (alpha > 0.01) {
@@ -2341,14 +2579,14 @@ export class CounterStrikeGame extends BaseGame {
     // ── Spectate banner.
     if (!p.alive && !this.gameOver) {
       ctx.fillStyle = 'rgba(8,16,30,0.6)';
-      ctx.fillRect(0, H / 2 - 34, W, 68);
+      ctx.fillRect(0, H / 2 - 36, W, 72);
       ctx.textAlign = 'center';
-      ctx.font = `bold 20px ${font}`;
+      ctx.font = `bold 22px ${font}`;
       ctx.fillStyle = '#ff9a8a';
       ctx.fillText(zh ? '你阵亡了' : 'YOU WERE KILLED', W / 2, H / 2 - 14);
-      ctx.font = `13px ${font}`;
+      ctx.font = `14px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.85)';
-      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', W / 2, H / 2 + 12);
+      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', W / 2, H / 2 + 14);
     }
 
     // ── Round result banner.
@@ -2360,14 +2598,14 @@ export class CounterStrikeGame extends BaseGame {
           : (zh ? '恐怖分子获胜!' : 'Terrorists Win!');
       const color = this.roundDraw ? '#ffd24a' : this.roundWinner === 'CT' ? '#7fb2ff' : '#ff9a8a';
       ctx.fillStyle = 'rgba(8,16,30,0.6)';
-      ctx.fillRect(0, 118, W, 66);
+      ctx.fillRect(0, 126, W, 70);
       ctx.textAlign = 'center';
-      ctx.font = `bold 24px ${font}`;
+      ctx.font = `bold 26px ${font}`;
       ctx.fillStyle = color;
-      ctx.fillText(text, W / 2, 142);
-      ctx.font = `13px ${font}`;
+      ctx.fillText(text, W / 2, 150);
+      ctx.font = `14px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.85)';
-      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, W / 2, 166);
+      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, W / 2, 176);
     }
   }
 
@@ -2414,10 +2652,9 @@ export class CounterStrikeGame extends BaseGame {
         ctx.fillRect(mx + f.x * scale - 2, my + f.y * scale - 2, 4, 4);
       }
     }
-    // Player heading wedge.
     ctx.save();
-    ctx.translate(mx + player.x * scale, my + player.y * scale);
-    ctx.rotate(player.angle);
+    ctx.translate(mx + this.px * scale, my + this.py * scale);
+    ctx.rotate(this.angle);
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.moveTo(4.5, 0);
@@ -2456,7 +2693,6 @@ export class CounterStrikeGame extends BaseGame {
     const leftX = rect.x + 8;
     const rightX = rect.x + rect.w / 2 + 6;
 
-    // Left: categories.
     BUY_CATEGORIES.forEach((category, i) => {
       const y = rowY + i * rowH;
       const hover = this.buyCat === -1 && this.hoverCat === i;
@@ -2469,7 +2705,6 @@ export class CounterStrikeGame extends BaseGame {
       ctx.fillText(`${i + 1}  ${zh ? category.labelZh : category.label}`, leftX + 6, y);
     });
 
-    // Right: items of the selected category.
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath();
     ctx.moveTo(rect.x + rect.w / 2, rect.y + 48);
@@ -2509,41 +2744,41 @@ export class CounterStrikeGame extends BaseGame {
   private drawScoreboard(ctx: CanvasRenderingContext2D) {
     const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const mono = 'ui-monospace, SFMono-Regular, monospace';
-    const bw = 340;
+    const bw = 360;
     const bx = (W - bw) / 2;
-    const by = 70;
-    const bh = 252;
+    const by = 76;
+    const bh = 264;
     ctx.fillStyle = 'rgba(8,16,30,0.92)';
     ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = 'rgba(255,210,74,0.5)';
     ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold 16px ${font}`;
+    ctx.font = `bold 17px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bx + bw / 2, by + 18);
+    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bx + bw / 2, by + 20);
 
     const cols: { team: Team; title: string; color: string; x: number }[] = [
-      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: bx + 18 },
-      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bx + bw / 2 + 10 },
+      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: bx + 20 },
+      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bx + bw / 2 + 12 },
     ];
     for (const col of cols) {
       ctx.textAlign = 'left';
       ctx.font = `bold 12px ${font}`;
       ctx.fillStyle = col.color;
-      ctx.fillText(col.title, col.x, by + 38);
+      ctx.fillText(col.title, col.x, by + 40);
       const members = this.fighters.filter((f) => f.team === col.team);
       members.forEach((f, i) => {
-        const y = by + 58 + i * 26;
+        const y = by + 62 + i * 27;
         const dead = !f.alive;
         ctx.fillStyle = dead ? 'rgba(232,238,245,0.4)' : '#e8eef5';
         ctx.font = `12px ${font}`;
         ctx.fillText(f.name, col.x, y);
         ctx.font = `11px ${mono}`;
         ctx.textAlign = 'right';
-        ctx.fillText(`${f.kills}/${f.deaths}`, col.x + 110, y);
+        ctx.fillText(`${f.kills}/${f.deaths}`, col.x + 116, y);
         ctx.fillStyle = '#8ee04d';
-        ctx.fillText(`$${f.money}`, col.x + 152, y);
+        ctx.fillText(`$${f.money}`, col.x + 162, y);
         ctx.textAlign = 'left';
       });
     }
@@ -2555,33 +2790,39 @@ export class CounterStrikeGame extends BaseGame {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, 56, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, 58, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, 24, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, 26, 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.28)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(78, H - 78, 56, 0, Math.PI * 2);
+      ctx.arc(92, H - 92, 58, 0, Math.PI * 2);
       ctx.stroke();
     }
     const fireActive = !!this.fireTouch;
     ctx.fillStyle = fireActive ? 'rgba(240,90,80,0.75)' : 'rgba(240,90,80,0.4)';
     ctx.beginPath();
-    ctx.arc(W - 62, H - 62, 44, 0, Math.PI * 2);
+    ctx.arc(W - 88, H - 84, 44, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '开火' : 'FIRE', W - 62, H - 62);
-    ctx.fillStyle = 'rgba(57,197,187,0.4)';
-    ctx.fillRect(W - 120, H - 148, 100, 26);
+    ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(zh ? '开火' : 'FIRE', W - 88, H - 84);
+    const reloadActive = !!this.reloadTouch;
+    ctx.fillStyle = reloadActive ? 'rgba(57,197,187,0.75)' : 'rgba(57,197,187,0.4)';
+    ctx.beginPath();
+    ctx.arc(W - 88, H - 164, 30, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '换弹 R' : 'RELOAD R', W - 70, H - 135);
+    ctx.font = 'bold 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(zh ? '换弹' : 'R', W - 88, H - 164);
+    ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(zh ? '左:移动  右:视角' : 'LEFT: MOVE  RIGHT: LOOK', W / 2, H - 14);
   }
 }

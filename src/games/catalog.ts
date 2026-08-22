@@ -532,7 +532,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['M'], action: 'Toggle sound', actionZh: '音效开关' },
       ],
       touch: [
-        { icon: 'tap', action: 'Tap anywhere to open, buttons to browse prizes and stats', actionZh: '点击任意处开箱,点击按钮浏览奖品与统计' },
+        { icon: 'tap', action: 'Tap the case to open, buttons on top to browse prizes and stats', actionZh: '点击箱子开箱,点击顶部按钮浏览奖品与统计' },
       ],
     },
   },
@@ -557,15 +557,15 @@ export const GAMES: GameMeta[] = [
     group: 'action', order: 7.5, icon: 'counterstrike', // heads the Action family
     name: 'Counter-Strike',
     nameZh: '反恐精英',
-    desc: 'CS 1.6-style T vs CT rounds on fy_iceworld. Grab the gun under your spawn, buy at the exposed center buyzone, and win the match.',
-    descZh: 'CS 1.6 风格的警匪回合对战,战场是经典 fy_iceworld。捡起出生点的枪,在中央购买区补给,率先赢下比赛。',
+    desc: 'First-person CS 1.6 rounds on fy_iceworld. Grab the gun under your spawn, buy at the exposed center buyzone, and win the match.',
+    descZh: '第一人称 CS 1.6 警匪回合对战,战场是经典 fy_iceworld。捡起出生点的枪,在中央购买区补给,率先赢下比赛。',
     loader: () => import('./counterstrike.js').then((m) => m.CounterStrikeGame),
-    canvasSize: { width: 480, height: 480 },
+    canvasSize: { width: 960, height: 540 },
     controls: {
       keyboard: [
         { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
         { keys: ['↑', '←', '↓', '→'], action: 'Move', actionZh: '移动' },
-        { keys: ['Mouse'], action: 'Aim / Fire', actionZh: '瞄准 / 射击' },
+        { keys: ['Mouse'], action: 'Look / Fire', actionZh: '瞄准 / 射击' },
         { keys: ['R'], action: 'Reload', actionZh: '换弹' },
         { keys: ['B'], action: 'Buy menu (center buyzone)', actionZh: '购买菜单(中央购买区)' },
         { keys: ['Tab'], action: 'Scoreboard', actionZh: '记分板' },
@@ -590,7 +590,7 @@ export const GAMES: GameMeta[] = [
         { label: 'G', key: 'g' },
       ],
       touch: [
-        { icon: 'swipe', action: 'Left: move stick, right: aim stick', actionZh: '左侧移动摇杆,右侧瞄准摇杆' },
+        { icon: 'swipe', action: 'Left: move stick, right: look', actionZh: '左侧移动摇杆,右侧转视角' },
         { icon: 'tap', action: 'Tap fire / reload / buy buttons', actionZh: '点击开火 / 换弹 / 购买按钮' },
       ],
     },

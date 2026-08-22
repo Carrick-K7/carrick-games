@@ -264,3 +264,59 @@ export function raycastWall(x: number, y: number, dx: number, dy: number, maxDis
   }
   return maxDist;
 }
+
+// ── Textured raycast (DDA) for the first-person renderer ────────────────────
+
+export interface RayResult {
+  dist: number;
+  side: 0 | 1;
+  wallX: number;
+  kind: TileKind;
+  col: number;
+  row: number;
+}
+
+/**
+ * DDA raycast over the tile grid, returning the hit distance, wall face, and
+ * the fractional texture coordinate. World units are pixels (TILE = 30).
+ */
+export function castRay(px: number, py: number, dirX: number, dirY: number, maxDist: number): RayResult {
+  const unitX = px / TILE;
+  const unitY = py / TILE;
+  let mapX = Math.floor(unitX);
+  let mapY = Math.floor(unitY);
+  const deltaX = dirX === 0 ? 1e30 : Math.abs(1 / dirX);
+  const deltaY = dirY === 0 ? 1e30 : Math.abs(1 / dirY);
+  const stepX = dirX < 0 ? -1 : 1;
+  const stepY = dirY < 0 ? -1 : 1;
+  let sideX = dirX < 0 ? (unitX - mapX) * deltaX : (mapX + 1 - unitX) * deltaX;
+  let sideY = dirY < 0 ? (unitY - mapY) * deltaY : (mapY + 1 - unitY) * deltaY;
+  let side: 0 | 1 = 0;
+  let dist = 0;
+  for (let i = 0; i < 128; i++) {
+    if (sideX < sideY) {
+      sideX += deltaX;
+      mapX += stepX;
+      side = 0;
+    } else {
+      sideY += deltaY;
+      mapY += stepY;
+      side = 1;
+    }
+    dist = (side === 0 ? sideX - deltaX : sideY - deltaY) * TILE;
+    if (dist > maxDist) break;
+    if (isSolidTile(mapX, mapY)) {
+      let wallX = side === 0 ? unitY + (dist / TILE) * dirY : unitX + (dist / TILE) * dirX;
+      wallX -= Math.floor(wallX);
+      return { dist, side, wallX, kind: tileAt(mapX, mapY), col: mapX, row: mapY };
+    }
+  }
+  return { dist: maxDist, side, wallX: 0, kind: TileKind.Floor, col: -1, row: -1 };
+}
+
+export type WallTint = 'blue' | 'red';
+
+/** CT half walls lean blue, T half walls lean red — the map's two "sides". */
+export function wallTintAt(col: number, _row: number): WallTint {
+  return col < MAP_COLS / 2 ? 'blue' : 'red';
+}
