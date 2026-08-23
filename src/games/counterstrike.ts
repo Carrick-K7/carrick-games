@@ -16,6 +16,7 @@ import {
 } from '../core/game.js';
 import { Sfx } from './counterstrikeAudio.js';
 import { getGrenadeSprite, getSoldierFrames, getWallTexture, getWeaponSprite } from './counterstrikeAssets.js';
+import { CounterStrikeScene3D } from './counterstrikeScene3d.js';
 import {
   BUY_ZONE_RECT,
   CT_SPAWNS,
@@ -316,6 +317,8 @@ export class CounterStrikeGame extends BaseGame {
   private zBuffer = new Float32Array(640);
   private rw = 640;
   private rh = 360;
+  private scene3d: CounterStrikeScene3D | null = null;
+  private scene3dDisabled = false;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -495,6 +498,8 @@ export class CounterStrikeGame extends BaseGame {
   destroy() {
     this.stop();
     this.sfx.close();
+    this.scene3d?.dispose();
+    this.scene3d = null;
   }
 
   override stop() {
@@ -2144,29 +2149,13 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const pixel = this.isPixelMode();
-    this.rw = pixel ? 320 : 640;
-    this.rh = pixel ? 180 : 360;
-    if (this.renderCanvas.width !== this.rw) {
-      this.renderCanvas.width = this.rw;
-      this.renderCanvas.height = this.rh;
+    const use3d = !this.isPixelMode() && this.ensureScene3D();
+    if (use3d) {
+      this.drawWorld3D(ctx);
+    } else {
+      this.drawWorldLegacy(ctx);
+      this.drawProjectedFx(ctx);
     }
-    const rctx = this.renderCtx;
-    if (!rctx) return;
-
-    this.drawWorld(rctx);
-
-    ctx.imageSmoothingEnabled = !pixel;
-    let shakeX = 0;
-    let shakeY = 0;
-    if (this.shakeT > 0) {
-      const k = this.shakeT / 0.12;
-      shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
-      shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
-    }
-    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, shakeX, shakeY, W, H);
-
-    this.drawProjectedFx(ctx);
     this.drawViewmodel(ctx);
     this.drawHud(ctx);
     if (this.buyOpen) this.drawBuyMenu(ctx);
@@ -2201,6 +2190,102 @@ export class CounterStrikeGame extends BaseGame {
         hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE TO RESTART',
       });
     }
+  }
+
+  /** Lazily create the WebGL scene; falls back to the raycaster when unavailable. */
+  private ensureScene3D(): boolean {
+    if (this.scene3dDisabled) return false;
+    if (!this.scene3d) {
+      try {
+        this.scene3d = new CounterStrikeScene3D();
+      } catch {
+        this.scene3d = null;
+      }
+      if (!this.scene3d || !this.scene3d.ok) {
+        this.scene3d?.dispose();
+        this.scene3d = null;
+        this.scene3dDisabled = true;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Modern mode: render the world with Three.js, then blit into the 2D canvas. */
+  private drawWorld3D(ctx: CanvasRenderingContext2D) {
+    const scene = this.scene3d;
+    if (!scene) return;
+    scene.resize(W, H);
+    const p = this.player();
+    scene.sync({
+      camX: this.px,
+      camY: this.py,
+      camAngle: this.angle,
+      pitch: this.pitch,
+      eye: this.eye(),
+      moving: p.moving,
+      walkPhase: p.walkPhase,
+      fighters: this.fighters.map((f, i) => ({
+        id: i,
+        isPlayer: f === p,
+        x: f.x,
+        y: f.y,
+        angle: f.angle,
+        team: f.team,
+        variant: f.variant,
+        alive: f.alive,
+        deadT: f.deadT,
+        walkPhase: f.walkPhase,
+        moving: f.moving,
+        muzzle: f.muzzle,
+        crouch: f.crouch,
+        hitFlash: f.hitFlash,
+        helmet: f.helmet,
+      })),
+      ground: this.ground.map((g) => ({ x: g.x, y: g.y, kind: g.kind, weaponId: g.weaponId, nade: g.nade })),
+      grenades: this.grenades.map((g) => ({ x: g.x, y: g.y, type: g.type })),
+      smokes: this.smokes.map((s) => ({ x: s.x, y: s.y, r: s.r, maxR: s.maxR, life: s.life, maxLife: s.maxLife })),
+      tracers: this.tracers.slice(-24),
+      particles: this.particles.slice(-384),
+    });
+    scene.render();
+
+    const glCanvas = scene.canvas;
+    if (!glCanvas) return;
+    ctx.imageSmoothingEnabled = true;
+    let shakeX = 0;
+    let shakeY = 0;
+    if (this.shakeT > 0) {
+      const k = this.shakeT / 0.12;
+      shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+      shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+    }
+    ctx.drawImage(glCanvas, shakeX, shakeY, W, H);
+  }
+
+  /** Pixel mode / no-WebGL fallback: the original raycaster. */
+  private drawWorldLegacy(ctx: CanvasRenderingContext2D) {
+    const pixel = this.isPixelMode();
+    this.rw = pixel ? 320 : 640;
+    this.rh = pixel ? 180 : 360;
+    if (this.renderCanvas.width !== this.rw) {
+      this.renderCanvas.width = this.rw;
+      this.renderCanvas.height = this.rh;
+    }
+    const rctx = this.renderCtx;
+    if (!rctx) return;
+
+    this.drawWorld(rctx);
+
+    ctx.imageSmoothingEnabled = !pixel;
+    let shakeX = 0;
+    let shakeY = 0;
+    if (this.shakeT > 0) {
+      const k = this.shakeT / 0.12;
+      shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+      shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+    }
+    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, shakeX, shakeY, W, H);
   }
 
   private drawWorld(rctx: CanvasRenderingContext2D) {

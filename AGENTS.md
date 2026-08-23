@@ -36,8 +36,8 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 
 ## Development Rules
 
-- Prefer existing patterns in `BaseGame`, `src/core/render.ts`, `src/games/catalog.ts`, `src/main.ts`, and nearby games.
-- Do not add external runtime dependencies for games unless the user explicitly approves it.
+- Prefer existing patterns in `BaseGame`, `src/core/render.ts`, `src/core/fx.ts`, `src/games/catalog.ts`, `src/main.ts`, and nearby games.
+- Minimize external runtime dependencies. The standing exception: shooter-family games may use `three` for real-3D rendering (currently `counterstrike` via `src/games/counterstrikeScene3d.ts`), rendered into the game's 2D canvas so shell contracts stay intact. Any other new runtime dependency still requires explicit user approval, must be declared in `package.json`, and must be listed here when added.
 - Keep changes scoped. Do not reformat unrelated files or rewrite established game logic as part of a narrow fix.
 - Use `this.isDarkTheme()` and `this.isZhLang()` for theme and language branching inside games.
 - Use `this.canvasPoint(clientX, clientY)` for mouse and touch coordinates. Do not compute from `canvas.width / rect.width`; canvases use HiDPI backing stores.

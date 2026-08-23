@@ -9,6 +9,7 @@ Carrick Games uses a clean HD arcade style: classic game shapes and readable arc
 The target feel is:
 
 - Crisp: HiDPI backing canvases, sharp geometry, stable logical coordinates.
+- Premium: layered lighting, soft shadows, restrained glow, and eased motion — the bar is a polished modern web game, not a tech demo.
 - Playable: controls, scores, hazards, and game state must read instantly.
 - Lightweight: Canvas-native drawing, no heavy asset pipeline.
 - Bilingual: English and Chinese UI must both fit without overlap.
@@ -74,6 +75,40 @@ game closes the library drawer so the play surface is revealed immediately.
 Desktop and mobile sidebar state must remain independent. A collapsed desktop
 rail shows icons only and always keeps an obvious expand control visible.
 
+## Canvas Craft (modern mode)
+
+The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing
+one-off drawing code; it is how the game canvases stay stylistically unified.
+
+- **Lighting model**: one consistent key light from above. Bodies get gradient
+  shading (`fillBevelTile`, `fillSphere`), a top-edge highlight, a bottom-edge
+  shade, and where useful a rim light. Derive light/dark variants with
+  `shade()` and translucency with `withAlpha()` instead of inventing one-off
+  colors.
+- **Glow**: additive radial glow (`drawGlow`, `glow`-shaped particles) marks
+  energy, muzzle flashes, rare loot, and interactive hotspots. Keep glow
+  purposeful — it loses meaning when everything glows. In light theme, prefer
+  `source-over` particles so bright scenes do not wash out.
+- **Scenes**: build depth with layered backgrounds (`Starfield` parallax,
+  nebula washes, textured floors) and seat the scene with a subtle vignette
+  (`drawVignette`, strength ≤ ~0.3). Never use full-screen scanlines.
+- **Motion & juice**: animate with the shared easings (`ease()`, `Tween`);
+  celebrate moments with `Particles`/`fx` presets (explosion, confetti, pop),
+  `ScreenShake` (keep trauma ≤ ~0.3 for hits, ≤ 0.8 for deaths), and
+  `FloatTexts` for score feedback. Keep particle counts bounded.
+- **Sprites**: anything with real detail — ships, cars, chests, items — is
+  drawn once through `makeSprite()` and blitted each frame with `drawSprite()`.
+  Cache per theme and rebuild on theme change. Do not re-run detailed vector
+  drawing per frame, and avoid per-frame `shadowBlur` storms.
+- **3D exception**: shooter-family games may render the world with `three`
+  (see `src/games/counterstrikeScene3d.ts`), blitting the WebGL canvas into
+  the game's 2D canvas each frame so HiDPI, HUD, overlays, and e2e pixel
+  probes keep working. HUD, menus, radar, and result overlays stay 2D.
+- **Pixel mode** keeps the original retro look: the craft above applies to
+  modern mode only. Shared chrome (result overlays) still branches on
+  `isPixelMode()`, and games with a legacy renderer (e.g. the Counter-Strike
+  raycaster) keep it as the pixel-mode path.
+
 ## Palette
 
 Use the app theme tokens for page UI and `getRetroPalette()` from `src/core/render.ts` for canvas scenes.
@@ -125,6 +160,7 @@ Rules:
 
 Use:
 
+- `src/core/fx.ts` helpers for lit shapes, glow, particles, shake, tweens, sprites, and layered backgrounds (see Canvas Craft).
 - `drawRetroBackground()` for subtle arcade grids or background texture.
 - `fillRoundedPanel()` for HUD panels, menus, and overlays.
 - `getCanvasPoint()` or `this.canvasPoint()` for input mapping.
@@ -133,7 +169,7 @@ Avoid:
 
 - Manually scaling pointer coordinates from `canvas.width / rect.width`.
 - Decorative overlays that reduce readability.
-- Full-screen scanline/vignette effects by default.
+- Full-screen scanline effects; vignettes only as a subtle scene-seating wash (see Canvas Craft).
 - Canvas text or controls that depend on browser viewport-scaled font sizes.
 
 Game-specific glow, particles, gradients, and texture are acceptable when they improve readability or game feel. Keep them restrained.

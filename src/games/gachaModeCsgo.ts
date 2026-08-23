@@ -15,6 +15,10 @@
  *
  * The reel always runs to completion on its own — there is no
  * user-initiated stopping of the spin itself.
+ *
+ * Rendering: card faces are pre-rendered once into HiDPI sprites, then
+ * blitted each frame with velocity-scaled stretch and ghost trails for a
+ * motion-blur feel; the center marker glows in sync with the tick sfx.
  */
 
 import type { GachaSfx } from './gachaAudio.js';
@@ -26,6 +30,7 @@ import {
 } from './gachaData.js';
 import type { GachaOpenContext, GachaOpenMode, GachaOpenModeFactory } from './gachaModes.js';
 import { drawWeaponIcon } from './gachaWeaponIcons.js';
+import { clamp, drawGlow, fillGlassPanel, makeSprite, shade } from '../core/fx.js';
 
 // ── Layout ──
 const CARD_W = 124;
@@ -65,6 +70,11 @@ export class CsgoStripMode implements GachaOpenMode {
   private started = false;
   private readonly viewportLeft: number;
   private readonly viewportRight: number;
+
+  // Pre-rendered card faces: index → sprite (winner has a lit variant)
+  private readonly cardSprites = new Map<number, HTMLCanvasElement>();
+  private winnerLandedSprite: HTMLCanvasElement | null = null;
+  private markerPulse = 0;
 
   constructor(ctx: GachaOpenContext) {
     this.ctx = ctx;
@@ -134,6 +144,7 @@ export class CsgoStripMode implements GachaOpenMode {
     }
 
     if (this.landFlash > 0) this.landFlash = Math.max(0, this.landFlash - dt);
+    if (this.markerPulse > 0) this.markerPulse = Math.max(0, this.markerPulse - dt * 3);
 
     // Tick when a card boundary crosses the window center line.
     const cx = this.ctx.width / 2;
@@ -142,6 +153,7 @@ export class CsgoStripMode implements GachaOpenMode {
     if (centerIndex !== this.lastTickedCenter) {
       if (this.lastTickedCenter >= 0 && centerIndex > this.lastTickedCenter) {
         this.sfx.tick(this.speedRatio());
+        this.markerPulse = Math.max(this.markerPulse, 0.7);
       }
       this.lastTickedCenter = centerIndex;
     }
@@ -153,6 +165,7 @@ export class CsgoStripMode implements GachaOpenMode {
     if (this.landed) return;
     this.landed = true;
     this.landFlash = LAND_FLASH;
+    this.markerPulse = 1;
     this.elapsed = TIME_TOTAL;
     this.traveled = this.totalDistance;
     this.sfx.land();
@@ -165,29 +178,91 @@ export class CsgoStripMode implements GachaOpenMode {
     const cx = this.ctx.width / 2;
     const cy = REEL_Y + REEL_H / 2;
     const dark = this.dark;
+    const speed = this.speedRatio();
 
     // Reel backdrop — glass track
-    const trackGrad = ctx.createLinearGradient(0, REEL_Y - 14, 0, REEL_Y + REEL_H + 14);
-    trackGrad.addColorStop(0, dark ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.7)');
-    trackGrad.addColorStop(1, dark ? 'rgba(255,255,255,0.012)' : 'rgba(255,255,255,0.4)');
-    ctx.fillStyle = trackGrad;
-    roundRectPath(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18);
-    ctx.fill();
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(17,24,39,0.08)';
-    ctx.lineWidth = 1;
-    roundRectPath(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18);
-    ctx.stroke();
+    fillGlassPanel(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18, {
+      fill: dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.72)',
+      fill2: dark ? 'rgba(255,255,255,0.015)' : 'rgba(255,255,255,0.45)',
+      border: dark ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.09)',
+    });
+
+    // Speed streaks inside the track while the strip is at full tilt
+    if (speed > 0.45) {
+      ctx.save();
+      ctx.globalAlpha = (speed - 0.45) * 0.45;
+      ctx.strokeStyle = dark ? 'rgba(226,238,249,0.5)' : 'rgba(71,85,105,0.4)';
+      ctx.lineWidth = 1;
+      const trackW = this.viewportRight - this.viewportLeft;
+      for (let i = 0; i < 6; i++) {
+        const y = REEL_Y + 16 + ((i * 53) % (REEL_H - 28));
+        const x0 = this.viewportLeft - 10 + ((i * 197 + Math.floor(this.elapsed * 900)) % trackW);
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + 30 + 60 * speed, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     // Visible card range
     const firstVisible = Math.max(0, Math.floor((this.traveled - CARD_W) / CARD_PITCH));
     const lastVisible = Math.min(this.cards.length - 1, Math.floor((this.traveled + (this.viewportRight - this.viewportLeft) + CARD_W) / CARD_PITCH));
+    const centerIndex = Math.floor((this.traveled + (cx - this.viewportLeft)) / CARD_PITCH);
 
     for (let i = firstVisible; i <= lastVisible; i++) {
       const card = this.cards[i];
       const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
-      const isWinner = i === WIN_INDEX;
-      this.drawCard(ctx, x, card, isWinner);
+      const isWinnerLanded = i === WIN_INDEX && this.landed;
+      const sprite = isWinnerLanded ? this.winnerSprite() : this.cardSprite(i, card);
+
+      // Motion stretch while fast; approaching-card pulse while slow
+      const stretch = 1 + 0.3 * speed;
+      let scale = 1;
+      if (!this.landed && speed < 0.3 && i === centerIndex) {
+        scale = 1 + 0.05 * clamp(1 - speed / 0.3, 0, 1) * (0.5 + 0.5 * Math.sin(this.elapsed * 14));
+      }
+      const dw = CARD_W * stretch * scale;
+      const dh = REEL_H * scale;
+      const dx = x + (CARD_W - dw) / 2;
+      const dy = REEL_Y + (REEL_H - dh) / 2;
+
+      if (x > this.ctx.width || x + CARD_W < 0) continue;
+
+      // Ghost trail behind the direction of travel (strip moves left)
+      if (speed > 0.35 && !isWinnerLanded) {
+        ctx.save();
+        ctx.globalAlpha = 0.2 * speed;
+        ctx.drawImage(sprite, dx + 7 * speed, dy, dw, dh);
+        ctx.globalAlpha = 0.1 * speed;
+        ctx.drawImage(sprite, dx + 15 * speed, dy, dw, dh);
+        ctx.restore();
+      }
+
+      if (isWinnerLanded) {
+        ctx.save();
+        ctx.shadowColor = card.tier.color;
+        ctx.shadowBlur = 24;
+        ctx.drawImage(sprite, dx, dy, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(sprite, dx, dy, dw, dh);
+      }
     }
+
+    // Edge fades so cards melt into the track ends
+    const fadeW = 44;
+    const edge = dark ? '13,16,22' : '243,245,249';
+    const leftFade = ctx.createLinearGradient(this.viewportLeft - 24, 0, this.viewportLeft - 24 + fadeW, 0);
+    leftFade.addColorStop(0, `rgba(${edge},0.95)`);
+    leftFade.addColorStop(1, `rgba(${edge},0)`);
+    ctx.fillStyle = leftFade;
+    ctx.fillRect(this.viewportLeft - 24, REEL_Y - 14, fadeW, REEL_H + 28);
+    const rightFade = ctx.createLinearGradient(this.viewportRight + 24, 0, this.viewportRight + 24 - fadeW, 0);
+    rightFade.addColorStop(0, `rgba(${edge},0.95)`);
+    rightFade.addColorStop(1, `rgba(${edge},0)`);
+    ctx.fillStyle = rightFade;
+    ctx.fillRect(this.viewportRight + 24 - fadeW, REEL_Y - 14, fadeW, REEL_H + 28);
 
     // Center highlight window — soft inner glow, not a hard box
     const winX = cx - CARD_W / 2;
@@ -198,6 +273,7 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.fillRect(winX, REEL_Y - 6, CARD_W, REEL_H + 12);
 
     if (this.landed && this.landFlash > 0) {
+      drawGlow(ctx, cx, cy, 130, this.ctx.roll.tier.color, this.landFlash * 1.2);
       ctx.save();
       ctx.strokeStyle = `rgba(255,255,255,${this.landFlash * 1.8})`;
       ctx.lineWidth = 2;
@@ -217,7 +293,11 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // Marker — soft chevrons, premium accent
+    // Markers — chevrons with a glow that pulses on every tick
+    const markerColor = dark ? '#7dd3fc' : '#0284c7';
+    const glowStrength = 0.35 + this.markerPulse * 0.6;
+    drawGlow(ctx, cx - CARD_W / 2 - 13, cy, 18, markerColor, glowStrength * 0.7);
+    drawGlow(ctx, cx + CARD_W / 2 + 13, cy, 18, markerColor, glowStrength * 0.7);
     ctx.fillStyle = dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.9)';
     ctx.beginPath();
     ctx.moveTo(cx - CARD_W / 2 - 18, cy - 8);
@@ -247,64 +327,80 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.fillText(this.ctx.zh ? `当前格 · ${(tier.odds * 100).toFixed(2)}%` : `Cell · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 22);
   }
 
-  private drawCard(ctx: CanvasRenderingContext2D, x: number, card: StripCard, isWinner: boolean) {
-    if (x > this.ctx.width || x + CARD_W < 0) return;
+  /* ─── Card face sprites ─── */
 
+  private cardSprite(index: number, card: StripCard): HTMLCanvasElement {
+    let sprite = this.cardSprites.get(index);
+    if (!sprite) {
+      sprite = makeSprite(CARD_W, REEL_H, (c) => this.renderCardFace(c, card, false), 2);
+      this.cardSprites.set(index, sprite);
+    }
+    return sprite;
+  }
+
+  private winnerSprite(): HTMLCanvasElement {
+    if (!this.winnerLandedSprite) {
+      this.winnerLandedSprite = makeSprite(CARD_W, REEL_H, (c) => this.renderCardFace(c, this.cards[WIN_INDEX], true), 2);
+    }
+    return this.winnerLandedSprite;
+  }
+
+  /** Static card art, drawn once into a sprite at origin (0,0). */
+  private renderCardFace(c: CanvasRenderingContext2D, card: StripCard, landed: boolean) {
     const tier = card.tier;
     const dark = this.dark;
 
     // Sheet: glassy neutral base, rarity-tinted gradient on top
-    const grad = ctx.createLinearGradient(x, REEL_Y, x, REEL_Y + REEL_H);
-    if (isWinner && this.landed) {
-      grad.addColorStop(0, tier.color);
+    const grad = c.createLinearGradient(0, 0, 0, REEL_H);
+    if (landed) {
+      grad.addColorStop(0, shade(tier.color, 0.15));
       grad.addColorStop(1, shade(tier.color, -0.5));
     } else {
       grad.addColorStop(0, dark ? shade(tier.color, -0.62) : shade(tier.color, -0.05));
       grad.addColorStop(1, dark ? shade(tier.color, -0.75) : shade(tier.color, -0.45));
     }
+    roundRectPath(c, 0, 0, CARD_W, REEL_H, 14);
+    c.fillStyle = grad;
+    c.fill();
 
-    ctx.save();
-    roundRectPath(ctx, x, REEL_Y, CARD_W, REEL_H, 14);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    // Glass sheen across the top third
+    c.save();
+    roundRectPath(c, 0, 0, CARD_W, REEL_H, 14);
+    c.clip();
+    const sheen = c.createLinearGradient(0, 0, 0, REEL_H * 0.4);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.16)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = sheen;
+    c.fillRect(0, 0, CARD_W, REEL_H * 0.4);
+    c.restore();
 
     // Inner hairline
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.65)';
-    ctx.lineWidth = 1;
-    roundRectPath(ctx, x + 0.5, REEL_Y + 0.5, CARD_W - 1, REEL_H - 1, 13.5);
-    ctx.stroke();
+    c.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.65)';
+    c.lineWidth = 1;
+    roundRectPath(c, 0.5, 0.5, CARD_W - 1, REEL_H - 1, 13.5);
+    c.stroke();
 
     // Rarity chip — small pill under the weapon
-    ctx.fillStyle = dark ? 'rgba(9,11,16,0.55)' : 'rgba(255,255,255,0.75)';
-    roundRectPath(ctx, x + CARD_W / 2 - 34, REEL_Y + REEL_H - 30, 68, 16, 8);
-    ctx.fill();
-    ctx.fillStyle = dark ? '#e6edf5' : '#3d4a5c';
-    ctx.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(this.ctx.zh ? tier.nameZh : tier.name, x + CARD_W / 2, REEL_Y + REEL_H - 22);
+    c.fillStyle = dark ? 'rgba(9,11,16,0.55)' : 'rgba(255,255,255,0.75)';
+    roundRectPath(c, CARD_W / 2 - 34, REEL_H - 30, 68, 16, 8);
+    c.fill();
+    c.fillStyle = dark ? '#e6edf5' : '#3d4a5c';
+    c.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 22);
 
     // Weapon silhouette
-    drawWeaponIcon(ctx, card.item.kind, x + CARD_W / 2, REEL_Y + REEL_H / 2 - 12, { color: dark ? '#f1f5f9' : '#ffffff', alpha: 0.95, size: 74 });
+    drawWeaponIcon(c, card.item.kind, CARD_W / 2, REEL_H / 2 - 12, { color: dark ? '#f1f5f9' : '#ffffff', alpha: 0.95, size: 74 });
 
     // Item name
-    ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = dark ? '#f1f5f9' : '#ffffff';
-    ctx.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 14), x + CARD_W / 2, REEL_Y + REEL_H / 2 + 36);
-
-    ctx.restore();
+    c.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    c.fillStyle = dark ? '#f1f5f9' : '#ffffff';
+    c.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 14), CARD_W / 2, REEL_H / 2 + 36);
   }
 }
 
 // ── helpers ──
-
-function shade(hex: string, amount: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.max(0, Math.min(255, (n >> 16) + Math.round(amount * 255)));
-  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + Math.round(amount * 255)));
-  const b = Math.max(0, Math.min(255, (n & 0xff) + Math.round(amount * 255)));
-  return `rgb(${r},${g},${b})`;
-}
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
