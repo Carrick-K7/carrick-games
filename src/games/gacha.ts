@@ -39,6 +39,7 @@ import {
   type GachaOpenContext,
   type GachaOpenMode,
 } from './gachaModes.js';
+import { drawWeaponIcon } from './gachaWeaponIcons.js';
 
 type Screen = 'menu' | 'unlock' | 'opening' | 'result' | 'gallery' | 'stats';
 
@@ -551,6 +552,10 @@ export class GachaGame extends BaseGame {
     ctx.fillStyle = p.textDim;
     ctx.fillText(zh ? '解锁中…' : 'UNLOCKING…', this.width / 2, 34);
 
+    // Browse chips are live during the prelude too.
+    this.chipButton(ctx, this.hitPrizeChip(), zh ? '奖品' : 'PRIZES', p);
+    this.chipButton(ctx, this.hitHomeChip(), zh ? '首页' : 'HOME', p);
+
     const cx = this.width / 2;
     const cy = 216;
     const shake = t < 0.45 ? Math.sin(t * 82) * 6 * (1 - t / 0.45) : 0;
@@ -593,6 +598,10 @@ export class GachaGame extends BaseGame {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.textDim;
     ctx.fillText(zh ? '开箱中…' : 'OPENING…', this.width / 2, 28);
+
+    // Keep browsing alive during the spin: prizes + home take priority.
+    this.chipButton(ctx, this.hitPrizeChip(), zh ? '奖品' : 'PRIZES', p, false);
+    this.chipButton(ctx, this.hitHomeChip(), zh ? '首页' : 'HOME', p, false);
   }
 
   /* ─── Result ─── */
@@ -665,18 +674,17 @@ export class GachaGame extends BaseGame {
       ctx.restore();
     }
 
-    // Content
-    ctx.font = '56px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.text;
-    ctx.fillText(item.emoji, 0, -38);
+    // Content — weapon silhouette in the tier color, name below
+    drawWeaponIcon(ctx, item.kind, 0, -30, { color: tier.color, alpha: 0.95, size: 170 });
     ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(truncate(item.nameZh, 14), 0, 44);
+    ctx.fillStyle = p.text;
+    ctx.fillText(truncate(item.nameZh, 14), 0, 52);
     ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
-    ctx.fillText(truncate(item.name, 30), 0, 74);
+    ctx.fillText(truncate(item.name, 30), 0, 80);
     ctx.fillStyle = tier.color;
     ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
-    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, 116);
+    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, 118);
     ctx.restore();
 
     // Buttons — one primary action only
@@ -697,41 +705,39 @@ export class GachaGame extends BaseGame {
     ctx.fillText(zh ? '全部奖品' : 'ALL PRIZES', 42, 34);
     this.chipButton(ctx, this.hitBack(), zh ? '菜单' : 'MENU', p);
 
-    // Rarity legend row: swatch + name, one per grade.
-    const legendW = (this.width - 48 - 8 * (GACHA_TIERS.length - 1)) / GACHA_TIERS.length;
-    for (let i = 0; i < GACHA_TIERS.length; i++) {
-      const tier = GACHA_TIERS[i];
-      const x = 24 + i * (legendW + 8);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = tier.color;
-      roundRectPath(ctx, x, 68, 3, 14, 1.5);
-      ctx.fill();
-      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(tier.nameZh, x + 9, 71);
-      ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillStyle = p.textFaint;
-      ctx.fillText(`${GACHA_POOL[tier.id].length} · ${(tier.odds * 100).toFixed(2)}%`, x + 9, 84);
-    }
-
-    // Compact grid: all prizes on one page. High tiers first.
-    const perLine = 6;
+    // One row per rarity color: tier label on the left, its items in a row.
+    const labelW = 128;
     const gap = 8;
-    const cardW = (this.width - 48 - gap * (perLine - 1)) / perLine;
-    const cardH = 52;
-    const startY = 104;
-    const items: { item: GachaItem; tier: GachaTier }[] = [];
+    const cardH = 58;
+    let y = 68;
+
     for (const tierId of [...GACHA_TIER_ORDER].reverse()) {
       const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
-      for (const item of GACHA_POOL[tierId]) items.push({ item, tier });
-    }
+      const items = GACHA_POOL[tierId];
+      const cardW = (this.width - 48 - labelW - gap * (items.length - 1)) / items.length;
 
-    for (let i = 0; i < items.length; i++) {
-      const col = i % perLine;
-      const row = Math.floor(i / perLine);
-      const x = 24 + col * (cardW + gap);
-      const y = startY + row * (cardH + 6);
-      const owned = this.stats.itemCounts[items[i].item.id] ?? 0;
-      this.drawItemCard(ctx, x, y, cardW, cardH, items[i].tier, items[i].item, owned, p);
+      // Tier label column
+      ctx.textAlign = 'left';
+      ctx.fillStyle = tier.color;
+      roundRectPath(ctx, 26, y + 4, 3, 20, 1.5);
+      ctx.fill();
+      ctx.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(tier.nameZh, 36, y + 12);
+      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.textDim;
+      ctx.fillText(`${(tier.odds * 100).toFixed(2)}% · ${items.length}`, 36, y + 28);
+      ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(weaponFamilyLabel(zh, tierId), 36, y + 42);
+
+      // Items row
+      for (let i = 0; i < items.length; i++) {
+        const owned = this.stats.itemCounts[items[i].id] ?? 0;
+        this.drawItemCard(ctx, 24 + labelW + i * (cardW + gap), y, cardW, cardH, tier, items[i], owned, p);
+      }
+
+      y += cardH + 22;
+      if (y > this.height - 6) break;
     }
   }
 
@@ -774,23 +780,22 @@ export class GachaGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const iconSize = Math.min(w * 0.62, 46);
     if (locked) {
-      ctx.globalAlpha = 0.3;
-      ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.globalAlpha = 0.28;
       ctx.fillStyle = dark ? '#cbd5e1' : '#475569';
-      ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 6);
+      drawWeaponIcon(ctx, item.kind, x + w / 2, y + h / 2 - 6, { color: dark ? '#cbd5e1' : '#475569', size: iconSize });
       ctx.globalAlpha = 1;
       ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
-      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 8), x + w / 2, y + h / 2 + 16);
+      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
       return;
     }
 
-    ctx.font = '18px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(item.emoji, x + w / 2, y + h / 2 - 6);
+    drawWeaponIcon(ctx, item.kind, x + w / 2, y + h / 2 - 6, { color: p.text, alpha: 0.85, size: iconSize });
     ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
-    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 8), x + w / 2, y + h / 2 + 16);
+    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
 
     ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textFaint;
@@ -880,10 +885,8 @@ export class GachaGame extends BaseGame {
         const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
         const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
         if (!tier || !item) continue;
-        ctx.font = '15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = p.textDim;
-        ctx.fillText(item.emoji, hx + 12, hy + 20);
+        drawWeaponIcon(ctx, item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22 });
         ctx.beginPath();
         ctx.fillStyle = tier.color;
         ctx.arc(hx + 12, hy + 34, 2.5, 0, Math.PI * 2);
@@ -959,6 +962,9 @@ export class GachaGame extends BaseGame {
   private hitPrizes() { return { x: this.width - 254, y: 22, w: 52, h: 24 }; }
   private hitBack() { return { x: this.width - 104, y: 22, w: 56, h: 24 }; }
   private hitAgain() { return { x: this.width / 2 - 92, y: 402, w: 184, h: 44 }; }
+  /** Chips shown while the reel runs: browse prizes or bail to home. */
+  private hitPrizeChip() { return { x: this.width - 254, y: 22, w: 52, h: 24 }; }
+  private hitHomeChip() { return { x: this.width - 104, y: 22, w: 56, h: 24 }; }
 
   private canvasHit(x: number, y: number, r: { x: number; y: number; w: number; h: number }): boolean {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -980,9 +986,14 @@ export class GachaGame extends BaseGame {
         if (this.sfx.enabled) this.sfx.prime();
         return;
       }
-      // While a prelude or reel is running, nothing but the sound toggle
-      // responds: the animation always runs to completion on its own.
-      if (this.screen === 'unlock' || this.screen === 'opening') return;
+      // While a prelude or reel is running, only browsing shortcuts work:
+      // Escape/R exits to the menu; the spin never skips ahead.
+      if (this.screen === 'unlock' || this.screen === 'opening') {
+        if (e.key === 'Escape' || e.key === 'r' || e.key === 'R') {
+          this.gotoMenu();
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         if (this.screen === 'gallery' || this.screen === 'stats' || this.screen === 'result') this.gotoMenu();
         return;
@@ -1051,7 +1062,20 @@ export class GachaGame extends BaseGame {
       }
       case 'unlock':
       case 'opening': {
-        // The prelude and the reel run to completion on their own.
+        // Browsing intent wins over the running spin: prizes or home.
+        if (this.canvasHit(x, y, this.hitPrizeChip())) {
+          this.sfx.click();
+          // Bailing mid-spin is allowed: the pull is already recorded.
+          this.animMode = null;
+          this.screen = 'gallery';
+          this.canvas.dataset.gachaScreen = 'gallery';
+          return;
+        }
+        if (this.canvasHit(x, y, this.hitHomeChip())) {
+          this.sfx.click();
+          this.gotoMenu();
+          return;
+        }
         return;
       }
       case 'result': {
@@ -1130,6 +1154,17 @@ function shade(hex: string, amount: number): string {
 
 function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
+}
+
+function weaponFamilyLabel(zh: boolean, tierId: string): string {
+  switch (tierId) {
+    case 'rarespecial': return zh ? '刀 · 手套' : 'knife · gloves';
+    case 'covert': return zh ? '狙击枪' : 'snipers';
+    case 'classified': return zh ? '步枪' : 'rifles';
+    case 'restricted': return zh ? '冲锋枪' : 'SMGs';
+    case 'milspec': return zh ? '手枪' : 'pistols';
+    default: return '';
+  }
 }
 
 function easeOutBack(t: number): number {

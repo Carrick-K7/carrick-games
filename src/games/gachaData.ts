@@ -2,9 +2,15 @@
  * Gacha prize pool configuration.
  *
  * ⚠️ CONTENT SLOTS — edit this file to design your own prizes.
- * The five CS:GO-style rarity tiers and their official odds are fixed
- * below; the per-tier item lists are simple placeholders (蓝1-15,
- * 紫1-8, 粉1-5, 红1-3, 金1-2) and can be renamed or replaced freely.
+ * Five CS:GO-style rarity tiers with their official odds are fixed
+ * below; the item lists sample real CS:GO pieces and can be renamed or
+ * replaced freely. Each tier maps to a weapon family:
+ *
+ *   金 Rare Special → knife + gloves
+ *   红 Covert       → sniper rifles
+ *   粉 Classified   → rifles
+ *   紫 Restricted   → SMGs
+ *   蓝 Mil-Spec     → pistols
  *
  * Rolling is two-level:
  *   1. tier is picked by the official color odds (blue 79.92%, purple
@@ -20,6 +26,8 @@
 
 export type GachaTierId = 'milspec' | 'restricted' | 'classified' | 'covert' | 'rarespecial';
 
+export type WeaponKind = 'knife' | 'gloves' | 'sniper' | 'rifle' | 'smg' | 'pistol';
+
 export interface GachaTier {
   id: GachaTierId;
   name: string;
@@ -33,7 +41,7 @@ export interface GachaItem {
   id: string;
   name: string;
   nameZh: string;
-  emoji: string;
+  kind: WeaponKind;
   /** Relative probability inside the tier (normalized at roll time). */
   weight: number;
 }
@@ -74,30 +82,59 @@ export const GACHA_TIER_MAP: ReadonlyMap<GachaTierId, GachaTier> = new Map(
 
 export const GACHA_TIER_ORDER: GachaTierId[] = ['milspec', 'restricted', 'classified', 'covert', 'rarespecial'];
 
-/* ───────── Prize pool (placeholder content — replace freely) ───────── */
+export const GACHA_TIER_ORDER_HIGH_FIRST: GachaTierId[] = [...GACHA_TIER_ORDER].reverse();
 
-const BLUE_EMOJIS = ['🔷', '🔹', '🧊', '💠', '🟦', '📘', '🫧', '🌊', '🧿', '🎽', '💙', '🥶', '🎿', '🪣', '🧢'];
-const PURPLE_EMOJIS = ['🟣', '💜', '🪐', '🍇', '🦄', '🧞', '💟', '🔮'];
-const PINK_EMOJIS = ['🌸', '🎀', '💗', '🩷', '🎠'];
-const RED_EMOJIS = ['🔥', '💥', '🩸'];
-const GOLD_EMOJIS = ['👑', '🏆'];
-
-function buildTier(id: GachaTierId, zhName: string, enName: string, count: number, emojis: string[]): GachaItem[] {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `${id}-${index + 1}`,
-    name: `${enName} ${index + 1}`,
-    nameZh: `${zhName} ${index + 1}`,
-    emoji: emojis[index % emojis.length],
-    weight: 1,
-  }));
-}
+/* ───────── Prize pool (sample CS:GO pieces — replace freely) ───────── */
 
 export const GACHA_POOL: Record<GachaTierId, GachaItem[]> = {
-  milspec: buildTier('milspec', '蓝', 'Blue', 15, BLUE_EMOJIS),   // 蓝 1-15
-  restricted: buildTier('restricted', '紫', 'Purple', 8, PURPLE_EMOJIS),     // 紫 1-8
-  classified: buildTier('classified', '粉', 'Pink', 5, PINK_EMOJIS),         // 粉 1-5
-  covert: buildTier('covert', '红', 'Red', 3, RED_EMOJIS),        // 红 1-3
-  rarespecial: buildTier('rarespecial', '金', 'Gold', 2, GOLD_EMOJIS),       // 金 1-2
+  // 金 · 手套与刀
+  rarespecial: [
+    { id: 'karambit-fade', name: 'Karambit | Fade', nameZh: '爪刀 · 渐变', kind: 'knife', weight: 0.6 },
+    { id: 'gloves-vice', name: 'Sport Gloves | Vice', nameZh: '运动手套 · 罪恶', kind: 'gloves', weight: 0.4 },
+  ],
+  // 红 · 狙击枪
+  covert: [
+    { id: 'awp-dragonlore', name: 'AWP | Dragon Lore', nameZh: 'AWP · 巨龙传说', kind: 'sniper', weight: 0.4 },
+    { id: 'awp-gungnir', name: 'AWP | Gungnir', nameZh: 'AWP · 永恒之枪', kind: 'sniper', weight: 0.35 },
+    { id: 'ssg-blood', name: 'SSG 08 | Blood in the Water', nameZh: 'SSG 08 · 水中血', kind: 'sniper', weight: 0.25 },
+  ],
+  // 粉 · 步枪
+  classified: [
+    { id: 'ak-fireserpent', name: 'AK-47 | Fire Serpent', nameZh: 'AK-47 · 火蛇', kind: 'rifle', weight: 0.25 },
+    { id: 'm4-howl', name: 'M4A4 | Howl', nameZh: 'M4A4 · 咆哮', kind: 'rifle', weight: 0.25 },
+    { id: 'ak-asiimov', name: 'AK-47 | Asiimov', nameZh: 'AK-47 · 阿斯莫夫', kind: 'rifle', weight: 0.2 },
+    { id: 'm4-printstream', name: 'M4A1-S | Printstream', nameZh: 'M4A1-S · 印花', kind: 'rifle', weight: 0.2 },
+    { id: 'famas-rollcage', name: 'FAMAS | Roll Cage', nameZh: 'FAMAS · 滚笼', kind: 'rifle', weight: 0.1 },
+  ],
+  // 紫 · 冲锋枪
+  restricted: [
+    { id: 'mp9-starlight', name: 'MP9 | Starlight Protector', nameZh: 'MP9 · 星辉卫士', kind: 'smg', weight: 0.15 },
+    { id: 'mp7-neonply', name: 'MP7 | Neon Ply', nameZh: 'MP7 · 霓虹胶合', kind: 'smg', weight: 0.15 },
+    { id: 'ump-prism', name: 'UMP-45 | Prism', nameZh: 'UMP-45 · 棱镜', kind: 'smg', weight: 0.14 },
+    { id: 'p90-runhide', name: 'P90 | Run and Hide', nameZh: 'P90 · 奔逃', kind: 'smg', weight: 0.13 },
+    { id: 'mp5-phosphor', name: 'MP5-SD | Phosphor', nameZh: 'MP5-SD · 磷光', kind: 'smg', weight: 0.12 },
+    { id: 'mac-stalker', name: 'MAC-10 | Stalker', nameZh: 'MAC-10 · 潜行者', kind: 'smg', weight: 0.11 },
+    { id: 'p90-freight', name: 'P90 | Freight', nameZh: 'P90 · 货运', kind: 'smg', weight: 0.1 },
+    { id: 'ump-metalflowers', name: 'UMP-45 | Metal Flowers', nameZh: 'UMP-45 · 金属花', kind: 'smg', weight: 0.1 },
+  ],
+  // 蓝 · 手枪
+  milspec: [
+    { id: 'glock-fade', name: 'Glock-18 | Fade', nameZh: 'Glock-18 · 渐变', kind: 'pistol', weight: 0.08 },
+    { id: 'deagle-blaze', name: 'Desert Eagle | Blaze', nameZh: '沙漠之鹰 · 烈焰', kind: 'pistol', weight: 0.08 },
+    { id: 'usp-killconfirmed', name: 'USP-S | Kill Confirmed', nameZh: 'USP-S · 确认击杀', kind: 'pistol', weight: 0.08 },
+    { id: 'fn57-casehardened', name: 'Five-SeveN | Case Hardened', nameZh: 'FN57 · 淬火', kind: 'pistol', weight: 0.08 },
+    { id: 'p250-seeyalater', name: 'P250 | See Ya Later', nameZh: 'P250 · 后会有期', kind: 'pistol', weight: 0.08 },
+    { id: 'tec9-fuel', name: 'Tec-9 | Fuel Injector', nameZh: 'Tec-9 · 燃油喷嘴', kind: 'pistol', weight: 0.08 },
+    { id: 'cz75-xiangliu', name: 'CZ75-Auto | Xiangliu', nameZh: 'CZ75 · 相柳', kind: 'pistol', weight: 0.08 },
+    { id: 'duals-melondrama', name: 'Dual Berettas | Melondrama', nameZh: '双持贝瑞塔 · 西瓜剧', kind: 'pistol', weight: 0.07 },
+    { id: 'glock-neonoir', name: 'Glock-18 | Neo-Noir', nameZh: 'Glock-18 · 新黑色', kind: 'pistol', weight: 0.07 },
+    { id: 'deagle-codered', name: 'Desert Eagle | Code Red', nameZh: '沙漠之鹰 · 红色代码', kind: 'pistol', weight: 0.07 },
+    { id: 'usp-orion', name: 'USP-S | Orion', nameZh: 'USP-S · 猎户座', kind: 'pistol', weight: 0.07 },
+    { id: 'fn57-monkey', name: 'Five-SeveN | Monkey Business', nameZh: 'FN57 · 猴戏', kind: 'pistol', weight: 0.06 },
+    { id: 'p250-undertow', name: 'P250 | Undertow', nameZh: 'P250 · 暗流', kind: 'pistol', weight: 0.04 },
+    { id: 'tec9-icecap', name: 'Tec-9 | Ice Cap', nameZh: 'Tec-9 · 冰盖', kind: 'pistol', weight: 0.03 },
+    { id: 'duals-twinturbo', name: 'Dual Berettas | Twin Turbo', nameZh: '双持贝瑞塔 · 双涡轮', kind: 'pistol', weight: 0.01 },
+  ],
 };
 
 /* ───────── Rolling ───────── */

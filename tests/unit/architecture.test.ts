@@ -114,15 +114,19 @@ describe('Gacha odds and pool', () => {
     }
   });
 
-  it('keeps the placeholder pool sizes at 蓝15/紫8/粉5/红3/金2', () => {
+  it('keeps the pool sizes at 蓝15/紫8/粉5/红3/金2 with the weapon families', () => {
     expect(GACHA_POOL.milspec).toHaveLength(15);
     expect(GACHA_POOL.restricted).toHaveLength(8);
     expect(GACHA_POOL.classified).toHaveLength(5);
     expect(GACHA_POOL.covert).toHaveLength(3);
     expect(GACHA_POOL.rarespecial).toHaveLength(2);
-    // Placeholder ids follow the tier prefix: rarespecial-1 = 金1.
-    expect(GACHA_POOL.rarespecial[0].id).toBe('rarespecial-1');
-    expect(GACHA_POOL.milspec[0].id).toBe('milspec-1');
+    // Weapon families per grade: gold = knife/gloves, red = snipers,
+    // pink = rifles, purple = SMGs, blue = pistols.
+    expect(new Set(GACHA_POOL.rarespecial.map((i) => i.kind))).toEqual(new Set(['knife', 'gloves']));
+    expect(GACHA_POOL.covert.every((i) => i.kind === 'sniper')).toBe(true);
+    expect(GACHA_POOL.classified.every((i) => i.kind === 'rifle')).toBe(true);
+    expect(GACHA_POOL.restricted.every((i) => i.kind === 'smg')).toBe(true);
+    expect(GACHA_POOL.milspec.every((i) => i.kind === 'pistol')).toBe(true);
   });
 
   it('rolls gold at the top of the odds interval and blue at the bottom', () => {
@@ -132,11 +136,11 @@ describe('Gacha odds and pool', () => {
     expect(blue.tier.id).toBe('milspec');
     // The same constant rng also picks the item: near-1 → last of the tier,
     // near-0 → first of the tier (uniform inside the tier, weight 1).
-    expect(gold.item.id).toBe('rarespecial-2');
-    expect(blue.item.id).toBe('milspec-1');
+    expect(gold.item.id).toBe('gloves-vice');
+    expect(blue.item.id).toBe('glock-fade');
   });
 
-  it('distributes items inside a tier uniformly by default', () => {
+  it('distributes items inside a tier by weight (gold 60/40)', () => {
     let first = 0;
     let last = 0;
     for (let step = 1; step <= 1000; step++) {
@@ -150,15 +154,16 @@ describe('Gacha odds and pool', () => {
       };
       const roll = rollGachaItem(twoPhase);
       expect(roll.tier.id).toBe('rarespecial');
-      if (roll.item.id === 'rarespecial-1') first++;
-      else if (roll.item.id === 'rarespecial-2') last++;
+      if (roll.item.id === 'karambit-fade') first++;
+      else if (roll.item.id === 'gloves-vice') last++;
     }
-    // Two items with equal weight: ~500/500.
-    expect(first).toBeGreaterThan(420);
-    expect(last).toBeGreaterThan(420);
-    expect(first).toBeLessThan(580);
-    expect(last).toBeLessThan(580);
+    // Weights 0.6/0.4 over the item interval: ~600/400.
+    expect(first).toBeGreaterThan(520);
+    expect(last).toBeGreaterThan(320);
+    expect(first).toBeLessThan(680);
+    expect(last).toBeLessThan(480);
   });
+
 });
 
 describe('extracted game rules', () => {
