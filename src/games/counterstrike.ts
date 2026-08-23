@@ -66,10 +66,11 @@ const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
 const MAX_DIST = 1500;
 const FOG_START = 430;
 const WALL_H = TILE; // 30
-const EYE = 24;
-const EYE_CROUCH = 16;
+const EYE = 56;       // CS eye height (~0.9 of a player's 72 units)
+const EYE_CROUCH = 38;
+const PITCH_MAX = 0.52; // vertical look limit (~30°)
 const PLAYER_RADIUS = 15;
-const SOLDIER_H = 56; // world height of a soldier sprite
+const SOLDIER_H = 66; // world height of a soldier sprite (≈72 map units)
 const BOT_VISION = 480;
 const MAX_HP = ROUND.maxHp;
 const MAX_ARMOR = ROUND.maxArmor;
@@ -235,6 +236,9 @@ interface FeedEntry {
   life: number;
 }
 
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
+
 const shuffle = <T,>(arr: T[]): T[] => {
   const out = [...arr];
   for (let i = out.length - 1; i > 0; i--) {
@@ -256,6 +260,9 @@ export class CounterStrikeGame extends BaseGame {
   private px = 0;
   private py = 0;
   private angle = 0;
+  private pitch = 0;
+  private shakeT = 0;
+  private shakeMag = 0;
 
   private phase: Phase = 'freeze';
   private phaseTimer = ROUND.freezeTime;
@@ -519,7 +526,7 @@ export class CounterStrikeGame extends BaseGame {
     const allPts = this.fighters
       .map((f) => `${f.x.toFixed(0)},${f.y.toFixed(0)}${f.alive ? '' : ',x'}`)
       .join(';');
-    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|CTW${this.ctWins},TW${this.tWins}|${this.px.toFixed(0)},${this.py.toFixed(0)},$${p.money},a${((this.angle * 180) / Math.PI).toFixed(0)}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}|${allPts}`;
+    const key = `${this.round},${this.phase},${p.kills},${alive},${this.gameOver ? 1 : 0}|CTW${this.ctWins},TW${this.tWins}|${this.px.toFixed(0)},${this.py.toFixed(0)},$${p.money},a${((this.angle * 180) / Math.PI).toFixed(0)},p${((this.pitch * 180) / Math.PI).toFixed(0)}|${t0.x.toFixed(0)},${t0.y.toFixed(0)}|${allPts}`;
     if (key !== this.hudStateCache) {
       this.hudStateCache = key;
       this.canvas.dataset.counterstrikeState = key;
@@ -929,10 +936,13 @@ export class CounterStrikeGame extends BaseGame {
         if (this.buyOpen) this.updateBuyHover(point.x, point.y);
         if (document.pointerLockElement === this.canvas) {
           this.angle += e.movementX * MOUSE_SENS;
+          this.pitch = clamp(this.pitch - e.movementY * MOUSE_SENS * 0.75, -PITCH_MAX, PITCH_MAX);
         } else if (this.lookDrag) {
           const dx = e.clientX - this.lookDrag.lastX;
+          const dy = e.clientY - this.lookDrag.lastY;
           this.angle += dx * MOUSE_SENS * 1.6;
-          this.lookDrag.moved += Math.abs(dx);
+          this.pitch = clamp(this.pitch - dy * MOUSE_SENS * 1.2, -PITCH_MAX, PITCH_MAX);
+          this.lookDrag.moved += Math.abs(dx) + Math.abs(dy);
           this.lookDrag.lastX = e.clientX;
           this.lookDrag.lastY = e.clientY;
         }
@@ -1032,6 +1042,7 @@ export class CounterStrikeGame extends BaseGame {
             }
           } else if (this.lookTouch && t.identifier === this.lookTouch.id) {
             this.angle += (point.x - this.lookTouch.lastX) * 0.008;
+            this.pitch = clamp(this.pitch - (point.y - this.lookTouch.lastY) * 0.005, -PITCH_MAX, PITCH_MAX);
             this.lookTouch.lastX = point.x;
             this.lookTouch.lastY = point.y;
           }
@@ -1305,8 +1316,12 @@ export class CounterStrikeGame extends BaseGame {
     }
     w.mag--;
     shooter.fireCd = w.def.interval;
-    shooter.recoil = Math.min(0.2, shooter.recoil + w.def.kick);
+    shooter.recoil = Math.min(0.26, shooter.recoil + w.def.kick);
     shooter.muzzle = 0.055;
+    if (shooter === this.player()) {
+      this.shakeT = 0.12;
+      this.shakeMag = 5 + shooter.recoil * 60;
+    }
 
     const moveMul = shooter.moving ? (shooter.walk ? 1.35 : 1.9) : 1;
     const crouchMul = shooter.crouch ? 0.55 : 1;
@@ -1335,16 +1350,16 @@ export class CounterStrikeGame extends BaseGame {
 
       if (best) {
         this.tracers.push({
-          x1: shooter.x + dirX * 12, y1: shooter.y + dirY * 12, z1: 8,
-          x2: best.x, y2: best.y, z2: 8,
+          x1: shooter.x + dirX * 14, y1: shooter.y + dirY * 14, z1: EYE - 8,
+          x2: best.x, y2: best.y, z2: EYE - 8,
           life: 0.07, maxLife: 0.07, color: '#ffe9a8',
         });
         const zone = rollHitZone(shooter.moving, shooter.crouch);
         this.damageFighter(best, shooter, w.def, zone, bestT);
       } else {
         this.tracers.push({
-          x1: shooter.x + dirX * 12, y1: shooter.y + dirY * 12, z1: 8,
-          x2: shooter.x + dirX * (wallHit.dist - 2), y2: shooter.y + dirY * (wallHit.dist - 2), z2: 8,
+          x1: shooter.x + dirX * 14, y1: shooter.y + dirY * 14, z1: EYE - 8,
+          x2: shooter.x + dirX * (wallHit.dist - 2), y2: shooter.y + dirY * (wallHit.dist - 2), z2: EYE - 8,
           life: 0.07, maxLife: 0.07, color: '#ffe9a8',
         });
         this.spawnImpact(shooter.x + dirX * (wallHit.dist - 2), shooter.y + dirY * (wallHit.dist - 2));
@@ -1656,6 +1671,7 @@ export class CounterStrikeGame extends BaseGame {
     p.flashT = Math.max(0, p.flashT - dt);
     this.damageFlash = Math.max(0, this.damageFlash - dt * 0.9);
     this.hitmarker = Math.max(0, this.hitmarker - dt);
+    this.shakeT = Math.max(0, this.shakeT - dt);
 
     if (!p.alive) return;
 
@@ -2096,7 +2112,12 @@ export class CounterStrikeGame extends BaseGame {
     const tx = invDet * (dirY * dx - dirX * dy);
     const ty = invDet * (-planeY * dx + planeX * dy);
     if (ty <= 0.05) return null;
-    return { x: (this.rw / 2) * (1 + tx / ty), y: this.rh / 2 - ((h - this.eye()) * this.rh) / ty, depth: ty };
+    const shift = Math.sin(this.pitch) * this.rh * 0.9;
+    return {
+      x: (this.rw / 2) * (1 + tx / ty),
+      y: this.rh / 2 - ((h - this.eye()) * this.rh) / ty + shift,
+      depth: ty,
+    };
   }
 
   // ── Drawing ────────────────────────────────────────────────────────────────
@@ -2136,7 +2157,14 @@ export class CounterStrikeGame extends BaseGame {
     this.drawWorld(rctx);
 
     ctx.imageSmoothingEnabled = !pixel;
-    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, 0, 0, W, H);
+    let shakeX = 0;
+    let shakeY = 0;
+    if (this.shakeT > 0) {
+      const k = this.shakeT / 0.12;
+      shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+      shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
+    }
+    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, shakeX, shakeY, W, H);
 
     this.drawProjectedFx(ctx);
     this.drawViewmodel(ctx);
@@ -2191,6 +2219,7 @@ export class CounterStrikeGame extends BaseGame {
     const dirY = Math.sin(this.angle);
     const planeX = -dirY * HALF_FOV_TAN;
     const planeY = dirX * HALF_FOV_TAN;
+    const shift = Math.sin(this.pitch) * rh * 0.9;
 
     for (let col = 0; col < rw; col++) {
       const camX = (2 * col) / rw - 1;
@@ -2200,8 +2229,8 @@ export class CounterStrikeGame extends BaseGame {
       this.zBuffer[col] = hit.dist;
 
       const lineHeight = (rh * WALL_H) / Math.max(hit.dist, 1e-4);
-      const wallTop = rh / 2 - lineHeight / 2;
-      const wallBot = rh / 2 + lineHeight / 2;
+      const wallTop = rh / 2 - lineHeight / 2 + shift;
+      const wallBot = rh / 2 + lineHeight / 2 + shift;
       const fog = Math.max(0, Math.min(1, (hit.dist - FOG_START) / (MAX_DIST - FOG_START)));
 
       // Ice floor.
@@ -2412,10 +2441,12 @@ export class CounterStrikeGame extends BaseGame {
     const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 6 : 0;
     const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
     ctx.save();
-    ctx.translate(W / 2 + 150 + swayX, H - 150);
-    ctx.scale(1.25, 1.25);
-    ctx.rotate(-0.32 - p.recoil * 0.9 + reloadDip);
-    ctx.translate(0, -bobY);
+    // Anchored bottom-right, mirrored so the barrel aims up-left at the
+    // crosshair. Recoil kicks the muzzle up and pulls the gun back.
+    ctx.translate(W - 190 + swayX, H - 56);
+    ctx.scale(-1.25, 1.25);
+    ctx.rotate(-0.34 - p.recoil * 1.7 + reloadDip);
+    ctx.translate(-p.recoil * 120, -bobY);
 
     const sound = w.def.sound;
     const body = sound === 'sniper' ? '#263746' : sound === 'shotgun' ? '#3d352a' : '#2b3038';
@@ -2461,14 +2492,14 @@ export class CounterStrikeGame extends BaseGame {
       ctx.fillStyle = dark;
       ctx.fillRect(-40, -28, 16, 36);
       if (p.muzzle > 0) {
-        const size = 14 + p.muzzle * 300;
+        const size = 28 + p.muzzle * 460;
         ctx.fillStyle = 'rgba(255,224,130,0.95)';
         ctx.beginPath();
-        ctx.arc(barrel + 40, -9, size, 0, Math.PI * 2);
+        ctx.arc(barrel + 42, -9, size, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = 'rgba(255,246,214,0.95)';
         ctx.beginPath();
-        ctx.arc(barrel + 40, -9, size * 0.45, 0, Math.PI * 2);
+        ctx.arc(barrel + 42, -9, size * 0.45, 0, Math.PI * 2);
         ctx.fill();
       }
     }
