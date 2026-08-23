@@ -111,3 +111,17 @@ export function renderParkingSteeringHTML(state: LevelSelectState, zh: boolean):
 export function renderMenuHint(zh: boolean): string {
   return `<div class="ds-hint">${zh ? '点击关卡开始' : 'Click a level to start'}</div>`;
 }
+
+/**
+ * Compact in-play level summary: current level + clear progress. Replaces
+ * the full grid while a run is active so the panel stays signal-only.
+ */
+export function renderLevelStripHTML(state: LevelSelectState, zh: boolean): string {
+  const cleared = Math.min(Math.max(state.bestLevel, 0), state.totalLevels);
+  const pct = Math.round((cleared / Math.max(1, state.totalLevels)) * 100);
+  return `<div class="level-strip">
+    <span class="ls-current">${zh ? '第' : 'L'}${state.currentLevel + 1}<span class="ls-total">/${state.totalLevels}${zh ? '关' : ''}</span></span>
+    <span class="ls-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span class="ls-progress-fill" style="width:${pct}%"></span></span>
+    <span class="ls-cleared">${cleared} ✓</span>
+  </div>`;
+}

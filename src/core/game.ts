@@ -4,6 +4,7 @@ import {
   getRetroPalette,
   getCanvasPoint,
   isPixelMode,
+  setCanvasDisplaySize,
   type CanvasPoint,
   type GameResultOverlayOptions,
 } from './render.js';
@@ -29,6 +30,8 @@ export interface Game {
   restart(): void;
   stop(): void;
   renderFrame(): void;
+  /** Re-fit the canvas to a shell-chosen CSS width (backing store stays sharp). */
+  setDisplayScale?(cssWidth: number): void;
   getShellSnapshot(): GameShellSnapshot;
   getFrameTelemetry(): GameFrameTelemetry | null;
   startDemo?(): void;
@@ -240,6 +243,23 @@ export abstract class BaseGame implements Game {
     this.ctx.save();
     this.draw(this.ctx);
     this.ctx.restore();
+  }
+
+  /**
+   * Shell-driven display fit: the canvas is shown at `cssWidth` CSS pixels
+   * wide while the backing store is re-sized to stay sharp. Logical
+   * coordinates and input mapping are unaffected.
+   */
+  setDisplayScale(cssWidth: number) {
+    if (!Number.isFinite(cssWidth) || cssWidth <= 0) return;
+    const next = setCanvasDisplaySize(this.canvas, this.ctx, this.width, this.height, cssWidth);
+    if (Math.abs(next - this.pixelRatio) > 0.001) {
+      this.pixelRatio = next;
+      this.renderFrame();
+    } else {
+      // Scale unchanged but the CSS size may still have been refreshed.
+      this.pixelRatio = next;
+    }
   }
 
   protected drawResultOverlay(

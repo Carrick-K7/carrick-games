@@ -24,6 +24,7 @@ import { initializeSidebar } from './app/sidebar.js';
 
 import {
   renderLevelGridHTML,
+  renderLevelStripHTML,
   renderDrivingStateHTML,
   renderMenuHint,
   renderParkingSteeringHTML,
@@ -187,14 +188,40 @@ function renderStats() {
   }
   html += `</div>`;
 
-  // Level grid
-  if (ls) {
-    html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVELS'}</div>`;
-    html += renderLevelGridHTML(ls, ls.selectedLevel, zh);
-    html += `</div>`;
+  // Controls legend — the catalog already carries per-game key/action text;
+  // surface it so players never have to guess.
+  const kb = meta.controls.keyboard ?? [];
+  const touch = meta.controls.touch ?? [];
+  if (kb.length || touch.length) {
+    html += `<div class="stats-section"><div class="stats-section-title">${zh ? '操作' : 'CONTROLS'}</div>`;
+    html += '<div class="controls-legend">';
+    for (const entry of kb) {
+      const caps = entry.keys.map((k) => `<kbd class="keycap">${k}</kbd>`).join('');
+      html += `<div class="cl-row"><span class="cl-keys">${caps}</span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
+    }
+    for (const entry of touch) {
+      html += `<div class="cl-row"><span class="cl-keys"><kbd class="keycap keycap-touch">${zh ? '触屏' : 'Touch'}</kbd></span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
+    }
+    html += '</div></div>';
+  }
 
-    if (ls.gameState === 'menu') {
-      html += renderMenuHint(zh);
+  // Level select: full grid whenever the player is not actively driving
+  // (menu, crash, level complete, demo complete all allow picking a level);
+  // collapse to a compact strip + driving instruments mid-run only.
+  if (ls) {
+    const driving = ls.gameState === 'playing' || ls.gameState === 'demo';
+    if (!driving) {
+      html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVELS'}</div>`;
+      html += renderLevelGridHTML(ls, ls.selectedLevel, zh);
+      html += `</div>`;
+      if (ls.gameState === 'menu') {
+        html += renderMenuHint(zh);
+      }
+    } else {
+      html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVEL'}</div>`;
+      html += renderLevelStripHTML(ls, zh);
+      html += renderDrivingStateHTML(ls, zh);
+      html += `</div>`;
     }
   }
 
@@ -282,7 +309,15 @@ function setStartOverlay(active: boolean) {
   const titleEl = el.querySelector('.start-overlay-title') as HTMLElement | null;
   const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-  if (hintEl) hintEl.textContent = zh ? '点击「开始游戏」按钮开始' : 'Click Start Game to begin';
+  if (hintEl) {
+    const base = zh ? '点击「开始游戏」按钮开始' : 'Click Start Game to begin';
+    // Surface the two most important key mappings so nobody starts blind.
+    const core = (meta?.controls.keyboard ?? [])
+      .slice(0, 2)
+      .map((entry) => `${entry.keys.join('/')} ${zh ? entry.actionZh : entry.action}`)
+      .join(' · ');
+    hintEl.textContent = core ? `${base} — ${core}` : base;
+  }
 }
 
 function readGameScore(): number | null {
@@ -336,8 +371,7 @@ function renderKeyboard() {
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const ls = getLevelSelectState();
   const steeringPanel = ls ? renderParkingSteeringHTML(ls, zh) : '';
-  const drivingPanel = (ls && ls.gameState !== 'menu') ? renderDrivingStateHTML(ls, zh) : '';
-  container.innerHTML = steeringPanel + drivingPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+  container.innerHTML = steeringPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
   bindVirtualKeyboard();
 }
 
@@ -515,6 +549,8 @@ export async function prepareGame(name: string) {
   renderControls();
   updateFullscreenToggle(meta);
   setStartOverlay(true);
+  lastFittedCanvasWidth = 0;
+  requestAnimationFrame(fitGameCanvas);
 }
 
 /** Some games opt out of the shell fullscreen control (e.g. kiosk-style UX). */
@@ -523,6 +559,33 @@ function updateFullscreenToggle(meta: GameMeta) {
   if (!btn) return;
   // Inline style: .icon-btn's display:flex would otherwise override [hidden].
   btn.style.display = meta.fullscreen === false ? 'none' : '';
+}
+
+/**
+ * Fit the game canvas to the available stage space. Width comes from the
+ * layout column; height is capped so canvas + action bar stay inside the
+ * first viewport on common laptops. The backing store is re-sized by
+ * `setDisplayScale`, so the upscaled picture stays sharp.
+ */
+let lastFittedCanvasWidth = 0;
+
+function fitGameCanvas() {
+  const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
+  const wrapper = document.getElementById('canvasWrapper');
+  if (!canvas || !wrapper || !currentGameInstance) return;
+  if (wrapper.classList.contains('fullscreen')) return;
+  const meta = GAMES.find((g) => g.id === currentGameName);
+  if (!meta) return;
+  const { width: lw, height: lh } = meta.canvasSize;
+  const aspect = lh / lw;
+  const colW = wrapper.clientWidth;
+  if (colW <= 0) return;
+  const top = wrapper.getBoundingClientRect().top;
+  const availH = window.innerHeight - top - 14 - 62 - 12; // stage gap + action bar + margin
+  const cssW = Math.round(Math.max(280, Math.min(colW, availH / aspect, lw * 2.5)));
+  if (cssW === lastFittedCanvasWidth) return;
+  lastFittedCanvasWidth = cssW;
+  currentGameInstance.setDisplayScale?.(cssW);
 }
 
 function startPreparedGame() {
@@ -765,11 +828,37 @@ function toggleFullscreen() {
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
   }
+  if (!isFullscreen) {
+    lastFittedCanvasWidth = 0;
+    requestAnimationFrame(fitGameCanvas);
+  }
 }
+
+// Refit the canvas whenever the stage column changes size (window resize,
+// sidebar collapse, breakpoint switches). Debounced via rAF.
+let fitCanvasScheduled = false;
+const canvasFitObserver = new ResizeObserver(() => {
+  if (fitCanvasScheduled) return;
+  fitCanvasScheduled = true;
+  requestAnimationFrame(() => {
+    fitCanvasScheduled = false;
+    fitGameCanvas();
+  });
+});
 
 // Init UI
 (function init() {
   const sidebar = initializeSidebar();
+  const canvasWrapperEl = document.getElementById('canvasWrapper');
+  if (canvasWrapperEl) canvasFitObserver.observe(canvasWrapperEl);
+  window.addEventListener('resize', () => {
+    if (fitCanvasScheduled) return;
+    fitCanvasScheduled = true;
+    requestAnimationFrame(() => {
+      fitCanvasScheduled = false;
+      fitGameCanvas();
+    });
+  });
   document.querySelectorAll<HTMLElement>('.lang-btn').forEach((button) => {
     button.addEventListener('click', () => setLang(button.dataset.lang === 'en' ? 'en' : 'zh'));
   });

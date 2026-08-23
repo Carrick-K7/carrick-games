@@ -654,9 +654,9 @@ export class CounterStrikeScene3D {
     return this.renderer ? this.renderer.domElement : null;
   }
 
-  resize(w: number, h: number): void {
+  resize(w: number, h: number, backingRatio?: number): void {
     if (!this.renderer) return;
-    const ratio = this.lowSpec ? 0.75 : getCanvasPixelRatio();
+    const ratio = this.lowSpec ? 0.75 : (backingRatio ?? getCanvasPixelRatio());
     if (w === this.lastW && h === this.lastH && ratio === this.lastRatio) return;
     this.lastW = w;
     this.lastH = h;

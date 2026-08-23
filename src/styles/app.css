@@ -765,10 +765,10 @@
     /* ---------- Game layout with side panels ---------- */
     .game-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
       grid-template-areas:
         "game stats"
-        "keyboard keyboard";
+        "keyboard stats";
       align-items: start;
       gap: 20px;
       width: 100%;
@@ -1151,6 +1151,95 @@
       padding: 6px 0;
     }
 
+    /* ---------- Controls legend (stats panel) ---------- */
+    .controls-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .cl-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.74rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .cl-keys {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      flex: 0 0 auto;
+      min-width: 86px;
+    }
+    .keycap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      font-family: inherit;
+      font-size: 0.64rem;
+      font-weight: 700;
+      color: var(--text);
+      background: var(--key-bg);
+      border: var(--bw) solid var(--key-border);
+      border-radius: var(--radius-s);
+      box-shadow: var(--key-shadow);
+    }
+    .keycap-touch {
+      min-width: 40px;
+      color: var(--accent);
+    }
+    .cl-action {
+      min-width: 0;
+    }
+
+    /* ---------- Compact level strip (in-play) ---------- */
+    .level-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--elevated);
+      border: var(--bw) solid var(--border);
+      border-radius: var(--radius-m);
+    }
+    .ls-current {
+      font-weight: 800;
+      font-size: 0.92rem;
+      color: var(--text);
+      font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .ls-total {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.74rem;
+    }
+    .ls-progress {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--inset);
+      overflow: hidden;
+    }
+    .ls-progress-fill {
+      display: block;
+      height: 100%;
+      border-radius: 3px;
+      background: var(--accent);
+      transition: width .3s var(--ease-out);
+    }
+    .ls-cleared {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
     /* ---------- Side panel keyboard sizing ---------- */
     .keyboard-panel .vkeyboard {
       --vk-unit: 38px;
@@ -1258,11 +1347,11 @@
     }
 
     @media (min-width: 1721px) {
+      /* Wide desktops: keep the same two-column rhythm, just give the game
+         column room to show large canvases (e.g. 1280-wide Counter-Strike)
+         at full logical size. */
       .game-layout {
-        grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) minmax(340px, 560px);
-        grid-template-areas: "stats game keyboard";
-        align-items: center;
-        max-width: 1600px;
+        max-width: 1680px;
       }
     }
 
@@ -1801,6 +1890,62 @@
       font-size: 0.48rem;
     }
 
+    /* Derived compact panel: only the keys the active game uses */
+    .vkeyboard-keys {
+      padding: 12px;
+      overflow-x: visible;
+    }
+    .vkeyboard-keys .vkeyboard-row {
+      flex-wrap: wrap;
+      min-width: 0;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .vkeyboard-keys .vkey {
+      flex: 0 0 auto;
+      min-width: 40px;
+      height: 40px;
+      padding: 0 10px;
+      font-size: 0.72rem;
+      border-radius: var(--radius-s);
+    }
+    .vkeyboard-row.vk-wrap {
+      flex-wrap: wrap;
+      min-width: 0;
+      justify-content: center;
+    }
+    .vkeyboard-row.vk-wrap .vkey {
+      flex: 0 0 auto;
+    }
+    .vk-arrows {
+      display: inline-grid;
+      grid-template-areas:
+        ". up ."
+        "left down right";
+      gap: 4px;
+      margin-right: 4px;
+    }
+    .vk-arrows .vkey.vk-arrow {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      padding: 0;
+      font-size: 0.85rem;
+    }
+    .vk-arrow-spacer {
+      width: 40px;
+      height: 40px;
+    }
+
+    /* Touch devices: the key panel is meaningless there; games bring their
+       own on-canvas touch controls. */
+    @media (pointer: coarse) {
+      .game-sidebar.keyboard-panel {
+        display: none;
+      }
+    }
+
     .vkey.simon-red {
       border-color: rgba(251,113,133,0.6);
       color: #ffe4e6;
@@ -2102,5 +2247,43 @@
         animation-iteration-count: 1 !important;
         transition-duration: .01ms !important;
         scroll-behavior: auto !important;
+      }
+    }
+
+    /* ---------- Narrow phones: one-row compact topbar ---------- */
+    @media (max-width: 480px) {
+      .topbar {
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .topbar-context {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .topbar-context .library-eyebrow {
+        display: none;
+      }
+      .topbar-context .selected-game-label {
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+      }
+      .topbar-settings {
+        flex-wrap: nowrap;
+        gap: 6px;
+      }
+      .topbar-settings .style-switch,
+      .topbar-settings .lang-switch,
+      .topbar-settings .theme-switch {
+        padding: 2px;
+        gap: 2px;
+      }
+      .topbar-settings button {
+        min-width: 26px;
+        height: 26px;
+        font-size: 0.66rem;
       }
     }

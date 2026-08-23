@@ -2215,7 +2215,7 @@ export class CounterStrikeGame extends BaseGame {
   private drawWorld3D(ctx: CanvasRenderingContext2D) {
     const scene = this.scene3d;
     if (!scene) return;
-    scene.resize(W, H);
+    scene.resize(W, H, this.canvas.width / W);
     const p = this.player();
     scene.sync({
       camX: this.px,

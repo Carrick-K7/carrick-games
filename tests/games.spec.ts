@@ -943,11 +943,14 @@ test.describe('Carrick Games - Lifecycle', () => {
 
       expect(metrics.logicalWidth).toBe(400);
       expect(metrics.logicalHeight).toBe(400);
-      expect(metrics.pixelRatio).toBe(2);
-      expect(metrics.width).toBe(800);
-      expect(metrics.height).toBe(800);
-      expect(metrics.boxWidth).toBe(400);
-      expect(metrics.boxHeight).toBe(400);
+      // The shell upscales the canvas to fit the stage; the backing store
+      // follows display size × devicePixelRatio. Logical size never changes.
+      expect(metrics.pixelRatio).toBeGreaterThanOrEqual(2);
+      expect(metrics.width).toBe(Math.round(metrics.logicalWidth * metrics.pixelRatio));
+      expect(metrics.height).toBe(Math.round(metrics.logicalHeight * metrics.pixelRatio));
+      expect(metrics.boxWidth).toBeGreaterThan(400);
+      expect(Math.abs(metrics.width / 2 - metrics.boxWidth)).toBeLessThanOrEqual(2);
+      expect(Math.abs(metrics.height / 2 - metrics.boxHeight)).toBeLessThanOrEqual(2);
       expect(metrics.parkingState).toBe('');
     } finally {
       await context.close();

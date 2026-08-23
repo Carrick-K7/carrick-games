@@ -67,6 +67,31 @@ export function configureHiDpiCanvas(
   return pixelRatio;
 }
 
+/**
+ * Fit the canvas to a CSS display width chosen by the shell layout. The
+ * logical coordinate system never changes; the backing store is re-sized to
+ * `cssWidth * devicePixelRatio` so the upscaled picture stays sharp.
+ * Returns the effective logical-to-backing scale.
+ */
+export function setCanvasDisplaySize(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  logicalWidth: number,
+  logicalHeight: number,
+  cssWidth: number
+): number {
+  const displayScale = Math.max(0.2, cssWidth / logicalWidth);
+  const backingScale = Math.min(displayScale * getCanvasPixelRatio(), 6);
+  canvas.dataset.pixelRatio = String(backingScale);
+  canvas.width = Math.round(logicalWidth * backingScale);
+  canvas.height = Math.round(logicalHeight * backingScale);
+  canvas.style.width = `${Math.round(cssWidth)}px`;
+  canvas.style.height = `${Math.round((cssWidth * logicalHeight) / logicalWidth)}px`;
+  ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  return backingScale;
+}
+
 export function getLogicalCanvasSize(canvas: HTMLCanvasElement): { width: number; height: number } {
   const pixelRatio = Number(canvas.dataset.pixelRatio) || 1;
   const width = Number(canvas.dataset.logicalWidth) || canvas.width / pixelRatio;

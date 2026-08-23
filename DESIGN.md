@@ -68,6 +68,34 @@ The shell UI is an application surface, not a marketing landing page.
 - Do not let sidebars, keyboard panels, or overlays intercept unrelated clicks.
 - Text must fit in buttons, cards, sidebars, and canvas overlays at mobile and desktop sizes.
 
+## Shell Layout & Canvas Fit
+
+The canvas is the product. Layout exists to give it room.
+
+- **Canvas fitting**: the shell sizes `#gameCanvas` to the game column width,
+  capped so canvas + action bar stay inside the first viewport
+  (`fitGameCanvas()` in `src/main.ts`, `setCanvasDisplaySize()` in
+  `src/core/render.ts`). Display scaling never changes logical coordinates;
+  the backing store is re-sized to `cssWidth × devicePixelRatio` so upscaled
+  games stay sharp. Never clamp a large canvas below its logical width just
+  to fit a side panel — shrink the panel instead.
+- **Layout rhythm**: desktop keeps a fixed two-column rhythm — game column
+  (canvas + action bar + keyboard panel) beside a single stats sidebar
+  (info, controls legend, level state). No third column at any breakpoint;
+  wide screens widen the game column instead. Below 960px everything stacks:
+  canvas, stats, keyboard.
+- **Keyboard panel**: show only the keys the active game actually uses
+  (arrow cluster + chips via `renderVirtualKeyboard()`); wrap, never
+  scroll horizontally. Hide the whole panel on `pointer: coarse` — touch
+  games bring their own on-canvas controls.
+- **Controls legend**: the stats sidebar always renders the catalog's
+  per-game key→action list (keycaps + labels) and touch hints; the start
+  overlay adds the one or two most important mappings. Players should never
+  have to guess a key.
+- **Contextual side panels**: panels show what the current game state needs.
+  Example: parking shows the full level grid in menu state, but collapses
+  to a compact progress strip plus driving instruments mid-run.
+
 The game library uses four visible primary category filters plus grouped game
 sections. Category filters show counts, the selected category is explicit, and
 the current game's family remains visible in the top bar. On mobile, choosing a
@@ -108,6 +136,12 @@ one-off drawing code; it is how the game canvases stay stylistically unified.
   modern mode only. Shared chrome (result overlays) still branches on
   `isPixelMode()`, and games with a legacy renderer (e.g. the Counter-Strike
   raycaster) keep it as the pixel-mode path.
+- **Canvas text**: size text for the logical canvas, not the screen —
+  ≥ 11px on canvases ≤ 480 logical px wide, ≥ 13px on ≥ 960-wide ones
+  (HUD labels may be 1–2px smaller than values). The shell upscales small
+  canvases on desktop, so logical sizes scale up proportionally. HUD labels
+  use the active UI language; proper nouns (weapon names, map names) may
+  stay in English. One line of in-canvas hint at a time.
 
 ## Palette
 
