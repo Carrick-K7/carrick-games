@@ -674,7 +674,8 @@ export class CounterStrikeScene3D {
     const bob = state.moving ? Math.sin(state.walkPhase * Math.PI * 2) * 1.3 : 0;
     this.camera.position.set(state.camX, state.eye + bob, state.camY);
     this.camera.rotation.y = -state.camAngle - Math.PI / 2;
-    this.camera.rotation.x = -state.pitch;
+    // Game pitch > 0 means "look up"; three's rotation.x > 0 pitches up too.
+    this.camera.rotation.x = state.pitch;
 
     // Soldiers
     const seen = new Set<number>();
