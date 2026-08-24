@@ -806,6 +806,38 @@
       scrollbar-color: var(--border-strong) transparent;
     }
 
+    /* Flat sidebar: one panel, hairline-separated sections — no cards
+       nested inside the sidebar card. */
+    .game-sidebar .game-info-card,
+    .game-sidebar .level-strip,
+    .game-sidebar .parking-steering {
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .game-sidebar .game-info-card {
+      border-bottom: var(--bw) solid var(--border);
+      padding-bottom: 12px;
+    }
+    .game-sidebar .stats-section {
+      padding: 10px 0;
+      border-bottom: var(--bw) solid var(--border);
+    }
+    .game-sidebar .stats-section:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .game-sidebar .level-strip {
+      padding: 2px 0;
+    }
+    .game-sidebar .driving-state {
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+
     .game-sidebar.keyboard-panel {
       grid-area: keyboard;
       width: 100%;

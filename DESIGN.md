@@ -84,14 +84,17 @@ The canvas is the product. Layout exists to give it room.
   (info, controls legend, level state). No third column at any breakpoint;
   wide screens widen the game column instead. Below 960px everything stacks:
   canvas, stats, keyboard.
-- **Keyboard panel**: show only the keys the active game actually uses
-  (arrow cluster + chips via `renderVirtualKeyboard()`); wrap, never
-  scroll horizontally. Hide the whole panel on `pointer: coarse` — touch
-  games bring their own on-canvas controls.
+- **Keyboard panel**: the full ANSI 60% layout with the active game's keys
+  enabled (games with `controls.keyboardPanel` keep their compact chip row);
+  wrap, never scroll horizontally. Hide the whole panel on
+  `pointer: coarse` — touch games bring their own on-canvas controls.
 - **Controls legend**: the stats sidebar always renders the catalog's
   per-game key→action list (keycaps + labels) and touch hints; the start
   overlay adds the one or two most important mappings. Players should never
   have to guess a key.
+- **Flat panels**: the sidebar is one panel — do not nest cards inside it.
+  Sections inside `.game-sidebar` separate with hairline dividers, not
+  boxed/elevated backgrounds.
 - **Contextual side panels**: panels show what the current game state needs.
   Example: parking shows the full level grid in menu state, but collapses
   to a compact progress strip plus driving instruments mid-run.

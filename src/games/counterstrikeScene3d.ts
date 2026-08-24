@@ -43,6 +43,7 @@ export interface Scene3DFighter {
   crouch: boolean;
   hitFlash: number;
   helmet: boolean;
+  recoil: number;
 }
 
 export interface Scene3DGroundItem {
@@ -111,23 +112,22 @@ const SKY_HORIZON = '#e9f2fa';
 const FOG_COLOR = '#dfeaf5';
 
 const SOLDIER_COLORS = {
+  // CS 1.6 flavor — CT: navy fatigues + helmet; T: olive jacket + balaclava.
   CT: {
-    jacket: ['#2e4d78', '#27436a'],
-    jacketDark: ['#213a5c', '#1c3250'],
-    pants: '#2c425e',
-    boots: '#202933',
-    headgear: '#23405f',
+    jacket: ['#2b4364', '#263b58'],
+    jacketDark: ['#1f3049', '#1b2a40'],
+    pants: '#25344a',
+    boots: '#1c222b',
+    headgear: '#22344c',
     skin: '#e8b98a',
-    accent: '#39C5BB',
   },
   T: {
-    jacket: ['#7a5a44', '#6b4e3b'],
-    jacketDark: ['#5c4433', '#4f3a2c'],
-    pants: '#4c4434',
-    boots: '#2e2a22',
-    headgear: '#41392c',
+    jacket: ['#5a5e42', '#50543a'],
+    jacketDark: ['#464a33', '#3e422d'],
+    pants: '#3a3c33',
+    boots: '#2a2620',
+    headgear: '#26241f',
     skin: '#dfb08a',
-    accent: '#e07f3e',
   },
 } as const;
 
@@ -235,6 +235,7 @@ class SoldierModel {
   private readonly legL: THREE.Group;
   private readonly legR: THREE.Group;
   private readonly armR: THREE.Group;
+  private readonly gun: THREE.Group;
   private readonly muzzleSprite: THREE.Sprite;
   private readonly muzzleLight: THREE.PointLight;
   private readonly mats: THREE.MeshStandardMaterial[] = [];
@@ -253,10 +254,10 @@ class SoldierModel {
     const boots = mat(colors.boots);
     const skin = mat(colors.skin);
     const headgear = mat(colors.headgear);
-    const accent = mat(colors.accent);
-    const gunMat = mat('#242a33');
-    gunMat.metalness = 0.45;
-    gunMat.roughness = 0.5;
+    const vest = mat(team === 'CT' ? '#1d2634' : '#38342a');
+    const gunMat = mat('#22262d');
+    gunMat.metalness = 0.5;
+    gunMat.roughness = 0.45;
 
     const box = (
       w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number,
@@ -267,39 +268,59 @@ class SoldierModel {
       return mesh;
     };
 
-    // Facing +X. Legs pivot at the hip for the walk swing.
+    // CS 1.6-flavored proportions, facing +X: total height ~70 (eye 56),
+    // legs ~34 (49%), torso 22, head 10 — slimmer than the old blocky build.
     this.legL = new THREE.Group();
-    this.legL.position.set(0, 30, -7);
-    this.legL.add(box(9, 26, 8, pants, 0, -13, 0));
-    this.legL.add(box(10, 6, 9, boots, 1.5, -27, 0));
+    this.legL.position.set(0, 34, -5.5);
+    this.legL.add(box(8, 30, 8, pants, 0, -15, 0));
+    this.legL.add(box(10, 5, 9, boots, 1.5, -31.5, 0));
     this.legR = new THREE.Group();
-    this.legR.position.set(0, 30, 7);
-    this.legR.add(box(9, 26, 8, pants, 0, -13, 0));
-    this.legR.add(box(10, 6, 9, boots, 1.5, -27, 0));
+    this.legR.position.set(0, 34, 5.5);
+    this.legR.add(box(8, 30, 8, pants, 0, -15, 0));
+    this.legR.add(box(10, 5, 9, boots, 1.5, -31.5, 0));
 
     const torso = new THREE.Group();
-    torso.add(box(14, 24, 22, jacket, 0, 42, 0));
-    torso.add(box(4, 20, 23, jacketDark, 5.5, 42, 0)); // vest front
-    torso.add(box(15, 4, 16, accent, 0.5, 50, 0)); // team stripe
-    // Static left arm; right arm aims the rifle and pivots for recoil.
-    torso.add(box(7, 20, 7, jacket, 0, 40, -14.5));
-    this.armR = new THREE.Group();
-    this.armR.position.set(4, 48, 12);
-    this.armR.add(box(16, 6, 6, jacket, 5, -2, 0));
-    this.armR.add(box(30, 5, 5, gunMat, 22, 0, 0));
-    this.armR.add(box(7, 9, 4, gunMat, 14, -5, 0)); // grip/mag
-    torso.add(this.armR);
+    torso.add(box(15, 22, 19, jacket, 0, 45, 0));            // torso 34..56
+    torso.add(box(4, 15, 15, vest, 6.6, 45, 0));             // chest rig
+    torso.add(box(3, 13, 14, vest, -6.9, 45, 0));            // back plate
+    torso.add(box(15.5, 3.5, 19.5, jacketDark, 0, 35.5, 0)); // belt line
 
+    // Head — CT: navy helmet with brim and goggle band; T: balaclava with a
+    // skin eye slit. This is the silhouette that reads "CS 1.6".
     const head = new THREE.Group();
-    head.add(box(11, 11, 11, skin, 0, 60, 0));
+    head.add(box(10, 10, 10, skin, 0, 62, 0));
     if (team === 'CT') {
-      head.add(box(12.5, 6, 12.5, headgear, 0, 65, 0)); // helmet
-      head.add(box(13.5, 2.5, 13.5, headgear, 0, 61.5, 0));
+      head.add(box(11.6, 5.4, 11.6, headgear, 0, 67.2, 0));       // helmet dome
+      head.add(box(12.6, 2.2, 12.6, headgear, 0, 64.6, 0));       // helmet brim
+      head.add(box(1.4, 2.6, 8.4, mat('#12181f'), 5.2, 63.2, 0)); // goggles
     } else {
-      head.add(box(11.5, 5, 11.5, headgear, 0, 64.5, 0)); // beanie
-      head.add(box(11.5, 4, 11.5, headgear, 0, 57.5, 0)); // balaclava band
+      head.add(box(10.8, 10.6, 10.8, headgear, 0, 62.4, 0));      // balaclava wrap
+      head.add(box(1.4, 2.4, 7.2, skin, 5.3, 64, 0));             // eye slit
     }
     torso.add(head);
+
+    // Rifle held at chest height on the near-centerline; it kicks back with
+    // recoil. Tip at local (33, 51, 2) is where the muzzle flash anchors.
+    this.gun = new THREE.Group();
+    this.gun.position.set(0, 51, 0);
+    this.gun.add(box(27, 4.5, 4.5, gunMat, 18, 0, 2));  // barrel + receiver
+    this.gun.add(box(5, 8, 4, gunMat, 8, -4.5, 2));     // magazine
+    this.gun.add(box(6, 6, 5, jacketDark, 2, 0.5, 2));  // stock
+    torso.add(this.gun);
+
+    // Both hands on the rifle: right to the grip, left to the forend.
+    this.armR = new THREE.Group();
+    this.armR.position.set(0, 51, 11);
+    this.armR.rotation.y = 0.42;
+    this.armR.add(box(14, 6, 6, jacket, 6, 0, 0));
+    torso.add(this.armR);
+
+    const armL = new THREE.Group();
+    armL.position.set(0, 51, -11);
+    armL.rotation.y = -0.62;
+    armL.add(box(16, 6, 6, jacket, 7, 0, 0));
+    armL.add(box(5, 5, 5, skin, 15.5, 0, 0)); // left hand under the forend
+    torso.add(armL);
 
     this.body.add(this.legL, this.legR, torso);
     this.group.add(this.body);
@@ -314,7 +335,7 @@ class SoldierModel {
     this.muzzleSprite.scale.set(26, 26, 1);
     this.muzzleSprite.visible = false;
     this.muzzleLight = new THREE.PointLight(0xffc86e, 0, 220, 1.8);
-    this.muzzleLight.position.set(40, 48, 12);
+    this.muzzleLight.position.set(33, 51, 2);
     this.group.add(this.muzzleSprite, this.muzzleLight);
     this.deadSpin = Math.random() > 0.5 ? 1 : -1;
   }
@@ -350,15 +371,20 @@ class SoldierModel {
     this.group.scale.y = f.crouch ? 0.74 : 1;
 
     if (f.moving) {
-      const swing = Math.sin(f.walkPhase * Math.PI * 2) * 0.5;
+      // walkPhase advances ~12 units/s at run speed; 0.45 half-cycles per
+      // unit lands at ~2.7 steps/s — a human run cadence, not a vibration.
+      const stepPhase = f.walkPhase * Math.PI * 0.45;
+      const swing = Math.sin(stepPhase) * 0.45;
       this.legL.rotation.z = swing;
       this.legR.rotation.z = -swing;
-      this.body.position.y = Math.abs(Math.sin(f.walkPhase * Math.PI * 2)) * 1.4;
+      this.body.position.y = Math.abs(Math.sin(stepPhase)) * 0.9;
     } else {
       this.legL.rotation.z *= 0.8;
       this.legR.rotation.z *= 0.8;
       this.body.position.y = Math.sin(time * 1.6 + f.id) * 0.5; // idle breath
     }
+    // Rifle kicks back under recoil.
+    this.gun.position.x = -Math.min(0.26, f.recoil) * 26;
 
     const flashing = f.muzzle > 0;
     this.muzzleSprite.visible = flashing;
@@ -370,7 +396,7 @@ class SoldierModel {
       this.muzzleLight.intensity = 0;
     }
     // Flash stays anchored at the muzzle tip in group space (facing +X).
-    this.muzzleSprite.position.set(41, 48, 12);
+    this.muzzleSprite.position.set(33, 51, 2);
   }
 
   dispose(): void {
@@ -420,6 +446,7 @@ export class CounterStrikeScene3D {
   readonly ok: boolean;
   private readonly renderer: THREE.WebGLRenderer | null = null;
   private readonly scene = new THREE.Scene();
+  private sky: THREE.Mesh | null = null;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly soldiers = new Map<number, SoldierModel>();
   private readonly tracerPool: THREE.Mesh[] = [];
@@ -501,6 +528,7 @@ export class CounterStrikeScene3D {
       new THREE.SphereGeometry(3600, 24, 14),
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false }),
     );
+    this.sky = sky;
     this.scene.add(sky);
 
     // Lights
@@ -670,9 +698,13 @@ export class CounterStrikeScene3D {
   sync(state: Scene3DState): void {
     if (!this.renderer) return;
 
-    // Camera (view bob while moving)
-    const bob = state.moving ? Math.sin(state.walkPhase * Math.PI * 2) * 1.3 : 0;
+    // Camera (subtle view bob while moving — a fraction of the old
+    // ~8Hz/1.3-unit bob, which read as screen shake).
+    const bob = state.moving ? Math.sin(state.walkPhase * Math.PI * 0.45) * 0.5 : 0;
     this.camera.position.set(state.camX, state.eye + bob, state.camY);
+    // The sky dome follows the camera — a fixed dome centered at the world
+    // origin puts the gradient's bright band off to one side (a pale blob).
+    this.sky?.position.set(state.camX, 0, state.camY);
     this.camera.rotation.y = -state.camAngle - Math.PI / 2;
     // Game pitch > 0 means "look up"; three's rotation.x > 0 pitches up too.
     this.camera.rotation.x = state.pitch;

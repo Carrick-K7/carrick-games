@@ -380,6 +380,75 @@ function renderControls() {
   renderKeyboard();
 }
 
+// Debug hook for automated visual checks (?cs3d=force is separate). E2E and
+// humans alike should never rely on this — it is not part of the game API.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __CS_DEBUG__?: unknown }).__CS_DEBUG__ = {
+    look(angle: number, pitch = 0) {
+      const g = currentGameInstance as unknown as { angle: number; pitch: number } | null;
+      if (!g || currentGameName !== 'counterstrike') return;
+      g.angle = angle;
+      g.pitch = pitch;
+    },
+    tp(x: number, y: number) {
+      const g = currentGameInstance as unknown as {
+        px: number;
+        py: number;
+        fighters?: { x: number; y: number }[];
+      } | null;
+      if (!g || currentGameName !== 'counterstrike') return;
+      // The fighter body is authoritative (shots, collision); px/py is the
+      // camera synced from it — move both.
+      const p = g.fighters?.[0];
+      if (p) {
+        p.x = x;
+        p.y = y;
+      }
+      g.px = x;
+      g.py = y;
+    },
+    info() {
+      const g = currentGameInstance as unknown as {
+        fighters?: { x: number; y: number; hp: number; slot: string; primary?: { def: { id: string }; mag: number }; pistols?: { def: { id: string } }[] }[];
+        phase?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        activeWeapon?: (f: any) => { def: { id: string }; mag: number } | null;
+      } | null;
+      if (!g || currentGameName !== 'counterstrike' || !g.fighters || !g.activeWeapon) return null;
+      const p = g.fighters[0];
+      const w = g.activeWeapon(p);
+      return { weapon: w?.def.id ?? null, mag: w?.mag ?? -1, slot: p.slot, phase: g.phase, x: p.x, y: p.y };
+    },
+    /** Fire one shot along the current view angle (bypasses DOM events —
+     *  used to verify hit registration against exact aim). */
+    shoot() {
+      const g = currentGameInstance as unknown as {
+        fighters?: { alive: boolean }[];
+        phase?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fireShot?: (f: any, angle: number) => void;
+        angle: number;
+      } | null;
+      if (!g || currentGameName !== 'counterstrike' || !g.fighters || !g.fireShot) return;
+      const p = g.fighters[0];
+      if (!p?.alive) return;
+      g.fireShot(p, g.angle);
+    },
+    /** Give the player a primary weapon by id (debug/QA only). */
+    give(weaponId: string) {
+      const g = currentGameInstance as unknown as {
+        fighters?: { alive: boolean; slot: string; primary?: unknown }[];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        makeWeapon?: (id: any) => unknown;
+      } | null;
+      const p = g?.fighters?.[0];
+      if (!g || currentGameName !== 'counterstrike' || !p || !g.makeWeapon) return;
+      p.primary = g.makeWeapon(weaponId);
+      p.slot = 'primary';
+    },
+  };
+}
+
 function getKeysFromEvent(e: KeyboardEvent): string[] {
   const keys: string[] = [e.key];
   if (e.code === 'Space') keys.push(' ');

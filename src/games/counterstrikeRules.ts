@@ -160,7 +160,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   }),
   tmp: weapon({
     id: 'tmp', name: 'Schmidt Machine Pistol', slot: 'primary', team: 'CT',
-    price: 1250, mag: 18, reserve: 72, interval: 0.08, reload: 2.5,
+    price: 1250, mag: 30, reserve: 120, interval: 0.08, reload: 2.5,
     killReward: 300, speedUnits: 250, spread: 0.038, kick: 0.008, range: 460, falloff: 0.32,
     auto: true,
     dmg: { head: 76, chest: 19, stomach: 23, legs: 14 },
@@ -292,7 +292,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     sound: 'sniper',
   }),
   m249: weapon({
-    id: 'm249', name: 'M249', slot: 'primary', team: 'both',
+    id: 'm249', name: 'ES M249 Para', slot: 'primary', team: 'both',
     price: 5750, mag: 100, reserve: 200, interval: 0.092, reload: 4.7,
     killReward: 300, speedUnits: 220, spread: 0.062, kick: 0.017, range: 560, falloff: 0.3,
     auto: true,

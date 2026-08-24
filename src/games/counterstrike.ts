@@ -1713,6 +1713,11 @@ export class CounterStrikeGame extends BaseGame {
       p.moving = false;
     }
 
+    // Keep the fighter's facing in lockstep with the view angle: melee arcs,
+    // radar cones, and any angle consumer expect it (p.angle was previously
+    // only set at spawn, so knife swings fired along the spawn direction).
+    p.angle = this.angle;
+
     // Firing.
     if (p.flashT <= 0 && !p.reloading && p.fireCd <= 0) {
       if (p.slot === 'nade') {
@@ -1723,11 +1728,14 @@ export class CounterStrikeGame extends BaseGame {
       } else {
         const weapon = this.activeWeapon(p);
         if (weapon) {
+          // The player's shots must follow the view angle, not the fighter's
+          // spawn-facing angle — p.angle is only set at spawn (line 588) and
+          // never tracks the mouse. (throwNade already uses this.angle.)
           if (weapon.def.auto) {
-            if (this.firing || this.triggerPulse) this.fireShot(p, p.angle);
+            if (this.firing || this.triggerPulse) this.fireShot(p, this.angle);
           } else if (this.triggerPulse) {
             this.triggerPulse = false;
-            this.fireShot(p, p.angle);
+            this.fireShot(p, this.angle);
           }
         }
       }
@@ -2241,6 +2249,7 @@ export class CounterStrikeGame extends BaseGame {
         crouch: f.crouch,
         hitFlash: f.hitFlash,
         helmet: f.helmet,
+        recoil: f.recoil,
       })),
       ground: this.ground.map((g) => ({ x: g.x, y: g.y, kind: g.kind, weaponId: g.weaponId, nade: g.nade })),
       grenades: this.grenades.map((g) => ({ x: g.x, y: g.y, type: g.type })),
