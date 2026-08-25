@@ -2,20 +2,9 @@ import type { VirtualKeySpec } from "../games/catalog.js";
 import { normalizeKey } from './keyboard-input.js';
 
 export function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualKeySpec[]) {
-  const enabledKeys = new Set(activeKeys);
+  void panelKeys; // kept for key-alias highlighting (main.ts); layout is always full
 
-  if (panelKeys?.length) {
-    return `
-      <div class="vkeyboard vkeyboard-compact" id="vkeyboard">
-        <div class="vkeyboard-row">
-          ${panelKeys.map((key) => {
-            const normalizedKey = normalizeKey(key.key);
-            return `<div class="vkey ${key.classes || ''}" data-key="${normalizedKey}">${key.label}</div>`;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }
+  const enabledKeys = new Set(activeKeys);
 
   const mk = (label: string, key: string, wClass: string, enabled: boolean) => {
     const normalizedKey = normalizeKey(key);
@@ -26,9 +15,10 @@ export function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualK
 
   const a = (key: string) => enabledKeys.has(normalizeKey(key));
 
-  // Standard ANSI 60% layout (no numpad)
+  // Standard ANSI 60% layout (no numpad) + a live mouse simulation.
   return `
-    <div class="vkeyboard" id="vkeyboard">
+    <div class="vksim">
+      <div class="vkeyboard" id="vkeyboard">
       <!-- Row 1: Numbers -->
       <div class="vkeyboard-row">
         ${mk('`', '`', 'w-1', a('`'))}
@@ -107,6 +97,13 @@ export function renderVirtualKeyboard(activeKeys: string[], panelKeys?: VirtualK
         ${mk('←', 'ArrowLeft', 'w-1', a('ArrowLeft'))}
         ${mk('↓', 'ArrowDown', 'w-1', a('ArrowDown'))}
         ${mk('→', 'ArrowRight', 'w-1', a('ArrowRight'))}
+      </div>
+      </div>
+      <div class="vmouse" id="vmouse" aria-hidden="true">
+        <div class="vmouse-btn vmouse-left" data-mbtn="0"></div>
+        <div class="vmouse-btn vmouse-right" data-mbtn="2"></div>
+        <div class="vmouse-wheel" data-mbtn="1"></div>
+        <div class="vmouse-cable"></div>
       </div>
     </div>
   `;

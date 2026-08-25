@@ -101,33 +101,33 @@ export interface Scene3DState {
   particles: Scene3DParticle[];
 }
 
-// Visual wall height: the legacy raycaster centered walls on the horizon, so
-// they read as tall barriers; the 3D scene needs walls above eye level (56)
-// to feel like fy_iceworld's corridors. Gameplay collision stays 2D tile-based
-// and is unaffected by this visual height.
-const WALL_H = 78;
+// Visual wall height: iceworld's ice walls tower roughly 2x eye height
+// (eye is 56 ≈ 60 units). Gameplay collision stays 2D tile-based and is
+// unaffected by this visual height.
+const WALL_H = 120; // ~128 map units — iceworld walls tower ~2x eye height
 const SKY_TOP = '#6fa8dc';
 const SKY_MID = '#9cc4e8';
 const SKY_HORIZON = '#e9f2fa';
 const FOG_COLOR = '#dfeaf5';
 
 const SOLDIER_COLORS = {
-  // CS 1.6 flavor — CT: navy fatigues + helmet; T: olive jacket + balaclava.
+  // CS 1.6 flavor — CT: SEAL navy fatigues + dark helmet; T: Phoenix
+  // Connexion olive jacket, gray-green pants, black balaclava.
   CT: {
-    jacket: ['#2b4364', '#263b58'],
-    jacketDark: ['#1f3049', '#1b2a40'],
-    pants: '#25344a',
-    boots: '#1c222b',
-    headgear: '#22344c',
-    skin: '#e8b98a',
+    jacket: ['#2c3d5e', '#273652'],
+    jacketDark: ['#212e48', '#1d2940'],
+    pants: '#253049',
+    boots: '#181d24',
+    headgear: '#1e2530',
+    skin: '#e0b48c',
   },
   T: {
-    jacket: ['#5a5e42', '#50543a'],
-    jacketDark: ['#464a33', '#3e422d'],
-    pants: '#3a3c33',
-    boots: '#2a2620',
-    headgear: '#26241f',
-    skin: '#dfb08a',
+    jacket: ['#596540', '#4f5a39'],
+    jacketDark: ['#454f31', '#3e472b'],
+    pants: '#5d5c50',
+    boots: '#2a251d',
+    headgear: '#211f1b',
+    skin: '#dab08a',
   },
 } as const;
 
@@ -234,6 +234,8 @@ class SoldierModel {
   private readonly body = new THREE.Group();
   private readonly legL: THREE.Group;
   private readonly legR: THREE.Group;
+  private readonly shinL: THREE.Group;
+  private readonly shinR: THREE.Group;
   private readonly armR: THREE.Group;
   private readonly gun: THREE.Group;
   private readonly muzzleSprite: THREE.Sprite;
@@ -254,7 +256,8 @@ class SoldierModel {
     const boots = mat(colors.boots);
     const skin = mat(colors.skin);
     const headgear = mat(colors.headgear);
-    const vest = mat(team === 'CT' ? '#1d2634' : '#38342a');
+    const gloves = mat(team === 'CT' ? '#232830' : '#2e2c26');
+    const vest = mat(team === 'CT' ? '#161c26' : '#3a382e');
     const gunMat = mat('#22262d');
     gunMat.metalness = 0.5;
     gunMat.roughness = 0.45;
@@ -268,58 +271,91 @@ class SoldierModel {
       return mesh;
     };
 
-    // CS 1.6-flavored proportions, facing +X: total height ~70 (eye 56),
-    // legs ~34 (49%), torso 22, head 10 — slimmer than the old blocky build.
-    this.legL = new THREE.Group();
-    this.legL.position.set(0, 34, -5.5);
-    this.legL.add(box(8, 30, 8, pants, 0, -15, 0));
-    this.legL.add(box(10, 5, 9, boots, 1.5, -31.5, 0));
-    this.legR = new THREE.Group();
-    this.legR.position.set(0, 34, 5.5);
-    this.legR.add(box(8, 30, 8, pants, 0, -15, 0));
-    this.legR.add(box(10, 5, 9, boots, 1.5, -31.5, 0));
+    // CS 1.6-flavored build, facing +X: total height ~71 (eye 56) with
+    // segmented legs (hip/knee) and arms (shoulder/elbow).
+    const mkLeg = (z: number): { hip: THREE.Group; knee: THREE.Group } => {
+      const hip = new THREE.Group();
+      hip.position.set(0, 34, z);
+      hip.add(box(8.5, 15, 8.5, pants, 0, -7.5, 0));        // thigh
+      const knee = new THREE.Group();
+      knee.position.set(0, -15, 0);
+      knee.add(box(7.5, 14, 7.5, pants, 0, -7, 0));         // shin
+      if (team === 'CT') knee.add(box(2.5, 6, 8, vest, 4, -5, 0)); // kneepad
+      knee.add(box(10.5, 5.5, 9.5, boots, 1.5, -16.5, 0));  // boot
+      hip.add(knee);
+      return { hip, knee };
+    };
+    const legLParts = mkLeg(-5.5);
+    const legRParts = mkLeg(5.5);
+    this.legL = legLParts.hip;
+    this.shinL = legLParts.knee;
+    this.legR = legRParts.hip;
+    this.shinR = legRParts.knee;
 
     const torso = new THREE.Group();
     torso.add(box(15, 22, 19, jacket, 0, 45, 0));            // torso 34..56
-    torso.add(box(4, 15, 15, vest, 6.6, 45, 0));             // chest rig
-    torso.add(box(3, 13, 14, vest, -6.9, 45, 0));            // back plate
     torso.add(box(15.5, 3.5, 19.5, jacketDark, 0, 35.5, 0)); // belt line
+    if (team === 'CT') {
+      // SEAL-style: plate carrier + mag pouches + backpack.
+      torso.add(box(4, 15, 15, vest, 6.6, 45, 0));           // front plate
+      torso.add(box(3, 13, 14, vest, -6.9, 45, 0));          // back plate
+      torso.add(box(3.4, 4, 3.4, jacketDark, 7, 42, -5));    // pouches
+      torso.add(box(3.4, 4, 3.4, jacketDark, 7, 42, 0));
+      torso.add(box(3.4, 4, 3.4, jacketDark, 7, 42, 5));
+      torso.add(box(5, 14, 12, jacketDark, -8.5, 46, 0));    // backpack
+    } else {
+      // Phoenix-style: no armor, bandolier strap across the chest.
+      const strap = box(2.5, 24, 3, vest, 6.8, 45, 0);
+      strap.rotation.x = 0.6;
+      torso.add(strap);
+      torso.add(box(4, 12, 14, jacketDark, 6.4, 38, 0));     // belly band
+    }
 
-    // Head — CT: navy helmet with brim and goggle band; T: balaclava with a
-    // skin eye slit. This is the silhouette that reads "CS 1.6".
+    // Head — CT SEAL: dark helmet + goggles; T Phoenix: black balaclava.
     const head = new THREE.Group();
     head.add(box(10, 10, 10, skin, 0, 62, 0));
     if (team === 'CT') {
-      head.add(box(11.6, 5.4, 11.6, headgear, 0, 67.2, 0));       // helmet dome
-      head.add(box(12.6, 2.2, 12.6, headgear, 0, 64.6, 0));       // helmet brim
-      head.add(box(1.4, 2.6, 8.4, mat('#12181f'), 5.2, 63.2, 0)); // goggles
+      head.add(box(11.8, 6.4, 11.8, headgear, 0, 66.6, 0));       // helmet dome
+      head.add(box(12.6, 2.2, 12.6, headgear, 0, 64.2, 0));       // brim
+      head.add(box(1.4, 2.6, 8.4, mat('#0f141a'), 5.2, 63.2, 0)); // goggle band
     } else {
-      head.add(box(10.8, 10.6, 10.8, headgear, 0, 62.4, 0));      // balaclava wrap
+      head.add(box(10.8, 10.6, 10.8, headgear, 0, 62.4, 0));      // balaclava
       head.add(box(1.4, 2.4, 7.2, skin, 5.3, 64, 0));             // eye slit
     }
     torso.add(head);
 
-    // Rifle held at chest height on the near-centerline; it kicks back with
-    // recoil. Tip at local (33, 51, 2) is where the muzzle flash anchors.
+    // Rifle held two-handed at chest height; kicks back with recoil.
     this.gun = new THREE.Group();
     this.gun.position.set(0, 51, 0);
     this.gun.add(box(27, 4.5, 4.5, gunMat, 18, 0, 2));  // barrel + receiver
     this.gun.add(box(5, 8, 4, gunMat, 8, -4.5, 2));     // magazine
-    this.gun.add(box(6, 6, 5, jacketDark, 2, 0.5, 2));  // stock
+    this.gun.add(box(6, 6, 5, gunMat, 2, 0.5, 2));      // stock
     torso.add(this.gun);
 
-    // Both hands on the rifle: right to the grip, left to the forend.
+    // Right arm: shoulder → elbow → gloved hand on the grip.
     this.armR = new THREE.Group();
-    this.armR.position.set(0, 51, 11);
+    this.armR.position.set(0, 52, 11);
     this.armR.rotation.y = 0.42;
-    this.armR.add(box(14, 6, 6, jacket, 6, 0, 0));
+    this.armR.add(box(9, 6, 6, jacket, 3, -1, 0));               // upper arm
+    const foreR = new THREE.Group();
+    foreR.position.set(7.5, -1.5, 0);
+    foreR.rotation.z = -0.22;
+    foreR.add(box(9, 5, 5, jacket, 4, 0, 0));                    // forearm
+    foreR.add(box(5, 5, 5, gloves, 8.5, 0.5, 0));                // hand
+    this.armR.add(foreR);
     torso.add(this.armR);
 
+    // Left arm across to the forend.
     const armL = new THREE.Group();
-    armL.position.set(0, 51, -11);
+    armL.position.set(0, 52, -11);
     armL.rotation.y = -0.62;
-    armL.add(box(16, 6, 6, jacket, 7, 0, 0));
-    armL.add(box(5, 5, 5, skin, 15.5, 0, 0)); // left hand under the forend
+    armL.add(box(9, 6, 6, jacket, 3, -1, 0));
+    const foreL = new THREE.Group();
+    foreL.position.set(7.5, -1.5, 0);
+    foreL.rotation.z = -0.3;
+    foreL.add(box(9, 5, 5, jacket, 4, 0, 0));
+    foreL.add(box(5, 5, 5, gloves, 8.5, 0.5, 0));
+    armL.add(foreL);
     torso.add(armL);
 
     this.body.add(this.legL, this.legR, torso);
@@ -377,10 +413,15 @@ class SoldierModel {
       const swing = Math.sin(stepPhase) * 0.45;
       this.legL.rotation.z = swing;
       this.legR.rotation.z = -swing;
+      // Knees fold as the leg swings back.
+      this.shinL.rotation.z = Math.max(0, Math.sin(stepPhase)) * 0.65;
+      this.shinR.rotation.z = Math.max(0, -Math.sin(stepPhase)) * 0.65;
       this.body.position.y = Math.abs(Math.sin(stepPhase)) * 0.9;
     } else {
       this.legL.rotation.z *= 0.8;
       this.legR.rotation.z *= 0.8;
+      this.shinL.rotation.z *= 0.8;
+      this.shinR.rotation.z *= 0.8;
       this.body.position.y = Math.sin(time * 1.6 + f.id) * 0.5; // idle breath
     }
     // Rifle kicks back under recoil.
@@ -520,7 +561,7 @@ export class CounterStrikeScene3D {
     this.camera.rotation.order = 'YXZ';
 
     this.scene.background = new THREE.Color(SKY_MID);
-    this.scene.fog = new THREE.Fog(FOG_COLOR, 480, 2300);
+    this.scene.fog = new THREE.Fog(FOG_COLOR, 960, 4600);
 
     // Sky dome
     const skyTex = makeCanvasTexture(makeSkyTexture());

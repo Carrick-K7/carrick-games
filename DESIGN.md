@@ -84,10 +84,11 @@ The canvas is the product. Layout exists to give it room.
   (info, controls legend, level state). No third column at any breakpoint;
   wide screens widen the game column instead. Below 960px everything stacks:
   canvas, stats, keyboard.
-- **Keyboard panel**: the full ANSI 60% layout with the active game's keys
-  enabled (games with `controls.keyboardPanel` keep their compact chip row);
-  wrap, never scroll horizontally. Hide the whole panel on
-  `pointer: coarse` — touch games bring their own on-canvas controls.
+- **Keyboard + mouse panel**: every game page shows the full ANSI 60%
+  keyboard (active game's keys enabled) beside a live mouse simulation
+  (buttons and wheel light up with real input). Never swap these for a
+  compact layout. Hide the whole panel on `pointer: coarse` — touch games
+  bring their own on-canvas controls.
 - **Controls legend**: the stats sidebar always renders the catalog's
   per-game key→action list (keycaps + labels) and touch hints; the start
   overlay adds the one or two most important mappings. Players should never

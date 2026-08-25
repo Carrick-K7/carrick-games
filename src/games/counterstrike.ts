@@ -64,15 +64,17 @@ import {
 const W = 1280;
 const H = 720;
 const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
-const MAX_DIST = 1500;
-const FOG_START = 430;
-const WALL_H = TILE; // 30
+const MAX_DIST = 3200;
+const FOG_START = 900;
+/** Bullets travel until a wall; falloff handles the rest (CS 1.6 behavior). */
+const MAX_SHOT_DIST = Math.hypot(MAP_PIXEL_X, MAP_PIXEL_Y);
+const WALL_H = TILE; // 60
 const EYE = 56;       // CS eye height (~0.9 of a player's 72 units)
 const EYE_CROUCH = 38;
 const PITCH_MAX = 0.52; // vertical look limit (~30°)
 const PLAYER_RADIUS = 15;
 const SOLDIER_H = 66; // world height of a soldier sprite (≈72 map units)
-const BOT_VISION = 480;
+const BOT_VISION = 960;
 const MAX_HP = ROUND.maxHp;
 const MAX_ARMOR = ROUND.maxArmor;
 const MOUSE_SENS = 0.0022;
@@ -1289,7 +1291,7 @@ export class CounterStrikeGame extends BaseGame {
     }
     f.nades[kind]--;
     const dir = f === this.player() ? this.angle : f.angle;
-    const speed = 400;
+    const speed = 640;
     this.grenades.push({
       x: f.x + Math.cos(dir) * 14,
       y: f.y + Math.sin(dir) * 14,
@@ -1337,7 +1339,9 @@ export class CounterStrikeGame extends BaseGame {
       const a = angle + (Math.random() - 0.5) * 2 * spread;
       const dirX = Math.cos(a);
       const dirY = Math.sin(a);
-      const wallHit = castRay(shooter.x, shooter.y, dirX, dirY, w.def.range);
+      // Bullets fly until they hit a wall (CS has no range cap); the weapon's
+      // `range` value only drives damage falloff (see computeDamage).
+      const wallHit = castRay(shooter.x, shooter.y, dirX, dirY, MAX_SHOT_DIST);
 
       let best: Fighter | null = null;
       let bestT = wallHit.dist;
@@ -2062,9 +2066,9 @@ export class CounterStrikeGame extends BaseGame {
     for (const f of this.fighters) {
       if (!f.alive) continue;
       const d = Math.hypot(f.x - g.x, f.y - g.y);
-      if (d > 140) continue;
+      if (d > 210) continue;
       if (!hasLineOfSight(g.x, g.y, f.x, f.y)) continue;
-      const falloff = 1 - 0.75 * (d / 140);
+      const falloff = 1 - 0.75 * (d / 210);
       const armored = f.armor > 0;
       const dmg = Math.round((armored ? 45 : 98) * falloff);
       const result = { dmg: Math.max(1, dmg), armorDmg: armored ? Math.max(0, Math.round(53 * falloff)) : 0 };
@@ -2088,7 +2092,7 @@ export class CounterStrikeGame extends BaseGame {
 
   private popSmoke(g: Grenade) {
     this.sfx.smokePop();
-    this.smokes.push({ x: g.x, y: g.y, r: 12, maxR: 110, life: 18, maxLife: 18 });
+    this.smokes.push({ x: g.x, y: g.y, r: 12, maxR: 190, life: 18, maxLife: 18 });
   }
 
   private updateFx(dt: number) {
@@ -2099,7 +2103,7 @@ export class CounterStrikeGame extends BaseGame {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vz -= 260 * dt;
+      p.vz -= 420 * dt;
       if (p.z < 0) p.z = 0;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
@@ -2526,78 +2530,329 @@ export class CounterStrikeGame extends BaseGame {
     }
   }
 
+  /**
+   * CS 1.6-style viewmodel: gun anchored low-right, muzzle toward the
+   * crosshair, right hand on the grip and the left hand under the forend.
+   * Silhouettes follow the real weapons (AK's curved mag + wood, AWP's big
+   * scope + long barrel, P90's top mag, Deagle's long slide, ...).
+   */
   private drawViewmodel(ctx: CanvasRenderingContext2D) {
     const p = this.player();
     if (this.gameOver || !p.alive || this.phase !== 'live') return;
     const w = this.activeWeapon(p);
     if (!w) return;
-    const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 5 : 0;
-    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 6 : 0;
+    const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 4 : 0;
+    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 5 : 0;
     const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
+
+    const id = w.def.id;
+    if (id === 'elite') {
+      // Dual Berettas: one at each lower corner, angled inward.
+      this.vmWithTransform(ctx, W - 150 + swayX, H - 34, -1.3, -0.30 - p.recoil * 1.4 + reloadDip, () => this.vmEliteSide(ctx, false));
+      this.vmWithTransform(ctx, 150 + swayX * 0.6, H - 34, 1.3, -(-0.30 - p.recoil * 1.4 + reloadDip), () => this.vmEliteSide(ctx, true));
+      return;
+    }
+
     ctx.save();
-    // Anchored bottom-right, mirrored so the barrel aims up-left at the
-    // crosshair. Recoil kicks the muzzle up and pulls the gun back.
-    ctx.translate(W - 190 + swayX, H - 56);
-    ctx.scale(-1.25, 1.25);
-    ctx.rotate(-0.34 - p.recoil * 1.7 + reloadDip);
-    ctx.translate(-p.recoil * 120, -bobY);
+    ctx.translate(W - 168 + swayX, H - 42);
+    ctx.scale(-1.32, 1.32);
+    ctx.rotate(-0.235 - p.recoil * 1.35 + reloadDip);
+    ctx.translate(-p.recoil * 110, -bobY * 0.6);
 
-    const sound = w.def.sound;
-    const body = sound === 'sniper' ? '#263746' : sound === 'shotgun' ? '#3d352a' : '#2b3038';
-    const dark = '#1e232b';
-    const grip = '#4a3b2c';
-    let barrel = 150;
-    if (sound === 'sniper') barrel = 300;
-    else if (sound === 'rifle') barrel = 220;
-    else if (sound === 'mg') barrel = 200;
-    else if (sound === 'smg') barrel = 140;
-    else if (sound === 'pistol') barrel = 70;
-
-    if (w.def.slot === 'knife') {
-      ctx.fillStyle = '#a9bccd';
-      ctx.fillRect(-20, -26, 110, 10);
-      ctx.beginPath();
-      ctx.moveTo(88, -25);
-      ctx.lineTo(124, -16);
-      ctx.lineTo(88, -14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = dark;
-      ctx.fillRect(-34, -28, 18, 26);
+    let muzzleX = 90;
+    let muzzleY = -22;
+    if (id === 'knife') {
+      this.vmKnife(ctx);
+    } else if (w.def.slot === 'secondary') {
+      muzzleX = this.vmPistol(ctx, id, w.silenced);
+      muzzleY = -30;
     } else {
-      ctx.fillStyle = body;
-      ctx.fillRect(-30, -26, 120, 34);
-      ctx.fillStyle = dark;
-      ctx.fillRect(52, -20, barrel, 22);
-      if (sound === 'sniper') {
-        ctx.fillStyle = '#3d5570';
-        ctx.fillRect(40, -32, 20, 12);
-      }
-      if (sound === 'shotgun') {
-        ctx.fillStyle = '#5c4a33';
-        ctx.fillRect(40, -20, 24, 40);
-      }
-      if (sound === 'mg') {
-        ctx.fillStyle = '#3a4a3a';
-        ctx.fillRect(-6, -8, 20, 26);
-      }
-      ctx.fillStyle = grip;
-      ctx.fillRect(4, -8, 16, 46);
-      ctx.fillStyle = dark;
-      ctx.fillRect(-40, -28, 16, 36);
-      if (p.muzzle > 0) {
-        const size = 28 + p.muzzle * 460;
-        ctx.fillStyle = 'rgba(255,224,130,0.95)';
-        ctx.beginPath();
-        ctx.arc(barrel + 42, -9, size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,246,214,0.95)';
-        ctx.beginPath();
-        ctx.arc(barrel + 42, -9, size * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      muzzleX = this.vmLongGun(ctx, id, w.silenced);
+      muzzleY = -30;
+    }
+
+    if (p.muzzle > 0 && id !== 'knife') {
+      const size = 22 + p.muzzle * 380;
+      ctx.fillStyle = 'rgba(255,224,130,0.95)';
+      ctx.beginPath();
+      ctx.arc(muzzleX + 10, muzzleY, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,246,214,0.95)';
+      ctx.beginPath();
+      ctx.arc(muzzleX + 10, muzzleY, size * 0.45, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
+  }
+
+  /** Apply the mirrored CS anchor transform around a painter. */
+  private vmWithTransform(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, scale: number, rot: number,
+    paint: () => void,
+  ) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, Math.abs(scale));
+    ctx.rotate(rot);
+    paint();
+    ctx.restore();
+  }
+
+  // ── Viewmodel parts (local space: +X = muzzle direction, y down) ────────
+
+  private vmHand(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number) {
+    // CT-issue dark glove.
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#3c414a';
+    ctx.fillRect(-8, -7, 17, 15);
+    ctx.fillStyle = '#2b2f36';
+    ctx.fillRect(-8, 4, 17, 4);
+    ctx.restore();
+  }
+
+  private vmKnife(ctx: CanvasRenderingContext2D) {
+    // Combat knife, blade up, held in the right hand.
+    ctx.fillStyle = '#c7d3e0';
+    ctx.beginPath();
+    ctx.moveTo(8, -58);
+    ctx.lineTo(26, -96);
+    ctx.lineTo(30, -96);
+    ctx.lineTo(20, -52);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#8ea2b5';
+    ctx.fillRect(8, -58, 6, 46); // flat of the blade
+    ctx.fillStyle = '#23262c';
+    ctx.fillRect(6, -14, 22, 8); // guard
+    ctx.fillStyle = '#4a3b2c';
+    ctx.fillRect(9, -8, 16, 30); // handle
+    this.vmHand(ctx, 17, 22, 0);
+  }
+
+  /** Pistols. Returns the muzzle X in local space. */
+  private vmPistol(ctx: CanvasRenderingContext2D, id: WeaponId, silenced: boolean): number {
+    const twoTone = id === 'p228';
+    const slideCol = twoTone ? '#b9c2cc' : '#2a2d33';
+    const frameCol = '#1e2126';
+    const gripCol = '#3d332a';
+    const longSlide = id === 'deagle';
+    const slideLen = longSlide ? 74 : id === 'glock' ? 50 : 56;
+    const slideH = longSlide ? 15 : 13;
+
+    // grip + trigger guard
+    ctx.fillStyle = gripCol;
+    ctx.beginPath();
+    ctx.moveTo(-16, -18);
+    ctx.lineTo(4, -18);
+    ctx.lineTo(10, 34);
+    ctx.lineTo(-8, 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = frameCol;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(16, -6, 9, -Math.PI * 0.55, Math.PI * 0.55);
+    ctx.stroke();
+    // frame + slide
+    ctx.fillStyle = frameCol;
+    ctx.fillRect(-18, -24, 34, 8);
+    ctx.fillStyle = slideCol;
+    ctx.fillRect(-20, -24 - slideH, slideLen, slideH);
+    if (longSlide) {
+      ctx.fillStyle = '#c8ccd2';
+      ctx.fillRect(-20, -24 - slideH, slideLen, 4); // deagle chrome rib
+    }
+    // hammer + rear sight
+    ctx.fillStyle = frameCol;
+    ctx.fillRect(-24, -24 - slideH + 2, 5, 8);
+    ctx.fillRect(-20, -26 - slideH, 6, 3);
+    ctx.fillRect(-20 + slideLen - 6, -26 - slideH, 4, 3); // front sight
+    if (silenced) {
+      // iconic USP/M4 suppressor
+      ctx.fillStyle = '#23262b';
+      ctx.fillRect(slideLen - 22, -21 - slideH, 34, 10);
+      ctx.fillStyle = '#31353c';
+      ctx.fillRect(slideLen - 22, -21 - slideH, 34, 3);
+      this.vmHand(ctx, -1, 34, 0);
+      return slideLen + 12;
+    }
+    this.vmHand(ctx, -1, 34, 0);
+    return slideLen - 20;
+  }
+
+  /** Dual Beretta 92 — one side (mirrored placement handled by caller). */
+  private vmEliteSide(ctx: CanvasRenderingContext2D, left: boolean) {
+    ctx.fillStyle = '#c2c9d1';
+    ctx.fillRect(-18, -36, 52, 12);           // open-top slide (silver)
+    ctx.fillStyle = '#23262b';
+    ctx.fillRect(-4, -34, 24, 5);             // exposed barrel slot
+    ctx.fillRect(-18, -24, 30, 7);            // frame
+    ctx.fillStyle = '#3d332a';
+    ctx.beginPath();
+    ctx.moveTo(-14, -18);
+    ctx.lineTo(2, -18);
+    ctx.lineTo(8, 30);
+    ctx.lineTo(-6, 30);
+    ctx.closePath();
+    ctx.fill();
+    this.vmHand(ctx, 0, 30, 0);
+    void left;
+  }
+
+  /** Long guns (shotgun/smg/rifle/sniper/mg). Returns muzzle X. */
+  private vmLongGun(ctx: CanvasRenderingContext2D, id: WeaponId, silenced: boolean): number {
+    const metal = '#26292f';
+    const metalDark = '#1b1e23';
+    const wood = '#7a4e2d';
+    const olive = '#55603d';
+    const polymer = '#33373e';
+
+    const has = (...ids: WeaponId[]) => ids.includes(id);
+    const isAk = has('ak47', 'galil');
+    const isBullpup = has('p90', 'famas', 'aug');
+    const isSniper = has('scout', 'awp', 'g3sg1', 'sg550');
+
+    const bodyCol = isAk ? metal : id === 'awp' || id === 'scout' ? olive : id === 'aug' || id === 'p90' ? olive : metal;
+    const furnCol = isAk || id === 'm3' ? wood : bodyCol;
+    const barrelLen =
+      id === 'awp' ? 150 : isSniper ? 128 : has('m4a1', 'sg552', 'aug', 'famas') ? 108 :
+      isAk ? 104 : has('m249') ? 112 : has('m3', 'xm1014') ? 96 :
+      has('mp5') ? 74 : has('ump45', 'p90') ? 66 : 58;
+
+    const gripX = isBullpup ? 34 : 0; // bullpup: action behind the trigger
+
+    // Stock (behind the receiver, except bullpups)
+    if (id === 'm4a1' || id === 'mp5') {
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX - 58, -26, 26, 12); // slim stock
+    } else if (isAk) {
+      ctx.fillStyle = furnCol;
+      ctx.beginPath();                        // wooden stock sloping down
+      ctx.moveTo(gripX - 62, -24);
+      ctx.lineTo(gripX - 34, -30);
+      ctx.lineTo(gripX - 34, -8);
+      ctx.lineTo(gripX - 62, -4);
+      ctx.closePath();
+      ctx.fill();
+    } else if (isSniper) {
+      ctx.fillStyle = bodyCol;
+      ctx.beginPath();                        // stock with cheek rest
+      ctx.moveTo(gripX - 60, -26);
+      ctx.lineTo(gripX - 32, -30);
+      ctx.lineTo(gripX - 32, -6);
+      ctx.lineTo(gripX - 52, -6);
+      ctx.lineTo(gripX - 60, -14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(gripX - 52, -32, 14, 6);
+    } else if (!isBullpup) {
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX - 52, -26, 22, 14);
+    }
+
+    // Receiver
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(gripX - 34, -34, 74, 26);
+    if (id === 'xm1014') ctx.fillRect(gripX - 34, -34, 84, 30); // bulkier
+
+    // Magazine
+    ctx.fillStyle = metalDark;
+    if (isAk) {
+      // The iconic curved 30-rounder.
+      ctx.beginPath();
+      ctx.moveTo(gripX + 10, -10);
+      ctx.quadraticCurveTo(gripX + 16, 26, gripX + 36, 36);
+      ctx.lineTo(gripX + 46, 28);
+      ctx.quadraticCurveTo(gripX + 28, 18, gripX + 24, -10);
+      ctx.closePath();
+      ctx.fill();
+    } else if (id === 'p90') {
+      // Top-mounted translucent 50-round strip.
+      ctx.fillStyle = '#8d9aa8';
+      ctx.fillRect(gripX - 20, -42, 78, 7);
+      ctx.fillStyle = 'rgba(233,236,240,0.65)';
+      ctx.fillRect(gripX - 20, -42, 78, 2.5);
+    } else if (id === 'm249') {
+      ctx.fillStyle = '#3f4a35';              // ammo box
+      ctx.fillRect(gripX + 4, -8, 30, 26);
+    } else if (id === 'mp5') {
+      ctx.beginPath();                        // curved SMG mag
+      ctx.moveTo(gripX + 12, -10);
+      ctx.quadraticCurveTo(gripX + 16, 18, gripX + 28, 26);
+      ctx.lineTo(gripX + 36, 20);
+      ctx.quadraticCurveTo(gripX + 26, 12, gripX + 24, -10);
+      ctx.closePath();
+      ctx.fill();
+    } else if (!isBullpup) {
+      ctx.fillRect(gripX + 8, -10, 14, isSniper ? 16 : 26); // straight box mag
+    } else {
+      ctx.fillRect(gripX - 6, -10, 13, 22);   // bullpup mag behind grip
+    }
+
+    // Handguard + barrel
+    ctx.fillStyle = furnCol;
+    ctx.fillRect(gripX + 40, -32, 52, 20);
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(gripX + 88, -28, barrelLen - 52, 8);
+    if (id === 'awp' || id === 'g3sg1') ctx.fillRect(gripX + 88, -29, barrelLen - 40, 10); // heavy barrel
+
+    // Pump / foregrip / bolt details
+    if (id === 'm3') {
+      ctx.fillStyle = wood;
+      ctx.fillRect(gripX + 46, -10, 30, 9);   // pump under the tube
+    }
+    if (id === 'tmp' || id === 'mp5') {
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX + 46, -10, 8, 18);   // foregrip
+    }
+    if (isSniper) {
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX + 34, -26, 10, 5);   // bolt handle
+    }
+
+    // Top furniture: scope / carry handle / rail
+    if (isSniper || has('sg552', 'sg550', 'aug')) {
+      ctx.fillStyle = '#1f2227';              // scope tube
+      const scopeL = id === 'awp' ? 46 : 36;
+      ctx.fillRect(gripX - 16, -48, scopeL, 12);
+      ctx.fillStyle = '#3d4c5c';
+      ctx.fillRect(gripX - 16, -48, 6, 12);   // objective bell
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX + 2, -36, 6, 4);     // mount
+    } else if (has('m4a1', 'famas')) {
+      ctx.fillStyle = metalDark;              // carry handle
+      ctx.fillRect(gripX - 22, -44, 46, 10);
+      ctx.fillRect(gripX - 22, -44, 6, 20);
+      ctx.fillRect(gripX + 18, -44, 6, 20);
+    } else if (id === 'm249') {
+      ctx.fillStyle = metalDark;              // feed cover
+      ctx.fillRect(gripX - 30, -40, 60, 7);
+    }
+
+    // Front sight
+    if (isAk || id === 'm4a1') {
+      ctx.fillStyle = metalDark;
+      ctx.fillRect(gripX + 86 + (barrelLen - 60), -38, 4, 12);
+    }
+
+    // Suppressor (USP/M4A1 attach state)
+    let muzzleX = gripX + 88 + barrelLen - 52;
+    if (silenced && (id === 'm4a1')) {
+      ctx.fillStyle = '#23262b';
+      ctx.fillRect(muzzleX - 4, -31, 34, 12);
+      ctx.fillStyle = '#31353c';
+      ctx.fillRect(muzzleX - 4, -31, 34, 4);
+      muzzleX += 30;
+    }
+
+    // Hands: right on the grip, left under the handguard.
+    this.vmHand(ctx, gripX - 4, 24, 0);       // right
+    this.vmHand(ctx, gripX + 58, -2, -0.5);   // left at the forend
+
+    return muzzleX;
   }
 
   private drawHud(ctx: CanvasRenderingContext2D) {

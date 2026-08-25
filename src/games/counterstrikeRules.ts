@@ -65,7 +65,7 @@ export interface WeaponDef {
   sound: WeaponSound;
 }
 
-// The tile grid mirrors the original map at 1 tile = 32 map units, so
+// The tile grid mirrors the original map at 1 tile = 64 map units, so
 // pixels ≈ map units × 0.94; CS players run at up to 250 u/s.
 export const SPEED_SCALE = 0.94;
 export const WALK_MULT = 0.52; // walk (Shift) speed multiplier
@@ -87,7 +87,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   knife: weapon({
     id: 'knife', name: 'Knife', slot: 'knife', team: 'both',
     price: 0, mag: 1, reserve: 0, interval: 0.45, reload: 0,
-    killReward: 1500, speedUnits: 250, spread: 0, kick: 0, range: 26, falloff: 0,
+    killReward: 1500, speedUnits: 250, spread: 0, kick: 0, range: 48, falloff: 0,
     dmg: { head: 60, chest: 15, stomach: 18, legs: 11 },
     armorDmg: { head: 51, chest: 12, stomach: 15 },
     sound: 'pistol',
@@ -496,7 +496,11 @@ export function computeDamage(
   target: DamageTarget,
   distance: number,
 ): DamageResult {
-  const falloff = 1 - def.falloff * Math.min(1, distance / Math.max(1, def.range));
+  // CS-style falloff: damage decays linearly with distance and keeps
+  // decaying past the weapon's reference range (bullets are not range-capped),
+  // floored at 25% so long shots still sting. `range` is in map units.
+  const refDist = Math.max(1, def.range * SPEED_SCALE);
+  const falloff = Math.max(0.25, 1 - def.falloff * (distance / refDist));
   const base = def.dmg[zone] * falloff;
 
   const armorApplies =

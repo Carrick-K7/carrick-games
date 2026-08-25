@@ -12,11 +12,11 @@
 
 import type { WeaponId } from './counterstrikeRules.js';
 
-export const TILE = 30;
+export const TILE = 60;
 export const MAP_COLS = 48;
 export const MAP_ROWS = 56;
-export const MAP_PIXEL_X = MAP_COLS * TILE; // 1440
-export const MAP_PIXEL_Y = MAP_ROWS * TILE; // 1680
+export const MAP_PIXEL_X = MAP_COLS * TILE; // 2880
+export const MAP_PIXEL_Y = MAP_ROWS * TILE; // 3360
 
 export const TileKind = {
   Floor: 0,

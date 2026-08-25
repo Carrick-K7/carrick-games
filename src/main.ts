@@ -928,6 +928,24 @@ const canvasFitObserver = new ResizeObserver(() => {
       fitGameCanvas();
     });
   });
+
+  // Mouse simulation: mirror real button presses and wheel ticks on the
+  // little mouse next to the keyboard.
+  const mouseEls = (btn: number) => document.querySelectorAll(`#vmouse [data-mbtn="${btn}"]`);
+  document.addEventListener('mousedown', (e) => {
+    mouseEls(e.button).forEach((el) => el.classList.add('pressed'));
+  });
+  document.addEventListener('mouseup', (e) => {
+    mouseEls(e.button).forEach((el) => el.classList.remove('pressed'));
+  });
+  let wheelTimer = 0;
+  document.addEventListener('wheel', () => {
+    const wheel = document.querySelector('#vmouse .vmouse-wheel');
+    if (!wheel) return;
+    wheel.classList.add('scrolling');
+    window.clearTimeout(wheelTimer);
+    wheelTimer = window.setTimeout(() => wheel.classList.remove('scrolling'), 140);
+  }, { passive: true });
   document.querySelectorAll<HTMLElement>('.lang-btn').forEach((button) => {
     button.addEventListener('click', () => setLang(button.dataset.lang === 'en' ? 'en' : 'zh'));
   });

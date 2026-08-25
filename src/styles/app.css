@@ -2319,3 +2319,73 @@
         font-size: 0.66rem;
       }
     }
+
+    /* ---------- Mouse simulation (beside the keyboard) ---------- */
+    .vksim {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .vksim .vkeyboard {
+      flex: 1 1 auto;
+      min-width: 0;
+      margin-top: 0;
+    }
+    .vmouse {
+      position: relative;
+      flex: 0 0 auto;
+      width: 72px;
+      height: 108px;
+      background: var(--key-bg);
+      border: var(--bw) solid var(--key-border);
+      border-radius: 34px 34px 38px 38px;
+      box-shadow: var(--key-shadow);
+      overflow: hidden;
+    }
+    .vmouse-btn {
+      position: absolute;
+      top: 0;
+      width: 50%;
+      height: 42%;
+      border-bottom: var(--bw) solid var(--key-border);
+      transition: background .08s ease;
+    }
+    .vmouse-left {
+      left: 0;
+      border-right: var(--bw) solid var(--key-border);
+      border-radius: 34px 0 0 0;
+    }
+    .vmouse-right {
+      right: 0;
+      border-left: var(--bw) solid var(--key-border);
+      border-radius: 0 34px 0 0;
+    }
+    .vmouse-btn.pressed {
+      background: var(--key-pressed);
+    }
+    .vmouse-wheel {
+      position: absolute;
+      top: 6%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 9px;
+      height: 20px;
+      border-radius: 5px;
+      background: var(--elevated);
+      border: var(--bw) solid var(--key-border);
+      z-index: 1;
+      transition: background .08s ease, transform .1s ease;
+    }
+    .vmouse-wheel.pressed,
+    .vmouse-wheel.scrolling {
+      background: var(--key-pressed);
+    }
+    .vmouse-wheel.scrolling {
+      transform: translateX(-50%) translateY(3px);
+    }
+    [data-style-mode="pixel"] .vmouse {
+      border-radius: 6px;
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35);
+    }
