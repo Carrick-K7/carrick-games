@@ -4,6 +4,7 @@
 import type { WeaponId } from './counterstrikeRules.js';
 import type { Team } from './counterstrikeRules.js';
 import type { WallTint } from './counterstrikeMap.js';
+import { drawWeaponIcon } from './gachaWeaponIcons.js';
 
 type RGB = [number, number, number];
 
@@ -212,101 +213,42 @@ export function getSoldierFrames(team: Team, variant: number): SoldierFrames {
 
 // ── Ground pickups ───────────────────────────────────────────────────────────
 
-type WeaponClass = 'pistol' | 'smg' | 'rifle' | 'sniper' | 'shotgun' | 'mg' | 'knife';
-
-const CLASS_IDS: Record<WeaponId, WeaponClass> = {
+// WeaponId → per-weapon icon id (see gachaWeaponIcons.ts). Same-name by
+// default; only a few diverge (fiveseven renders as the FN57).
+const ICON_IDS: Record<WeaponId, string> = {
   knife: 'knife',
-  glock: 'pistol', usp: 'pistol', p228: 'pistol', deagle: 'pistol',
-  fiveseven: 'pistol', elite: 'pistol',
-  m3: 'shotgun', xm1014: 'shotgun',
-  tmp: 'smg', mac10: 'smg', mp5: 'smg', ump45: 'smg', p90: 'smg',
-  galil: 'rifle', famas: 'rifle', ak47: 'rifle', sg552: 'rifle', m4a1: 'rifle', aug: 'rifle',
-  scout: 'sniper', awp: 'sniper', g3sg1: 'sniper', sg550: 'sniper',
-  m249: 'mg',
+  glock: 'glock', usp: 'usp', p228: 'p228', deagle: 'deagle',
+  fiveseven: 'fn57', elite: 'elite',
+  m3: 'm3', xm1014: 'xm1014',
+  tmp: 'tmp', mac10: 'mac10', mp5: 'mp5', ump45: 'ump45', p90: 'p90',
+  galil: 'galil', famas: 'famas', ak47: 'ak47', sg552: 'sg552', m4a1: 'm4a1', aug: 'aug',
+  scout: 'scout', awp: 'awp', g3sg1: 'g3sg1', sg550: 'sg550',
+  m249: 'm249',
 };
 
-const weaponSprites = new Map<WeaponClass, HTMLCanvasElement>();
+const weaponSprites = new Map<WeaponId, HTMLCanvasElement>();
 
-function drawWeaponSprite(cls: WeaponClass): HTMLCanvasElement {
+function drawWeaponSprite(iconId: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 24;
+  canvas.width = 64;
+  canvas.height = 28;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+  // Ground shadow stays under the pickup
   ctx.fillStyle = 'rgba(15,35,55,0.25)';
   ctx.beginPath();
-  ctx.ellipse(24, 21, 19, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(32, 23, 22, 4, 0, 0, Math.PI * 2);
   ctx.fill();
-  const body = '#2b3038';
-  const dark = '#1e232b';
-  const grip = '#4a3b2c';
-  if (cls === 'knife') {
-    ctx.fillStyle = '#9fb2c4';
-    ctx.fillRect(22, 6, 14, 4);
-    ctx.beginPath();
-    ctx.moveTo(36, 8); ctx.lineTo(42, 14); ctx.lineTo(36, 14); ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = dark;
-    ctx.fillRect(18, 8, 5, 9);
-  } else if (cls === 'pistol') {
-    ctx.fillStyle = body;
-    ctx.fillRect(8, 8, 20, 7);
-    ctx.fillStyle = dark;
-    ctx.fillRect(26, 9, 8, 3);
-    ctx.fillStyle = grip;
-    ctx.fillRect(13, 14, 6, 7);
-  } else if (cls === 'smg') {
-    ctx.fillStyle = body;
-    ctx.fillRect(4, 9, 30, 7);
-    ctx.fillStyle = dark;
-    ctx.fillRect(32, 10, 9, 3);
-    ctx.fillStyle = grip;
-    ctx.fillRect(16, 15, 7, 6);
-    ctx.fillRect(8, 13, 4, 8);
-  } else if (cls === 'rifle') {
-    ctx.fillStyle = body;
-    ctx.fillRect(2, 9, 40, 7);
-    ctx.fillStyle = dark;
-    ctx.fillRect(38, 10, 8, 3);
-    ctx.fillStyle = grip;
-    ctx.fillRect(18, 15, 8, 6);
-    ctx.fillRect(6, 13, 4, 8);
-  } else if (cls === 'sniper') {
-    ctx.fillStyle = body;
-    ctx.fillRect(0, 9, 46, 6);
-    ctx.fillStyle = dark;
-    ctx.fillRect(42, 10, 5, 3);
-    ctx.fillStyle = '#3d5570';
-    ctx.fillRect(12, 5, 8, 4);
-    ctx.fillStyle = grip;
-    ctx.fillRect(20, 14, 7, 7);
-  } else if (cls === 'shotgun') {
-    ctx.fillStyle = '#3d352a';
-    ctx.fillRect(2, 9, 34, 7);
-    ctx.fillStyle = dark;
-    ctx.fillRect(34, 10, 10, 4);
-    ctx.fillStyle = grip;
-    ctx.fillRect(14, 15, 7, 6);
-  } else {
-    // mg
-    ctx.fillStyle = body;
-    ctx.fillRect(0, 8, 44, 8);
-    ctx.fillStyle = dark;
-    ctx.fillRect(40, 10, 7, 4);
-    ctx.fillStyle = '#3a4a3a';
-    ctx.fillRect(8, 13, 7, 8);
-    ctx.fillStyle = grip;
-    ctx.fillRect(20, 15, 8, 6);
-  }
+  // Weapon silhouette — single dark tone
+  drawWeaponIcon(ctx, iconId, 32, 13, { color: '#23262b', alpha: 1, size: 44 });
   return canvas;
 }
 
 export function getWeaponSprite(id: WeaponId): HTMLCanvasElement {
-  const cls = CLASS_IDS[id];
-  const cached = weaponSprites.get(cls);
+  const cached = weaponSprites.get(id);
   if (cached) return cached;
-  const sprite = drawWeaponSprite(cls);
-  weaponSprites.set(cls, sprite);
+  const sprite = drawWeaponSprite(ICON_IDS[id]);
+  weaponSprites.set(id, sprite);
   return sprite;
 }
 

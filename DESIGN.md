@@ -79,20 +79,20 @@ The canvas is the product. Layout exists to give it room.
   the backing store is re-sized to `cssWidth × devicePixelRatio` so upscaled
   games stay sharp. Never clamp a large canvas below its logical width just
   to fit a side panel — shrink the panel instead.
-- **Layout rhythm**: desktop keeps a fixed two-column rhythm — game column
-  (canvas + action bar + keyboard panel) beside a single stats sidebar
-  (info, controls legend, level state). No third column at any breakpoint;
-  wide screens widen the game column instead. Below 960px everything stacks:
-  canvas, stats, keyboard.
+- **Layout rhythm**: desktop keeps a fixed two-column rhythm — the game
+  column (canvas + action bar) on the left; the right rail stacks the stats
+  sidebar (info, controls legend, level state) above the keyboard + mouse
+  simulation panel. The canvas never shrinks below its logical width to make
+  room for a panel. Below 960px everything stacks: canvas, stats, keyboard.
 - **Keyboard + mouse panel**: every game page shows the full ANSI 60%
   keyboard (active game's keys enabled) beside a live mouse simulation
   (buttons and wheel light up with real input). Never swap these for a
   compact layout. Hide the whole panel on `pointer: coarse` — touch games
   bring their own on-canvas controls.
 - **Controls legend**: the stats sidebar always renders the catalog's
-  per-game key→action list (keycaps + labels) and touch hints; the start
-  overlay adds the one or two most important mappings. Players should never
-  have to guess a key.
+  per-game key→action list (keycaps + labels) and touch hints. The start
+  overlay stays minimal (game name + click-to-start) — no control teaching
+  on the canvas. Players should never have to guess a key.
 - **Flat panels**: the sidebar is one panel — do not nest cards inside it.
   Sections inside `.game-sidebar` separate with hairline dividers, not
   boxed/elevated backgrounds.

@@ -1326,8 +1326,9 @@ export class CounterStrikeGame extends BaseGame {
     shooter.recoil = Math.min(0.26, shooter.recoil + w.def.kick);
     shooter.muzzle = 0.055;
     if (shooter === this.player()) {
-      this.shakeT = 0.12;
-      this.shakeMag = 5 + shooter.recoil * 60;
+      // Subtle fire shake — CS kicks the view, it doesn't rattle the screen.
+      this.shakeT = 0.09;
+      this.shakeMag = 1.4 + shooter.recoil * 6;
     }
 
     const moveMul = shooter.moving ? (shooter.walk ? 1.35 : 1.9) : 1;
@@ -2269,7 +2270,7 @@ export class CounterStrikeGame extends BaseGame {
     let shakeX = 0;
     let shakeY = 0;
     if (this.shakeT > 0) {
-      const k = this.shakeT / 0.12;
+      const k = this.shakeT / 0.09;
       shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
       shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
     }
@@ -2294,7 +2295,7 @@ export class CounterStrikeGame extends BaseGame {
     let shakeX = 0;
     let shakeY = 0;
     if (this.shakeT > 0) {
-      const k = this.shakeT / 0.12;
+      const k = this.shakeT / 0.09;
       shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
       shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
     }
@@ -2702,8 +2703,50 @@ export class CounterStrikeGame extends BaseGame {
     void left;
   }
 
+  /** Machine pistols (MAC-10 / TMP): stockless boxy body, big mag, strap. */
+  private vmMachinePistol(ctx: CanvasRenderingContext2D, id: WeaponId): number {
+    const metal = '#2a2d33';
+    const dark = '#1b1e23';
+    // Receiver — one tall slab, no stock, no separate handguard.
+    ctx.fillStyle = metal;
+    ctx.fillRect(-24, -36, 62, 26);
+    ctx.fillStyle = dark;
+    ctx.fillRect(-24, -14, 62, 6);                 // lower edge
+    ctx.fillRect(36, -32, 22, 8);                  // short threaded barrel
+    ctx.fillRect(-8, -42, 14, 6);                  // top cocking tabs
+    if (id === 'mac10') {
+      // Big straight mag and the iconic front strap the off-hand holds.
+      ctx.fillStyle = dark;
+      ctx.fillRect(4, -10, 13, 34);
+      ctx.strokeStyle = '#4a4038';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(30, -10);
+      ctx.quadraticCurveTo(40, 8, 32, 24);
+      ctx.stroke();
+    } else {
+      // TMP: slimmer mag + foregrip
+      ctx.fillStyle = dark;
+      ctx.fillRect(6, -10, 11, 26);
+      ctx.fillRect(30, -10, 7, 16);
+    }
+    // Grip
+    ctx.fillStyle = '#33291f';
+    ctx.beginPath();
+    ctx.moveTo(-16, -10);
+    ctx.lineTo(-2, -10);
+    ctx.lineTo(3, 26);
+    ctx.lineTo(-10, 26);
+    ctx.closePath();
+    ctx.fill();
+    this.vmHand(ctx, -4, 24, 0);                       // right on grip
+    this.vmHand(ctx, 26, id === 'mac10' ? 10 : 4, -0.4); // left on strap/foregrip
+    return 58;
+  }
+
   /** Long guns (shotgun/smg/rifle/sniper/mg). Returns muzzle X. */
   private vmLongGun(ctx: CanvasRenderingContext2D, id: WeaponId, silenced: boolean): number {
+    if (id === 'mac10' || id === 'tmp') return this.vmMachinePistol(ctx, id);
     const metal = '#26292f';
     const metalDark = '#1b1e23';
     const wood = '#7a4e2d';
@@ -2804,7 +2847,7 @@ export class CounterStrikeGame extends BaseGame {
       ctx.fillStyle = wood;
       ctx.fillRect(gripX + 46, -10, 30, 9);   // pump under the tube
     }
-    if (id === 'tmp' || id === 'mp5') {
+    if (id === 'mp5') {
       ctx.fillStyle = metalDark;
       ctx.fillRect(gripX + 46, -10, 8, 18);   // foregrip
     }

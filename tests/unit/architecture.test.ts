@@ -114,15 +114,15 @@ describe('Gacha odds and pool', () => {
     }
   });
 
-  it('keeps the pool sizes at 蓝15/紫8/粉5/红3/金2 with the weapon families', () => {
-    expect(GACHA_POOL.milspec).toHaveLength(15);
-    expect(GACHA_POOL.restricted).toHaveLength(8);
-    expect(GACHA_POOL.classified).toHaveLength(5);
-    expect(GACHA_POOL.covert).toHaveLength(3);
+  it('keeps the pool sizes at 蓝5/紫4/粉3/红2/金2 with the weapon families', () => {
+    expect(GACHA_POOL.milspec).toHaveLength(5);
+    expect(GACHA_POOL.restricted).toHaveLength(4);
+    expect(GACHA_POOL.classified).toHaveLength(3);
+    expect(GACHA_POOL.covert).toHaveLength(2);
     expect(GACHA_POOL.rarespecial).toHaveLength(2);
-    // Weapon families per grade: gold = knife/gloves, red = snipers,
-    // pink = rifles, purple = SMGs, blue = pistols.
-    expect(new Set(GACHA_POOL.rarespecial.map((i) => i.kind))).toEqual(new Set(['knife', 'gloves']));
+    // Iconic weapons per grade: gold = knives, red = snipers, pink = rifles,
+    // purple = SMGs, blue = pistols.
+    expect(GACHA_POOL.rarespecial.every((i) => i.kind === 'knife')).toBe(true);
     expect(GACHA_POOL.covert.every((i) => i.kind === 'sniper')).toBe(true);
     expect(GACHA_POOL.classified.every((i) => i.kind === 'rifle')).toBe(true);
     expect(GACHA_POOL.restricted.every((i) => i.kind === 'smg')).toBe(true);
@@ -136,11 +136,11 @@ describe('Gacha odds and pool', () => {
     expect(blue.tier.id).toBe('milspec');
     // The same constant rng also picks the item: near-1 → last of the tier,
     // near-0 → first of the tier (uniform inside the tier, weight 1).
-    expect(gold.item.id).toBe('gloves-vice');
-    expect(blue.item.id).toBe('glock-fade');
+    expect(gold.item.id).toBe('knife-karambit');
+    expect(blue.item.id).toBe('glock18');
   });
 
-  it('distributes items inside a tier by weight (gold 60/40)', () => {
+  it('distributes items inside a tier by weight (gold 50/50)', () => {
     let first = 0;
     let last = 0;
     for (let step = 1; step <= 1000; step++) {
@@ -154,14 +154,14 @@ describe('Gacha odds and pool', () => {
       };
       const roll = rollGachaItem(twoPhase);
       expect(roll.tier.id).toBe('rarespecial');
-      if (roll.item.id === 'karambit-fade') first++;
-      else if (roll.item.id === 'gloves-vice') last++;
+      if (roll.item.id === 'knife-butterfly') first++;
+      else if (roll.item.id === 'knife-karambit') last++;
     }
-    // Weights 0.6/0.4 over the item interval: ~600/400.
-    expect(first).toBeGreaterThan(520);
-    expect(last).toBeGreaterThan(320);
-    expect(first).toBeLessThan(680);
-    expect(last).toBeLessThan(480);
+    // Weights 0.5/0.5 over the item interval: ~500/500.
+    expect(first).toBeGreaterThan(440);
+    expect(last).toBeGreaterThan(440);
+    expect(first).toBeLessThan(560);
+    expect(last).toBeLessThan(560);
   });
 
 });

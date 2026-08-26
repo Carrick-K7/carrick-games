@@ -24,7 +24,6 @@ import {
   type GachaItem,
   type GachaRoll,
   type GachaTier,
-  type WeaponKind,
 } from './gachaData.js';
 import {
   Particles,
@@ -905,14 +904,18 @@ export class GachaGame extends BaseGame {
     }
 
     // Content — pre-rendered weapon silhouette with a rarity-colored aura
-    const icon = this.weaponSprite(item.kind, tier.color, 0.95);
+    const icon = this.weaponSprite(item.icon ?? item.kind, tier.color, 0.95);
     drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
     ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.text;
     ctx.fillText(truncate(item.nameZh, 14), 0, 52);
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.textDim;
-    ctx.fillText(truncate(item.name, 30), 0, 80);
+    // Subtitle only when the English name differs (pure-weapon names would
+    // otherwise print the same string twice).
+    if (item.name !== item.nameZh) {
+      ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.textDim;
+      ctx.fillText(truncate(item.name, 30), 0, 80);
+    }
     ctx.fillStyle = tier.color;
     ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
     ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, 118);
@@ -943,13 +946,13 @@ export class GachaGame extends BaseGame {
     this.primaryButton(ctx, again, zh ? '再抽一次' : 'DRAW AGAIN', p);
   }
 
-  /** Pre-rendered weapon silhouette, cached per kind + color. */
-  private weaponSprite(kind: WeaponKind, color: string, alpha: number): HTMLCanvasElement {
-    const key = `${kind}|${color}|${alpha}`;
+  /** Pre-rendered weapon silhouette, cached per icon + color. */
+  private weaponSprite(iconId: string, color: string, alpha: number): HTMLCanvasElement {
+    const key = `${iconId}|${color}|${alpha}`;
     let sprite = this.weaponSprites.get(key);
     if (!sprite) {
       sprite = makeSprite(120, 120, (c) => {
-        drawWeaponIcon(c, kind, 60, 60, { color, alpha, size: 104 });
+        drawWeaponIcon(c, iconId, 60, 60, { color, alpha, size: 104 });
       }, 2);
       this.weaponSprites.set(key, sprite);
     }
@@ -1049,7 +1052,7 @@ export class GachaGame extends BaseGame {
     const blit = iconSize * 1.16;
 
     if (locked) {
-      const icon = this.weaponSprite(item.kind, dark ? '#cbd5e1' : '#475569', 1);
+      const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#cbd5e1' : '#475569', 1);
       drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.28 });
       ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
@@ -1070,7 +1073,7 @@ export class GachaGame extends BaseGame {
     ctx.fillRect(-3, -3, 6, 6);
     ctx.restore();
 
-    const icon = this.weaponSprite(item.kind, dark ? '#e8edf4' : '#334155', 0.9);
+    const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#e8edf4' : '#334155', 0.9);
     drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit);
     ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
@@ -1174,7 +1177,7 @@ export class GachaGame extends BaseGame {
         const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
         if (!tier || !item) continue;
         ctx.textAlign = 'center';
-        drawWeaponIcon(ctx, item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22 });
+        drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22 });
         ctx.beginPath();
         ctx.fillStyle = tier.color;
         ctx.arc(hx + 12, hy + 34, 2.5, 0, Math.PI * 2);

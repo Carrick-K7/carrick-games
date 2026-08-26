@@ -309,15 +309,8 @@ function setStartOverlay(active: boolean) {
   const titleEl = el.querySelector('.start-overlay-title') as HTMLElement | null;
   const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-  if (hintEl) {
-    const base = zh ? '点击「开始游戏」按钮开始' : 'Click Start Game to begin';
-    // Surface the two most important key mappings so nobody starts blind.
-    const core = (meta?.controls.keyboard ?? [])
-      .slice(0, 2)
-      .map((entry) => `${entry.keys.join('/')} ${zh ? entry.actionZh : entry.action}`)
-      .join(' · ');
-    hintEl.textContent = core ? `${base} — ${core}` : base;
-  }
+  // No control teaching on the canvas — that lives in the side panel.
+  if (hintEl) hintEl.textContent = zh ? '点击开始' : 'Click to start';
 }
 
 function readGameScore(): number | null {
@@ -999,6 +992,11 @@ const canvasFitObserver = new ResizeObserver(() => {
   if (actionBtn) {
     actionBtn.addEventListener('click', startPreparedGame);
   }
+  // The start overlay covers the canvas; clicking it should start the game
+  // directly instead of forcing a trip to the button below.
+  document.getElementById('startOverlay')?.addEventListener('click', () => {
+    if (actionBtn && !actionBtn.disabled) startPreparedGame();
+  });
 
   const demoBtn = document.getElementById('demoBtn') as HTMLButtonElement | null;
   if (demoBtn) {

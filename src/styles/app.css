@@ -765,10 +765,11 @@
     /* ---------- Game layout with side panels ---------- */
     .game-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+      grid-template-rows: auto auto;
       grid-template-areas:
         "game stats"
-        "keyboard stats";
+        "game keyboard";
       align-items: start;
       gap: 20px;
       width: 100%;
@@ -1274,9 +1275,9 @@
 
     /* ---------- Side panel keyboard sizing ---------- */
     .keyboard-panel .vkeyboard {
-      --vk-unit: 38px;
-      --vk-gap: 6px;
-      padding: 12px 10px;
+      --vk-unit: 22px;
+      --vk-gap: 4px;
+      padding: 12px 8px;
       margin: 0;
       min-width: 0;
       width: 100%;
@@ -1285,14 +1286,28 @@
       min-width: 0;
     }
     .keyboard-panel .vkey {
-      font-size: 0.72rem;
+      font-size: 0.6rem;
       min-width: 0;
       flex-shrink: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      height: var(--vk-unit, 38px);
+      height: var(--vk-unit, 22px);
       line-height: 1;
+    }
+    .keyboard-panel .vksim {
+      gap: 12px;
+    }
+    .keyboard-panel .vmouse {
+      width: 58px;
+      height: 86px;
+      border-radius: 28px 28px 31px 31px;
+    }
+    .keyboard-panel .vmouse-btn {
+      border-radius: 28px 0 0 0;
+    }
+    .keyboard-panel .vmouse-right {
+      border-radius: 0 28px 0 0;
     }
     [data-style-mode="pixel"] .keyboard-panel .vkey {
       font-size: 0.5rem;
@@ -2124,6 +2139,11 @@
     }
     .start-overlay.active {
       display: flex;
+      cursor: pointer;
+    }
+    .start-overlay.active:hover .start-overlay-hint {
+      background: rgba(255,255,255,0.16);
+      border-color: rgba(255,255,255,0.45);
     }
     .start-overlay-title {
       font-size: 1.5rem;
