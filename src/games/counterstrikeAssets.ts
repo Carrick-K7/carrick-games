@@ -239,8 +239,9 @@ function drawWeaponSprite(iconId: string): HTMLCanvasElement {
   ctx.beginPath();
   ctx.ellipse(32, 23, 22, 4, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Weapon silhouette — single dark tone
-  drawWeaponIcon(ctx, iconId, 32, 13, { color: '#23262b', alpha: 1, size: 44 });
+  // Weapon — realistic multi-tone render (dark steel reads on snow /
+  // ice; the built-in dark outline keeps the silhouette crisp)
+  drawWeaponIcon(ctx, iconId, 32, 13, { color: '#23262b', alpha: 1, size: 44, mono: false });
   return canvas;
 }
 

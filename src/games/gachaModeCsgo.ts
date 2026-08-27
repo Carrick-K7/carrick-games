@@ -391,7 +391,7 @@ export class CsgoStripMode implements GachaOpenMode {
     c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 22);
 
     // Weapon silhouette
-    drawWeaponIcon(c, card.item.icon ?? card.item.kind, CARD_W / 2, REEL_H / 2 - 12, { color: dark ? '#f1f5f9' : '#ffffff', alpha: 0.95, size: 74 });
+    drawWeaponIcon(c, card.item.icon ?? card.item.kind, CARD_W / 2, REEL_H / 2 - 12, { color: dark ? '#f1f5f9' : '#ffffff', alpha: 0.95, size: 74, mono: false });
 
     // Item name
     c.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';

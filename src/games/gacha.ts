@@ -457,51 +457,28 @@ export class GachaGame extends BaseGame {
     this.chipButton(ctx, this.hitStats(), zh ? '统计' : 'STATS', p);
     this.chipButton(ctx, this.hitSound(), this.sfx.enabled ? (zh ? '声音' : 'SOUND') : (zh ? '静音' : 'MUTED'), p);
 
-    // Case — hero object, centered.
+    // Case — hero object, centered. The home screen shows only the case:
+    // no odds strip, no operation hints (per design review).
     const cx = this.width / 2;
-    this.drawCase(ctx, cx, 205, 200, 134);
-
-    // Animated hint
-    const hintY = 312;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 2.6);
-    const arrowBob = Math.sin(t * 2.2) * 3;
-    ctx.globalAlpha = 0.55 + 0.45 * pulse;
-    ctx.font = '500 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = p.textDim;
-    ctx.fillText(zh ? '点击箱子开箱' : 'Click the case to open', cx, hintY);
-    ctx.globalAlpha = 1;
-    ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.accent;
-    ctx.fillText('▾', cx, hintY + 18 + arrowBob);
+    const cy = 54 + (this.height - 54) / 2 - 10;
+    this.drawCase(ctx, cx, cy, 216, 144);
 
     // Mode switcher (only when more than one animation exists)
     if (openingModeCount() > 1) {
       const label = openingModeLabel(this.animModeIndex);
       ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
       ctx.fillStyle = p.textDim;
-      ctx.fillText(zh ? `动画 · ${label.nameZh} ◂ ▸` : `Mode · ${label.name} ◂ ▸`, cx, 356);
+      ctx.fillText(zh ? `动画 · ${label.nameZh} ◂ ▸` : `Mode · ${label.name} ◂ ▸`, cx, this.height - 30);
       // Glowing tab underline under the active mode label
       const tabPulse = 0.55 + 0.3 * Math.sin(t * 2.2);
       ctx.globalAlpha = tabPulse;
       ctx.fillStyle = p.accent;
-      roundRectPath(ctx, cx - 42, 366, 84, 2, 1);
+      roundRectPath(ctx, cx - 42, this.height - 20, 84, 2, 1);
       ctx.fill();
       ctx.globalAlpha = 1;
-      drawGlow(ctx, cx, 367, 34, p.accent, 0.22 * tabPulse);
+      drawGlow(ctx, cx, this.height - 19, 34, p.accent, 0.22 * tabPulse);
     }
-
-    // Tier odds strip
-    this.drawTierStrip(ctx, p, 24, 382, this.width - 48, 52);
-
-    // Key hints
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = p.textFaint;
-    ctx.fillText(
-      zh ? 'R 返回 · M 音效 · Shift+R 重置统计' : 'R menu · M sound · Shift+R reset stats',
-      this.width / 2, this.height - 13,
-    );
   }
 
   private chipButton(
@@ -952,7 +929,7 @@ export class GachaGame extends BaseGame {
     let sprite = this.weaponSprites.get(key);
     if (!sprite) {
       sprite = makeSprite(120, 120, (c) => {
-        drawWeaponIcon(c, iconId, 60, 60, { color, alpha, size: 104 });
+        drawWeaponIcon(c, iconId, 60, 60, { color, alpha, size: 104, mono: false });
       }, 2);
       this.weaponSprites.set(key, sprite);
     }
@@ -1177,7 +1154,7 @@ export class GachaGame extends BaseGame {
         const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
         if (!tier || !item) continue;
         ctx.textAlign = 'center';
-        drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22 });
+        drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22, mono: true });
         ctx.beginPath();
         ctx.fillStyle = tier.color;
         ctx.arc(hx + 12, hy + 34, 2.5, 0, Math.PI * 2);
@@ -1335,12 +1312,12 @@ export class GachaGame extends BaseGame {
         if (this.canvasHit(x, y, this.hitSound())) { this.sfx.enabled = !this.sfx.enabled; if (this.sfx.enabled) this.sfx.prime(); return; }
         // Mode switcher (only when > 1 mode registered)
         if (openingModeCount() > 1) {
-          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - 356) < 12) {
+          if (x < this.width / 2 - 10 && x > this.width / 2 - 120 && Math.abs(y - (this.height - 30)) < 12) {
             this.animModeIndex = (this.animModeIndex - 1 + openingModeCount()) % openingModeCount();
             this.sfx.click();
             return;
           }
-          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - 356) < 12) {
+          if (x > this.width / 2 + 10 && x < this.width / 2 + 120 && Math.abs(y - (this.height - 30)) < 12) {
             this.animModeIndex = (this.animModeIndex + 1) % openingModeCount();
             this.sfx.click();
             return;

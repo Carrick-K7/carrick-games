@@ -186,6 +186,8 @@ interface GroundItem {
   mag: number;
   reserve: number;
   fixed: boolean;
+  /** Dropped guns can't be re-collected for a beat (prevents drop→instant-repickup loops). */
+  noPickupUntil?: number;
 }
 
 interface Tracer {
@@ -1238,7 +1240,7 @@ export class CounterStrikeGame extends BaseGame {
       if (!f.primary) return this.sfx.denied();
       const w = f.primary;
       this.ground.push({
-        x: f.x, y: f.y, kind: 'weapon', weaponId: w.def.id, mag: w.mag, reserve: w.reserve, fixed: false,
+        x: f.x, y: f.y, kind: 'weapon', weaponId: w.def.id, mag: w.mag, reserve: w.reserve, fixed: false, noPickupUntil: performance.now() + 900,
       });
       f.primary = null;
       f.slot = 'secondary';
@@ -1250,7 +1252,7 @@ export class CounterStrikeGame extends BaseGame {
       if (f.pistols.length === 0) return this.sfx.denied();
       const w = f.pistols[f.pistolIndex];
       this.ground.push({
-        x: f.x, y: f.y, kind: 'weapon', weaponId: w.def.id, mag: w.mag, reserve: w.reserve, fixed: false,
+        x: f.x, y: f.y, kind: 'weapon', weaponId: w.def.id, mag: w.mag, reserve: w.reserve, fixed: false, noPickupUntil: performance.now() + 900,
       });
       f.pistols.splice(f.pistolIndex, 1);
       f.pistolIndex = Math.min(f.pistolIndex, f.pistols.length - 1);
@@ -1270,7 +1272,7 @@ export class CounterStrikeGame extends BaseGame {
     if (!near || !near.weaponId) return;
     if (f.primary) {
       this.ground.push({
-        x: f.x, y: f.y, kind: 'weapon', weaponId: f.primary.def.id, mag: f.primary.mag, reserve: f.primary.reserve, fixed: false,
+        x: f.x, y: f.y, kind: 'weapon', weaponId: f.primary.def.id, mag: f.primary.mag, reserve: f.primary.reserve, fixed: false, noPickupUntil: performance.now() + 900,
       });
     }
     const take = this.makeWeapon(near.weaponId);
@@ -1596,9 +1598,13 @@ export class CounterStrikeGame extends BaseGame {
   // ── Update ─────────────────────────────────────────────────────────────────
 
   update(dt: number) {
-    if (this.paused || this.gameOver) return;
+    if (this.paused) return;
 
+    // Visual decays run in every phase (including post/gameOver) — otherwise
+    // a kill that ends the round leaves shakeT/hitmarker stuck > 0 and the
+    // screen jitters with the hit X frozen on.
     this.updateFx(dt);
+    if (this.gameOver) return;
     this.updateGrenades(dt);
 
     if (this.phase === 'freeze') {
@@ -1676,12 +1682,7 @@ export class CounterStrikeGame extends BaseGame {
   private updatePlayer(dt: number) {
     const p = this.player();
     p.fireCd = Math.max(0, p.fireCd - dt);
-    p.recoil = Math.max(0, p.recoil - dt * 0.5);
-    p.muzzle = Math.max(0, p.muzzle - dt);
-    p.flashT = Math.max(0, p.flashT - dt);
-    this.damageFlash = Math.max(0, this.damageFlash - dt * 0.9);
-    this.hitmarker = Math.max(0, this.hitmarker - dt);
-    this.shakeT = Math.max(0, this.shakeT - dt);
+    // recoil/muzzle/flashT/hitmarker/shakeT/damageFlash decay in updateFx.
 
     if (!p.alive) return;
 
@@ -1968,6 +1969,7 @@ export class CounterStrikeGame extends BaseGame {
       if (!f.alive) continue;
       for (let i = this.ground.length - 1; i >= 0; i--) {
         const item = this.ground[i];
+        if (item.noPickupUntil && performance.now() < item.noPickupUntil) continue;
         if (Math.hypot(item.x - f.x, item.y - f.y) > 20) continue;
         if (item.kind === 'weapon' && item.weaponId) {
           const def = WEAPONS[item.weaponId];
@@ -2097,6 +2099,17 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   private updateFx(dt: number) {
+    // View feelers that must decay even outside the live phase.
+    const pl = this.player();
+    if (pl) {
+      pl.recoil = Math.max(0, pl.recoil - dt * 0.5);
+      pl.muzzle = Math.max(0, pl.muzzle - dt);
+      pl.flashT = Math.max(0, pl.flashT - dt);
+    }
+    this.hitmarker = Math.max(0, this.hitmarker - dt);
+    this.shakeT = Math.max(0, this.shakeT - dt);
+    this.damageFlash = Math.max(0, this.damageFlash - dt * 0.9);
+
     for (const tr of this.tracers) tr.life -= dt;
     this.tracers = this.tracers.filter((tr) => tr.life > 0);
     for (const p of this.particles) {
@@ -2555,8 +2568,8 @@ export class CounterStrikeGame extends BaseGame {
     }
 
     ctx.save();
-    ctx.translate(W - 168 + swayX, H - 42);
-    ctx.scale(-1.32, 1.32);
+    ctx.translate(W - 186 + swayX, H - 50);
+    ctx.scale(-1.5, 1.5);
     ctx.rotate(-0.235 - p.recoil * 1.35 + reloadDip);
     ctx.translate(-p.recoil * 110, -bobY * 0.6);
 
@@ -2636,7 +2649,7 @@ export class CounterStrikeGame extends BaseGame {
   /** Pistols. Returns the muzzle X in local space. */
   private vmPistol(ctx: CanvasRenderingContext2D, id: WeaponId, silenced: boolean): number {
     const twoTone = id === 'p228';
-    const slideCol = twoTone ? '#b9c2cc' : '#2a2d33';
+    const slideCol = twoTone || id === 'deagle' ? '#c2c9d4' : '#2a2d33';
     const frameCol = '#1e2126';
     const gripCol = '#3d332a';
     const longSlide = id === 'deagle';
@@ -2747,10 +2760,10 @@ export class CounterStrikeGame extends BaseGame {
   /** Long guns (shotgun/smg/rifle/sniper/mg). Returns muzzle X. */
   private vmLongGun(ctx: CanvasRenderingContext2D, id: WeaponId, silenced: boolean): number {
     if (id === 'mac10' || id === 'tmp') return this.vmMachinePistol(ctx, id);
-    const metal = '#26292f';
+    const metal = '#2e323a';
     const metalDark = '#1b1e23';
-    const wood = '#7a4e2d';
-    const olive = '#55603d';
+    const wood = '#8a5a34';
+    const olive = '#66764a';
     const polymer = '#33373e';
 
     const has = (...ids: WeaponId[]) => ids.includes(id);
@@ -2761,9 +2774,9 @@ export class CounterStrikeGame extends BaseGame {
     const bodyCol = isAk ? metal : id === 'awp' || id === 'scout' ? olive : id === 'aug' || id === 'p90' ? olive : metal;
     const furnCol = isAk || id === 'm3' ? wood : bodyCol;
     const barrelLen =
-      id === 'awp' ? 150 : isSniper ? 128 : has('m4a1', 'sg552', 'aug', 'famas') ? 108 :
-      isAk ? 104 : has('m249') ? 112 : has('m3', 'xm1014') ? 96 :
-      has('mp5') ? 74 : has('ump45', 'p90') ? 66 : 58;
+      id === 'awp' ? 172 : isSniper ? 140 : has('m4a1', 'sg552', 'aug', 'famas') ? 110 :
+      isAk ? 106 : has('m249') ? 122 : has('m3', 'xm1014') ? 92 :
+      has('mp5') ? 68 : has('ump45', 'p90') ? 58 : 52;
 
     const gripX = isBullpup ? 34 : 0; // bullpup: action behind the trigger
 
