@@ -14,6 +14,7 @@
  * menu shows a mode switcher automatically once more than one exists.
  */
 
+import { drawItemArt } from './gunImages.js';
 import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
 import { GachaSfx } from './gachaAudio.js';
 import {
@@ -437,20 +438,21 @@ export class GachaGame extends BaseGame {
     const zh = this.isZhLang();
     const t = performance.now() / 1000;
 
-    // Header bar
-    fillGlassPanel(ctx, 24, 14, this.width - 48, 40, 12, {
-      fill: p.panel,
-      border: p.panelBorder,
-      glow: p.accent,
-    });
-    ctx.font = '600 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    // Slim header: plain title + ghost chips, hairline divider.
+    ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.text;
-    ctx.fillText(zh ? '抽卡' : 'Gacha', 42, 34);
+    ctx.fillText(zh ? '抽卡' : 'Gacha', 26, 32);
     ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.textDim;
-    ctx.fillText(zh ? `已抽取 ${this.stats.totalPulls} 次` : `${this.stats.totalPulls} pulls`, 42, 50);
+    ctx.fillStyle = p.textFaint;
+    ctx.fillText(zh ? `已抽取 ${this.stats.totalPulls} 次` : `${this.stats.totalPulls} pulls`, 26, 48);
+    ctx.strokeStyle = p.panelBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(24, 58);
+    ctx.lineTo(this.width - 24, 58);
+    ctx.stroke();
 
     // Right-side icon chips
     this.chipButton(ctx, this.hitPrizes(), zh ? '奖品' : 'PRIZES', p);
@@ -488,19 +490,17 @@ export class GachaGame extends BaseGame {
     p: GachaPalette,
     accentText = false,
   ) {
-    const dark = this.isDarkTheme();
-    ctx.fillStyle = dark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.75)';
-    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
-    ctx.fill();
-    ctx.strokeStyle = p.panelBorder;
-    ctx.lineWidth = 1;
-    roundRectPath(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2);
-    ctx.stroke();
+    // Ghost text button: no pill chrome, accent underline when primary.
     ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = accentText ? p.accent : p.textDim;
     ctx.fillText(label, hit.x + hit.w / 2, hit.y + hit.h / 2 + 1);
+    if (accentText) {
+      ctx.fillStyle = p.accent;
+      roundRectPath(ctx, hit.x + hit.w / 2 - 14, hit.y + hit.h - 3, 28, 2, 1);
+      ctx.fill();
+    }
   }
 
   private drawCase(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, lidOpen = 0, shake = 0) {
@@ -881,8 +881,11 @@ export class GachaGame extends BaseGame {
     }
 
     // Content — pre-rendered weapon silhouette with a rarity-colored aura
-    const icon = this.weaponSprite(item.icon ?? item.kind, tier.color, 0.95);
-    drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
+    const iconId = item.icon ?? item.kind;
+    if (!drawItemArt(ctx, iconId, 0, -30, 150, { plate: true, maxW: 300 })) {
+      const icon = this.weaponSprite(iconId, tier.color, 0.95);
+      drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
+    }
     ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.text;
     ctx.fillText(truncate(item.nameZh, 14), 0, 52);
@@ -941,15 +944,17 @@ export class GachaGame extends BaseGame {
   private drawGallery(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
 
-    fillGlassPanel(ctx, 24, 14, this.width - 48, 40, 12, {
-      fill: p.panel,
-      border: p.panelBorder,
-    });
-    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.text;
-    ctx.fillText(zh ? '全部奖品' : 'ALL PRIZES', 42, 34);
+    ctx.fillText(zh ? '全部奖品' : 'ALL PRIZES', 26, 32);
+    ctx.strokeStyle = p.panelBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(24, 58);
+    ctx.lineTo(this.width - 24, 58);
+    ctx.stroke();
     this.chipButton(ctx, this.hitBack(), zh ? '菜单' : 'MENU', p);
 
     // One row per rarity color: tier label on the left, its items in a row.
@@ -1029,8 +1034,10 @@ export class GachaGame extends BaseGame {
     const blit = iconSize * 1.16;
 
     if (locked) {
-      const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#cbd5e1' : '#475569', 1);
-      drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.28 });
+      if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { alpha: 0.28, maxW: w - 14 })) {
+        const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#cbd5e1' : '#475569', 1);
+        drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.28 });
+      }
       ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
       ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
@@ -1050,8 +1057,10 @@ export class GachaGame extends BaseGame {
     ctx.fillRect(-3, -3, 6, 6);
     ctx.restore();
 
-    const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#e8edf4' : '#334155', 0.9);
-    drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit);
+    if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { maxW: w - 14 })) {
+      const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#e8edf4' : '#334155', 0.9);
+      drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit);
+    }
     ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
     ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
@@ -1068,108 +1077,130 @@ export class GachaGame extends BaseGame {
     const zh = this.isZhLang();
     const total = this.stats.totalPulls;
 
-    fillGlassPanel(ctx, 24, 14, this.width - 48, 40, 12, {
-      fill: p.panel,
-      border: p.panelBorder,
-    });
-    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    // Slim header
+    ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.text;
-    ctx.fillText(zh ? '抽取统计' : 'PULL STATS', 42, 34);
+    ctx.fillText(zh ? '抽取统计' : 'PULL STATS', 26, 32);
     this.chipButton(ctx, this.hitBack(), zh ? '菜单' : 'MENU', p);
+    ctx.strokeStyle = p.panelBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(24, 58);
+    ctx.lineTo(this.width - 24, 58);
+    ctx.stroke();
 
-    if (this.statsPage === 0) {
-      // Total pulls — hero number with a soft halo
-      drawGlow(ctx, this.width / 2, 92, 70, p.accent, this.isDarkTheme() ? 0.18 : 0.1);
-      ctx.textAlign = 'center';
-      ctx.font = '600 30px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillStyle = p.text;
-      ctx.fillText(String(total), this.width / 2, 92);
-      ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = p.textDim;
-      ctx.fillText(zh ? '累计抽取次数' : 'TOTAL PULLS', this.width / 2, 118);
+    // ── Donut: tier distribution, total in the middle. ──
+    const dcx = 168;
+    const dcy = 246;
+    const radius = 96;
+    const ringW = 30;
+    const tiersHighFirst = [...GACHA_TIER_ORDER].reverse();
 
-      // Per-tier bars (high tiers first)
-      const barX = 64;
-      const barW = this.width - 240;
-      let y = 150;
-      for (const tierId of [...GACHA_TIER_ORDER].reverse()) {
+    // Track ring
+    ctx.strokeStyle = this.isDarkTheme() ? 'rgba(255,255,255,0.06)' : 'rgba(17,24,39,0.08)';
+    ctx.lineWidth = ringW;
+    ctx.beginPath();
+    ctx.arc(dcx, dcy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (total > 0) {
+      let a0 = -Math.PI / 2;
+      for (const tierId of tiersHighFirst) {
         const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
         const count = this.stats.tierCounts[tierId];
-        const pct = total > 0 ? (count / total) * 100 : 0;
-        ctx.textAlign = 'left';
-        ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = p.textDim;
-        ctx.fillText(tier.nameZh, 36, y);
-
-        // Track + gradient fill with a glowing tip
-        ctx.fillStyle = this.isDarkTheme() ? 'rgba(255,255,255,0.06)' : 'rgba(17,24,39,0.07)';
-        roundRectPath(ctx, barX, y - 6, barW, 12, 6);
-        ctx.fill();
-        if (pct > 0) {
-          const fillW = Math.max(3, (barW * pct) / 100);
-          const barGrad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
-          barGrad.addColorStop(0, shadeFx(tier.color, -0.25));
-          barGrad.addColorStop(1, tier.color);
-          ctx.fillStyle = barGrad;
-          roundRectPath(ctx, barX, y - 6, fillW, 12, 6);
-          ctx.fill();
-          drawGlow(ctx, barX + fillW, y, 9, tier.color, 0.4);
-        }
-        ctx.fillStyle = p.text;
-        ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText(String(count), this.width - 146, y);
-        ctx.fillStyle = p.textFaint;
-        ctx.fillText(`${pct.toFixed(1)}%`, this.width - 84, y);
-        y += 34;
-      }
-    } else {
-      // Item counts + recent pulls
-      const allItems = GACHA_TIERS.flatMap((tier) => GACHA_POOL[tier.id].map((item) => ({ item, tier })));
-      const cardW = 88;
-      const cardH = 48;
-      const cols = 6;
-      const gapX = (this.width - 60 - cardW * cols) / (cols - 1);
-      let idx = 0;
-      const rowStartY = 70;
-      const rows = Math.ceil(allItems.length / cols);
-      for (const entry of allItems) {
-        const col = idx % cols;
-        const row = Math.floor(idx / cols);
-        this.drawItemCard(ctx, 30 + col * (cardW + gapX), rowStartY + row * (cardH + 6), cardW, cardH, entry.tier, entry.item, this.stats.itemCounts[entry.item.id] ?? 0, p);
-        idx++;
-      }
-
-      const hy = rowStartY + rows * (cardH + 6) + 8;
-      ctx.textAlign = 'left';
-      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = p.text;
-      ctx.fillText(zh ? '最近抽取' : 'RECENT PULLS', 30, hy);
-      const recent = this.stats.history.slice(0, 12);
-      let hx = 30;
-      for (const entry of recent) {
-        const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
-        const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
-        if (!tier || !item) continue;
-        ctx.textAlign = 'center';
-        drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 12, hy + 20, { color: p.textDim, size: 22, mono: true });
+        if (count <= 0) continue;
+        const frac = count / total;
+        const a1 = a0 + frac * Math.PI * 2;
+        ctx.strokeStyle = tier.color;
+        ctx.lineWidth = ringW;
+        ctx.lineCap = 'butt';
         ctx.beginPath();
-        ctx.fillStyle = tier.color;
-        ctx.arc(hx + 12, hy + 34, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        hx += 40;
-        if (hx > this.width - 50) break;
-      }
-      if (recent.length === 0) {
-        ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = p.textFaint;
-        ctx.fillText(zh ? '还没有抽取记录' : 'No pulls yet', 30, hy + 20);
+        ctx.arc(dcx, dcy, radius, a0 + 0.012, Math.max(a0 + 0.012, a1 - 0.012));
+        ctx.stroke();
+        a0 = a1;
       }
     }
+    ctx.lineCap = 'butt';
 
-    this.pager(ctx, this.statsPage, 2, p);
+    // Center total
+    drawGlow(ctx, dcx, dcy, 60, p.accent, this.isDarkTheme() ? 0.14 : 0.08);
+    ctx.textAlign = 'center';
+    ctx.font = '700 32px ui-monospace, SFMono-Regular, monospace';
+    ctx.fillStyle = p.text;
+    ctx.fillText(String(total), dcx, dcy - 6);
+    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(zh ? '累计抽取' : 'TOTAL PULLS', dcx, dcy + 22);
+
+    // ── Right: per-tier rows with thin progress bars. ──
+    const rowX = 316;
+    const rowW = this.width - rowX - 30;
+    let y = 116;
+    for (const tierId of tiersHighFirst) {
+      const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
+      const count = this.stats.tierCounts[tierId];
+      const pct = total > 0 ? (count / total) * 100 : 0;
+
+      // color chip + name + count
+      ctx.fillStyle = tier.color;
+      roundRectPath(ctx, rowX, y - 6, 4, 16, 2);
+      ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.text;
+      ctx.fillText(zh ? tier.nameZh : tier.name, rowX + 12, y);
+      ctx.textAlign = 'right';
+      ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.text;
+      ctx.fillText(`${count}`, rowX + rowW - 64, y);
+      ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(`${pct.toFixed(1)}%`, rowX + rowW, y);
+
+      // thin bar
+      ctx.fillStyle = this.isDarkTheme() ? 'rgba(255,255,255,0.06)' : 'rgba(17,24,39,0.07)';
+      roundRectPath(ctx, rowX + 12, y + 12, rowW - 12, 4, 2);
+      ctx.fill();
+      if (pct > 0) {
+        const fillW = Math.max(3, ((rowW - 12) * pct) / 100);
+        const barGrad = ctx.createLinearGradient(rowX, 0, rowX + fillW, 0);
+        barGrad.addColorStop(0, shadeFx(tier.color, -0.25));
+        barGrad.addColorStop(1, tier.color);
+        ctx.fillStyle = barGrad;
+        roundRectPath(ctx, rowX + 12, y + 12, fillW, 4, 2);
+        ctx.fill();
+      }
+      y += 54;
+    }
+
+    // ── Bottom: recent pulls as colored icon chips. ──
+    const hy = 424;
+    ctx.textAlign = 'left';
+    ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = p.textDim;
+    ctx.fillText(zh ? '最近抽取' : 'RECENT PULLS', 30, hy - 14);
+    const allItems = GACHA_TIERS.flatMap((tier) => GACHA_POOL[tier.id].map((item) => ({ item, tier })));
+    const recent = this.stats.history.slice(0, 14);
+    let hx = 30;
+    for (const entry of recent) {
+      const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
+      const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
+      if (!tier || !item) continue;
+      drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
+      ctx.beginPath();
+      ctx.fillStyle = tier.color;
+      ctx.arc(hx + 14, hy + 26, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      hx += 42;
+      if (hx > this.width - 60) break;
+    }
+    if (recent.length === 0) {
+      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(zh ? '还没有抽取记录' : 'No pulls yet', 30, hy + 10);
+    }
 
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'right';
@@ -1357,8 +1388,6 @@ export class GachaGame extends BaseGame {
       }
       case 'stats': {
         if (this.canvasHit(x, y, this.hitBack())) { this.sfx.click(); this.gotoMenu(); return; }
-        if (this.canvasHit(x, y, { x: 130, y: this.height - 44, w: 60, h: 24 }) && this.statsPage > 0) { this.statsPage = 0; this.sfx.click(); return; }
-        if (this.canvasHit(x, y, { x: this.width - 190, y: this.height - 44, w: 60, h: 24 }) && this.statsPage < 1) { this.statsPage = 1; this.sfx.click(); return; }
         return;
       }
     }
