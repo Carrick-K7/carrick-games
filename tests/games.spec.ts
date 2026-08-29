@@ -927,6 +927,15 @@ test.describe('Carrick Games - Lifecycle', () => {
       await page.goto('/');
       await selectGame(page, 'snake');
 
+      // Canvas fitting is scheduled with requestAnimationFrame/ResizeObserver;
+      // wait for the first fit instead of racing the constructor's 400px CSS size.
+      await expect.poll(
+        () => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) =>
+          Math.round(canvas.getBoundingClientRect().width),
+        ),
+        { timeout: 5000 },
+      ).toBeGreaterThan(400);
+
       const metrics = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
         const box = canvas.getBoundingClientRect();
         return {

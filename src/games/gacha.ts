@@ -14,7 +14,7 @@
  * menu shows a mode switcher automatically once more than one exists.
  */
 
-import { drawItemArt } from './gunImages.js';
+import { drawItemArt, drawGunSilhouette } from './gunImages.js';
 import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
 import { GachaSfx } from './gachaAudio.js';
 import {
@@ -882,7 +882,7 @@ export class GachaGame extends BaseGame {
 
     // Content — pre-rendered weapon silhouette with a rarity-colored aura
     const iconId = item.icon ?? item.kind;
-    if (!drawItemArt(ctx, iconId, 0, -30, 150, { plate: true, maxW: 300 })) {
+    if (!drawItemArt(ctx, iconId, 0, -42, 146, { plate: true, maxW: 290 })) {
       const icon = this.weaponSprite(iconId, tier.color, 0.95);
       drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
     }
@@ -1188,7 +1188,10 @@ export class GachaGame extends BaseGame {
       const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
       const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
       if (!tier || !item) continue;
-      drawWeaponIcon(ctx, item.icon ?? item.kind, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
+      const iconId = item.icon ?? item.kind;
+      if (!drawGunSilhouette(ctx, iconId, hx + 14, hy + 8, 26, p.textDim)) {
+        drawWeaponIcon(ctx, iconId, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
+      }
       ctx.beginPath();
       ctx.fillStyle = tier.color;
       ctx.arc(hx + 14, hy + 26, 2.5, 0, Math.PI * 2);
