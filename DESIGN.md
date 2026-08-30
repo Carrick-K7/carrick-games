@@ -2,286 +2,223 @@
 
 This is the repository's design authority. `README.md` is for external readers; `AGENTS.md` is for development workflow and deployment closure.
 
-## Direction
+## Product Principle
 
-Carrick Games uses a clean HD arcade style: classic game shapes and readable arcade layouts, rendered with modern high-density Canvas 2D.
+Carrick Games is a simple, fun game collection. The shell exists only to help a player:
 
-The target feel is:
+1. switch games,
+2. see and play the game canvas,
+3. understand the current keyboard and mouse mapping on desktop.
 
-- Crisp: HiDPI backing canvases, sharp geometry, stable logical coordinates.
-- Premium: layered lighting, soft shadows, restrained glow, and eased motion — the bar is a polished modern web game, not a tech demo.
-- Playable: controls, scores, hazards, and game state must read instantly.
-- Lightweight: Canvas-native drawing, no heavy asset pipeline.
-- Bilingual: English and Chinese UI must both fit without overlap.
-- Theme-aware: dark, light, and system modes should all look intentional.
+Everything else is contextual and optional. Games may be expressive; the page around them must stay quiet.
 
-Do not use a separate visual-style document. Put durable visual decisions here.
+The target feel is closer to Nuxt or Substack than to a game launcher dashboard: strong typography, generous breathing room, neutral surfaces, hairline dividers, and one clear content region.
 
-## Style Modes
+Do not add a separate visual-style document. Put durable visual decisions here.
 
-The shell ships two style modes, orthogonal to the light/dark theme. The active
-mode lives on `<html data-style-mode="modern|pixel">` (default `modern`) and is
-persisted in `localStorage` under `cg-style-mode`. Both modes share one set of
-semantic CSS tokens in `index.html`; a mode only changes token values
-(geometry, shadows, display font) plus a short list of component overrides.
+## Shell Information Architecture
 
-### Modern (default)
+The persistent shell has exactly three layers:
 
-- Layered dark scene (`--bg-scene` gradient + faint accent ambience), glassy
-  translucent sidebar/panels with `backdrop-filter` blur, hairline alpha
-  borders, soft elevation shadows.
-- The canvas sits on a "stage": hairline bezel, rounded corners, and a
-  restrained ambient accent glow (`0 0 80px -22px var(--accent-glow)`).
-- Motion is token-driven (`--dur-fast`, `--dur-base`, `--ease-out`): hover
-  lifts, pressed states, staggered list entrances, canvas pop-in, overlay
-  fade-up. Everything degrades to instant under
-  `prefers-reduced-motion: reduce`.
+- A thin header with the wordmark, current-game switcher, and one overflow menu.
+- A centered game canvas.
+- A compact desktop input strip containing only controls used by the current game.
 
-### Pixel
+The following are not persistent page regions:
 
-- Geometry tokens flip to the arcade set: `--radius-*` → 2px/4px,
-  `--bw` → 2px, blur shadows → hard offset shadows (`0 4px 0 ...`),
-  `--glass-blur` → 0.
-- Dark pixel is a deep indigo cabinet palette; light pixel is a warm retro
-  paper palette.
-- Display type uses the bundled `fonts/PressStart2P-Regular.ttf`
-  (`@font-face 'Press Start 2P'`, stack falls back to system UI for Chinese
-  glyphs). Apply it via `var(--font-display)` to brand, eyebrows, section
-  titles, buttons, numeric readouts, and overlay titles — never to dense body
-  text or the game list names.
-- CJK fallback rule: any pixel-mode selector whose text may be Chinese must
-  stay at or above roughly `0.55rem`; keep tiny `0.4–0.5rem` sizes for
-  Latin/digit-only micro labels.
-- `#gameCanvas` gets `image-rendering: pixelated` and a thicker bezel.
-- `drawGameResultOverlay()`/`fillRoundedPanel()` in `src/core/render.ts` read
-  `isPixelMode()` and switch to the pixel font stack, small radius, and hard
-  shadow so in-canvas terminal panels match the shell.
+- The game library opens as a modal command palette on desktop and a bottom sheet on mobile.
+- Theme, language, demo, and other low-frequency actions live in the overflow menu.
+- Game-specific utilities such as Parking's level selector appear as a compact disclosure below the canvas.
+- Descriptions, records, and statistics must not become permanent sidebars.
 
-## Core UI
+Do not reintroduce permanent left/right rails, nested cards, category dashboards, or a full inactive keyboard.
 
-The shell UI is an application surface, not a marketing landing page.
+## Game Switching
 
-- Keep the game as the primary first-screen experience.
-- Keep navigation dense enough for repeated use.
-- Use compact controls and predictable panels.
-- Avoid nested cards and decorative page sections.
-- Do not let sidebars, keyboard panels, or overlays intercept unrelated clicks.
-- Text must fit in buttons, cards, sidebars, and canvas overlays at mobile and desktop sizes.
+The current game name is always visible in the header and is the game-switch trigger.
 
-## Shell Layout & Canvas Fit
+The picker:
 
-The canvas is the product. Layout exists to give it room.
+- opens only on demand;
+- puts search first;
+- uses simple text group headings rather than colored category pills;
+- presents one flat row per game;
+- closes immediately after selection;
+- supports Escape, backdrop close, focus-visible states, and mobile touch targets;
+- may preload a game on pointer or focus intent, but must not eagerly fetch every game.
 
-- **Canvas fitting**: the shell sizes `#gameCanvas` to the game column width,
-  capped so canvas + action bar stay inside the first viewport
-  (`fitGameCanvas()` in `src/main.ts`, `setCanvasDisplaySize()` in
-  `src/core/render.ts`). Display scaling never changes logical coordinates;
-  the backing store is re-sized to `cssWidth × devicePixelRatio` so upscaled
-  games stay sharp. Never clamp a large canvas below its logical width just
-  to fit a side panel — shrink the panel instead.
-- **Layout rhythm**: desktop keeps a fixed two-column rhythm — the game
-  column (canvas + action bar) on the left; the right rail stacks the stats
-  sidebar (info, controls legend, level state) above the keyboard + mouse
-  simulation panel. The canvas never shrinks below its logical width to make
-  room for a panel. Below 960px everything stacks: canvas, stats, keyboard.
-- **Keyboard + mouse panel**: every game page shows the full ANSI 60%
-  keyboard (active game's keys enabled) beside a live mouse simulation
-  (buttons and wheel light up with real input). Never swap these for a
-  compact layout. Hide the whole panel on `pointer: coarse` — touch games
-  bring their own on-canvas controls.
-- **Controls legend**: follow the primary pointer. Fine-pointer devices show
-  only keyboard/mouse key→action rows; `pointer: coarse` clients show only
-  touch guidance (never both). The start overlay stays minimal (game name +
-  click-to-start) — no control teaching on the canvas.
-- **Flat panels**: the sidebar is one panel — do not nest cards inside it.
-  Sections inside `.game-sidebar` separate with hairline dividers, not
-  boxed/elevated backgrounds.
-- **Contextual side panels**: panels show what the current game state needs.
-  Example: parking shows the full level grid in menu state, but collapses
-  to a compact progress strip plus driving instruments mid-run.
+Game names and grouping come from `src/games/catalog.ts`. Do not maintain a second game registry.
 
-The game library uses four visible primary category filters plus grouped game
-sections. Category filters show counts, the selected category is explicit, and
-the current game's family remains visible in the top bar. On mobile, choosing a
-game closes the library drawer so the play surface is revealed immediately.
-Desktop and mobile sidebar state must remain independent. A collapsed desktop
-rail shows icons only and always keeps an obvious expand control visible.
+## Canvas Is the Product
 
-## Canvas Craft (modern mode)
+The canvas is the only dominant visual object on the page.
 
-The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing
-one-off drawing code; it is how the game canvases stay stylistically unified.
+- Center it in the available viewport.
+- Keep its logical dimensions and HiDPI behavior unchanged.
+- Fit it without reserving space for permanent side panels.
+- Use only a 1px bezel, small radius, and near-flat shadow in the shell.
+- Keep fullscreen affordance quiet and reveal it on hover/focus; touch may keep it faintly visible.
+- Start through the canvas overlay. Do not duplicate the action with a large external start button.
+- Keep loading and error states aligned to the displayed canvas bounds.
 
-- **Lighting model**: one consistent key light from above. Bodies get gradient
-  shading (`fillBevelTile`, `fillSphere`), a top-edge highlight, a bottom-edge
-  shade, and where useful a rim light. Derive light/dark variants with
-  `shade()` and translucency with `withAlpha()` instead of inventing one-off
-  colors.
-- **Glow**: additive radial glow (`drawGlow`, `glow`-shaped particles) marks
-  energy, muzzle flashes, rare loot, and interactive hotspots. Keep glow
-  purposeful — it loses meaning when everything glows. In light theme, prefer
-  `source-over` particles so bright scenes do not wash out.
-- **Scenes**: build depth with layered backgrounds (`Starfield` parallax,
-  nebula washes, textured floors) and seat the scene with a subtle vignette
-  (`drawVignette`, strength ≤ ~0.3). Never use full-screen scanlines.
-- **Motion & juice**: animate with the shared easings (`ease()`, `Tween`);
-  celebrate moments with `Particles`/`fx` presets (explosion, confetti, pop),
-  `ScreenShake` (keep trauma ≤ ~0.3 for hits, ≤ 0.8 for deaths), and
-  `FloatTexts` for score feedback. Keep particle counts bounded.
-- **Sprites**: anything with real detail — ships, cars, chests, items — is
-  drawn once through `makeSprite()` and blitted each frame with `drawSprite()`.
-  Cache per theme and rebuild on theme change. Do not re-run detailed vector
-  drawing per frame, and avoid per-frame `shadowBlur` storms.
-- **3D exception**: shooter-family games may render the world with `three`
-  (see `src/games/counterstrikeScene3d.ts`), blitting the WebGL canvas into
-  the game's 2D canvas each frame so HiDPI, HUD, overlays, and e2e pixel
-  probes keep working. HUD, menus, radar, and result overlays stay 2D.
-- **Pixel mode** keeps the original retro look: the craft above applies to
-  modern mode only. Shared chrome (result overlays) still branches on
-  `isPixelMode()`, and games with a legacy renderer (e.g. the Counter-Strike
-  raycaster) keep it as the pixel-mode path.
-- **Canvas text**: size text for the logical canvas, not the screen —
-  ≥ 11px on canvases ≤ 480 logical px wide, ≥ 13px on ≥ 960-wide ones
-  (HUD labels may be 1–2px smaller than values). The shell upscales small
-  canvases on desktop, so logical sizes scale up proportionally. HUD labels
-  use the active UI language; proper nouns (weapon names, map names) may
-  stay in English. One line of in-canvas hint at a time.
+`fitGameCanvas()` in `src/main.ts` and `setCanvasDisplaySize()` in `src/core/render.ts` own display scaling. Never change logical coordinates or pointer mapping to fit the shell.
 
-## Palette
+## Input Mapping
 
-Use the app theme tokens for page UI and `getRetroPalette()` from `src/core/render.ts` for canvas scenes.
+Fine-pointer desktops show a compact mapping strip under the canvas.
+
+- Render only controls the current game uses.
+- Group keycaps with their action label.
+- Keep real keyboard presses visibly synchronized.
+- Keep a small live mouse indicator; do not draw a full decorative keyboard or mouse.
+- Do not put controls in a separate card.
+
+Hide the entire mapping on `pointer: coarse` and narrow mobile layouts. Touch games express their controls through the canvas and catalog guidance, not permanent page chrome.
+
+## Contextual Game Utilities
+
+A game-specific shell utility is allowed only when removing it would block gameplay.
+
+- Parking keeps level selection as a compact `Level N` disclosure below the canvas.
+- Demo actions live in the overflow menu and appear only for games that support them.
+- Scores and moment-to-moment telemetry belong in the game canvas whenever possible.
+- Large steering instruments, records cards, game descriptions, and progress dashboards are not persistent shell UI.
+
+When a contextual control expands, it should collapse after a selection and must not compete with active gameplay.
+
+## Visual Language
+
+Carrick Games has one shell style. There is no modern/pixel shell mode switch.
+
+Individual games may still use pixel art or another visual language inside their canvas. The shell remains neutral and consistent.
+
+### Color
+
+Use a neutral page with one accent color.
 
 | Purpose | Dark | Light |
-|---------|------|-------|
-| App background | `#070b12` | `#eef2f7` |
-| Canvas background | `#0b0f19` | `#fafafa` |
-| Primary accent | `#39C5BB` | `#0d9488` |
-| Text | `#f1f5f9` | `#0f172a` |
-| Muted text | `#94a3b8` | `#5b6b80` |
-| Danger | `#fb7185` | `#dc2626` |
-| Warning | `#facc15` | `#ca8a04` |
-| Success | `#4ade80` | `#16a34a` |
-
-Pixel mode shifts the shell palette (indigo cabinet / retro paper) and
-brightens the accent; canvas scenes keep the shared `getRetroPalette()` values.
+|---|---|---|
+| Page | `#0f0f0f` | `#ffffff` |
+| Quiet surface | `#171717` | `#fafafa` |
+| Text | `#f5f5f5` | `#111111` |
+| Muted | `#a3a3a3` | `#6b7280` |
+| Border | `#2a2a2a` | `#e5e7eb` |
+| Accent | `#2dd4bf` | `#0d9488` |
 
 Rules:
 
-- Branch game colors with `this.isDarkTheme()`.
-- Prefer shared palette helpers over one-off colors.
-- Do not rely on color alone for critical state; pair color with shape, position, text, or motion.
+- No page-level radial ambience or decorative background gradients.
+- No category color system in the shell.
+- Accent marks focus, active selection, and meaningful state only.
+- Do not rely on color alone for critical state.
 
-## Typography
+### Typography
 
-Canvas text should use the system UI stack unless a specific symbol font is needed:
+Use the system UI stack for the shell and canvases unless a symbol font is necessary.
 
-```typescript
-ctx.font = '14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-```
+- Wordmark: 15–16px, semibold.
+- Current game: 14px, medium.
+- Body and list rows: 12–14px.
+- Avoid uppercase eyebrow labels and decorative display fonts.
+- Keep Chinese and English at equivalent visual weight.
 
-Rules:
+### Geometry and Elevation
 
-- Use system fonts for HUDs, labels, instructions, and overlays.
-- Use `ui-monospace, SFMono-Regular, monospace` only for aligned numeric readouts.
-- Use symbol fonts only for board-game pieces or card suits where needed.
-- The pixel display font (`'Press Start 2P'`) is reserved for result-overlay
-  titles/details in pixel mode and for shell display elements; never use it
-  for in-gameplay HUD text that must read at a glance.
-- Minimum readable canvas text size is `10px`.
-- Typical HUD text is `12px-14px`.
-- Game-over and title text is usually `18px-28px`.
-- Set `ctx.textBaseline = 'middle'` for vertically centered single-line text.
+- Canvas radius: 6–8px.
+- Buttons and fields: 5–7px.
+- Modal or mobile sheet: 10–12px.
+- Ordinary components have no shadow.
+- Only dialogs may use obvious elevation.
+- Avoid pill shapes except where semantics genuinely require them.
 
-## Canvas Rendering
+### Motion
 
-`BaseGame` configures the HiDPI backing canvas through `configureHiDpiCanvas()`. Games draw in logical coordinates with `this.width` and `this.height`.
+Motion communicates state, not decoration.
 
-Use:
+- Menus and dialogs may use a short 120–160ms opacity/position transition.
+- Keyboard and mouse indicators react immediately.
+- Do not stagger game-list entrances or animate every page component.
+- Honor `prefers-reduced-motion`.
 
-- `src/core/fx.ts` helpers for lit shapes, glow, particles, shake, tweens, sprites, and layered backgrounds (see Canvas Craft).
-- `drawRetroBackground()` for subtle arcade grids or background texture.
-- `fillRoundedPanel()` for HUD panels, menus, and overlays.
-- `getCanvasPoint()` or `this.canvasPoint()` for input mapping.
+## Canvas Craft
 
-Avoid:
+The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing one-off game drawing code.
 
-- Manually scaling pointer coordinates from `canvas.width / rect.width`.
-- Decorative overlays that reduce readability.
-- Full-screen scanline effects; vignettes only as a subtle scene-seating wash (see Canvas Craft).
-- Canvas text or controls that depend on browser viewport-scaled font sizes.
+- Use `fillBevelTile`, `fillSphere`, `shade`, and `withAlpha` for a consistent top-light model.
+- Use glow only for energy, rare rewards, hits, and interactive hotspots.
+- Use layered scene backgrounds and restrained vignettes to create depth inside games.
+- Use shared particles, screen shake, tweens, and float text for meaningful feedback; keep counts bounded.
+- Cache detailed sprites with `makeSprite()`/`drawSprite()` rather than rebuilding them every frame.
+- Avoid per-frame `shadowBlur` storms.
+- Shooter-family games may use `three`, rendered back into the game's 2D canvas so shell contracts remain intact.
 
-Game-specific glow, particles, gradients, and texture are acceptable when they improve readability or game feel. Keep them restrained.
+Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `src/core/render.ts`. Shell minimalism must not flatten or remove useful game feedback.
 
-## Layout
+## Canvas Text and HUD
 
-Common canvas sizes:
-
-- Square arcade: `400x400`, `480x480`, `600x600`.
-- Wide arcade: `480x360`, `600x400`.
-- Tall arcade: `400x560`, `480x640`.
-- Puzzle/tabletop: whatever preserves a readable board and touch targets.
-
-Rules:
-
-- Use stable dimensions for boards, tiles, buttons, HUD rows, and side panels.
-- Avoid layout shifts caused by hover states, dynamic labels, loading states, or translated text.
-- Mobile sidebars must not overlap game-list items in a way that changes click targets.
-- Touch targets should be at least `40px` where the game allows it.
-- On common desktop widths, keep the game and its status panel in the first
-  layout row; place the keyboard/control panel below when three columns do not
-  fit.
-
-## In-Game HUD
-
-HUDs should be compact and close to the action:
-
-- Prefer a top bar, side strip, or small anchored panel.
-- Keep score, timer, level, and state readable at a glance.
-- Keep HUD outside the playfield when it would obscure gameplay.
-- Use translucent panels only when the content behind them does not matter.
+- Size text for logical canvas dimensions, not the viewport.
+- Use at least 11px on canvases up to 480 logical px and 13px on larger canvases where practical.
+- Prefer compact top bars, side strips, or anchored HUDs.
+- Keep critical score, timer, hazard, and state information readable at a glance.
+- Use one line of in-canvas hint at a time.
 
 ## Overlays
 
-Game-over, pause, win, and start overlays should use:
+Terminal win/loss/completion states use `BaseGame.drawResultOverlay()`; Gacha remains the published exception because it has no terminal state.
 
-- a semi-transparent dim layer,
-- centered text or a compact panel,
-- clear score/result state,
-- concise restart/start instruction.
+Start overlays contain only:
 
-All terminal win, loss, completion, and game-over states use
-`BaseGame.drawResultOverlay()`. This keeps result hierarchy, tone, spacing,
-theme behavior, style-mode behavior, and the testable canvas result state
-consistent. The only published exception is Gacha, which has no terminal
-state.
+- the game name;
+- one concise click/tap-to-start instruction.
 
-The standard terminal primary action is Space, Enter, click, or tap, detected
-through `BaseGame.isRestartInput()`. A game may map that action to the next
-level or continue state when restarting would be incorrect, but its result
-panel must describe that behavior. Secondary shortcuts such as replay or menu
-may remain game-specific.
+Do not duplicate control teaching or large external start buttons.
 
-Do not create large explanatory screens inside games. The app already renders controls outside the canvas.
+Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.isRestartInput()` unless the game's continuation semantics require otherwise.
+
+## Responsive Behavior
+
+### Desktop
+
+- Keep the header thin and the canvas centered.
+- Show the compact keyboard/mouse mapping.
+- Open game switching in a centered modal.
+
+### Mobile and coarse pointer
+
+- Keep wordmark, current-game switcher, and overflow menu in one row.
+- Let the canvas use nearly the full viewport width.
+- Hide keyboard/mouse mapping completely.
+- Open game switching as a bottom sheet.
+- Do not render permanent descriptions, records, or control cards below the game.
+- Touch targets should be at least 40px where space allows.
+
+## Themes and Language
+
+Dark, light, and system themes remain supported, but they live in the overflow menu. Language selection also lives there.
+
+Theme and language changes must repaint static canvases immediately and fit both English and Chinese without overlap.
 
 ## Game Families
 
-The 0.1.x release line includes 26 published games. The four primary families are intentionally broad and follow familiar App Store game-category language. Keep this list aligned with `src/games/catalog.ts` and `README.md`.
+The published collection contains 26 games across four broad families:
 
 - Casual: Parking, Gacha, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
 - Action: Counter-Strike, I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
 - Puzzle: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku.
 - Board & Card: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.
 
-Each family can vary in mood, but all games should share the same clarity, theming, and HiDPI expectations.
+Family labels organize the on-demand picker only; they are not permanent dashboard filters.
 
 ## Acceptance Checklist
 
-Before a design or UI change is done:
+Before a shell or visual change is complete:
 
-- `npm run build` passes.
-- Relevant Playwright tests pass; full `npm run test:e2e` is required before Agent closure.
-- Canvas is nonblank in dark and light themes.
-- Shell looks intentional in both style modes (modern and pixel), in dark and light.
-- Text fits in English and Chinese, including pixel-mode CJK fallback sizes.
-- Keyboard, mouse, and touch input remain correctly mapped after canvas scaling.
-- The UI has no incoherent overlaps at mobile and desktop widths.
+- The first viewport is dominated by the current game canvas.
+- Game switching is obvious without a permanent library rail.
+- No game name, start action, or control legend is duplicated.
+- Desktop shows only relevant keyboard/mouse mappings.
+- Mobile and coarse-pointer layouts show no keyboard/mouse panel.
+- Parking level selection and supported Demo flows remain reachable.
+- Dark/light/system themes and English/Chinese remain coherent.
+- Canvas pointer mapping and HiDPI scaling remain correct.
+- `npm run typecheck`, `npm run test:unit`, `npm run build`, and full `npm run test:e2e` pass.

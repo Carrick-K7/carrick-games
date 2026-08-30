@@ -13,16 +13,15 @@ async function collectErrors(page: Page) {
 }
 
 async function selectGame(page: Page, gameId: string) {
+  await page.locator('#gamePickerBtn').click();
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
-  await expect(page.locator('#actionBtn')).toBeVisible();
-  await expect(page.locator('#actionBtn')).toBeEnabled();
+  await expect(page.locator('#startOverlay')).toHaveClass(/active/);
 }
 
 async function startGame(page: Page) {
-  const btn = page.locator('#actionBtn');
-  await btn.click();
+  await page.locator('#startOverlay').click();
   await page.waitForTimeout(400);
 }
 
@@ -46,8 +45,7 @@ async function getScores(page: Page): Promise<number[]> {
 }
 
 async function restartGame(page: Page) {
-  const btn = page.locator('#actionBtn');
-  await btn.click();
+  await page.locator('#gameCanvas').click({ position: { x: 12, y: 12 } });
   await page.waitForTimeout(500);
 }
 

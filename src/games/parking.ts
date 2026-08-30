@@ -126,7 +126,7 @@ export class ParkingGame extends BaseGame {
   private bestLevel = 0;
   private selectedLevel = 0;
 
-  // Exposed for side panel
+  // Exposed for the compact shell level picker.
   readonly totalLevels = PARKING_LEVELS.length;
   get levelIndexEx(): number { return this.levelIndex; }
   get bestLevelEx(): number { return this.bestLevel; }
@@ -202,7 +202,7 @@ export class ParkingGame extends BaseGame {
     this.gameState = 'demo';
   }
 
-  /** Called from side panel to select a level in menu */
+  /** Called from the shell level picker to select a level. */
   selectLevel(index: number) {
     if (index < 0 || index >= PARKING_LEVELS.length) return;
     if (index > this.unlockedLevel) return;
@@ -211,7 +211,7 @@ export class ParkingGame extends BaseGame {
     this.notifyShellStateChanged();
   }
 
-  /** Called from side panel to select a level and enter menu mode */
+  /** Return level selection to menu mode. */
   goToMenu() {
     this.gameState = 'menu';
     this.selectedLevel = Math.min(this.unlockedLevel, PARKING_LEVELS.length - 1);

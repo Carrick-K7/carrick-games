@@ -6,12 +6,11 @@ This is the repository's development authority. `README.md` is for external read
 
 ```text
 src/
-  app/                # Shell behavior such as responsive sidebar state
   core/game.ts        # BaseGame, GameHost, lifecycle, and shell snapshots
   core/render.ts      # HiDPI canvas, palette, and coordinate helpers
   core/storage.ts     # Safe shared score persistence
   core/levelselect.ts # Shared level-select UI helpers
-  games/catalog.ts    # Game metadata, dynamic loaders, and sidebar grouping
+  games/catalog.ts    # Game metadata, dynamic loaders, and picker grouping
   games/              # One file per registered game plus pure helper modules
   ui/                 # Shell rendering helpers and input presentation
   styles/             # Vite-managed application styles
@@ -41,7 +40,7 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 - Keep changes scoped. Do not reformat unrelated files or rewrite established game logic as part of a narrow fix.
 - Use `this.isDarkTheme()` and `this.isZhLang()` for theme and language branching inside games.
 - Use `this.canvasPoint(clientX, clientY)` for mouse and touch coordinates. Do not compute from `canvas.width / rect.width`; canvases use HiDPI backing stores.
-- The shell supports two style modes, `data-style-mode="modern"` (default) and `"pixel"`, orthogonal to the light/dark theme and persisted as `cg-style-mode`. Keep both modes coherent when editing `index.html` styles or shared canvas chrome (`src/core/render.ts` reads `isPixelMode()` for result panels). See `DESIGN.md` for the mode rules.
+- The shell uses one restrained visual style with light, dark, and system themes. Individual games may remain pixel-styled inside their canvas, but do not add a shell-wide style-mode switch or permanent dashboard chrome. See `DESIGN.md` for the shell rules.
 - Follow `DESIGN.md` for visual choices. If `AGENTS.md` and `DESIGN.md` appear to conflict on design, update the docs instead of inventing a third rule.
 
 ## Adding A Game

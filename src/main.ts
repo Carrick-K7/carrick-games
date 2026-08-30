@@ -17,26 +17,15 @@ import {
 } from './core/game.js';
 import { saveStoredRecord } from './core/storage.js';
 import { isPixelMode } from './core/render.js';
-import { GAME_ICONS } from './ui/game-icons.js';
 import { normalizeKey } from './ui/keyboard-input.js';
 import { renderVirtualKeyboard } from './ui/virtual-keyboard.js';
-import { initializeSidebar } from './app/sidebar.js';
-
-import {
-  renderLevelGridHTML,
-  renderLevelStripHTML,
-  renderDrivingStateHTML,
-  renderMenuHint,
-  renderParkingSteeringHTML,
-  type LevelSelectState,
-} from './core/levelselect.js';
+import { renderLevelGridHTML, type LevelSelectState } from './core/levelselect.js';
 
 let currentGameName: string | null = null;
 let currentGameInstance: GameInstance | null = null;
 let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
-let selectedGameGroup = 'all';
 const gameClassCache = new Map<string, Promise<GameCtor>>();
 
 function loadGameClass(meta: GameMeta): Promise<GameCtor> {
@@ -74,29 +63,10 @@ function setHashGame(name: string) {
 }
 
 function updateActionButton() {
-  const btn = document.getElementById('actionBtn') as HTMLButtonElement | null;
-  if (!btn) {
-    updateDemoButton();
-    return;
-  }
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  if (isLoadingGame) {
-    btn.textContent = zh ? '加载中...' : 'Loading...';
-    btn.disabled = true;
-    updateDemoButton();
-    return;
-  }
-  if (!currentGameInstance) {
-    btn.textContent = zh ? '选择游戏' : 'Select a game';
-    btn.disabled = true;
-    updateDemoButton();
-    return;
-  }
-  btn.disabled = false;
-  if (!isRunning) {
-    btn.textContent = zh ? '开始游戏' : 'Start Game';
-  } else {
-    btn.textContent = zh ? '重新开始' : 'Restart';
+  const restart = document.getElementById('restartBtn') as HTMLButtonElement | null;
+  if (restart) {
+    restart.hidden = !currentGameInstance || !isRunning || isLoadingGame;
+    restart.textContent = isZhLang() ? '重新开始' : 'Restart';
   }
   updateDemoButton();
 }
@@ -112,20 +82,11 @@ function updateDemoButton() {
 }
 
 function updateGameTitle() {
-  const titleEl = document.getElementById('gameTitle');
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
   const meta = GAMES.find((g) => g.id === currentGameName);
-  if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-  const libraryEyebrow = document.getElementById('libraryEyebrow');
-  if (libraryEyebrow) {
-    libraryEyebrow.textContent = zh ? `游戏库 · ${GAMES.length} 款` : `GAME LIBRARY · ${GAMES.length}`;
-  }
   const selectedGameLabel = document.getElementById('selectedGameLabel');
   if (selectedGameLabel) {
-    const group = meta ? GAME_GROUPS.find((item) => item.id === GAME_GROUP_MAP[meta.id]) : null;
-    const gameName = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '选择游戏' : 'Select a game');
-    const groupName = group ? (zh ? group.nameZh : group.name) : '';
-    selectedGameLabel.textContent = groupName ? `${groupName} / ${gameName}` : gameName;
+    selectedGameLabel.textContent = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '选择游戏' : 'Select a game');
   }
   const canvas = document.getElementById('gameCanvas');
   if (canvas && meta) {
@@ -134,22 +95,11 @@ function updateGameTitle() {
   }
 }
 
-function updateGameDesc() {
-  const descEl = document.getElementById('gameDesc');
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  if (descEl) descEl.textContent = meta ? (zh ? meta.descZh : meta.desc) : '';
-}
-
 function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
   document.querySelectorAll('.vkey').forEach((el) => {
     const k = el.getAttribute('data-key') || '';
     el.classList.toggle('pressed', pressedSet.has(k));
   });
-}
-
-function getRecord(gameId: string): number | null {
-  return getStoredRecord(gameId);
 }
 
 function getLevelSelectState(): LevelSelectState | null {
@@ -162,133 +112,46 @@ function getLevelSelectState(): LevelSelectState | null {
 function renderStats() {
   const container = document.getElementById('statsPanel');
   if (!container) return;
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  if (!meta) {
-    container.innerHTML = `<div class="stats-empty">${zh ? '选择游戏' : 'Select a game'}</div>`;
+  const ls = getLevelSelectState();
+  if (!ls) {
+    container.hidden = true;
+    container.innerHTML = '';
     return;
   }
 
-  if (!currentGameName) return;
-  const best = getRecord(currentGameName);
-  const ls = getLevelSelectState();
-  let html = '';
+  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
+  const driving = ls.gameState === 'playing' || ls.gameState === 'demo';
+  const current = ls.currentLevel + 1;
+  const selected = ls.selectedLevel + 1;
+  container.hidden = false;
+  container.innerHTML = `
+    <details class="level-picker">
+      <summary>
+        <span>${zh ? '关卡' : 'Level'} ${driving ? current : selected}</span>
+        <span class="level-picker-meta">${zh ? '最佳' : 'Best'} ${ls.bestLevel}</span>
+      </summary>
+      <div class="level-picker-grid">${renderLevelGridHTML(ls, ls.selectedLevel, zh)}</div>
+    </details>
+  `;
 
-  // Game info card
-  html += `<div class="game-info-card">`;
-  html += `<div class="gic-name">${zh ? meta.nameZh : meta.name}</div>`;
-  html += `<div class="gic-desc">${zh ? (meta.descZh || meta.desc) : meta.desc}</div>`;
-  const liveScore = readGameScore();
-  if (liveScore != null) {
-    html += `<div class="gic-record"><span>${zh ? '当前分数' : 'Score'}</span><span class="gic-value" id="liveScore">${liveScore}</span></div>`;
-  }
-  if (best != null) {
-    const bestLabel = currentGameName === 'parking' ? (zh ? '最高关卡' : 'Best Level') : (zh ? '最高记录' : 'Best');
-    html += `<div class="gic-record"><span>${bestLabel}</span><span class="gic-value">${best}</span></div>`;
-  }
-  html += `</div>`;
-
-  // Controls legend — the catalog already carries per-game key/action text;
-  // surface it so players never have to guess.
-  const kb = meta.controls.keyboard ?? [];
-  const touch = meta.controls.touch ?? [];
-  // Input guidance follows the primary pointer: touch-first Web clients only
-  // see touch guidance; keyboard/mouse clients only see key mappings.
-  const touchFirst = window.matchMedia('(pointer: coarse)').matches;
-  const showTouch = touchFirst && touch.length > 0;
-  const visibleControls = showTouch ? touch : kb;
-  if (visibleControls.length) {
-    html += `<div class="stats-section"><div class="stats-section-title">${zh ? '操作' : 'CONTROLS'}</div>`;
-    html += '<div class="controls-legend">';
-    if (showTouch) {
-      for (const entry of touch) {
-        html += `<div class="cl-row"><span class="cl-keys"><kbd class="keycap keycap-touch">${zh ? '触屏' : 'Touch'}</kbd></span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
-      }
-    } else {
-      for (const entry of kb) {
-        const caps = entry.keys.map((k) => `<kbd class="keycap">${k}</kbd>`).join('');
-        html += `<div class="cl-row"><span class="cl-keys">${caps}</span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
-      }
-    }
-    html += '</div></div>';
-  }
-
-  // Level select: full grid whenever the player is not actively driving
-  // (menu, crash, level complete, demo complete all allow picking a level);
-  // collapse to a compact strip + driving instruments mid-run only.
-  if (ls) {
-    const driving = ls.gameState === 'playing' || ls.gameState === 'demo';
-    if (!driving) {
-      html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVELS'}</div>`;
-      html += renderLevelGridHTML(ls, ls.selectedLevel, zh);
-      html += `</div>`;
-      if (ls.gameState === 'menu') {
-        html += renderMenuHint(zh);
-      }
-    } else {
-      html += `<div class="stats-section"><div class="stats-section-title">${zh ? '关卡' : 'LEVEL'}</div>`;
-      html += renderLevelStripHTML(ls, zh);
-      html += renderDrivingStateHTML(ls, zh);
-      html += `</div>`;
-    }
-  }
-
-  container.innerHTML = html;
-
-  if (ls) {
-    container.querySelectorAll('.level-cell').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.getAttribute('data-level') || '', 10);
-        if (isNaN(idx)) return;
-        currentGameInstance?.selectLevel?.(idx);
-      });
+  container.querySelectorAll('.level-cell').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-level') || '', 10);
+      if (isNaN(idx)) return;
+      currentGameInstance?.selectLevel?.(idx);
+      const details = container.querySelector('details');
+      if (details instanceof HTMLDetailsElement) details.open = false;
     });
-  }
+  });
 }
 
 function updateLiveScoreDisplay() {
-  // Update score if game has it
-  const scoreEl = document.getElementById('liveScore');
-  if (scoreEl) {
-    const score = readGameScore();
-    if (score != null) scoreEl.textContent = String(score);
-  }
-
-  // Update driving state if applicable
   const ls = getLevelSelectState();
-  if (!ls || ls.gameState === 'menu') return;
-
-  const speedEl = document.getElementById('ds-speed-val');
-  const gearEl = document.getElementById('ds-gear-val');
-
-  const speedRatio = Math.max(0, Math.min(1, Math.abs(ls.speed) / Math.max(1, ls.maxSpeed)));
-  const roundedSpeed = String(Math.round(ls.speed));
-  if (speedEl && speedEl.textContent !== roundedSpeed) speedEl.textContent = roundedSpeed;
-  const speedArcEl = document.getElementById('ds-speed-arc') as SVGPathElement | null;
-  if (speedArcEl) speedArcEl.setAttribute('stroke-dasharray', `${251 * speedRatio} 251`);
-  if (gearEl) {
-    gearEl.textContent = ls.gear;
-    gearEl.style.color = ls.gear === 'R' ? '#ef4444' : ls.gear === 'D' ? 'var(--accent)' : 'var(--text-secondary)';
-  }
-
-  const steeringWheel = document.getElementById('parkingSteeringWheel') as HTMLElement | null;
-  if (steeringWheel && typeof ls.steerAngle === 'number' && typeof ls.maxSteerAngle === 'number') {
-    const ratio = Math.max(-1, Math.min(1, ls.steerAngle / ls.maxSteerAngle));
-    steeringWheel.style.setProperty('--wheel-rotation', `${ratio * 220}deg`);
-    const percentEl = document.getElementById('parkingSteerPercent');
-    if (percentEl) percentEl.textContent = `${Math.round(ratio * 100)}%`;
-    const modeEl = document.getElementById('parkingSteerMode');
-    if (modeEl) modeEl.textContent = ls.steeringActive
-      ? (document.documentElement.getAttribute('data-lang') === 'zh' ? '鼠标' : 'MOUSE')
-      : (document.documentElement.getAttribute('data-lang') === 'zh' ? '键盘' : 'KEYS');
-  }
-
-  // Re-render level grid when progress changes
-  const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.gameState}`;
+  if (!ls) return;
+  const snapshot = `${ls.currentLevel},${ls.bestLevel},${ls.unlockedLevel},${ls.selectedLevel},${ls.gameState}`;
   if (snapshot !== lastLevelSelectSnapshot) {
     lastLevelSelectSnapshot = snapshot;
     renderStats();
-    renderKeyboard();
   }
 }
 
@@ -317,15 +180,8 @@ function setStartOverlay(active: boolean) {
   const titleEl = el.querySelector('.start-overlay-title') as HTMLElement | null;
   const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-  // No control teaching on the canvas — that lives in the side panel.
+  // Control teaching stays in the compact desktop input strip.
   if (hintEl) hintEl.textContent = zh ? '点击开始' : 'Click to start';
-}
-
-function readGameScore(): number | null {
-  if (!currentGameInstance) return null;
-  const raw = currentGameInstance.getShellSnapshot().score;
-  if (typeof raw === 'number') return raw;
-  return null;
 }
 
 let scorePollFrame: number | null = null;
@@ -363,16 +219,8 @@ function renderKeyboard() {
     return;
   }
 
-  const activeKeys = meta.controls.keyboard?.flatMap((k) => k.keys.map(normalizeKey)) || [];
-  if (!activeKeys.length) {
-    container.innerHTML = '';
-    return;
-  }
-
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const ls = getLevelSelectState();
-  const steeringPanel = ls ? renderParkingSteeringHTML(ls, zh) : '';
-  container.innerHTML = steeringPanel + renderVirtualKeyboard(activeKeys, meta.controls.keyboardPanel);
+  container.innerHTML = renderVirtualKeyboard(meta.controls, zh);
   bindVirtualKeyboard();
 }
 
@@ -564,7 +412,6 @@ export async function prepareGame(name: string) {
   setLoadError(null);
   setLoadingOverlay(true);
   updateGameTitle();
-  updateGameDesc();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
     el.classList.toggle('active', el.getAttribute('data-id') === name);
@@ -615,7 +462,6 @@ export async function prepareGame(name: string) {
   startScorePolling();
   updateActionButton();
   updateGameTitle();
-  updateGameDesc();
   renderControls();
   updateFullscreenToggle(meta);
   setStartOverlay(true);
@@ -633,8 +479,8 @@ function updateFullscreenToggle(meta: GameMeta) {
 
 /**
  * Fit the game canvas to the available stage space. Width comes from the
- * layout column; height is capped so canvas + action bar stay inside the
- * first viewport on common laptops. The backing store is re-sized by
+ * centered stage; height is capped so canvas + compact input strip stay in
+ * the first viewport on common laptops. The backing store is re-sized by
  * `setDisplayScale`, so the upscaled picture stays sharp.
  */
 let lastFittedCanvasWidth = 0;
@@ -651,10 +497,11 @@ function fitGameCanvas() {
   const colW = wrapper.clientWidth;
   if (colW <= 0) return;
   const top = wrapper.getBoundingClientRect().top;
-  const availH = window.innerHeight - top - 14 - 62 - 12; // stage gap + action bar + margin
+  const availH = window.innerHeight - top - 14 - 44 - 12; // input strip + breathing room
   const cssW = Math.round(Math.max(280, Math.min(colW, availH / aspect, lw * 2.5)));
   if (cssW === lastFittedCanvasWidth) return;
   lastFittedCanvasWidth = cssW;
+  wrapper.style.setProperty('--canvas-css-width', `${cssW}px`);
   currentGameInstance.setDisplayScale?.(cssW);
 }
 
@@ -693,46 +540,44 @@ function startDemoForCurrentGame() {
 }
 
 export async function loadGame(name: string) {
+  closeGameLibrary();
   await prepareGame(name);
   setHashGame(name);
 }
 
+function setGameLibraryOpen(open: boolean) {
+  const library = document.getElementById('gameLibrary');
+  const trigger = document.getElementById('gamePickerBtn');
+  if (!library || !trigger) return;
+  library.classList.toggle('open', open);
+  library.setAttribute('aria-hidden', String(!open));
+  trigger.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('library-open', open);
+  if (open) {
+    renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
+    window.setTimeout(() => (document.getElementById('searchInput') as HTMLInputElement | null)?.focus(), 0);
+  }
+}
+
+function closeGameLibrary() {
+  setGameLibraryOpen(false);
+}
+
+function setOverflowOpen(open: boolean) {
+  const menu = document.getElementById('overflowMenu');
+  const trigger = document.getElementById('overflowBtn');
+  if (!menu || !trigger) return;
+  menu.hidden = !open;
+  trigger.setAttribute('aria-expanded', String(open));
+}
+
 function renderLibraryFilters(zh: boolean) {
   const heading = document.getElementById('libraryHeadingTitle');
-  if (heading) heading.textContent = zh ? '游戏库' : 'Game Library';
+  if (heading) heading.textContent = zh ? '选择游戏' : 'Choose a game';
   const summary = document.getElementById('librarySummary');
-  if (summary) {
-    summary.textContent = zh ? `${GAMES.length} 款游戏 · ${GAME_GROUPS.length} 个分类` : `${GAMES.length} games · ${GAME_GROUPS.length} categories`;
-  }
-
-  const filters = document.getElementById('categoryFilters');
-  if (!filters) return;
-  const items = [
-    { id: 'all', name: 'All', nameZh: '全部', count: GAMES.length },
-    ...GAME_GROUPS.map((group) => ({
-      ...group,
-      count: GAMES.filter((game) => GAME_GROUP_MAP[game.id] === group.id).length,
-    })),
-  ];
-
-  filters.innerHTML = items.map((item) => {
-    const active = item.id === selectedGameGroup;
-    return `
-      <button class="category-chip${active ? ' active' : ''}" data-group="${item.id}" aria-pressed="${active}">
-        <span class="category-chip-dot" aria-hidden="true"></span>
-        <span>${zh ? item.nameZh : item.name}</span>
-        <span class="category-chip-count">${item.count}</span>
-      </button>
-    `;
-  }).join('');
-
-  filters.querySelectorAll<HTMLButtonElement>('.category-chip').forEach((button) => {
-    button.addEventListener('click', () => {
-      selectedGameGroup = button.dataset.group || 'all';
-      const search = document.getElementById('searchInput') as HTMLInputElement | null;
-      renderGameList(search?.value || '');
-    });
-  });
+  if (summary) summary.textContent = zh ? '搜索或从列表中选择。' : 'Search or choose from the list.';
+  const search = document.getElementById('searchInput') as HTMLInputElement | null;
+  if (search) search.placeholder = zh ? '搜索游戏' : 'Search games';
 }
 
 function renderGameList(filter = '') {
@@ -743,7 +588,6 @@ function renderGameList(filter = '') {
   renderLibraryFilters(zh);
 
   const filtered = GAMES.filter((g) => {
-    if (selectedGameGroup !== 'all' && GAME_GROUP_MAP[g.id] !== selectedGameGroup) return false;
     if (!term) return true;
     return (
       g.name.toLowerCase().includes(term) ||
@@ -772,34 +616,21 @@ function renderGameList(filter = '') {
   // Build grouped HTML
   let lastGroup = '';
   let html = '';
-  let itemIndex = 0;
-  const visibleGroupCounts = filtered.reduce((counts, game) => {
-    const groupId = GAME_GROUP_MAP[game.id] || '';
-    counts.set(groupId, (counts.get(groupId) || 0) + 1);
-    return counts;
-  }, new Map<string, number>());
   for (const g of filtered) {
     const groupId = GAME_GROUP_MAP[g.id] || '';
     if (groupId && groupId !== lastGroup) {
       const group = GAME_GROUPS.find((gr) => gr.id === groupId);
       if (group) {
-        html += `
-          <div class="game-list-group" data-group="${group.id}">
-            <span class="game-list-group-label"><span class="game-list-group-dot" aria-hidden="true"></span>${zh ? group.nameZh : group.name}</span>
-            <span class="game-list-group-count">${visibleGroupCounts.get(group.id) || 0}</span>
-          </div>
-        `;
+        html += `<div class="game-list-group" data-group="${group.id}">${zh ? group.nameZh : group.name}</div>`;
       }
       lastGroup = groupId;
     }
     html += `
-      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" style="--i:${itemIndex}" title="${zh ? g.nameZh : g.name}">
-        <span class="game-list-icon">${GAME_ICONS[g.id] || GAME_ICONS._default}</span>
-        <div class="game-list-name">${zh ? g.nameZh : g.name}</div>
-        <div class="game-list-desc">${zh ? g.descZh : g.desc}</div>
+      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" title="${zh ? g.nameZh : g.name}">
+        <span class="game-list-name">${zh ? g.nameZh : g.name}</span>
+        <span class="game-list-desc">${zh ? g.descZh : g.desc}</span>
       </button>
     `;
-    itemIndex += 1;
   }
 
   list.innerHTML = html;
@@ -811,9 +642,14 @@ function setLang(lang: 'en' | 'zh') {
   localStorage.setItem('cg-lang', lang);
   updateActionButton();
   updateGameTitle();
-  updateGameDesc();
   renderControls();
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
+  const languageLabel = document.getElementById('languageMenuLabel');
+  const themeLabel = document.getElementById('themeMenuLabel');
+  const overflowButton = document.getElementById('overflowBtn');
+  if (languageLabel) languageLabel.textContent = lang === 'zh' ? '语言' : 'Language';
+  if (themeLabel) themeLabel.textContent = lang === 'zh' ? '主题' : 'Theme';
+  if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '更多设置' : 'More settings');
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
     b.classList.toggle('active', target === lang);
@@ -841,29 +677,13 @@ function setTheme(mode: 'light' | 'dark' | 'system') {
   repaintCurrentFrame();
 }
 
-// Repaint the current frame so static (non-looping) scenes follow theme,
-// language, and style-mode changes immediately.
+// Repaint static (non-looping) scenes after theme or language changes.
 function repaintCurrentFrame() {
   try {
     currentGameInstance?.renderFrame?.();
   } catch {
     // A failed repaint is harmless; the next frame will pick the change up.
   }
-}
-
-function setStyleMode(mode: 'modern' | 'pixel') {
-  document.documentElement.setAttribute('data-style-mode', mode);
-  try {
-    localStorage.setItem('cg-style-mode', mode);
-  } catch {
-    // Style mode is a convenience; storage failures should not break the shell.
-  }
-  document.querySelectorAll('.style-btn').forEach((b) => {
-    const active = b.getAttribute('data-mode') === mode;
-    b.classList.toggle('active', active);
-    b.setAttribute('aria-pressed', String(active));
-  });
-  repaintCurrentFrame();
 }
 
 // Global keyboard highlight listener
@@ -904,8 +724,8 @@ function toggleFullscreen() {
   }
 }
 
-// Refit the canvas whenever the stage column changes size (window resize,
-// sidebar collapse, breakpoint switches). Debounced via rAF.
+// Refit the canvas whenever the centered stage changes size (window resize or
+// responsive breakpoint switches). Debounced via rAF.
 let fitCanvasScheduled = false;
 const canvasFitObserver = new ResizeObserver(() => {
   if (fitCanvasScheduled) return;
@@ -918,7 +738,6 @@ const canvasFitObserver = new ResizeObserver(() => {
 
 // Init UI
 (function init() {
-  const sidebar = initializeSidebar();
   const canvasWrapperEl = document.getElementById('canvasWrapper');
   if (canvasWrapperEl) canvasFitObserver.observe(canvasWrapperEl);
   window.addEventListener('resize', () => {
@@ -928,6 +747,29 @@ const canvasFitObserver = new ResizeObserver(() => {
       fitCanvasScheduled = false;
       fitGameCanvas();
     });
+  });
+
+  document.getElementById('gamePickerBtn')?.addEventListener('click', () => {
+    const open = !document.getElementById('gameLibrary')?.classList.contains('open');
+    setOverflowOpen(false);
+    setGameLibraryOpen(open);
+  });
+  document.getElementById('libraryCloseBtn')?.addEventListener('click', closeGameLibrary);
+  document.querySelector('[data-library-close]')?.addEventListener('click', closeGameLibrary);
+  document.getElementById('overflowBtn')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = document.getElementById('overflowMenu')?.hidden ?? true;
+    closeGameLibrary();
+    setOverflowOpen(open);
+  });
+  document.addEventListener('click', (event) => {
+    const target = event.target as Element;
+    if (!target.closest('.header-actions')) setOverflowOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    closeGameLibrary();
+    setOverflowOpen(false);
   });
 
   // Mouse simulation: mirror real button presses and wheel ticks on the
@@ -948,28 +790,22 @@ const canvasFitObserver = new ResizeObserver(() => {
     wheelTimer = window.setTimeout(() => wheel.classList.remove('scrolling'), 140);
   }, { passive: true });
   document.querySelectorAll<HTMLElement>('.lang-btn').forEach((button) => {
-    button.addEventListener('click', () => setLang(button.dataset.lang === 'en' ? 'en' : 'zh'));
+    button.addEventListener('click', () => {
+      setLang(button.dataset.lang === 'en' ? 'en' : 'zh');
+      setOverflowOpen(false);
+    });
   });
   document.querySelectorAll<HTMLElement>('.theme-btn').forEach((button) => {
     button.addEventListener('click', () => {
       const mode = button.dataset.set;
       if (mode === 'light' || mode === 'dark' || mode === 'system') setTheme(mode);
+      setOverflowOpen(false);
     });
-  });
-  document.querySelectorAll<HTMLElement>('.style-btn').forEach((button) => {
-    button.addEventListener('click', () => setStyleMode(button.dataset.mode === 'pixel' ? 'pixel' : 'modern'));
   });
   const savedLang = (localStorage.getItem('cg-lang') as 'en' | 'zh') || 'zh';
   const savedTheme = (localStorage.getItem('cg-theme') as 'light' | 'dark' | 'system') || 'system';
-  let savedStyleMode: 'modern' | 'pixel' = 'modern';
-  try {
-    if (localStorage.getItem('cg-style-mode') === 'pixel') savedStyleMode = 'pixel';
-  } catch {
-    // Ignore storage failures; the default modern mode applies.
-  }
   setLang(savedLang);
   setTheme(savedTheme);
-  setStyleMode(savedStyleMode);
 
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
   if (search) {
@@ -992,23 +828,21 @@ const canvasFitObserver = new ResizeObserver(() => {
       const id = getGameId(event.target);
       if (!id) return;
       void loadGame(id);
-      sidebar.closeOnMobile();
     });
   }
 
-  const actionBtn = document.getElementById('actionBtn') as HTMLButtonElement | null;
-  if (actionBtn) {
-    actionBtn.addEventListener('click', startPreparedGame);
-  }
-  // The start overlay covers the canvas; clicking it should start the game
-  // directly instead of forcing a trip to the button below.
-  document.getElementById('startOverlay')?.addEventListener('click', () => {
-    if (actionBtn && !actionBtn.disabled) startPreparedGame();
+  document.getElementById('startOverlay')?.addEventListener('click', startPreparedGame);
+  document.getElementById('restartBtn')?.addEventListener('click', () => {
+    setOverflowOpen(false);
+    startPreparedGame();
   });
 
   const demoBtn = document.getElementById('demoBtn') as HTMLButtonElement | null;
   if (demoBtn) {
-    demoBtn.addEventListener('click', startDemoForCurrentGame);
+    demoBtn.addEventListener('click', () => {
+      setOverflowOpen(false);
+      startDemoForCurrentGame();
+    });
   }
 
   // Fullscreen button

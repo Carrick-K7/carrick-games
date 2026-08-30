@@ -514,7 +514,6 @@ export class SimonGame extends BaseGame {
 
     ctx.textBaseline = 'top';
     this.drawStat(ctx, 36, 34, zh ? '关卡' : 'LEVEL', this.level, theme, 'left');
-    // Score shown in side panel
     this.drawStat(ctx, W - 36, 34, zh ? '最佳' : 'BEST', this.getBestScore(), theme, 'right');
 
     ctx.strokeStyle = theme.line;
@@ -610,7 +609,6 @@ export class SimonGame extends BaseGame {
     }
 
     ctx.fillText(`${zh ? '关卡' : 'LEVEL'} ${this.level}`, W / 2, 258);
-    // Score shown in side panel
   }
 
   private drawCard(
