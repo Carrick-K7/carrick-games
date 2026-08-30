@@ -1,14 +1,15 @@
-# Item Art Sources
+# CS2/CS:GO SVG Silhouettes
 
-All item art in this folder is **official Counter-Strike 2 inventory art** (Valve),
-plus silhouettes generated from it (`sil/` = alpha-mask white silhouettes for
-runtime tinting — generated, not grayed).
+Every SVG in `public/guns/svg/` is an auto-traced vector silhouette generated
+from official Counter-Strike 2 / CS:GO inventory art:
 
-- Guns: Counter-Strike Wiki (counterstrike.fandom.com) "CS2 <weapon> Inventory.png"
-  renders — wiki content is CC BY-SA 3.0; renders are Valve game assets shown here
-  as fan-site item art.
-- Knives (butterfly / karambit): Steam economy CDN (community.akamai.steamstatic.com)
-  vanilla item images — Valve game assets.
+- Guns: Counter-Strike Wiki files named `CS2 <weapon> Inventory.png`
+  (official Valve renders presented by the wiki).
+- Butterfly Knife / Karambit: Valve vanilla inventory images from the Steam
+  economy CDN.
 
-Normalization: muzzle flipped to point right where needed, content-bbox crop,
-height 256px, alpha preserved. No third-party photos used.
+Generation: alpha channel threshold → boundary tracing → RDP path simplification
+→ a single even-odd SVG path with steel gradient, dark outline, and highlight.
+The UI ships only these SVG paths; no raster photos are embedded. Monochrome
+variants are produced at runtime from the same SVG alpha mask (`source-in` tint),
+not grayscale conversion.

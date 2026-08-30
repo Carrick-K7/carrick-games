@@ -878,7 +878,7 @@ export class GachaGame extends BaseGame {
 
     // Content — pre-rendered weapon silhouette with a rarity-colored aura
     const iconId = item.icon ?? item.kind;
-    if (!drawItemArt(ctx, iconId, 0, -42, 146, { plate: true, maxW: 290 })) {
+    if (!drawItemArt(ctx, iconId, 0, -34, 172, { maxW: 310, glow: tier.color })) {
       const icon = this.weaponSprite(iconId, tier.color, 0.95);
       drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
     }
@@ -1030,9 +1030,9 @@ export class GachaGame extends BaseGame {
     const blit = iconSize * 1.16;
 
     if (locked) {
-      if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { alpha: 0.28, maxW: w - 14 })) {
+      if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { alpha: 0.68, maxW: w - 14 })) {
         const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#cbd5e1' : '#475569', 1);
-        drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.28 });
+        drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.68 });
       }
       ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
