@@ -192,15 +192,23 @@ function renderStats() {
   // surface it so players never have to guess.
   const kb = meta.controls.keyboard ?? [];
   const touch = meta.controls.touch ?? [];
-  if (kb.length || touch.length) {
+  // Input guidance follows the primary pointer: touch-first Web clients only
+  // see touch guidance; keyboard/mouse clients only see key mappings.
+  const touchFirst = window.matchMedia('(pointer: coarse)').matches;
+  const showTouch = touchFirst && touch.length > 0;
+  const visibleControls = showTouch ? touch : kb;
+  if (visibleControls.length) {
     html += `<div class="stats-section"><div class="stats-section-title">${zh ? '操作' : 'CONTROLS'}</div>`;
     html += '<div class="controls-legend">';
-    for (const entry of kb) {
-      const caps = entry.keys.map((k) => `<kbd class="keycap">${k}</kbd>`).join('');
-      html += `<div class="cl-row"><span class="cl-keys">${caps}</span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
-    }
-    for (const entry of touch) {
-      html += `<div class="cl-row"><span class="cl-keys"><kbd class="keycap keycap-touch">${zh ? '触屏' : 'Touch'}</kbd></span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
+    if (showTouch) {
+      for (const entry of touch) {
+        html += `<div class="cl-row"><span class="cl-keys"><kbd class="keycap keycap-touch">${zh ? '触屏' : 'Touch'}</kbd></span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
+      }
+    } else {
+      for (const entry of kb) {
+        const caps = entry.keys.map((k) => `<kbd class="keycap">${k}</kbd>`).join('');
+        html += `<div class="cl-row"><span class="cl-keys">${caps}</span><span class="cl-action">${zh ? entry.actionZh : entry.action}</span></div>`;
+      }
     }
     html += '</div></div>';
   }

@@ -1044,6 +1044,28 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('#gameCanvas')).toBeVisible();
   });
 
+  test('control guidance follows the primary pointer type', async ({ browser }) => {
+    const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const touchContext = await browser.newContext({
+      viewport: { width: 390, height: 800 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const touch = await touchContext.newPage();
+    try {
+      await desktop.goto('/#/snake');
+      await expect(desktop.locator('.keycap:not(.keycap-touch)').first()).toBeVisible();
+      await expect(desktop.locator('.keycap-touch')).toHaveCount(0);
+
+      await touch.goto('/#/snake');
+      await expect(touch.locator('.keycap-touch').first()).toBeVisible();
+      await expect(touch.locator('.keycap:not(.keycap-touch)')).toHaveCount(0);
+    } finally {
+      await desktop.close();
+      await touchContext.close();
+    }
+  });
+
   test('mobile game list selects different games reliably', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto('/');

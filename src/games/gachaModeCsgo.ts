@@ -321,10 +321,7 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.textBaseline = 'middle';
     ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = tier.color;
-    ctx.fillText(label, cx, READOUT_Y);
-    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = dark ? 'rgba(148,163,184,0.65)' : 'rgba(91,107,128,0.7)';
-    ctx.fillText(this.ctx.zh ? `当前格 · ${(tier.odds * 100).toFixed(2)}%` : `Cell · ${(tier.odds * 100).toFixed(2)}%`, cx, READOUT_Y + 22);
+    ctx.fillText(label, cx, READOUT_Y + 8);
   }
 
   /* ─── Card face sprites ─── */

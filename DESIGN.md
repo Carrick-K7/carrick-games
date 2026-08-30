@@ -89,10 +89,10 @@ The canvas is the product. Layout exists to give it room.
   (buttons and wheel light up with real input). Never swap these for a
   compact layout. Hide the whole panel on `pointer: coarse` — touch games
   bring their own on-canvas controls.
-- **Controls legend**: the stats sidebar always renders the catalog's
-  per-game key→action list (keycaps + labels) and touch hints. The start
-  overlay stays minimal (game name + click-to-start) — no control teaching
-  on the canvas. Players should never have to guess a key.
+- **Controls legend**: follow the primary pointer. Fine-pointer devices show
+  only keyboard/mouse key→action rows; `pointer: coarse` clients show only
+  touch guidance (never both). The start overlay stays minimal (game name +
+  click-to-start) — no control teaching on the canvas.
 - **Flat panels**: the sidebar is one panel — do not nest cards inside it.
   Sections inside `.game-sidebar` separate with hairline dividers, not
   boxed/elevated backgrounds.

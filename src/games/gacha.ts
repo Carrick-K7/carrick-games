@@ -710,11 +710,7 @@ export class GachaGame extends BaseGame {
       ctx.textBaseline = 'middle';
       ctx.fillStyle = p.text;
       ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(tier.nameZh, sx + segW / 2, y + 18);
-      ctx.fillStyle = tier.color;
-      ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillText(`${(tier.odds * 100).toFixed(2)}%`, sx + segW / 2, y + 36);
-      void zh;
+      ctx.fillText(zh ? tier.nameZh : tier.name, sx + segW / 2, y + h / 2);
     }
   }
 
@@ -831,7 +827,7 @@ export class GachaGame extends BaseGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = tier.color;
-    ctx.fillText(`${tier.nameZh.toUpperCase()} · ${(tier.odds * 100).toFixed(2)}%`, cx, 38);
+    ctx.fillText((zh ? tier.nameZh : tier.name).toUpperCase(), cx, 38);
 
     // Card pop-in
     const cw = 252;
@@ -977,7 +973,7 @@ export class GachaGame extends BaseGame {
       ctx.fillText(tier.nameZh, 36, y + 12);
       ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textDim;
-      ctx.fillText(`${(tier.odds * 100).toFixed(2)}% · ${items.length}`, 36, y + 28);
+      ctx.fillText(zh ? `${items.length} 件` : `${items.length} items`, 36, y + 28);
       ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
       ctx.fillStyle = p.textFaint;
       ctx.fillText(weaponFamilyLabel(zh, tierId), 36, y + 42);
