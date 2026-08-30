@@ -1,20 +1,42 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  Particles,
+  FloatTexts,
+  Tween,
+  drawGlow,
+  drawVignette,
+  fillSphere,
+  fillGlassPanel,
+  shade,
+  withAlpha,
+  fx,
+} from '../core/fx.js';
 
 const COLS = 7;
 const ROWS = 6;
 const CELL = 60;
 const MARGIN = 10;
 
+interface DropAnim {
+  col: number;
+  row: number;
+  tween: Tween;
+}
+
 export class ConnectFourGame extends BaseGame {
   private board: (number | null)[][] = [];
   private currentPlayer = 1; // 1 = player (red), 2 = AI (yellow)
   private winner: number | null = null;
   private gameOver = false;
-  private animatingCol = -1;
-  private animatingRow = -1;
-  private animY = 0;
-  private animating = false;
   private score = 0;
+
+  // Presentation state (visual only; gameplay values above stay untouched)
+  private time = 0;
+  private dropAnims: DropAnim[] = [];
+  private winCells: { c: number; r: number }[] | null = null;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
 
   override getShellSnapshot(): GameShellSnapshot {
     return { score: this.score };
@@ -30,16 +52,92 @@ export class ConnectFourGame extends BaseGame {
     this.currentPlayer = 1;
     this.winner = null;
     this.gameOver = false;
-    this.animating = false;
     this.score = 0;
     this.moves = 0;
+    this.time = 0;
+    this.dropAnims = [];
+    this.winCells = null;
+    this.particles.clear();
+    this.floats.clear();
     this.resetScoreReport();
   }
 
-  update(_dt: number) {
-    if (this.gameOver || this.animating) return;
+  update(dt: number) {
+    this.time += dt;
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.updateDropAnims(dt);
+    if (this.gameOver) return;
     if (this.currentPlayer === 2) {
       this.aiMove();
+    }
+  }
+
+  private updateDropAnims(dt: number) {
+    if (this.dropAnims.length === 0) return;
+    const by = MARGIN + 40;
+    const landed: DropAnim[] = [];
+    for (const anim of this.dropAnims) {
+      anim.tween.update(dt);
+      if (anim.tween.done) landed.push(anim);
+    }
+    for (const anim of landed) {
+      const x = MARGIN + anim.col * CELL + CELL / 2;
+      const y = by + anim.row * CELL + CELL / 2;
+      const base = this.discColor(this.board[anim.col][anim.row]);
+      this.emitLandingPop(x, y, base);
+    }
+    this.dropAnims = this.dropAnims.filter((a) => !a.tween.done);
+  }
+
+  private discColor(player: number | null): string {
+    return player === 2 ? '#eab308' : '#ef4444';
+  }
+
+  private emitLandingPop(x: number, y: number, base: string) {
+    const dark = this.isDarkTheme();
+    for (const emit of fx.pop(x, y, [shade(base, 0.35), base, '#ffffff'])) {
+      if (!dark) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+  }
+
+  private findWinCells(c: number, r: number, p: number): { c: number; r: number }[] {
+    const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    for (const [dx, dy] of dirs) {
+      const cells = [{ c, r }];
+      for (let step = 1; step < 4; step++) {
+        const x = c + dx * step, y = r + dy * step;
+        if (x >= 0 && x < COLS && y >= 0 && y < ROWS && this.board[x][y] === p) cells.push({ c: x, r: y });
+        else break;
+      }
+      for (let step = 1; step < 4; step++) {
+        const x = c - dx * step, y = r - dy * step;
+        if (x >= 0 && x < COLS && y >= 0 && y < ROWS && this.board[x][y] === p) cells.push({ c: x, r: y });
+        else break;
+      }
+      if (cells.length >= 4) return cells;
+    }
+    return [{ c, r }];
+  }
+
+  private celebrateWin(col: number, row: number) {
+    const dark = this.isDarkTheme();
+    const palette = getRetroPalette(dark);
+    const winner = this.currentPlayer;
+    this.winCells = this.findWinCells(col, row, winner);
+    // Confetti only celebrates the human player's win; the AI win stays calm.
+    if (winner === 1) {
+      const colors = [palette.primary, palette.cyan, palette.amber, '#ffffff'];
+      this.particles.emit(fx.confetti(this.width / 2, MARGIN + 48, colors));
+      const by = MARGIN + 40;
+      const cx = this.winCells.reduce((s, cell) => s + MARGIN + cell.c * CELL + CELL / 2, 0) / this.winCells.length;
+      const cy = this.winCells.reduce((s, cell) => s + by + cell.r * CELL + CELL / 2, 0) / this.winCells.length;
+      this.floats.add(cx, cy - CELL * 0.6, this.isZhLang() ? '四连！' : 'CONNECT FOUR!', {
+        color: palette.amber,
+        size: 16,
+        life: 1.4,
+      });
     }
   }
 

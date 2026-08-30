@@ -1,4 +1,16 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillSphere,
+  fx,
+  shade,
+} from '../core/fx.js';
 
 const BOARD = 8;
 const CELL = 60;
@@ -27,6 +39,9 @@ export class CheckersGame extends BaseGame {
   }
   private validMoves: Move[] = [];
   private forcedCapture: { c: number; r: number } | null = null;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', BOARD * CELL + MARGIN * 2, BOARD * CELL + MARGIN * 2 + 40));
@@ -53,10 +68,16 @@ export class CheckersGame extends BaseGame {
     this.score = 0;
     this.validMoves = [];
     this.forcedCapture = null;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
-  update(_dt: number) {
+  update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.gameOver) return;
     if (this.currentPlayer === 2) {
       this.aiTurn();
@@ -114,6 +135,8 @@ export class CheckersGame extends BaseGame {
       this.gameOver = true;
       this.winner = 1;
       this.score = 100;
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.particles.emit(fx.confetti(this.width / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
       this.submitScoreOnce(this.score);
       return;
     }
@@ -134,13 +157,33 @@ export class CheckersGame extends BaseGame {
     this.board[move.fromC][move.fromR] = 0;
     // Remove captured pieces
     for (const cap of move.captures) {
+      const capturedPiece = this.board[cap.c][cap.r];
+      const palette = getRetroPalette(this.isDarkTheme());
+      const x = MARGIN + cap.c * CELL + CELL / 2;
+      const y = MARGIN + cap.r * CELL + CELL / 2;
+      for (const emit of fx.pop(x, y, [capturedPiece === 1 || capturedPiece === 3 ? palette.red : '#334155', palette.amber])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.floats.add(x, y - 10, this.isZhLang() ? '吃子' : 'CAPTURE', { color: palette.amber, size: 12, life: 0.65 });
       this.board[cap.c][cap.r] = 0;
     }
+    if (move.captures.length > 0) this.shake.add(0.08);
     // King promotion
     let newPiece = piece;
     if (piece === 1 && move.toR === 0) newPiece = 3;
     if (piece === 2 && move.toR === 7) newPiece = 4;
     this.board[move.toC][move.toR] = newPiece;
+    if (newPiece !== piece) {
+      const palette = getRetroPalette(this.isDarkTheme());
+      const x = MARGIN + move.toC * CELL + CELL / 2;
+      const y = MARGIN + move.toR * CELL + CELL / 2;
+      for (const emit of fx.pop(x, y, [palette.amber, '#ffffff'])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.floats.add(x, y - 10, this.isZhLang() ? '升王！' : 'KING!', { color: palette.amber, size: 13 });
+    }
 
     // Check multi-capture
     const promoted = newPiece !== piece;
@@ -167,6 +210,10 @@ export class CheckersGame extends BaseGame {
       this.winner = this.currentPlayer === 1 ? 2 : 1;
       if (this.winner === 1) {
         this.score = 100;
+        const palette = getRetroPalette(this.isDarkTheme());
+        this.particles.emit(fx.confetti(this.width / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+      } else {
+        this.shake.add(0.25);
       }
       this.submitScoreOnce(this.score);
     }
@@ -174,33 +221,42 @@ export class CheckersGame extends BaseGame {
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
-    const bg = isDark ? '#0b0f19' : '#fafafa';
+    const palette = getRetroPalette(isDark);
     const darkSq = isDark ? '#1e293b' : '#94a3b8';
     const lightSq = isDark ? '#334155' : '#cbd5e1';
-    const pColor = '#ef4444';
-    const aiColor = '#1e1e1e';
-    const kingRing = '#fbbf24';
-    const textColor = isDark ? '#e0e0e0' : '#1a1a2e';
+    const pColor = palette.red;
+    const aiColor = isDark ? '#111827' : '#334155';
+    const kingRing = palette.amber;
+    const textColor = palette.text;
 
-    ctx.fillStyle = bg;
+    const background = ctx.createLinearGradient(0, 0, 0, this.height);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, palette.bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, this.width, this.height);
 
     const bx = MARGIN;
     const by = MARGIN;
 
     // Draw board squares
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
     for (let c = 0; c < BOARD; c++) {
       for (let r = 0; r < BOARD; r++) {
-        ctx.fillStyle = (c + r) % 2 === 0 ? lightSq : darkSq;
-        ctx.fillRect(bx + c * CELL, by + r * CELL, CELL, CELL);
+        fillBevelTile(ctx, bx + c * CELL, by + r * CELL, CELL, CELL, 0, (c + r) % 2 === 0 ? lightSq : darkSq, {
+          gloss: false,
+          border: 'rgba(15,23,42,0.12)',
+        });
       }
     }
 
     // Highlight selected piece valid moves
     if (this.selected) {
+      drawGlow(ctx, bx + this.selected.c * CELL + CELL / 2, by + this.selected.r * CELL + CELL / 2, CELL * 0.75, palette.primary, isDark ? 0.28 : 0.1);
       ctx.fillStyle = 'rgba(57,197,187,0.4)';
       ctx.fillRect(bx + this.selected.c * CELL, by + this.selected.r * CELL, CELL, CELL);
       for (const m of this.validMoves) {
+        drawGlow(ctx, bx + m.toC * CELL + CELL / 2, by + m.toR * CELL + CELL / 2, CELL * 0.55, palette.primary, isDark ? 0.16 : 0.06);
         ctx.fillStyle = 'rgba(57,197,187,0.3)';
         ctx.fillRect(bx + m.toC * CELL, by + m.toR * CELL, CELL, CELL);
       }
@@ -216,18 +272,15 @@ export class CheckersGame extends BaseGame {
         const isPlayer = p === 1 || p === 3;
         const isKing = p === 3 || p === 4;
 
-        ctx.fillStyle = isPlayer ? pColor : aiColor;
+        const pieceColor = isPlayer ? pColor : aiColor;
+        ctx.fillStyle = shade(pieceColor, -0.45);
         ctx.beginPath();
-        ctx.arc(x, y, CELL / 2 - 6, 0, Math.PI * 2);
+        ctx.arc(x, y + 3, CELL / 2 - 5, 0, Math.PI * 2);
         ctx.fill();
-
-        // Highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.beginPath();
-        ctx.arc(x - 5, y - 5, 6, 0, Math.PI * 2);
-        ctx.fill();
+        fillSphere(ctx, x, y - 1, CELL / 2 - 7, pieceColor, { rim: 0.32, rimColor: isKing ? kingRing : '#ffffff' });
 
         if (isKing) {
+          drawGlow(ctx, x, y, CELL * 0.55, kingRing, isDark ? 0.25 : 0.09);
           ctx.strokeStyle = kingRing;
           ctx.lineWidth = 3;
           ctx.beginPath();
@@ -236,6 +289,11 @@ export class CheckersGame extends BaseGame {
         }
       }
     }
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, this.width, this.height, isDark ? 0.16 : 0.06);
+    this.floats.draw(ctx);
 
     // Turn text
     const zh = this.isZhLang();

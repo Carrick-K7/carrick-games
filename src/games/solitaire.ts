@@ -1,7 +1,13 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
 import {
-  getRetroPalette,
-} from '../core/render.js';
+  FloatTexts,
+  Particles,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fx,
+} from '../core/fx.js';
 import { canPlaceOnFoundation, canPlaceOnTableau } from './solitaireRules.js';
 
 const W = 480;
@@ -123,6 +129,8 @@ export class SolitaireGame extends BaseGame {
   private touchStartTime = 0;
   private touchStartPos = { x: 0, y: 0 };
   private lastTap = { x: 0, y: 0, time: 0 };
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -145,9 +153,13 @@ export class SolitaireGame extends BaseGame {
     this.tableau = [[], [], [], [], [], [], []];
     this.foundations = [[], [], [], []];
     this.deck = [];
+    this.particles.clear();
+    this.floats.clear();
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
     if (this.phase !== 'playing') return;
     this.elapsed = (performance.now() - this.startTime) / 1000;
   }
@@ -166,8 +178,10 @@ export class SolitaireGame extends BaseGame {
     this.drawFoundations(ctx, theme);
     this.drawStockWaste(ctx, theme);
     this.drawTableau(ctx, theme, zh);
+    this.particles.draw(ctx);
+    drawVignette(ctx, W, H, this.isDarkTheme() ? 0.22 : 0.09);
+    this.floats.draw(ctx);
     this.drawHud(ctx, theme, zh);
-
 
     if (this.phase === 'ready' || this.phase === 'won') {
       this.drawOverlay(ctx, theme, zh);
@@ -368,11 +382,13 @@ export class SolitaireGame extends BaseGame {
           this.tableau[target.col].pop();
           this.foundations[f].push(card);
           this.moves++;
+          this.emitFoundationFx(f, card);
           this.revealTopOfTableau();
         } else if (target.type === 'waste') {
           this.waste.pop();
           this.foundations[f].push(card);
           this.moves++;
+          this.emitFoundationFx(f, card);
         }
         this.selectedSrc = null;
         this.checkWin();
@@ -429,6 +445,12 @@ export class SolitaireGame extends BaseGame {
         this.stock.push(c);
       }
       this.moves++;
+      const palette = getRetroPalette(this.isDarkTheme());
+      for (const emit of fx.pop(STOCK_X + CW / 2, STOCK_Y + CH / 2, [palette.primary, palette.cyan])) {
+        emit.count = Math.min(emit.count, 5);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
     } else {
       const c = this.stock.pop()!;
       c.faceUp = true;
@@ -462,6 +484,7 @@ export class SolitaireGame extends BaseGame {
 
     this.foundations[foundIdx].push(card);
     this.moves++;
+    this.emitFoundationFx(foundIdx, card);
     this.selectedSrc = null;
     this.revealTopOfTableau();
     this.checkWin();
@@ -511,6 +534,19 @@ export class SolitaireGame extends BaseGame {
     this.checkWin();
   }
 
+  private emitFoundationFx(foundIdx: number, card: Card) {
+    const palette = getRetroPalette(this.isDarkTheme());
+    const x = FOUND_X + foundIdx * FOUND_GAP + CW / 2;
+    const y = FOUND_Y + CH / 2;
+    const color = card.suit < 2 ? palette.red : palette.text;
+    for (const emit of fx.pop(x, y, [color, palette.amber])) {
+      emit.count = Math.min(emit.count, 6);
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+    this.floats.add(x, y - 12, `${rankLabel(card.rank)}${suitSymbol(card.suit)}`, { color, size: 13, life: 0.7 });
+  }
+
   private canPlaceOnFoundation(card: Card, foundIdx: number): boolean {
     return canPlaceOnFoundation(card, this.foundations[foundIdx]);
   }
@@ -527,6 +563,8 @@ export class SolitaireGame extends BaseGame {
     const total = this.foundations.reduce((s, f) => s + f.length, 0);
     if (total === 52) {
       this.phase = 'won';
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.particles.emit(fx.confetti(W / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
       this.submitScoreOnce(this.score);
     }
   }
@@ -536,6 +574,8 @@ export class SolitaireGame extends BaseGame {
     this.moves = 0;
     this.startTime = performance.now();
     this.selectedSrc = null;
+    this.particles.clear();
+    this.floats.clear();
 
     // Create deck
     const deck: Card[] = [];
@@ -699,25 +739,18 @@ export class SolitaireGame extends BaseGame {
   ) {
     const dark = !this.isLightTheme();
 
-    // Card background
-    ctx.save();
-    ctx.shadowColor = theme.cardShadow;
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 3;
-    const faceGrad = ctx.createLinearGradient(x, y, x, y + CH);
-    faceGrad.addColorStop(0, theme.cardHighlight);
-    faceGrad.addColorStop(0.18, theme.cardFace);
-    faceGrad.addColorStop(1, theme.cardEdge);
-    ctx.fillStyle = faceGrad;
-    ctx.strokeStyle = highlight ? theme.accent : theme.border;
-    ctx.lineWidth = highlight ? 2 : 1;
+    // Shared glass body keeps the whole deck on the same top-light model.
+    if (highlight) {
+      drawGlow(ctx, x + CW / 2, y + CH / 2, CW * 0.85, theme.accent, this.isDarkTheme() ? 0.3 : 0.1);
+    }
+    ctx.fillStyle = theme.cardShadow;
     ctx.beginPath();
-    ctx.roundRect(x, y, CW, CH, CARD_R);
+    ctx.ellipse(x + CW / 2, y + CH + 2, CW * 0.42, 4, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.stroke();
-    ctx.restore();
+    fillBevelTile(ctx, x, y, CW, CH, CARD_R, theme.cardFace, {
+      border: highlight ? theme.accent : theme.border,
+      borderWidth: highlight ? 2 : 1,
+    });
 
     if (!card.faceUp) {
       // Card back

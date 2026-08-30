@@ -1,4 +1,16 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, getStoredRecord } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  Tween,
+  drawVignette,
+  fillBevelTile,
+  fillGlassPanel,
+  fx,
+  shade,
+} from '../core/fx.js';
 
 const W = 400;
 const H = 400;
@@ -42,6 +54,10 @@ export class Game2048 extends BaseGame {
   private hasWon = false;
   private touchStartX = 0;
   private touchStartY = 0;
+  private readonly tileTweens = new Map<string, Tween>();
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -52,6 +68,10 @@ export class Game2048 extends BaseGame {
     this.score = 0;
     this.gameState = 'playing';
     this.hasWon = false;
+    this.tileTweens.clear();
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
     this.addRandomTile();
     this.addRandomTile();
@@ -67,6 +87,7 @@ export class Game2048 extends BaseGame {
     if (!empty.length) return;
     const [r, c] = empty[Math.floor(Math.random() * empty.length)];
     this.grid[r][c] = { value: Math.random() < 0.9 ? 2 : 4, row: r, col: c, merged: false, isNew: true };
+    this.tileTweens.set(`${r}:${c}`, new Tween({ from: 0.3, to: 1, duration: 0.16, ease: 'outBack' }));
   }
 
   private startGame() {
@@ -76,6 +97,7 @@ export class Game2048 extends BaseGame {
   private move(dir: Dir) {
     if (this.gameState === 'idle') this.startGame();
     if (this.gameState !== 'playing') return;
+    this.tileTweens.clear();
 
     // Reset merged/new flags
     for (let r = 0; r < GRID; r++) {
@@ -165,6 +187,23 @@ export class Game2048 extends BaseGame {
 
     if (moved) {
       this.addRandomTile();
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const tile = this.grid[r][c];
+          if (!tile?.merged) continue;
+          this.tileTweens.set(`${r}:${c}`, new Tween({ from: 1.28, to: 1, duration: 0.18, ease: 'outBack' }));
+          const x = PADDING + c * (CELL + GAP) + CELL / 2;
+          const y = PADDING + 40 + r * (CELL + GAP) + CELL / 2;
+          const color = TILE_COLORS[tile.value] ?? DEFAULT_COLOR;
+          for (const emit of fx.pop(x, y, [color.bg, '#ffffff'])) {
+            if (!this.isDarkTheme()) emit.blend = 'source-over';
+            emit.count = Math.min(emit.count, 7);
+            this.particles.emit(emit);
+          }
+          this.floats.add(x, y - 10, `+${tile.value}`, { color: color.fg, size: 13, life: 0.65 });
+          this.shake.add(0.06);
+        }
+      }
     }
 
     // Check win
@@ -173,6 +212,8 @@ export class Game2048 extends BaseGame {
         for (let c = 0; c < GRID; c++) {
           if (this.grid[r][c]?.value === 2048) {
             this.hasWon = true;
+            const palette = getRetroPalette(this.isDarkTheme());
+            this.particles.emit(fx.confetti(W / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
           }
         }
       }
@@ -181,6 +222,7 @@ export class Game2048 extends BaseGame {
     // Check game over
     if (moved && !this.canMove()) {
       this.gameState = 'gameover';
+      this.shake.add(0.35);
       this.submitScoreOnce(this.score);
     }
   }
@@ -204,66 +246,81 @@ export class Game2048 extends BaseGame {
   }
 
   update(dt: number) {
-    // No continuous physics needed for 2048
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
+    for (const tween of this.tileTweens.values()) tween.update(dt);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
+    const palette = getRetroPalette(isDark);
+    const gridX = PADDING;
+    const gridY = PADDING + 40;
 
-    // Background
-    ctx.fillStyle = isDark ? '#0b0f19' : '#faf8ef';
+    const background = ctx.createLinearGradient(0, 0, 0, H);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, isDark ? palette.bg : '#faf8ef');
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, W, H);
 
-    // Grid background
-    const gridX = PADDING;
-    const gridY = PADDING + 40; // space for score
+    this.shake.apply(ctx, () => {
+      fillGlassPanel(ctx, gridX - 8, gridY - 8, GRID * CELL + (GRID - 1) * GAP + 16, GRID * CELL + (GRID - 1) * GAP + 16, 12, {
+        fill: palette.panel,
+        fill2: palette.panel2,
+        border: palette.border,
+        shadow: palette.shadow,
+      });
 
-    // Draw grid cells
-    const cellSize = CELL;
-    const gap = GAP;
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const x = gridX + c * (cellSize + gap);
-        const y = gridY + r * (cellSize + gap);
-        ctx.fillStyle = isDark ? '#1e293b' : '#bbcdc0';
-        ctx.beginPath();
-        ctx.roundRect(x, y, cellSize, cellSize, 6);
-        ctx.fill();
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const x = gridX + c * (CELL + GAP);
+          const y = gridY + r * (CELL + GAP);
+          fillBevelTile(ctx, x, y, CELL, CELL, 7, isDark ? '#1e293b' : '#bbcdc0', {
+            gloss: false,
+            border: palette.border,
+          });
+        }
       }
-    }
 
-    // Draw tiles
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const tile = this.grid[r][c];
-        if (!tile) continue;
-        const x = gridX + c * (cellSize + gap);
-        const y = gridY + r * (cellSize + gap);
-        const color = TILE_COLORS[tile.value] || DEFAULT_COLOR;
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const tile = this.grid[r][c];
+          if (!tile) continue;
+          const baseX = gridX + c * (CELL + GAP);
+          const baseY = gridY + r * (CELL + GAP);
+          const scale = this.tileTweens.get(`${r}:${c}`)?.value ?? 1;
+          const size = CELL * scale;
+          const x = baseX + (CELL - size) / 2;
+          const y = baseY + (CELL - size) / 2;
+          const color = TILE_COLORS[tile.value] || DEFAULT_COLOR;
+          fillBevelTile(ctx, x, y, size, size, 7 * scale, color.bg, {
+            border: shade(color.bg, -0.35),
+          });
 
-        ctx.fillStyle = color.bg;
-        ctx.beginPath();
-        ctx.roundRect(x, y, cellSize, cellSize, 6);
-        ctx.fill();
-
-        // Tile text
-        const fontSize = tile.value >= 1000 ? 14 : tile.value >= 100 ? 18 : 22;
-        ctx.fillStyle = color.fg;
-        ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(tile.value), x + cellSize / 2, y + cellSize / 2);
+          const fontSize = tile.value >= 1000 ? 14 : tile.value >= 100 ? 18 : 22;
+          ctx.fillStyle = color.fg;
+          ctx.font = `bold ${Math.max(11, fontSize * scale)}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(tile.value), baseX + CELL / 2, baseY + CELL / 2);
+        }
       }
-    }
+      this.particles.draw(ctx);
+    });
+
+    drawVignette(ctx, W, H, isDark ? 0.18 : 0.08);
+    this.floats.draw(ctx);
 
     const zh = this.isZhLang();
-    ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+    ctx.fillStyle = palette.text;
     ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
+    ctx.fillText(`${zh ? '得分' : 'SCORE'} ${this.score}`, PADDING, 10);
+    ctx.textAlign = 'right';
     ctx.fillText(`${zh ? '最高' : 'BEST'} ${this.getBest()}`, W - PADDING, 10);
 
-    // Idle overlay
     if (this.gameState === 'idle') {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, W, H);
@@ -272,11 +329,9 @@ export class Game2048 extends BaseGame {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('2048', W / 2, H / 2 - 40);
-      ctx.font = '12px system-ui, sans-serif';
       return;
     }
 
-    // Win overlay
     if (this.gameState === 'playing' && this.hasWon) {
       this.drawResultOverlay(ctx, {
         title: zh ? '达成 2048！' : '2048 REACHED!',
@@ -286,7 +341,6 @@ export class Game2048 extends BaseGame {
       });
     }
 
-    // Game over overlay
     if (this.gameState === 'gameover') {
       this.drawResultOverlay(ctx, {
         title: zh ? '游戏结束' : 'GAME OVER',

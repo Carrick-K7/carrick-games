@@ -1,4 +1,13 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawVignette,
+  fillBevelTile,
+  fx,
+} from '../core/fx.js';
 
 const W = 400;
 const H = 520;
@@ -86,6 +95,9 @@ export class WordleGame extends BaseGame {
   private keyStates: Map<string, TileState> = new Map();
   private activeKey: string | null = null;
   private activeKeyTimer = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -111,10 +123,16 @@ export class WordleGame extends BaseGame {
     this.resetScoreReport();
     this.activeKey = null;
     this.activeKeyTimer = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
   }
 
   update(dt: number) {
     const deltaMs = dt * 1000;
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
 
     if (this.shakeTimer > 0) {
       this.shakeTimer -= deltaMs;
@@ -163,8 +181,13 @@ export class WordleGame extends BaseGame {
     ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, W, H);
 
-    this.drawGrid(ctx, theme);
-    this.drawKeyboard(ctx, theme);
+    this.shake.apply(ctx, () => {
+      this.drawGrid(ctx, theme);
+      this.drawKeyboard(ctx, theme);
+      this.particles.draw(ctx);
+    });
+    drawVignette(ctx, W, H, this.isDarkTheme() ? 0.15 : 0.06);
+    this.floats.draw(ctx);
 
     if (this.message) {
       this.drawMessage(ctx, theme, this.message);
@@ -270,6 +293,7 @@ export class WordleGame extends BaseGame {
       this.shakeTimer = 400;
       this.message = zh ? '字母不够' : 'NOT ENOUGH';
       this.messageTimer = 1200;
+      this.shake.add(0.14);
       return;
     }
 
@@ -300,9 +324,13 @@ export class WordleGame extends BaseGame {
       this.won = true;
       this.gameOver = true;
       this.score = (7 - (this.currentRow + 1)) * 100;
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.particles.emit(fx.confetti(W / 2, 12, [palette.primary, palette.green, palette.amber, palette.violet]));
+      this.floats.add(W / 2, GRID_TOP + this.currentRow * (CELL_SIZE + CELL_GAP), `+${this.score}`, { color: palette.green, size: 14 });
     } else if (this.currentRow >= ROWS - 1) {
       this.gameOver = true;
       this.score = (7 - ROWS) * 100;
+      this.shake.add(0.3);
     } else {
       this.currentRow++;
       this.currentCol = 0;
@@ -396,13 +424,11 @@ export class WordleGame extends BaseGame {
             textColor = theme.text;
         }
 
-        ctx.fillStyle = fill;
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(x, y, CELL_SIZE, CELL_SIZE, 4);
-        ctx.fill();
-        ctx.stroke();
+        fillBevelTile(ctx, x, y, CELL_SIZE, CELL_SIZE, 5, fill, {
+          gloss: drawState !== 'empty',
+          border: stroke,
+          borderWidth: 2,
+        });
 
         if (drawLetter) {
           ctx.fillStyle = textColor;
@@ -473,10 +499,10 @@ export class WordleGame extends BaseGame {
       textColor = theme.keyText;
     }
 
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 4);
-    ctx.fill();
+    fillBevelTile(ctx, x, y, w, h, 4, bg, {
+      border: active ? theme.accent : theme.border,
+      gloss: active || state === 'green' || state === 'yellow',
+    });
 
     ctx.fillStyle = textColor;
     ctx.font = `14px system-ui, sans-serif`;

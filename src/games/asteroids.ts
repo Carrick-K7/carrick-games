@@ -1,4 +1,19 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette, type RetroPalette } from '../core/render.js';
+import {
+  Particles,
+  ScreenShake,
+  FloatTexts,
+  Starfield,
+  drawGlow,
+  drawVignette,
+  makeSprite,
+  drawSprite,
+  shade,
+  withAlpha,
+  fx,
+  TAU,
+} from '../core/fx.js';
 
 interface Vec {
   x: number;
@@ -61,6 +76,17 @@ export class AsteroidsGame extends BaseGame {
   private shootPending = false;
   private shootCooldown = 0;
   private maxBullets = 4;
+
+  // Presentation state (visual only; gameplay values above stay untouched)
+  private time = 0;
+  private thrustFxTimer = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
+  private readonly starfield = new Starfield({ density: 1.0 });
+  private spriteTheme: boolean | null = null;
+  private shipSprite: HTMLCanvasElement | null = null;
+  private saucerSprites: { large: HTMLCanvasElement | null; small: HTMLCanvasElement | null } = { large: null, small: null };
 
   // Screen wrap helper
   private wrap(v: Vec, margin = 20): Vec {
@@ -177,8 +203,41 @@ export class AsteroidsGame extends BaseGame {
     this.thrust = false;
     this.shootPending = false;
     this.shootCooldown = 0;
+    this.time = 0;
+    this.thrustFxTimer = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.spawnWave(4);
     this.resetScoreReport();
+  }
+
+  private emitExplosion(x: number, y: number, colors: readonly string[], countScale: number) {
+    const dark = this.isDarkTheme();
+    for (const emit of fx.explosion(x, y, colors)) {
+      const scaled = { ...emit, count: Math.max(1, Math.round(emit.count * countScale)) };
+      if (!dark && scaled.shape !== 'glow') scaled.blend = 'source-over';
+      this.particles.emit(scaled);
+    }
+  }
+
+  private onAsteroidDestroyed(a: Asteroid, pts: number) {
+    const palette = getRetroPalette(this.isDarkTheme());
+    const colors = [palette.muted, palette.text, '#ffffff', palette.amber];
+    this.emitExplosion(a.x, a.y, colors, a.size === 2 ? 1.4 : a.size === 1 ? 1 : 0.6);
+    this.shake.add(a.size === 2 ? 0.4 : 0.2);
+    this.floats.add(a.x, a.y - a.radius * 0.4, `+${pts}`, { color: palette.amber, size: 14 });
+  }
+
+  private onShipDestroyed() {
+    const palette = getRetroPalette(this.isDarkTheme());
+    const colors = ['#ffffff', palette.primary, palette.cyan, palette.amber, palette.orange];
+    this.emitExplosion(this.ship.x, this.ship.y, colors, 2);
+    this.particles.emit({
+      x: this.ship.x, y: this.ship.y, count: 1, speed: 0, life: 0.6,
+      size: [16, 22], colors: ['#ffffff'], shape: 'ring', endScale: 7,
+    });
+    this.shake.add(0.8);
   }
 
   private shoot() {
@@ -204,6 +263,12 @@ export class AsteroidsGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.time += dt;
+    this.starfield.update(dt, 8);
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
+
     if (this.gameOver) return;
 
     // Wave cleared check
@@ -233,6 +298,24 @@ export class AsteroidsGame extends BaseGame {
         const thrust = 250;
         this.ship.vx += Math.cos(this.ship.angle) * thrust * dt;
         this.ship.vy += Math.sin(this.ship.angle) * thrust * dt;
+        // Engine exhaust particles (throttled)
+        this.thrustFxTimer += dt;
+        while (this.thrustFxTimer >= 1 / 30) {
+          this.thrustFxTimer -= 1 / 30;
+          const dark = this.isDarkTheme();
+          const palette = getRetroPalette(dark);
+          const exhaustA = this.ship.angle + Math.PI;
+          const emit = fx.thruster(
+            this.ship.x + Math.cos(exhaustA) * 14,
+            this.ship.y + Math.sin(exhaustA) * 14,
+            exhaustA,
+            [palette.orange, palette.amber, '#ffffff'],
+          );
+          if (!dark) emit.blend = 'source-over';
+          this.particles.emit(emit);
+        }
+      } else {
+        this.thrustFxTimer = 0;
       }
       // Drag
       this.ship.vx *= Math.pow(0.99, dt * 60);
@@ -303,6 +386,7 @@ export class AsteroidsGame extends BaseGame {
           this.ship.blinkTimer = 0;
           this.ship.invincible = false;
           a.active = false;
+          this.onShipDestroyed();
         }
       }
       // Bullet collision

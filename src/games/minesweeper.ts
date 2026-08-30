@@ -1,4 +1,16 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillGlassPanel,
+  fillSphere,
+  fx,
+} from '../core/fx.js';
 
 const COLS = 9;
 const ROWS = 9;
@@ -16,6 +28,9 @@ export class MinesweeperGame extends BaseGame {
   private timer = 0;
   private minesPlaced = false;
   private touchTimer: number | null = null;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', CELL * COLS + 4, CELL * ROWS + 52));
@@ -41,6 +56,9 @@ export class MinesweeperGame extends BaseGame {
     this.gameState = 'idle';
     this.cursorX = Math.floor(COLS / 2);
     this.cursorY = Math.floor(ROWS / 2);
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
@@ -72,6 +90,14 @@ export class MinesweeperGame extends BaseGame {
     if (!this.flagged[y][x] && this.flagsLeft === 0) return;
     this.flagged[y][x] = !this.flagged[y][x];
     this.flagsLeft += this.flagged[y][x] ? -1 : 1;
+    if (this.flagged[y][x]) {
+      const palette = getRetroPalette(this.isDarkTheme());
+      for (const emit of fx.pop(2 + x * CELL + CELL / 2, 50 + y * CELL + CELL / 2, [palette.red, palette.amber])) {
+        emit.count = Math.min(emit.count, 5);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+    }
   }
 
   private computeNumbers() {
@@ -97,6 +123,14 @@ export class MinesweeperGame extends BaseGame {
     this.revealed[y][x] = true;
     if (this.grid[y][x] === -1) {
       this.gameState = 'lost';
+      const palette = getRetroPalette(this.isDarkTheme());
+      const cx = 2 + x * CELL + CELL / 2;
+      const cy = 50 + y * CELL + CELL / 2;
+      for (const emit of fx.explosion(cx, cy, [palette.red, palette.orange, palette.amber])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.shake.add(0.65);
       return;
     }
     if (this.grid[y][x] === 0) {
@@ -116,7 +150,11 @@ export class MinesweeperGame extends BaseGame {
         if (!this.revealed[y][x] && this.grid[y][x] !== -1) unrevealedSafe++;
       }
     }
-    if (unrevealedSafe === 0) this.gameState = 'won';
+    if (unrevealedSafe === 0 && this.gameState !== 'won') {
+      this.gameState = 'won';
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.particles.emit(fx.confetti(this.width / 2, 14, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+    }
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
@@ -236,6 +274,9 @@ export class MinesweeperGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.gameState === 'playing') {
       this.timer += dt;
     }
@@ -250,23 +291,30 @@ export class MinesweeperGame extends BaseGame {
     const lang = this.isZhLang();
     const isDark = this.isDarkTheme();
 
-    // Background
-    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
+    const palette = getRetroPalette(isDark);
+    const background = ctx.createLinearGradient(0, 0, 0, h);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, palette.bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, w, h);
 
-    // Header bg
-    ctx.fillStyle = isDark ? '#12121a' : '#e5e7eb';
-    ctx.fillRect(0, 0, w, 48);
+    fillGlassPanel(ctx, 4, 4, w - 8, 42, 9, {
+      fill: palette.panel,
+      fill2: palette.panel2,
+      border: palette.border,
+      glow: palette.primary,
+      shadow: palette.shadow,
+    });
 
     // Border
-    ctx.strokeStyle = '#39C5BB';
+    ctx.strokeStyle = palette.primary;
     ctx.lineWidth = 1;
     ctx.strokeRect(1, 1, w - 2, h - 2);
 
     // Timer
     const secs = Math.floor(this.gameState === 'idle' ? 0 : this.timer);
     const padded = (n: number) => String(n).padStart(3, '0');
-    ctx.fillStyle = '#39C5BB';
+    ctx.fillStyle = palette.primary;
     ctx.font = "bold 24px system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.fillText(padded(secs), w / 2, 32);
@@ -283,6 +331,8 @@ export class MinesweeperGame extends BaseGame {
     ctx.fillText(face, w - 8, 32);
 
     // Grid
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const px = 2 + x * CELL;
@@ -292,13 +342,16 @@ export class MinesweeperGame extends BaseGame {
         const isMine = this.grid[y][x] === -1;
         const isCursor = x === this.cursorX && y === this.cursorY;
 
-        // Cell background
+        // Raised unopened cells and recessed revealed cells make state readable at a glance.
         if (isRevealed) {
-          ctx.fillStyle = isDark ? '#1a1a24' : '#e5e7eb';
+          ctx.fillStyle = isDark ? '#151c28' : '#e5e7eb';
+          ctx.fillRect(px, py, CELL - 1, CELL - 1);
         } else {
-          ctx.fillStyle = isCursor ? (isDark ? '#2a2a3a' : '#d1d5db') : (isDark ? '#1e1e2a' : '#f3f4f6');
+          const cellColor = isCursor ? palette.panel2 : (isDark ? '#243244' : '#f3f4f6');
+          fillBevelTile(ctx, px, py, CELL - 1, CELL - 1, 4, cellColor, {
+            border: isCursor ? palette.primary : palette.border,
+          });
         }
-        ctx.fillRect(px, py, CELL - 1, CELL - 1);
 
         if (!isRevealed && !isFlagged) {
           // Unrevealed - border
@@ -309,15 +362,8 @@ export class MinesweeperGame extends BaseGame {
 
         if (isRevealed) {
           if (isMine) {
-            // Draw mine
-            ctx.fillStyle = '#ff4444';
-            ctx.beginPath();
-            ctx.arc(px + CELL / 2, py + CELL / 2, CELL / 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ff8888';
-            ctx.beginPath();
-            ctx.arc(px + CELL / 2 - 3, py + CELL / 2 - 3, 3, 0, Math.PI * 2);
-            ctx.fill();
+            drawGlow(ctx, px + CELL / 2, py + CELL / 2, CELL * 0.65, palette.red, isDark ? 0.36 : 0.12);
+            fillSphere(ctx, px + CELL / 2, py + CELL / 2, CELL / 3, palette.red, { rim: 0.35, rimColor: palette.orange });
           } else if (this.grid[y][x] > 0) {
             const colors = ['', '#39C5BB', '#4ade80', '#f97316', '#a855f7', '#ef4444', '#06b6d4', '#1a1a2e', '#6b7280'];
             ctx.fillStyle = colors[this.grid[y][x]] || '#fff';
@@ -339,10 +385,16 @@ export class MinesweeperGame extends BaseGame {
     {
       const px = 2 + this.cursorX * CELL;
       const py = 50 + this.cursorY * CELL;
-      ctx.strokeStyle = '#39C5BB';
+      drawGlow(ctx, px + CELL / 2, py + CELL / 2, CELL * 0.7, palette.primary, isDark ? 0.2 : 0.08);
+      ctx.strokeStyle = palette.primary;
       ctx.lineWidth = 2;
       ctx.strokeRect(px + 1, py + 1, CELL - 3, CELL - 3);
     }
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, w, h, isDark ? 0.16 : 0.07);
+    this.floats.draw(ctx);
 
     // Overlay messages
     if (this.gameState === 'won') {

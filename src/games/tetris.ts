@@ -1,4 +1,14 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  Particles,
+  FloatTexts,
+  ScreenShake,
+  fillBevelTile,
+  drawVignette,
+  withAlpha,
+  fx,
+} from '../core/fx.js';
 
 type TetrominoType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
@@ -98,6 +108,11 @@ export class TetrisGame extends BaseGame {
   private lastMoveTime = 0;
   private autoRepeatDelay = 0.15;
 
+  // Presentation state (visual only; gameplay values above stay untouched)
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
+
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 420, 600));
   }
@@ -122,6 +137,9 @@ export class TetrisGame extends BaseGame {
     this.rotateCWPending = false;
     this.rotateCCWPending = false;
     this.lastMoveTime = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
   }
 
   private drawFromBag(): TetrominoType {
@@ -195,23 +213,81 @@ export class TetrisGame extends BaseGame {
   }
 
   private clearLines() {
-    let cleared = 0;
+    const clearedRows: { y: number; colors: string[] }[] = [];
     for (let r = this.rows - 1; r >= 0; r--) {
       if (this.board[r].every((c) => c)) {
+        clearedRows.push({
+          y: r * this.cellSize + this.cellSize / 2,
+          colors: this.board[r].filter((c): c is string => Boolean(c)),
+        });
         this.board.splice(r, 1);
         this.board.unshift(Array(this.cols).fill(null));
-        cleared++;
         r++; // recheck this row
       }
     }
+    const cleared = clearedRows.length;
     if (cleared > 0) {
       const points = [0, 100, 300, 500, 800];
       this.score += points[cleared] * this.level;
       this.lines += cleared;
       const newLevel = Math.floor(this.lines / 10) + 1;
-      if (newLevel > this.level) {
+      const leveledUp = newLevel > this.level;
+      if (leveledUp) {
         this.level = newLevel;
       }
+      this.onLinesCleared(clearedRows, cleared, leveledUp);
+    }
+  }
+
+  private onLinesCleared(clearedRows: { y: number; colors: string[] }[], cleared: number, leveledUp: boolean) {
+    const isDark = this.isDarkTheme();
+    const palette = getRetroPalette(isDark);
+    const zh = this.isZhLang();
+    const boardW = this.cols * this.cellSize;
+
+    // Row-clear particles: spark/rect mix scattered along each cleared row
+    for (const row of clearedRows) {
+      const colors = [...row.colors, '#ffffff'];
+      for (let x = 0; x < this.cols; x++) {
+        const emit = fx.sparks(x * this.cellSize + this.cellSize / 2, row.y, -Math.PI / 2, colors);
+        emit.count = 2;
+        emit.spread = Math.PI;
+        if (!isDark) emit.blend = 'source-over';
+        this.particles.emit(emit);
+        this.particles.emit({
+          x: x * this.cellSize + this.cellSize / 2,
+          y: row.y,
+          count: 1,
+          speed: [30, 90],
+          life: [0.25, 0.5],
+          size: [2, 4],
+          colors,
+          shape: 'rect',
+          drag: 2,
+          blend: isDark ? 'lighter' : 'source-over',
+        });
+      }
+    }
+
+    const names = zh
+      ? ['', '单行消除', '双行消除', '三行消除', '四行消除!']
+      : ['', 'Single', 'Double', 'Triple', 'Tetris!'];
+    const colorsByCount = ['', palette.text, palette.green, palette.cyan, palette.amber];
+    const topY = Math.min(...clearedRows.map((r) => r.y));
+    this.floats.add(boardW / 2, topY - 20, names[cleared], {
+      color: colorsByCount[cleared],
+      size: cleared === 4 ? 24 : 18,
+      life: 1.1,
+    });
+    if (cleared === 4) {
+      this.shake.add(0.25);
+    }
+    if (leveledUp) {
+      this.floats.add(boardW / 2, topY - 48, zh ? `升级到 ${this.level} 级!` : `LEVEL ${this.level}!`, {
+        color: palette.primary,
+        size: 15,
+        life: 1.2,
+      });
     }
   }
 

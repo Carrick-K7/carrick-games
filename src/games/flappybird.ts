@@ -1,4 +1,17 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawSprite,
+  drawVignette,
+  fillBevelTile,
+  fillSphere,
+  fx,
+  makeSprite,
+  shade,
+} from '../core/fx.js';
 
 interface Pipe {
   x: number;
@@ -25,6 +38,12 @@ export class FlappyBirdGame extends BaseGame {
   }
   private gameOver = false;
   private groundHeight = 40;
+  private time = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
+  private spriteTheme: boolean | null = null;
+  private birdSprite: HTMLCanvasElement | null = null;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 400, 560));
@@ -37,6 +56,10 @@ export class FlappyBirdGame extends BaseGame {
     this.score = 0;
     this.gameOver = false;
     this.spawnTimer = 0;
+    this.time = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
@@ -59,6 +82,11 @@ export class FlappyBirdGame extends BaseGame {
       return;
     }
     this.bird.velocity = this.jumpVelocity;
+    const palette = getRetroPalette(this.isDarkTheme());
+    const emit = fx.sparks(this.bird.x - 8, this.bird.y + 7, Math.PI, [palette.amber, palette.orange]);
+    if (!this.isDarkTheme()) emit.blend = 'source-over';
+    emit.count = 4;
+    this.particles.emit(emit);
   }
 
   private checkCollision(pipe: Pipe): boolean {
@@ -79,6 +107,10 @@ export class FlappyBirdGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
+    this.time += dt;
     if (this.gameOver) return;
 
     this.bird.velocity += this.gravity * dt;
@@ -87,7 +119,7 @@ export class FlappyBirdGame extends BaseGame {
     // Ground / ceiling collision
     if (this.bird.y + this.bird.radius > this.height - this.groundHeight) {
       this.bird.y = this.height - this.groundHeight - this.bird.radius;
-      this.gameOver = true;
+      this.die();
       return;
     }
     if (this.bird.y - this.bird.radius < 0) {
@@ -108,9 +140,15 @@ export class FlappyBirdGame extends BaseGame {
       if (!pipe.passed && pipe.x + pipe.width < this.bird.x) {
         pipe.passed = true;
         this.score += 1;
+        const palette = getRetroPalette(this.isDarkTheme());
+        for (const emit of fx.pop(this.bird.x, this.bird.y, [palette.amber, palette.primary])) {
+          if (!this.isDarkTheme()) emit.blend = 'source-over';
+          this.particles.emit(emit);
+        }
+        this.floats.add(this.bird.x, this.bird.y - 12, '+1', { color: palette.amber, size: 14 });
       }
       if (this.checkCollision(pipe)) {
-        this.gameOver = true;
+        this.die();
         return;
       }
     }
@@ -119,83 +157,109 @@ export class FlappyBirdGame extends BaseGame {
     this.pipes = this.pipes.filter(p => p.x + p.width > -10);
   }
 
+  private die() {
+    if (this.gameOver) return;
+    this.gameOver = true;
+    const palette = getRetroPalette(this.isDarkTheme());
+    for (const emit of fx.explosion(this.bird.x, this.bird.y, [palette.amber, palette.orange, palette.red])) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+    this.shake.add(0.65);
+  }
+
+  private ensureBirdSprite(dark: boolean) {
+    if (this.spriteTheme === dark && this.birdSprite) return;
+    this.spriteTheme = dark;
+    const palette = getRetroPalette(dark);
+    this.birdSprite = makeSprite(42, 32, (ctx) => {
+      fillSphere(ctx, 17, 16, 11, palette.amber, { rim: 0.35, rimColor: palette.orange });
+      ctx.fillStyle = shade(palette.amber, 0.28);
+      ctx.beginPath();
+      ctx.ellipse(12, 20, 8, 5, -0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(21, 12, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(22, 12, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = palette.orange;
+      ctx.beginPath();
+      ctx.moveTo(26, 16);
+      ctx.lineTo(41, 20);
+      ctx.lineTo(26, 23);
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
+    const palette = getRetroPalette(isDark);
+    this.ensureBirdSprite(isDark);
 
-    // Sky
-    ctx.fillStyle = isDark ? '#0b0f19' : '#fafafa';
+    const sky = ctx.createLinearGradient(0, 0, 0, this.height);
+    sky.addColorStop(0, isDark ? '#071827' : '#dff4ff');
+    sky.addColorStop(0.68, isDark ? '#153047' : '#f4fbff');
+    sky.addColorStop(1, palette.bg2);
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Background city silhouette (simple)
-    ctx.fillStyle = isDark ? '#111827' : '#e5e7eb';
+    // Slow cloud layer gives depth without competing with pipe silhouettes.
+    for (let i = 0; i < 5; i++) {
+      const span = this.width + 110;
+      const x = ((i * 103 - this.time * 12) % span + span) % span - 55;
+      const y = 65 + (i % 3) * 78;
+      ctx.fillStyle = isDark ? 'rgba(148,163,184,0.10)' : 'rgba(255,255,255,0.72)';
+      ctx.beginPath();
+      ctx.arc(x, y, 20, 0, Math.PI * 2);
+      ctx.arc(x + 22, y - 8, 27, 0, Math.PI * 2);
+      ctx.arc(x + 48, y, 19, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = isDark ? '#102637' : '#c8e4dc';
     ctx.beginPath();
     ctx.moveTo(0, this.height - this.groundHeight);
-    for (let i = 0; i <= this.width; i += 40) {
-      const h = 30 + (i % 80 === 0 ? 40 : 20);
-      ctx.lineTo(i, this.height - this.groundHeight - h);
-      ctx.lineTo(i + 20, this.height - this.groundHeight - h);
+    for (let x = 0; x <= this.width; x += 48) {
+      ctx.quadraticCurveTo(x + 24, this.height - this.groundHeight - 52 - (x % 96) / 4, x + 48, this.height - this.groundHeight);
     }
-    ctx.lineTo(this.width, this.height - this.groundHeight);
     ctx.closePath();
     ctx.fill();
 
-    // Pipes
-    ctx.fillStyle = '#22c55e';
-    ctx.strokeStyle = '#14532d';
-    ctx.lineWidth = 2;
-    for (const pipe of this.pipes) {
-      // Top pipe
-      ctx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
-      ctx.strokeRect(pipe.x, 0, pipe.width, pipe.topHeight);
-      // Top pipe cap
-      ctx.fillRect(pipe.x - 4, pipe.topHeight - 20, pipe.width + 8, 20);
-      ctx.strokeRect(pipe.x - 4, pipe.topHeight - 20, pipe.width + 8, 20);
+    this.shake.apply(ctx, () => {
+      for (const pipe of this.pipes) {
+        const bottomY = pipe.topHeight + pipe.gap;
+        const bottomH = this.height - this.groundHeight - bottomY;
+        fillBevelTile(ctx, pipe.x, -8, pipe.width, pipe.topHeight + 8, 5, palette.green, { border: shade(palette.green, -0.45) });
+        fillBevelTile(ctx, pipe.x - 4, pipe.topHeight - 20, pipe.width + 8, 20, 4, palette.green, { border: shade(palette.green, -0.45) });
+        fillBevelTile(ctx, pipe.x, bottomY, pipe.width, bottomH + 8, 5, palette.green, { border: shade(palette.green, -0.45) });
+        fillBevelTile(ctx, pipe.x - 4, bottomY, pipe.width + 8, 20, 4, palette.green, { border: shade(palette.green, -0.45) });
+      }
 
-      // Bottom pipe
-      const bottomY = pipe.topHeight + pipe.gap;
-      const bottomH = this.height - this.groundHeight - bottomY;
-      ctx.fillRect(pipe.x, bottomY, pipe.width, bottomH);
-      ctx.strokeRect(pipe.x, bottomY, pipe.width, bottomH);
-      // Bottom pipe cap
-      ctx.fillRect(pipe.x - 4, bottomY, pipe.width + 8, 20);
-      ctx.strokeRect(pipe.x - 4, bottomY, pipe.width + 8, 20);
-    }
+      fillBevelTile(ctx, -4, this.height - this.groundHeight, this.width + 8, this.groundHeight + 8, 3, isDark ? '#713f12' : '#a16207', {
+        border: palette.amber,
+      });
 
-    // Ground
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(0, this.height - this.groundHeight, this.width, this.groundHeight);
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(0, this.height - this.groundHeight, this.width, 6);
+      if (this.birdSprite) {
+        const rotation = Math.max(-0.45, Math.min(0.8, this.bird.velocity / 520));
+        drawSprite(ctx, this.birdSprite, this.bird.x + 4, this.bird.y, 42, 32, { rotation });
+      }
+      this.particles.draw(ctx);
+    });
 
-    // Bird
-    ctx.fillStyle = '#facc15';
-    ctx.beginPath();
-    ctx.arc(this.bird.x, this.bird.y, this.bird.radius, 0, Math.PI * 2);
-    ctx.fill();
-    // Eye
-    ctx.fillStyle = isDark ? '#0f172a' : '#1a1a2e';
-    ctx.beginPath();
-    ctx.arc(this.bird.x + 4, this.bird.y - 4, 3, 0, Math.PI * 2);
-    ctx.fill();
-    // Beak
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.moveTo(this.bird.x + 6, this.bird.y + 2);
-    ctx.lineTo(this.bird.x + 16, this.bird.y + 6);
-    ctx.lineTo(this.bird.x + 6, this.bird.y + 10);
-    ctx.closePath();
-    ctx.fill();
-    // Wing
-    ctx.fillStyle = '#fde047';
-    ctx.beginPath();
-    ctx.ellipse(this.bird.x - 4, this.bird.y + 4, 6, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    drawVignette(ctx, this.width, this.height, isDark ? 0.22 : 0.1);
+    this.floats.draw(ctx);
 
-    // Score
-    ctx.fillStyle = isDark ? '#e0e0e0' : '#1a1a2e';
-    ctx.font = '16px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    // Game Over
+    ctx.fillStyle = palette.text;
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(this.score), this.width / 2, 16);
+
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
       const zh = this.isZhLang();

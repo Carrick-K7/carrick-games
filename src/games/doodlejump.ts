@@ -1,4 +1,17 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawSprite,
+  drawVignette,
+  fillBevelTile,
+  fillSphere,
+  fx,
+  makeSprite,
+} from '../core/fx.js';
 
 const W = 400;
 const H = 600;
@@ -33,6 +46,11 @@ export class DoodleJumpGame extends BaseGame {
   private keys = { left: false, right: false };
   private touchSide: 'left' | 'right' | null = null;
   private cameraY = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
+  private spriteTheme: boolean | null = null;
+  private playerSprite: HTMLCanvasElement | null = null;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -47,6 +65,9 @@ export class DoodleJumpGame extends BaseGame {
     this.platforms = [];
     this.keys = { left: false, right: false };
     this.touchSide = null;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
 
     // Generate initial platforms
@@ -85,6 +106,9 @@ export class DoodleJumpGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.gameState !== 'playing') return;
 
     // Horizontal movement
@@ -113,6 +137,14 @@ export class DoodleJumpGame extends BaseGame {
           this.player.y = p.y - CHAR_H;
           this.player.vy = JUMP_VEL;
 
+          const palette = getRetroPalette(this.isDarkTheme());
+          const color = p.type === 'fragile' ? palette.orange : p.type === 'moving' ? palette.amber : p.type === 'disappearing' ? palette.violet : palette.primary;
+          for (const emit of fx.pop(this.player.x + CHAR_W / 2, p.y, [color, '#ffffff'])) {
+            if (!this.isDarkTheme()) emit.blend = 'source-over';
+            emit.count = Math.min(emit.count, 7);
+            this.particles.emit(emit);
+          }
+
           if (p.type === 'fragile') {
             p.broken = true;
           } else if (p.type === 'disappearing') {
@@ -133,7 +165,17 @@ export class DoodleJumpGame extends BaseGame {
       this.maxY = this.player.y;
     }
     const newScore = Math.floor((H - 60 - this.maxY) / 10);
-    if (newScore > this.score) this.score = newScore;
+    if (newScore > this.score) {
+      if (Math.floor(newScore / 10) > Math.floor(this.score / 10)) {
+        const palette = getRetroPalette(this.isDarkTheme());
+        this.floats.add(this.player.x + CHAR_W / 2, this.player.y - 8, `+${newScore - this.score}`, {
+          color: palette.amber,
+          size: 13,
+          life: 0.7,
+        });
+      }
+      this.score = newScore;
+    }
 
     // Remove platforms far below camera
     this.platforms = this.platforms.filter(p => p.y - this.cameraY < H + 60);
@@ -164,61 +206,116 @@ export class DoodleJumpGame extends BaseGame {
     // Game over: fell below camera
     if (this.player.y - this.cameraY > H + 40) {
       this.gameState = 'gameover';
+      const palette = getRetroPalette(this.isDarkTheme());
+      for (const emit of fx.explosion(this.player.x + CHAR_W / 2, this.player.y, [palette.green, palette.primary, palette.red])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.shake.add(0.65);
       this.submitScoreOnce(this.score);
     }
   }
 
+  private ensurePlayerSprite(dark: boolean) {
+    if (this.spriteTheme === dark && this.playerSprite) return;
+    this.spriteTheme = dark;
+    const palette = getRetroPalette(dark);
+    this.playerSprite = makeSprite(40, 44, (ctx) => {
+      fillSphere(ctx, 20, 20, 14, palette.green, { rim: 0.3, rimColor: palette.primary });
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.ellipse(15, 16, 5, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(25, 16, 5, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(16, 16, 2.2, 0, Math.PI * 2);
+      ctx.arc(26, 16, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(20, 22, 6, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      ctx.strokeStyle = palette.green;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(14, 31);
+      ctx.lineTo(10, 41);
+      ctx.moveTo(26, 31);
+      ctx.lineTo(30, 41);
+      ctx.stroke();
+    });
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
-    // Sky gradient
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
     const isDark = this.isDarkTheme();
-    if (isDark) {
-      grad.addColorStop(0, '#0b0f19');
-      grad.addColorStop(1, '#0f172a');
-    } else {
-      grad.addColorStop(0, '#e0f2fe');
-      grad.addColorStop(1, '#bae6fd');
-    }
+    const palette = getRetroPalette(isDark);
+    this.ensurePlayerSprite(isDark);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, isDark ? '#071522' : '#e0f2fe');
+    grad.addColorStop(1, isDark ? '#10283a' : '#bae6fd');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.save();
-    ctx.translate(0, -this.cameraY);
-
-    // Draw platforms
-    for (const p of this.platforms) {
-      if (p.broken) continue;
-      ctx.globalAlpha = p.alpha;
-      let color = '#39C5BB';
-      if (!isDark) color = '#0d9488';
-      if (p.type === 'fragile') color = isDark ? '#f97316' : '#c2410c';
-      if (p.type === 'disappearing') color = isDark ? '#a855f7' : '#7c3aed';
-      if (p.type === 'moving') color = isDark ? '#eab308' : '#a16207';
-      ctx.fillStyle = color;
-      ctx.fillRect(p.x, p.y, p.w, PLATFORM_H);
-      // Top highlight
-      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)';
-      ctx.fillRect(p.x, p.y, p.w, 3);
-      ctx.globalAlpha = 1;
+    // Sparse parallax dots make vertical travel legible.
+    for (let i = 0; i < 24; i++) {
+      const x = (i * 71) % W;
+      const y = ((i * 97 - this.cameraY * (0.08 + (i % 3) * 0.04)) % H + H) % H;
+      ctx.fillStyle = i % 2 ? palette.primary : palette.cyan;
+      ctx.globalAlpha = isDark ? 0.16 : 0.1;
+      ctx.beginPath();
+      ctx.arc(x, y, 2 + (i % 3), 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.globalAlpha = 1;
 
-    // Draw player (doodle character)
-    this.drawPlayer(ctx);
+    this.shake.apply(ctx, () => {
+      ctx.save();
+      ctx.translate(0, -this.cameraY);
 
-    ctx.restore();
+      for (const p of this.platforms) {
+        if (p.broken) continue;
+        ctx.globalAlpha = p.alpha;
+        const color = p.type === 'fragile' ? palette.orange : p.type === 'disappearing' ? palette.violet : p.type === 'moving' ? palette.amber : palette.primary;
+        if (p.type === 'moving' || p.type === 'disappearing') {
+          drawGlow(ctx, p.x + p.w / 2, p.y + PLATFORM_H / 2, 24, color, isDark ? 0.18 : 0.08);
+        }
+        fillBevelTile(ctx, p.x, p.y, p.w, PLATFORM_H, 5, color, { border: palette.border });
+        ctx.globalAlpha = 1;
+      }
 
-    // Idle screen
+      if (this.playerSprite) {
+        const tilt = Math.max(-0.2, Math.min(0.2, this.player.vx / 900));
+        drawSprite(ctx, this.playerSprite, this.player.x + CHAR_W / 2, this.player.y + CHAR_H / 2, 40, 44, {
+          rotation: tilt,
+          flipX: this.player.vx < 0,
+        });
+      }
+
+      this.particles.draw(ctx);
+      this.floats.draw(ctx);
+      ctx.restore();
+    });
+
+    drawVignette(ctx, W, H, isDark ? 0.22 : 0.1);
+    ctx.fillStyle = palette.text;
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${this.isZhLang() ? '得分' : 'SCORE'} ${this.score}`, W - 12, 12);
+
     if (this.gameState === 'idle') {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f8fafc';
       ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('DOODLE JUMP', W / 2, H / 2 - 50);
-      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillText(this.isZhLang() ? '涂鸦跳跃' : 'DOODLE JUMP', W / 2, H / 2 - 50);
     }
 
-    // Game over
     if (this.gameState === 'gameover') {
       const zh = this.isZhLang();
       this.drawResultOverlay(ctx, {
@@ -228,63 +325,6 @@ export class DoodleJumpGame extends BaseGame {
         hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
       });
     }
-  }
-
-  private drawPlayer(ctx: CanvasRenderingContext2D) {
-    const { x, y } = this.player;
-    const isDark = this.isDarkTheme();
-    const bodyColor = isDark ? '#4ade80' : '#15803d';
-    const eyeColor = '#0f172a';
-
-    // Body (oval)
-    ctx.fillStyle = bodyColor;
-    ctx.beginPath();
-    ctx.ellipse(x + CHAR_W / 2, y + CHAR_H / 2 + 2, CHAR_W / 2 - 2, CHAR_H / 2 - 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Head (circle on top)
-    ctx.fillStyle = bodyColor;
-    ctx.beginPath();
-    ctx.arc(x + CHAR_W / 2, y + CHAR_H / 2 - 4, CHAR_W / 2 - 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes (white)
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(x + CHAR_W / 2 - 6, y + CHAR_H / 2 - 6, 5, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(x + CHAR_W / 2 + 6, y + CHAR_H / 2 - 6, 5, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Pupils
-    ctx.fillStyle = eyeColor;
-    ctx.beginPath();
-    ctx.arc(x + CHAR_W / 2 - 5, y + CHAR_H / 2 - 5, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + CHAR_W / 2 + 7, y + CHAR_H / 2 - 5, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Mouth (smile)
-    ctx.strokeStyle = eyeColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x + CHAR_W / 2, y + CHAR_H / 2, 6, 0.2, Math.PI - 0.2);
-    ctx.stroke();
-
-    // Legs (simple lines)
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x + CHAR_W / 2 - 6, y + CHAR_H - 4);
-    ctx.lineTo(x + CHAR_W / 2 - 10, y + CHAR_H + 6);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + CHAR_W / 2 + 6, y + CHAR_H - 4);
-    ctx.lineTo(x + CHAR_W / 2 + 10, y + CHAR_H + 6);
-    ctx.stroke();
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {

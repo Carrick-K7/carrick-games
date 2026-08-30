@@ -5,6 +5,16 @@ import {
   isDarkTheme as getEffectiveDarkTheme,
   isZhLang as getEffectiveZhLang,
 } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fx,
+} from '../core/fx.js';
 
 // Piece types
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
@@ -66,6 +76,9 @@ export class ChessGame extends BaseGame {
   private touchStart: { r: number; c: number } | null = null;
   private animTime = 0;
   private lastAiTime = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', CANVAS_W, CANVAS_H));
@@ -84,6 +97,9 @@ export class ChessGame extends BaseGame {
     this.aiThinking = false;
     this.animTime = 0;
     this.touchStart = null;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
@@ -332,6 +348,17 @@ export class ChessGame extends BaseGame {
     }
 
     this.moveHistory.push(rec);
+    if (captured || flags === 'ep') {
+      const palette = getRetroPalette(this.isDarkTheme());
+      const x = to.c * CELL + CELL / 2;
+      const y = to.r * CELL + UI_TOP + CELL / 2;
+      for (const emit of fx.pop(x, y, [captured?.color === 'w' ? '#f8fafc' : '#334155', palette.red])) {
+        emit.count = Math.min(emit.count, 8);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.shake.add(0.06);
+    }
     this.turn = this.turn === 'w' ? 'b' : 'w';
     this.isCheck = this.isInCheck(this.turn);
 
@@ -343,6 +370,10 @@ export class ChessGame extends BaseGame {
         this.gameResult = this.turn === 'w' ? 'blackWin' : 'whiteWin';
       } else {
         this.gameResult = 'stalemate';
+      }
+      if (this.gameResult !== 'stalemate') {
+        const palette = getRetroPalette(this.isDarkTheme());
+        this.particles.emit(fx.confetti(BOARD_SIZE / 2, UI_TOP + 8, [palette.primary, palette.cyan, palette.amber, palette.violet]));
       }
       this.submitScoreOnce(this.moveHistory.length);
     }
@@ -430,15 +461,23 @@ export class ChessGame extends BaseGame {
 
   update(dt: number) {
     this.animTime += dt;
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
     const theme = getTheme();
-    ctx.fillStyle = theme.bg;
+    const palette = getRetroPalette(this.isDarkTheme());
+    const background = ctx.createLinearGradient(0, 0, 0, this.height);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, theme.bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, this.width, this.height);
 
     if (this.phase === 'start') {
       this.drawStartScreen(ctx, theme);
+      drawVignette(ctx, this.width, this.height, this.isDarkTheme() ? 0.16 : 0.06);
       return;
     }
 
@@ -453,15 +492,20 @@ export class ChessGame extends BaseGame {
     ctx.fillText(turnText + checkText, BOARD_SIZE / 2, 22);
 
     // Draw board
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const x = c * CELL, y = r * CELL + UI_TOP;
         const isLight = (r + c) % 2 === 0;
-        ctx.fillStyle = isLight ? theme.lightSquare : theme.darkSquare;
-        ctx.fillRect(x, y, CELL, CELL);
+        fillBevelTile(ctx, x, y, CELL, CELL, 0, isLight ? theme.lightSquare : theme.darkSquare, {
+          gloss: false,
+          border: 'rgba(15,23,42,0.10)',
+        });
 
         // Highlight selected
         if (this.selected && this.selected.r === r && this.selected.c === c) {
+          drawGlow(ctx, x + CELL / 2, y + CELL / 2, CELL * 0.72, theme.accent, this.isDarkTheme() ? 0.28 : 0.1);
           ctx.fillStyle = theme.selected;
           ctx.fillRect(x, y, CELL, CELL);
         }
@@ -470,6 +514,7 @@ export class ChessGame extends BaseGame {
         if (this.validMoves.some(m => m.r === r && m.c === c)) {
           ctx.fillStyle = this.board[r][c] ? theme.highlight : 'rgba(57,197,187,0.4)';
           if (!this.board[r][c]) {
+            drawGlow(ctx, x + CELL / 2, y + CELL / 2, CELL * 0.34, theme.accent, this.isDarkTheme() ? 0.24 : 0.08);
             ctx.beginPath();
             ctx.arc(x + CELL / 2, y + CELL / 2, CELL * 0.2, 0, Math.PI * 2);
             ctx.fill();
@@ -494,13 +539,15 @@ export class ChessGame extends BaseGame {
         if (piece) {
           const key = piece.color + piece.type;
           const isKingInCheck = piece.type === 'K' && this.isCheck && piece.color === this.turn;
+          ctx.fillStyle = 'rgba(15,23,42,0.22)';
+          ctx.beginPath();
+          ctx.ellipse(x + CELL / 2, y + CELL * 0.78, CELL * 0.24, CELL * 0.08, 0, 0, Math.PI * 2);
+          ctx.fill();
           ctx.font = `${CELL * 0.85}px "Segoe UI Symbol", "Apple Symbols", "Noto Color Emoji", sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           if (isKingInCheck) {
-            // Draw red glow behind king
-            ctx.fillStyle = 'rgba(255,0,0,0.3)';
-            ctx.fillRect(x, y, CELL, CELL);
+            drawGlow(ctx, x + CELL / 2, y + CELL / 2, CELL * 0.72, palette.red, 0.55);
           }
           ctx.fillStyle = piece.color === 'w' ? '#fff' : '#000';
           ctx.strokeStyle = piece.color === 'w' ? '#333' : '#eee';
@@ -518,6 +565,11 @@ export class ChessGame extends BaseGame {
     for (let c = 0; c < 8; c++) {
       ctx.fillText(String.fromCharCode(97 + c), c * CELL + CELL / 2, this.height - 4);
     }
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, this.width, this.height, this.isDarkTheme() ? 0.14 : 0.05);
+    this.floats.draw(ctx);
 
     // Game over overlay
     if (this.phase === 'gameover') {
@@ -531,8 +583,10 @@ export class ChessGame extends BaseGame {
       for (let c = 0; c < 8; c++) {
         const x = c * CELL, y = r * CELL + UI_TOP;
         const isLight = (r + c) % 2 === 0;
-        ctx.fillStyle = isLight ? theme.lightSquare : theme.darkSquare;
-        ctx.fillRect(x, y, CELL, CELL);
+        fillBevelTile(ctx, x, y, CELL, CELL, 0, isLight ? theme.lightSquare : theme.darkSquare, {
+          gloss: false,
+          border: 'rgba(15,23,42,0.10)',
+        });
       }
     }
 

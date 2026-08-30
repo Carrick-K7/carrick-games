@@ -2,9 +2,19 @@ import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot 
 import {
   getRetroPalette,
 } from '../core/render.js';
+import {
+  Particles,
+  ScreenShake,
+  FloatTexts,
+  drawGlow,
+  drawVignette,
+  fillSphere,
+  fillBevelTile,
+  shade,
+  fx,
+} from '../core/fx.js';
 
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 
 export class SnakeGame extends BaseGame {
   private tileSize = 20;
@@ -22,7 +32,13 @@ export class SnakeGame extends BaseGame {
     return { score: this.score };
   }
   private gameOver = false;
-  private particles: Particle[] = [];
+
+  // Presentation state (visual only; gameplay values above stay untouched)
+  private time = 0;
+  private trailTimer = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 400, 400));
@@ -36,7 +52,11 @@ export class SnakeGame extends BaseGame {
     this.gameOver = false;
     this.moveTimer = 0;
     this.moveInterval = 0.12;
-    this.particles = [];
+    this.time = 0;
+    this.trailTimer = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.spawnFood();
     this.resetScoreReport();
   }
@@ -53,18 +73,37 @@ export class SnakeGame extends BaseGame {
   }
 
   update(dt: number) {
-    this.particles = this.particles
-      .map((p) => ({
-        ...p,
-        x: p.x + p.vx * dt,
-        y: p.y + p.vy * dt,
-        vy: p.vy + 110 * dt,
-        life: p.life - dt,
-      }))
-      .filter((p) => p.life > 0);
+    this.time += dt;
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
 
     if (this.gameOver) return;
     this.moveTimer += dt;
+
+    // Throttled soft glow trail behind the head
+    this.trailTimer += dt;
+    if (this.trailTimer >= 0.09) {
+      this.trailTimer = 0;
+      const head = this.snake[0];
+      if (head) {
+        const dark = this.isDarkTheme();
+        const palette = getRetroPalette(dark);
+        this.particles.emit({
+          x: head.x * this.tileSize + this.tileSize / 2,
+          y: head.y * this.tileSize + this.tileSize / 2,
+          count: 1,
+          speed: [3, 14],
+          life: [0.12, 0.22],
+          size: [2, 4],
+          colors: [palette.primary, palette.green],
+          shape: 'glow',
+          drag: 2,
+          blend: dark ? 'lighter' : 'source-over',
+        });
+      }
+    }
+
     if (this.moveTimer < this.moveInterval) return;
     this.moveTimer = 0;
 
@@ -79,13 +118,13 @@ export class SnakeGame extends BaseGame {
 
     // Wall collision
     if (head.x < 0 || head.x >= this.cols || head.y < 0 || head.y >= this.rows) {
-      this.gameOver = true;
+      this.onDeath(head);
       return;
     }
 
     // Self collision
     if (this.snake.some(s => s.x === head.x && s.y === head.y)) {
-      this.gameOver = true;
+      this.onDeath(head);
       return;
     }
 
@@ -94,29 +133,39 @@ export class SnakeGame extends BaseGame {
     if (head.x === this.food.x && head.y === this.food.y) {
       this.score += 10;
       this.moveInterval = Math.max(0.05, this.moveInterval - 0.002);
-      this.burstFood(head.x, head.y);
+      this.onEat(head.x, head.y);
       this.spawnFood();
     } else {
       this.snake.pop();
     }
   }
 
-  private burstFood(x: number, y: number) {
+  private onEat(x: number, y: number) {
+    const dark = this.isDarkTheme();
+    const palette = getRetroPalette(dark);
     const cx = x * this.tileSize + this.tileSize / 2;
     const cy = y * this.tileSize + this.tileSize / 2;
-    const colors = ['#fb7185', '#facc15', '#39C5BB', '#4ade80'];
-    for (let i = 0; i < 16; i++) {
-      const angle = (Math.PI * 2 * i) / 16;
-      const speed = 50 + (i % 5) * 12;
-      this.particles.push({
-        x: cx,
-        y: cy,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.35 + (i % 4) * 0.04,
-        color: colors[i % colors.length],
-      });
+    const colors = [palette.red, palette.amber, palette.orange, '#ffffff'];
+    for (const emit of fx.pop(cx, cy, colors)) {
+      // Additive particles wash out on light backgrounds.
+      if (!dark) emit.blend = 'source-over';
+      this.particles.emit(emit);
     }
+    this.floats.add(cx, cy - 6, '+10', { color: palette.amber, size: 13 });
+  }
+
+  private onDeath(head: { x: number; y: number }) {
+    this.gameOver = true;
+    const dark = this.isDarkTheme();
+    const palette = getRetroPalette(dark);
+    const cx = (Math.max(0, Math.min(this.cols - 1, head.x))) * this.tileSize + this.tileSize / 2;
+    const cy = (Math.max(0, Math.min(this.rows - 1, head.y))) * this.tileSize + this.tileSize / 2;
+    const colors = [palette.primary, palette.green, palette.red, '#ffffff'];
+    for (const emit of fx.explosion(cx, cy, colors)) {
+      if (!dark && emit.shape !== 'glow') emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+    this.shake.add(0.5);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -145,61 +194,15 @@ export class SnakeGame extends BaseGame {
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, boardW - 1, boardH - 1);
 
-    // Food
-    const fx = this.food.x * this.tileSize + this.tileSize / 2;
-    const fy = this.food.y * this.tileSize + this.tileSize / 2;
-    const pulse = 1 + Math.sin(performance.now() / 140) * 0.08;
-    ctx.save();
-    ctx.shadowColor = palette.red;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = palette.red;
-    ctx.beginPath();
-    ctx.arc(fx, fy, (this.tileSize / 2 - 3) * pulse, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = palette.amber;
-    ctx.fillRect(fx - 3, fy - 6, 6, 3);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillRect(fx - 4, fy - 5, 3, 3);
-    ctx.restore();
-
-    // Snake
-    this.snake.forEach((seg, i) => {
-      const pad = i === 0 ? 1 : 2;
-      const x = seg.x * this.tileSize + pad;
-      const y = seg.y * this.tileSize + pad;
-      const size = this.tileSize - pad * 2;
-      ctx.fillStyle = i === 0 ? palette.primary : i % 2 === 0 ? palette.green : '#22c55e';
-      ctx.shadowColor = 'rgba(0,0,0,0.08)';
-      ctx.shadowBlur = 2;
-      ctx.fillRect(
-        x,
-        y,
-        size,
-        size
-      );
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillRect(x + 3, y + 3, Math.max(2, size - 6), 3);
-      if (i === 0) {
-        ctx.fillStyle = isDark ? '#06111a' : '#ffffff';
-        ctx.fillRect(x + 5, y + 6, 3, 3);
-        ctx.fillRect(x + size - 8, y + 6, 3, 3);
-      }
+    this.shake.apply(ctx, () => {
+      this.drawFood(ctx, palette);
+      this.drawSnake(ctx, palette, isDark);
+      this.particles.draw(ctx);
     });
 
-    for (const p of this.particles) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5));
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-    }
-    ctx.globalAlpha = 1;
+    this.floats.draw(ctx);
+    drawVignette(ctx, this.width, this.height, isDark ? 0.26 : 0.14);
 
-    // Score
-    ctx.fillStyle = palette.text;
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
     // Game Over
     if (this.gameOver) {
       this.submitScoreOnce(this.score);
@@ -210,6 +213,68 @@ export class SnakeGame extends BaseGame {
         details: [`${zh ? '得分' : 'SCORE'} ${this.score}`],
         hint: zh ? '点击或按空格重新开始' : 'CLICK OR PRESS SPACE',
       });
+    }
+  }
+
+  private drawFood(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>) {
+    const cx = this.food.x * this.tileSize + this.tileSize / 2;
+    const cy = this.food.y * this.tileSize + this.tileSize / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 4.5);
+    drawGlow(ctx, cx, cy, this.tileSize * (0.85 + 0.25 * pulse), palette.red, 0.35 + 0.25 * pulse);
+    fillSphere(ctx, cx, cy, (this.tileSize / 2 - 3) * (1 + pulse * 0.08), palette.red, { rim: 0.3, rimColor: palette.amber });
+    // Tiny stem
+    ctx.fillStyle = shade(palette.green, -0.2);
+    ctx.beginPath();
+    ctx.roundRect(cx - 1, cy - (this.tileSize / 2 - 2), 2, 4, 1);
+    ctx.fill();
+  }
+
+  private drawSnake(ctx: CanvasRenderingContext2D, palette: ReturnType<typeof getRetroPalette>, isDark: boolean) {
+    const len = this.snake.length;
+    this.snake.forEach((seg, i) => {
+      const pad = i === 0 ? 1 : 2;
+      const x = seg.x * this.tileSize + pad;
+      const y = seg.y * this.tileSize + pad;
+      const size = this.tileSize - pad * 2;
+      // Per-segment shade gradient toward the tail
+      const t = len > 1 ? i / (len - 1) : 0;
+      const base = i === 0 ? palette.primary : shade(palette.green, -0.12 - 0.3 * t);
+      fillBevelTile(ctx, x, y, size, size, 5, base, { gloss: i === 0 || i % 2 === 0 });
+      if (i === 0) {
+        this.drawEyes(ctx, x, y, size, isDark);
+      }
+    });
+  }
+
+  private drawEyes(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, isDark: boolean) {
+    // Eyes look along the current direction of travel
+    let dx = 0;
+    let dy = 0;
+    switch (this.direction) {
+      case 'UP': dy = -1; break;
+      case 'DOWN': dy = 1; break;
+      case 'LEFT': dx = -1; break;
+      case 'RIGHT': dx = 1; break;
+    }
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const perpX = -dy;
+    const perpY = dx;
+    const eyeSep = size * 0.26;
+    const forward = size * 0.16;
+    const white = isDark ? '#f8fafc' : '#ffffff';
+    const pupil = isDark ? '#06111a' : '#0f172a';
+    for (const side of [-1, 1]) {
+      const ex = cx + perpX * eyeSep * side + dx * forward;
+      const ey = cy + perpY * eyeSep * side + dy * forward;
+      ctx.fillStyle = white;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pupil;
+      ctx.beginPath();
+      ctx.arc(ex + dx * 0.9, ey + dy * 0.9, 1.3, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 

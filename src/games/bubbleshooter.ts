@@ -1,4 +1,15 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillGlassPanel,
+  fillSphere,
+  fx,
+} from '../core/fx.js';
 
 const W = 420;
 const H = 620;
@@ -50,6 +61,9 @@ export class BubbleShooterGame extends BaseGame {
   }
   private shotsSinceRow = 0;
   private gameOver = false;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
   private readonly boundMouseMove = (e: MouseEvent) => {
     const point = this.canvasPoint(e.clientX, e.clientY);
     this.setAim(point.x, point.y);
@@ -72,10 +86,16 @@ export class BubbleShooterGame extends BaseGame {
     this.score = 0;
     this.shotsSinceRow = 0;
     this.gameOver = false;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.gameOver || !this.activeBubble) return;
 
     this.activeBubble.x += this.activeBubble.vx * dt;
@@ -87,9 +107,11 @@ export class BubbleShooterGame extends BaseGame {
     if (this.activeBubble.x <= minX) {
       this.activeBubble.x = minX + (minX - this.activeBubble.x);
       this.activeBubble.vx = Math.abs(this.activeBubble.vx);
+      this.emitWallSparks(minX, this.activeBubble.y, 0, this.activeBubble.color);
     } else if (this.activeBubble.x >= maxX) {
       this.activeBubble.x = maxX - (this.activeBubble.x - maxX);
       this.activeBubble.vx = -Math.abs(this.activeBubble.vx);
+      this.emitWallSparks(maxX, this.activeBubble.y, Math.PI, this.activeBubble.color);
     }
 
     if (this.activeBubble.y <= TOP_MARGIN + BUBBLE_RADIUS) {
@@ -104,24 +126,36 @@ export class BubbleShooterGame extends BaseGame {
     }
   }
 
+  private emitWallSparks(x: number, y: number, angle: number, color: string) {
+    const emit = fx.sparks(x, y, angle, [color, '#ffffff']);
+    emit.count = 4;
+    if (!this.isDarkTheme()) emit.blend = 'source-over';
+    this.particles.emit(emit);
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
     const zh = this.isZhLang();
-    const bg = isDark ? '#0b0f19' : '#fafafa';
-    const panel = isDark ? '#111827' : '#edf7f5';
-    const panelBorder = isDark ? 'rgba(57,197,187,0.26)' : 'rgba(13,148,136,0.22)';
-    const primary = isDark ? '#39C5BB' : '#0d9488';
-    const text = isDark ? '#e0e0e0' : '#1a1a2e';
-    const subtext = isDark ? 'rgba(224,224,224,0.65)' : 'rgba(26,26,46,0.68)';
+    const palette = getRetroPalette(isDark);
+    const primary = palette.primary;
+    const text = palette.text;
+    const subtext = palette.muted;
 
+    const bg = ctx.createLinearGradient(0, 0, 0, this.height);
+    bg.addColorStop(0, palette.bg2);
+    bg.addColorStop(1, palette.bg);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    ctx.fillStyle = panel;
-    ctx.fillRect(LEFT_MARGIN - 10, TOP_MARGIN - 10, this.width - (LEFT_MARGIN - 10) * 2, LOSE_LINE_Y - TOP_MARGIN + 20);
-    ctx.strokeStyle = panelBorder;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(LEFT_MARGIN - 10, TOP_MARGIN - 10, this.width - (LEFT_MARGIN - 10) * 2, LOSE_LINE_Y - TOP_MARGIN + 20);
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
+    fillGlassPanel(ctx, LEFT_MARGIN - 10, TOP_MARGIN - 10, this.width - (LEFT_MARGIN - 10) * 2, LOSE_LINE_Y - TOP_MARGIN + 20, 12, {
+      fill: palette.panel,
+      fill2: palette.panel2,
+      border: palette.border,
+      glow: palette.primary,
+      shadow: palette.shadow,
+    });
 
     ctx.strokeStyle = isDark ? 'rgba(57,197,187,0.1)' : 'rgba(13,148,136,0.08)';
     ctx.lineWidth = 1;
@@ -177,6 +211,11 @@ export class BubbleShooterGame extends BaseGame {
 
     this.drawBubble(ctx, SHOOTER_X, SHOOTER_Y - 2, this.currentColor, 0.95);
     this.drawBubble(ctx, SHOOTER_X + 56, SHOOTER_Y + 2, this.nextColor, 0.72);
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, this.width, this.height, isDark ? 0.2 : 0.09);
+    this.floats.draw(ctx);
 
     ctx.fillStyle = text;
     ctx.font = '14px system-ui, sans-serif';
@@ -297,6 +336,12 @@ export class BubbleShooterGame extends BaseGame {
 
     this.ensureRows(target.row + 1);
     this.grid[target.row][target.col] = { color: projectile.color };
+    const center = this.getCellCenter(target.row, target.col);
+    for (const emit of fx.pop(center.x, center.y, [projectile.color, '#ffffff'])) {
+      emit.count = Math.min(emit.count, 5);
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
 
     this.resolveMatches(target);
     this.shotsSinceRow += 1;
@@ -320,7 +365,14 @@ export class BubbleShooterGame extends BaseGame {
     let removed = this.removePositions(cluster);
     removed += this.removeFloatingBubbles();
     this.score += removed * 10;
+    const center = this.getCellCenter(origin.row, origin.col);
+    this.floats.add(center.x, center.y - 10, `+${removed * 10}`, { color: bubble.color, size: 14 });
+    this.shake.add(Math.min(0.28, 0.04 + removed * 0.015));
     this.trimEmptyRows();
+    if (this.availableColors().length === 0) {
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.particles.emit(fx.confetti(this.width / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+    }
   }
 
   private removeFloatingBubbles(): number {
@@ -350,9 +402,23 @@ export class BubbleShooterGame extends BaseGame {
     let removed = 0;
     for (let row = 0; row < this.grid.length; row++) {
       for (let col = 0; col < COLS; col++) {
-        if (!this.grid[row]?.[col]) continue;
+        const bubble = this.grid[row]?.[col];
+        if (!bubble) continue;
         const key = `${row}:${col}`;
         if (!visited.has(key)) {
+          const center = this.getCellCenter(row, col);
+          this.particles.emit({
+            x: center.x,
+            y: center.y,
+            count: 4,
+            speed: [20, 70],
+            life: [0.45, 0.8],
+            size: [2, 5],
+            colors: [bubble.color],
+            gravity: 260,
+            shape: 'circle',
+            blend: this.isDarkTheme() ? 'lighter' : 'source-over',
+          });
           this.grid[row][col] = null;
           removed++;
         }
@@ -365,7 +431,14 @@ export class BubbleShooterGame extends BaseGame {
   private removePositions(positions: GridPos[]): number {
     let removed = 0;
     for (const pos of positions) {
-      if (!this.grid[pos.row]?.[pos.col]) continue;
+      const bubble = this.grid[pos.row]?.[pos.col];
+      if (!bubble) continue;
+      const center = this.getCellCenter(pos.row, pos.col);
+      for (const emit of fx.pop(center.x, center.y, [bubble.color, '#ffffff'])) {
+        emit.count = Math.min(emit.count, 7);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
       this.grid[pos.row][pos.col] = null;
       removed++;
     }
@@ -600,8 +673,15 @@ export class BubbleShooterGame extends BaseGame {
   }
 
   private triggerGameOver() {
+    if (this.gameOver) return;
     this.gameOver = true;
     this.activeBubble = null;
+    const palette = getRetroPalette(this.isDarkTheme());
+    for (const emit of fx.explosion(this.width / 2, LOSE_LINE_Y, [palette.red, palette.orange, palette.amber])) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+    this.shake.add(0.65);
     this.submitScoreOnce(this.score);
   }
 
@@ -612,38 +692,9 @@ export class BubbleShooterGame extends BaseGame {
     color: string,
     scale = 1,
   ) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scale, scale);
-
-    const gradient = ctx.createRadialGradient(-6, -8, 4, 0, 0, BUBBLE_RADIUS);
-    gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
-    gradient.addColorStop(0.18, 'rgba(255,255,255,0.5)');
-    gradient.addColorStop(0.22, color);
-    gradient.addColorStop(1, 'rgba(15,23,42,0.92)');
-
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, 0, BUBBLE_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(0, 0, BUBBLE_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.beginPath();
-    ctx.arc(0, 0, BUBBLE_RADIUS - 1, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.48)';
-    ctx.beginPath();
-    ctx.arc(-6, -7, 5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
+    const radius = BUBBLE_RADIUS * scale;
+    drawGlow(ctx, x, y, radius * 1.7, color, this.isDarkTheme() ? 0.14 : 0.05);
+    fillSphere(ctx, x, y, radius, color, { rim: 0.32, rimColor: '#ffffff' });
   }
 
   private drawAimGuide(ctx: CanvasRenderingContext2D, primary: string) {

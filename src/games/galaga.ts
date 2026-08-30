@@ -1,4 +1,15 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, isDarkTheme as getEffectiveDarkTheme } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  Starfield,
+  drawGlow,
+  drawVignette,
+  fillSphere,
+  fx,
+} from '../core/fx.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type EnemyKind = 'drone' | 'boss';
@@ -104,6 +115,10 @@ export class GalagaGame extends BaseGame {
   // Respawn
   private respawnTimer = 0;
   private respawnDelay = 1.5;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
+  private readonly starfield = new Starfield({ density: 1.2 });
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -128,6 +143,9 @@ export class GalagaGame extends BaseGame {
     this.enemyFireTimer = 0;
     this.waveClearTimer = 0;
     this.respawnTimer = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.spawnWave();
     this.state = 'playing';
     this.resetScoreReport();
@@ -230,10 +248,19 @@ export class GalagaGame extends BaseGame {
 
   private addExplosion(x: number, y: number) {
     this.explosions.push({ x, y, t: 0, duration: 0.4 });
+    const palette = getRetroPalette(this.isDarkTheme());
+    for (const emit of fx.explosion(x, y, [palette.orange, palette.amber, palette.red])) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
   }
 
   update(dt: number) {
     const isZh = this.isZhLang();
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
+    this.starfield.update(dt, 12);
 
     if (this.state === 'start') return;
     if (this.state === 'gameover') return;
@@ -370,8 +397,13 @@ export class GalagaGame extends BaseGame {
         )) {
           b.active = false;
           e.alive = false;
-          this.score += e.kind === 'boss' ? 200 : 100;
+          const points = e.kind === 'boss' ? 200 : 100;
+          this.score += points;
           this.addExplosion(e.x, e.y);
+          this.floats.add(e.x, e.y - 10, `+${points}`, {
+            color: e.kind === 'boss' ? getRetroPalette(this.isDarkTheme()).blue : getRetroPalette(this.isDarkTheme()).green,
+            size: 13,
+          });
           break;
         }
       }
@@ -418,6 +450,10 @@ export class GalagaGame extends BaseGame {
     // ── Wave clear check ────────────────────────────────────────────────────
     const alive = this.enemies.filter(e => e.alive);
     if (alive.length === 0 && this.state === 'playing') {
+      if (this.waveClearTimer === 0) {
+        const palette = getRetroPalette(this.isDarkTheme());
+        this.particles.emit(fx.confetti(W / 2, 16, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+      }
       this.waveClearTimer += dt;
       if (this.waveClearTimer >= this.waveClearDelay) {
         this.waveClearTimer = 0;
@@ -430,6 +466,7 @@ export class GalagaGame extends BaseGame {
   private playerHit() {
     this.lives--;
     this.addExplosion(this.playerX + PLAYER_W / 2, PLAYER_Y + PLAYER_H / 2);
+    this.shake.add(this.lives <= 0 ? 0.8 : 0.55);
     if (this.lives <= 0) {
       this.state = 'gameover';
       this.submitScoreOnce(this.score);
@@ -444,30 +481,27 @@ export class GalagaGame extends BaseGame {
     const isZh = this.isZhLang();
 
     // Background
-    ctx.fillStyle = bg;
+    const background = ctx.createLinearGradient(0, 0, 0, H);
+    background.addColorStop(0, bg);
+    background.addColorStop(1, getRetroPalette(isDark).bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, W, H);
+    this.starfield.setTheme(isDark);
+    this.starfield.draw(ctx, W, H);
 
-    // Starfield (static dots)
-    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)';
-    const starSeed = [7,13,19,23,29,37,41,43,47,53,59,61,67,71,73,79,83,89,97,
-      101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,
-      193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283];
-    for (let i = 0; i < 60; i++) {
-      const sx = (starSeed[i] * 97) % W;
-      const sy = (starSeed[i] * 53) % (H - 80);
-      ctx.fillRect(sx, sy, 1, 1);
-    }
-
-    // HUD
-    this.drawHUD(ctx, isDark, isZh);
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
 
     // Bullets
     for (const b of this.bullets) {
+      drawGlow(ctx, b.x + BULLET_W / 2, b.y + BULLET_H / 2, 12, primary, isDark ? 0.45 : 0.14);
       ctx.fillStyle = primary;
       ctx.fillRect(b.x, b.y, BULLET_W, BULLET_H);
     }
     for (const b of this.enemyBullets) {
-      ctx.fillStyle = isDark ? '#ff4444' : '#c62828';
+      const color = isDark ? '#ff4444' : '#c62828';
+      drawGlow(ctx, b.x + BULLET_W / 2, b.y + BULLET_H / 2, 11, color, isDark ? 0.4 : 0.12);
+      ctx.fillStyle = color;
       ctx.fillRect(b.x, b.y, BULLET_W, BULLET_H);
     }
 
@@ -499,6 +533,12 @@ export class GalagaGame extends BaseGame {
       const show = this.invulnerable <= 0 || (Math.floor(this.invulnerable * 8) % 2 === 0);
       if (show) this.drawPlayer(ctx, isDark);
     }
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, W, H, isDark ? 0.25 : 0.12);
+    this.floats.draw(ctx);
+    this.drawHUD(ctx, isDark, isZh);
 
     // Wave clear flash
     if (this.waveClearTimer > 0 && this.enemies.filter(e => e.alive).length === 0) {
@@ -544,6 +584,8 @@ export class GalagaGame extends BaseGame {
     const { primary } = getTheme();
     const cx = this.playerX + PLAYER_W / 2;
     const cy = PLAYER_Y + PLAYER_H / 2;
+    drawGlow(ctx, cx, cy + PLAYER_H / 2, 22, isDark ? '#ff8f00' : '#ff6f00', isDark ? 0.5 : 0.16);
+    drawGlow(ctx, cx, cy, 28, primary, isDark ? 0.18 : 0.07);
     // Body
     ctx.fillStyle = primary;
     ctx.beginPath();
@@ -566,11 +608,9 @@ export class GalagaGame extends BaseGame {
   private drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, isDark: boolean,
                     droneCol: string, bossCol: string) {
     const col = e.kind === 'boss' ? bossCol : droneCol;
+    if (e.state === 'diving') drawGlow(ctx, e.x, e.y, 24, '#ef4444', isDark ? 0.35 : 0.12);
+    fillSphere(ctx, e.x, e.y, 10, col, { rim: 0.28, rimColor: e.kind === 'boss' ? '#facc15' : '#ffffff' });
     ctx.fillStyle = col;
-    // Body shape
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, 10, 0, Math.PI * 2);
-    ctx.fill();
     // Wings
     ctx.beginPath();
     ctx.moveTo(e.x - 10, e.y + 4);

@@ -1,9 +1,15 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
 import {
-  getRetroPalette,
-} from '../core/render.js';
-
-type HitParticle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillSphere,
+  fx,
+} from '../core/fx.js';
 
 export class BreakoutGame extends BaseGame {
   private paddleWidth = 80;
@@ -33,7 +39,10 @@ export class BreakoutGame extends BaseGame {
   private rightPressed = false;
   private leftPressed = false;
   private destroyedCount = 0;
-  private hitParticles: HitParticle[] = [];
+  private trailTimer = 0;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 480, 360));
@@ -52,7 +61,10 @@ export class BreakoutGame extends BaseGame {
     this.destroyedCount = 0;
     this.rightPressed = false;
     this.leftPressed = false;
-    this.hitParticles = [];
+    this.trailTimer = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
 
     this.brickWidth =
       (this.width - (this.brickPadding * (this.brickCols + 1))) / this.brickCols;
@@ -74,17 +86,28 @@ export class BreakoutGame extends BaseGame {
   }
 
   update(dt: number) {
-    this.hitParticles = this.hitParticles
-      .map((p) => ({
-        ...p,
-        x: p.x + p.vx * dt,
-        y: p.y + p.vy * dt,
-        vy: p.vy + 150 * dt,
-        life: p.life - dt,
-      }))
-      .filter((p) => p.life > 0);
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
 
     if (this.gameOver || this.won) return;
+
+    this.trailTimer += dt;
+    while (this.trailTimer >= 1 / 40) {
+      this.trailTimer -= 1 / 40;
+      this.particles.emit({
+        x: this.ballX,
+        y: this.ballY,
+        count: 1,
+        speed: [2, 10],
+        life: [0.12, 0.22],
+        size: [2, 4],
+        colors: [getRetroPalette(this.isDarkTheme()).cyan],
+        shape: 'glow',
+        drag: 3,
+        blend: this.isDarkTheme() ? 'lighter' : 'source-over',
+      });
+    }
 
     // Paddle movement
     if (this.rightPressed && this.paddleX < this.width - this.paddleWidth) {
@@ -121,12 +144,18 @@ export class BreakoutGame extends BaseGame {
       const hitPos = (this.ballX - (this.paddleX + this.paddleWidth / 2)) / (this.paddleWidth / 2);
       this.ballDx = hitPos * 300;
       this.ballY = this.paddleY - this.ballRadius - 0.5;
-      this.emitHit(this.ballX, this.paddleY, '#38bdf8');
+      this.emitHit(this.ballX, this.paddleY, '#38bdf8', false);
     }
 
     // Floor collision -> game over
     if (this.ballY + this.ballRadius > this.height) {
       this.gameOver = true;
+      const palette = getRetroPalette(this.isDarkTheme());
+      for (const emit of fx.explosion(this.ballX, this.height - 4, [palette.red, palette.orange, palette.amber])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.shake.add(0.55);
       return;
     }
 
@@ -157,98 +186,73 @@ export class BreakoutGame extends BaseGame {
 
     if (this.destroyedCount === this.bricks.length) {
       this.won = true;
+      const palette = getRetroPalette(this.isDarkTheme());
+      const emit = fx.confetti(this.width / 2, 10, [palette.primary, palette.cyan, palette.amber, palette.violet]);
+      this.particles.emit(emit);
     }
   }
 
-  private emitHit(x: number, y: number, color: string) {
-    for (let i = 0; i < 12; i++) {
-      const angle = -Math.PI + (Math.PI * 2 * i) / 12;
-      const speed = 60 + (i % 4) * 25;
-      this.hitParticles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.28 + (i % 3) * 0.06,
-        color,
-      });
+  private emitHit(x: number, y: number, color: string, showScore = true) {
+    const emits = showScore ? fx.pop(x, y, [color, '#ffffff']) : [fx.sparks(x, y, -Math.PI / 2, [color, '#ffffff'])];
+    for (const emit of emits) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
     }
+    if (showScore) this.floats.add(x, y - 8, '+10', { color, size: 12, life: 0.65, rise: 32 });
+    this.shake.add(showScore ? 0.08 : 0.05);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
     const isDark = this.isDarkTheme();
     const palette = getRetroPalette(isDark);
 
-    ctx.fillStyle = palette.bg;
+    const bg = ctx.createLinearGradient(0, 0, 0, this.height);
+    bg.addColorStop(0, palette.bg2);
+    bg.addColorStop(1, palette.bg);
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Parallax starfield
+    // Restrained depth texture; the playfield remains easy to scan.
     for (let i = 0; i < 54; i++) {
       const sx = (i * 97) % this.width;
       const sy = (i * 53) % this.height;
       ctx.fillStyle = i % 3 === 0 ? palette.cyan : i % 3 === 1 ? palette.primary : palette.muted;
-      ctx.globalAlpha = isDark ? 0.45 : 0.25;
-      ctx.fillRect(sx, sy, i % 5 === 0 ? 3 : 2, i % 5 === 0 ? 3 : 2);
+      ctx.globalAlpha = isDark ? 0.3 : 0.14;
+      ctx.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
     }
     ctx.globalAlpha = 1;
 
-    // Bricks
-    for (const brick of this.bricks) {
-      if (!brick.active) continue;
-      ctx.fillStyle = brick.color;
-      ctx.beginPath();
-      ctx.roundRect(brick.x, brick.y, this.brickWidth, this.brickHeight, 4);
-      ctx.fill();
-      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(brick.x + 1.5, brick.y + 1.5, this.brickWidth - 3, this.brickHeight - 3);
-    }
+    this.shake.apply(ctx, () => {
+      for (const brick of this.bricks) {
+        if (!brick.active) continue;
+        fillBevelTile(ctx, brick.x, brick.y, this.brickWidth, this.brickHeight, 4, brick.color, {
+          border: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.2)',
+        });
+      }
 
-    // Paddle
-    const paddleGrad = ctx.createLinearGradient(this.paddleX, this.paddleY, this.paddleX, this.paddleY + this.paddleHeight);
-    paddleGrad.addColorStop(0, '#7dd3fc');
-    paddleGrad.addColorStop(0.5, '#38bdf8');
-    paddleGrad.addColorStop(1, palette.primary);
-    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-    ctx.shadowBlur = 6;
-    ctx.fillStyle = paddleGrad;
-    ctx.beginPath();
-    ctx.roundRect(this.paddleX, this.paddleY, this.paddleWidth, this.paddleHeight, 4);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(255,255,255,0.40)';
-    ctx.fillRect(this.paddleX + 8, this.paddleY + 2, this.paddleWidth - 16, 2);
+      fillBevelTile(ctx, this.paddleX, this.paddleY, this.paddleWidth, this.paddleHeight, 5, palette.cyan, {
+        border: palette.primary,
+      });
 
-    // Ball
-    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-    ctx.shadowBlur = 6;
-    ctx.fillStyle = isDark ? '#f8fafc' : '#ffffff';
-    ctx.beginPath();
-    ctx.arc(this.ballX, this.ballY, this.ballRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = palette.blue;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+      drawGlow(ctx, this.ballX, this.ballY, 22, palette.cyan, isDark ? 0.45 : 0.18);
+      fillSphere(ctx, this.ballX, this.ballY, this.ballRadius, isDark ? '#e2f7ff' : '#ffffff', {
+        rim: 0.35,
+        rimColor: palette.blue,
+      });
 
-    for (const p of this.hitParticles) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 3));
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-    }
-    ctx.globalAlpha = 1;
+      this.particles.draw(ctx);
+    });
 
-    // Score
-    ctx.textAlign = 'left';
+    drawVignette(ctx, this.width, this.height, isDark ? 0.24 : 0.12);
+    this.floats.draw(ctx);
+
     ctx.fillStyle = palette.text;
     ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     const liveBricks = this.bricks.length - this.destroyedCount;
     ctx.textAlign = 'right';
-    ctx.fillText(`BRICKS ${liveBricks}`, this.width - 10, 22);
+    ctx.fillText(`${this.isZhLang() ? '砖块' : 'BRICKS'} ${liveBricks}`, this.width - 10, 22);
 
-    // Game Over / Win overlay
     if (this.gameOver || this.won) {
       this.submitScoreOnce(this.score);
       const zh = this.isZhLang();

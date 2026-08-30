@@ -5,6 +5,18 @@ import {
   isDarkTheme as getEffectiveDarkTheme,
   isZhLang as getEffectiveZhLang,
 } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles as FxParticles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillSphere,
+  fx,
+  shade,
+} from '../core/fx.js';
 import {
   IWANNA_PLAYER_H as PLAYER_H,
   IWANNA_PLAYER_W as PLAYER_W,
@@ -134,6 +146,9 @@ export class IwannaGame extends BaseGame {
   private saveIndex = 0;
   private cleared = false;
   private touchStart: { x: number; y: number } | null = null;
+  private readonly fxParticles = new FxParticles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -158,6 +173,9 @@ export class IwannaGame extends BaseGame {
     this.elapsed = 0;
     this.saveIndex = 0;
     this.cleared = false;
+    this.fxParticles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
     this.touchStart = null;
   }
@@ -165,6 +183,9 @@ export class IwannaGame extends BaseGame {
   update(dt: number) {
     this.elapsed += dt;
     this.updateParticles(dt);
+    this.fxParticles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
 
     if (this.cleared) {
       this.updateCamera(dt);
@@ -189,16 +210,16 @@ export class IwannaGame extends BaseGame {
   draw(ctx: CanvasRenderingContext2D) {
     const dark = isDarkTheme();
     const zh = isZh();
-    const bg = dark ? '#0b0f19' : '#fafafa';
-    const sky = dark ? '#111827' : '#e0f2fe';
+    const palette = getRetroPalette(dark);
     const platform = dark ? '#334155' : '#64748b';
-    const accent = dark ? '#39C5BB' : '#0d9488';
-    const spike = dark ? '#f43f5e' : '#dc2626';
-    const text = dark ? '#e0e0e0' : '#1a1a2e';
-    const save = dark ? '#facc15' : '#ca8a04';
+    const accent = palette.primary;
+    const spike = palette.red;
+    const text = palette.text;
+    const save = palette.amber;
 
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, dark ? '#0b1424' : '#e0f2fe');
+    sky.addColorStop(1, palette.bg2);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
@@ -210,11 +231,10 @@ export class IwannaGame extends BaseGame {
     }
 
     ctx.save();
-    ctx.translate(0, -this.cameraY);
+    ctx.translate(this.shake.x, this.shake.y - this.cameraY);
 
     for (const plat of PLATFORMS) {
-      ctx.fillStyle = platform;
-      ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+      fillBevelTile(ctx, plat.x, plat.y, plat.w, plat.h, Math.min(4, plat.h / 3), platform, { border: palette.border });
     }
 
     for (const strip of SPIKES) {
@@ -223,7 +243,9 @@ export class IwannaGame extends BaseGame {
 
     for (let i = 0; i < SAVE_POINTS.length; i++) {
       const savePoint = SAVE_POINTS[i];
-      ctx.fillStyle = i < this.saveIndex ? accent : save;
+      const saveColor = i < this.saveIndex ? accent : save;
+      drawGlow(ctx, savePoint.x + 8, savePoint.y - 14, 24, saveColor, dark ? 0.3 : 0.1);
+      ctx.fillStyle = saveColor;
       ctx.fillRect(savePoint.x, savePoint.y - 22, 6, 22);
       ctx.beginPath();
       ctx.moveTo(savePoint.x + 6, savePoint.y - 22);
@@ -233,11 +255,8 @@ export class IwannaGame extends BaseGame {
       ctx.fill();
     }
 
-    ctx.fillStyle = dark ? '#f8fafc' : '#0f172a';
-    ctx.fillRect(GOAL.x, GOAL.y, GOAL.w, GOAL.h);
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(GOAL.x, GOAL.y, GOAL.w, GOAL.h);
+    drawGlow(ctx, GOAL.x + GOAL.w / 2, GOAL.y + GOAL.h / 2, 30, accent, dark ? 0.42 : 0.14);
+    fillBevelTile(ctx, GOAL.x, GOAL.y, GOAL.w, GOAL.h, 3, dark ? '#f8fafc' : '#cbd5e1', { border: accent });
 
     for (const particle of this.particles) {
       ctx.fillStyle = `rgba(251, 113, 133, ${Math.max(0, particle.life)})`;
@@ -260,13 +279,9 @@ export class IwannaGame extends BaseGame {
       ctx.fillRect(x + 2, y + h - 5, 4, 5);
       ctx.fillRect(x + w - 6, y + h - 5, 4, 5);
 
-      // Body (blue)
-      ctx.fillStyle = '#3498db';
-      ctx.fillRect(x + 1, y + 4, w - 2, h - 9);
-
-      // Head (skin)
-      ctx.fillStyle = '#ffd9b3';
-      ctx.fillRect(x + 1, y, w - 2, 7);
+      // Body and head use the shared top-light model while keeping the tiny silhouette.
+      fillBevelTile(ctx, x + 1, y + 4, w - 2, h - 9, 2, palette.blue, { border: shade(palette.blue, -0.45) });
+      fillSphere(ctx, x + w / 2, y + 4, 6, '#ffd9b3', { rim: 0.15 });
 
       // Hair (brown)
       ctx.fillStyle = '#8B4513';
@@ -283,8 +298,11 @@ export class IwannaGame extends BaseGame {
       ctx.fillRect(x + w - 5, y + 2, 1, 1);
     }
 
+    this.fxParticles.draw(ctx);
+    this.floats.draw(ctx);
     ctx.restore();
 
+    drawVignette(ctx, W, H, dark ? 0.22 : 0.1);
     ctx.fillStyle = text;
     ctx.font = '14px system-ui, sans-serif';
     ctx.fillText('IWANNA', 12, 22);
@@ -413,6 +431,12 @@ export class IwannaGame extends BaseGame {
         this.respawnY = savePoint.spawnY;
         this.score = Math.max(this.score, savePoint.score);
         this.saveIndex += 1;
+        const palette = getRetroPalette(this.isDarkTheme());
+        for (const emit of fx.pop(savePoint.x + 8, savePoint.y - 16, [palette.green, palette.primary, '#ffffff'])) {
+          if (!this.isDarkTheme()) emit.blend = 'source-over';
+          this.fxParticles.emit(emit);
+        }
+        this.floats.add(savePoint.x + 8, savePoint.y - 24, this.isZhLang() ? '存档！' : 'SAVED!', { color: palette.green, size: 13 });
         this.submitScore(this.score);
       } else {
         break;
@@ -424,6 +448,8 @@ export class IwannaGame extends BaseGame {
     if (rectsOverlap(this.player.x, this.player.y, PLAYER_W, PLAYER_H, GOAL.x - 4, GOAL.y - 4, GOAL.w + 8, GOAL.h + 8)) {
       this.cleared = true;
       this.score = Math.max(this.score, 1200);
+      const palette = getRetroPalette(this.isDarkTheme());
+      this.fxParticles.emit(fx.confetti(GOAL.x, GOAL.y, [palette.primary, palette.cyan, palette.amber, palette.violet]));
       this.submitScoreOnce(this.score);
     }
   }
@@ -431,6 +457,15 @@ export class IwannaGame extends BaseGame {
   private killPlayer() {
     if (this.respawnTimer > 0 || this.cleared) return;
     this.deaths++;
+    const cx = this.player.x + PLAYER_W / 2;
+    const cy = this.player.y + PLAYER_H / 2;
+    const palette = getRetroPalette(this.isDarkTheme());
+    for (const emit of fx.explosion(cx, cy, [palette.red, palette.orange, palette.amber])) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.fxParticles.emit(emit);
+    }
+    this.floats.add(cx, cy - 10, `${this.isZhLang() ? '死亡' : 'DEATH'} ${this.deaths}`, { color: palette.red, size: 13 });
+    this.shake.add(0.72);
     for (let i = 0; i < 16; i++) {
       this.particles.push({
         x: this.player.x + PLAYER_W / 2,
@@ -470,7 +505,10 @@ export class IwannaGame extends BaseGame {
   private drawSpikeStrip(ctx: CanvasRenderingContext2D, strip: SpikeStrip, color: string) {
     const size = 12;
     const count = Math.max(1, Math.floor(strip.w / size));
-    ctx.fillStyle = color;
+    const gradient = ctx.createLinearGradient(strip.x, strip.y, strip.x, strip.y + strip.h);
+    gradient.addColorStop(0, shade(color, strip.dir === 'up' ? 0.45 : -0.35));
+    gradient.addColorStop(1, shade(color, strip.dir === 'up' ? -0.35 : 0.45));
+    ctx.fillStyle = gradient;
     for (let i = 0; i < count; i++) {
       const x = strip.x + i * size;
       ctx.beginPath();

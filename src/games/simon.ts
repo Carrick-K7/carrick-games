@@ -1,4 +1,15 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, getStoredRecord } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillGlassPanel,
+  fx,
+} from '../core/fx.js';
 
 const W = 400;
 const H = 500;
@@ -128,6 +139,9 @@ export class SimonGame extends BaseGame {
   private lastBonus = 0;
   private lastBonusTimerMs = 0;
   private audioContext: AudioContext | null = null;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -159,11 +173,17 @@ export class SimonGame extends BaseGame {
     this.lastInputAt = 0;
     this.lastBonus = 0;
     this.lastBonusTimerMs = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
   }
 
   update(dt: number) {
     const deltaMs = dt * 1000;
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
 
     if (this.flashTimerMs > 0) {
       this.flashTimerMs -= deltaMs;
@@ -219,10 +239,15 @@ export class SimonGame extends BaseGame {
     this.drawBackdrop(ctx, theme);
     this.drawHud(ctx, theme, zh);
 
-    for (const pad of this.pads) {
-      const active = pad.color === this.flashColor;
-      this.drawPad(ctx, pad, active, zh);
-    }
+    this.shake.apply(ctx, () => {
+      for (const pad of this.pads) {
+        const active = pad.color === this.flashColor;
+        this.drawPad(ctx, pad, active, zh);
+      }
+      this.particles.draw(ctx);
+    });
+    drawVignette(ctx, W, H, this.isDarkTheme() ? 0.18 : 0.08);
+    this.floats.draw(ctx);
 
     if (this.phase === 'ready' || this.phase === 'gameover') {
       this.drawOverlay(ctx, theme, zh);
@@ -283,6 +308,9 @@ export class SimonGame extends BaseGame {
     this.inputIndex = 0;
     this.lastBonus = 0;
     this.lastBonusTimerMs = 0;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
     this.beginNextRound();
   }
@@ -313,13 +341,28 @@ export class SimonGame extends BaseGame {
     const bonus = this.computeBonus(reactionMs);
     this.lastBonus = bonus;
     this.lastBonusTimerMs = bonus > 0 ? 900 : 0;
-    this.score += 10 + bonus;
+    const points = 10 + bonus;
+    this.score += points;
+    const pad = this.pads.find((item) => item.color === color);
+    if (pad) {
+      for (const emit of fx.pop(pad.x + pad.w / 2, pad.y + pad.h / 2, [pad.active, pad.border])) {
+        emit.count = Math.min(emit.count, 6);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.floats.add(pad.x + pad.w / 2, pad.y + pad.h / 2 - 10, `+${points}`, { color: pad.active, size: 13, life: 0.65 });
+    }
     this.inputIndex += 1;
     this.lastInputAt = now;
 
     if (this.inputIndex >= this.sequence.length) {
       this.phase = 'round-clear';
       this.roundTimerMs = 720;
+      this.floats.add(W / 2, GRID_TOP - 6, `${this.isZhLang() ? '第' : 'LEVEL'} ${this.level}${this.isZhLang() ? ' 关完成' : ' CLEAR'}`, {
+        color: getRetroPalette(this.isDarkTheme()).primary,
+        size: 14,
+        life: 0.9,
+      });
     }
   }
 
@@ -328,6 +371,15 @@ export class SimonGame extends BaseGame {
     this.roundTimerMs = 0;
     this.showTimerMs = 0;
     this.playErrorTone();
+    const palette = getRetroPalette(this.isDarkTheme());
+    const pad = this.pads.find((item) => item.color === this.flashColor);
+    const x = pad ? pad.x + pad.w / 2 : W / 2;
+    const y = pad ? pad.y + pad.h / 2 : H / 2;
+    for (const emit of fx.explosion(x, y, [palette.red, palette.orange, palette.amber])) {
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
+    this.shake.add(0.45);
 
     this.submitScoreOnce(this.score);
   }
@@ -505,19 +557,12 @@ export class SimonGame extends BaseGame {
     const fill = active ? pad.active : pad.base;
 
     if (active) {
-      ctx.shadowColor = pad.glow;
-      ctx.shadowBlur = 20;
-    } else {
-      ctx.shadowBlur = 0;
+      drawGlow(ctx, pad.x + pad.w / 2, pad.y + pad.h / 2, Math.max(pad.w, pad.h) * 0.7, pad.active, this.isDarkTheme() ? 0.55 : 0.18);
     }
-
-    this.drawCard(ctx, pad.x, pad.y, pad.w, pad.h, 18, fill, active ? pad.border : 'rgba(255,255,255,0.10)');
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.roundRect(pad.x + 1, pad.y + 1, pad.w - 2, pad.h * 0.45, 18);
-    ctx.fill();
+    fillBevelTile(ctx, pad.x, pad.y, pad.w, pad.h, 18, fill, {
+      border: active ? pad.border : 'rgba(255,255,255,0.10)',
+      borderWidth: active ? 2 : 1,
+    });
 
     this.drawCard(ctx, pad.x + 12, pad.y + 12, 56, 26, 8, 'rgba(15,23,42,0.24)', 'rgba(255,255,255,0.22)');
     ctx.fillStyle = '#ffffff';
@@ -578,13 +623,12 @@ export class SimonGame extends BaseGame {
     fill: string,
     stroke: string
   ) {
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, radius);
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    fillGlassPanel(ctx, x, y, w, h, radius, {
+      fill,
+      fill2: fill,
+      border: stroke,
+      shadow: 'rgba(0,0,0,0.18)',
+    });
   }
 
   private getStatusText(zh: boolean): string {

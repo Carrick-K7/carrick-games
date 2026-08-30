@@ -1,4 +1,16 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillGlassPanel,
+  fx,
+  withAlpha,
+} from '../core/fx.js';
 import { calculateSudokuScore } from './sudokuScore.js';
 
 interface Cell {
@@ -30,6 +42,9 @@ export class SudokuGame extends BaseGame {
   private numpadPressed = -1;
   private difficultyHovered: Difficulty | null = null;
   private showMenu = true;
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 480, 560));
@@ -57,6 +72,9 @@ export class SudokuGame extends BaseGame {
     this.numpadPressed = -1;
     this.difficultyHovered = null;
     this.showMenu = true;
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
   }
 
   private startGame(diff: Difficulty) {
@@ -189,6 +207,9 @@ export class SudokuGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.started && !this.gameOver && !this.won) {
       this.timer += dt;
     }
@@ -198,9 +219,10 @@ export class SudokuGame extends BaseGame {
     const isDark = this.isDarkTheme();
     const zh = this.isZhLang();
 
-    const bg = isDark ? '#0b0f19' : '#fafafa';
-    const text = isDark ? '#e0e0e0' : '#1a1a2e';
-    const primary = isDark ? '#39C5BB' : '#0d9488';
+    const palette = getRetroPalette(isDark);
+    const bg = palette.bg;
+    const text = palette.text;
+    const primary = palette.primary;
     const secondary = isDark ? '#2a2f3e' : '#e8e8e8';
     const gridLine = isDark ? '#3a3f4e' : '#d0d0d0';
     const boxLine = isDark ? '#5a6070' : '#a0a0a0';
@@ -212,11 +234,15 @@ export class SudokuGame extends BaseGame {
     const selectedBg = isDark ? '#2a4050' : '#c8e8e4';
     const sameNumBg = isDark ? '#3a5060' : '#b8d8d4';
 
-    ctx.fillStyle = bg;
+    const background = ctx.createLinearGradient(0, 0, 0, this.height);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, this.width, this.height);
 
     if (this.showMenu) {
       this.drawMenu(ctx, isDark, text, primary, secondary, zh);
+      drawVignette(ctx, this.width, this.height, isDark ? 0.14 : 0.05);
       return;
     }
 
@@ -262,14 +288,31 @@ export class SudokuGame extends BaseGame {
     const gridX = (this.width - gridSize) / 2;
     const gridY = 48;
 
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
+    fillGlassPanel(ctx, gridX - 4, gridY - 4, gridSize + 8, gridSize + 8, 8, {
+      fill: isDark ? 'rgba(15,23,42,0.72)' : 'rgba(255,255,255,0.72)',
+      fill2: isDark ? 'rgba(30,41,59,0.68)' : 'rgba(240,249,248,0.72)',
+      border: palette.border,
+      shadow: palette.shadow,
+    });
+
     // Highlight cells
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const x = gridX + c * cellSize;
         const y = gridY + r * cellSize;
         let cellBg = null;
+        const boardCell = this.board[r]?.[c];
+        if (boardCell && !boardCell.given && boardCell.value !== 0) {
+          fillBevelTile(ctx, x + 2, y + 2, cellSize - 4, cellSize - 4, 4, isDark ? '#172536' : '#f2fbfa', {
+            gloss: false,
+            border: withAlpha(primary, 0.18),
+          });
+        }
 
         if (r === this.selectedRow && c === this.selectedCol) {
+          drawGlow(ctx, x + cellSize / 2, y + cellSize / 2, cellSize * 0.65, primary, isDark ? 0.18 : 0.07);
           cellBg = selectedBg;
         } else if (
           this.selectedRow !== -1 &&
@@ -369,6 +412,11 @@ export class SudokuGame extends BaseGame {
       ctx.textAlign = 'left';
       ctx.fillText(zh ? '笔记模式' : 'NOTE MODE', 16, this.height - 8);
     }
+    this.particles.draw(ctx);
+    ctx.restore();
+
+    drawVignette(ctx, this.width, this.height, isDark ? 0.12 : 0.04);
+    this.floats.draw(ctx);
 
     // Game over / win overlay
     if (this.gameOver || this.won) {
@@ -411,11 +459,10 @@ export class SudokuGame extends BaseGame {
       const y = startY + i * (btnHeight + gap);
       const hovered = this.difficultyHovered === d.key;
 
-      ctx.fillStyle = hovered ? primary : secondary;
-      ctx.fillRect(x, y, btnWidth, btnHeight);
-      ctx.strokeStyle = primary;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, btnWidth, btnHeight);
+      fillBevelTile(ctx, x, y, btnWidth, btnHeight, 7, hovered ? primary : secondary, {
+        border: primary,
+        borderWidth: 2,
+      });
 
       ctx.fillStyle = hovered ? (isDark ? '#0b0f19' : '#fafafa') : text;
       ctx.font = '16px system-ui, sans-serif';
@@ -448,18 +495,10 @@ export class SudokuGame extends BaseGame {
       const pressed = this.numpadPressed === num;
       const completed = this.completedNumbers.has(num);
 
-      if (pressed) {
-        ctx.fillStyle = primary;
-      } else if (hovered) {
-        ctx.fillStyle = isDark ? '#2a4050' : '#c8e8e4';
-      } else {
-        ctx.fillStyle = secondary;
-      }
-      ctx.fillRect(bx, y, btnW, btnH);
-
-      ctx.strokeStyle = isDark ? '#3a3f4e' : '#d0d0d0';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(bx, y, btnW, btnH);
+      const buttonColor = pressed ? primary : hovered ? (isDark ? '#2a4050' : '#c8e8e4') : secondary;
+      fillBevelTile(ctx, bx + 1, y, btnW - 2, btnH, 4, buttonColor, {
+        border: isDark ? '#3a3f4e' : '#d0d0d0',
+      });
 
       ctx.font = '18px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -471,10 +510,9 @@ export class SudokuGame extends BaseGame {
     // Note toggle button
     const noteX = x + width + 8;
     const noteW = 40;
-    ctx.fillStyle = this.noteMode ? primary : secondary;
-    ctx.fillRect(noteX, y, noteW, btnH);
-    ctx.strokeStyle = isDark ? '#3a3f4e' : '#d0d0d0';
-    ctx.strokeRect(noteX, y, noteW, btnH);
+    fillBevelTile(ctx, noteX, y, noteW, btnH, 4, this.noteMode ? primary : secondary, {
+      border: isDark ? '#3a3f4e' : '#d0d0d0',
+    });
     ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = this.noteMode ? (isDark ? '#0b0f19' : '#fafafa') : text;
     ctx.fillText(zh ? '笔记' : 'NOTE', noteX + noteW / 2, y + btnH / 2 + 1);
@@ -671,15 +709,37 @@ export class SudokuGame extends BaseGame {
     } else {
       cell.value = num;
       cell.notes.clear();
+      const cx = 24 + this.selectedCol * 48 + 24;
+      const cy = 48 + this.selectedRow * 48 + 24;
+      const palette = getRetroPalette(this.isDarkTheme());
       if (num !== this.solution[this.selectedRow][this.selectedCol]) {
         cell.invalid = true;
         this.mistakes++;
+        this.particles.emit({
+          x: cx,
+          y: cy,
+          count: 1,
+          speed: 0,
+          life: 0.28,
+          size: 6,
+          colors: [palette.red],
+          shape: 'ring',
+          endScale: 4,
+          blend: 'source-over',
+        });
+        this.shake.add(0.14);
         if (this.mistakes >= this.maxMistakes) {
           this.gameOver = true;
+          this.shake.add(0.35);
           this.submitScoreOnce(0);
         }
       } else {
         cell.invalid = false;
+        for (const emit of fx.pop(cx, cy, [palette.primary, palette.green])) {
+          emit.count = Math.min(emit.count, 4);
+          if (!this.isDarkTheme()) emit.blend = 'source-over';
+          this.particles.emit(emit);
+        }
         this.checkWin();
       }
       this.updateCompletedNumbers();
@@ -717,6 +777,14 @@ export class SudokuGame extends BaseGame {
     cell.notes.clear();
     cell.invalid = false;
     this.hints++;
+    const palette = getRetroPalette(this.isDarkTheme());
+    const cx = 24 + pick.c * 48 + 24;
+    const cy = 48 + pick.r * 48 + 24;
+    for (const emit of fx.pop(cx, cy, [palette.amber, palette.primary])) {
+      emit.count = Math.min(emit.count, 5);
+      if (!this.isDarkTheme()) emit.blend = 'source-over';
+      this.particles.emit(emit);
+    }
     this.updateCompletedNumbers();
     this.checkWin();
   }
@@ -728,6 +796,8 @@ export class SudokuGame extends BaseGame {
       }
     }
     this.won = true;
+    const palette = getRetroPalette(this.isDarkTheme());
+    this.particles.emit(fx.confetti(this.width / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
     const score = calculateSudokuScore(this.timer, this.mistakes, this.hints);
     this.submitScoreOnce(score);
   }

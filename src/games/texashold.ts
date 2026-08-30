@@ -1,4 +1,15 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '../core/game.js';
+import { getRetroPalette } from '../core/render.js';
+import {
+  FloatTexts,
+  Particles,
+  ScreenShake,
+  drawGlow,
+  drawVignette,
+  fillBevelTile,
+  fillGlassPanel,
+  fx,
+} from '../core/fx.js';
 import {
   evaluatePreflopStrength,
   hasFlushDraw,
@@ -127,6 +138,9 @@ export class TexasHoldGame extends BaseGame {
   private pendingSystemDelay = 0;
   private pendingSystemAction: (() => void) | null = null;
   private showdownHands = new Map<number, HandValue>();
+  private readonly particles = new Particles();
+  private readonly floats = new FloatTexts();
+  private readonly shake = new ScreenShake();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -147,6 +161,9 @@ export class TexasHoldGame extends BaseGame {
     this.pendingSystemDelay = 0;
     this.pendingSystemAction = null;
     this.showdownHands.clear();
+    this.particles.clear();
+    this.floats.clear();
+    this.shake.reset();
     this.resetScoreReport();
 
     for (const player of this.players) {
@@ -158,6 +175,9 @@ export class TexasHoldGame extends BaseGame {
   }
 
   update(dt: number) {
+    this.particles.update(dt);
+    this.floats.update(dt);
+    this.shake.update(dt);
     if (this.state !== 'playing') return;
 
     if (this.pendingSystemAction) {
@@ -181,13 +201,23 @@ export class TexasHoldGame extends BaseGame {
     const theme = this.getTheme();
     const zh = this.isZh();
 
-    ctx.fillStyle = theme.bg;
+    const palette = getRetroPalette(this.isDarkTheme());
+    const background = ctx.createLinearGradient(0, 0, 0, H);
+    background.addColorStop(0, palette.bg2);
+    background.addColorStop(1, theme.bg);
+    ctx.fillStyle = background;
     ctx.fillRect(0, 0, W, H);
 
+    ctx.save();
+    ctx.translate(this.shake.x, this.shake.y);
     this.drawTable(ctx, theme);
-    this.drawHeader(ctx, theme, zh);
     this.drawCommunity(ctx, theme, zh);
     this.drawPlayers(ctx, theme, zh);
+    this.particles.draw(ctx);
+    ctx.restore();
+    drawVignette(ctx, W, H, this.isDarkTheme() ? 0.18 : 0.07);
+    this.floats.draw(ctx);
+    this.drawHeader(ctx, theme, zh);
     this.drawStatusBar(ctx, theme, zh);
     this.drawActionButtons(ctx, theme, zh);
 
@@ -626,6 +656,25 @@ export class TexasHoldGame extends BaseGame {
     this.finishHand();
   }
 
+  private emitPayoutFx() {
+    const palette = getRetroPalette(this.isDarkTheme());
+    for (let index = 0; index < this.players.length; index += 1) {
+      const player = this.players[index];
+      if (player.wonThisHand <= 0) continue;
+      const seat = this.seatLayout[index];
+      for (const emit of fx.pop(seat.x, seat.y + CARD_H / 2, [palette.amber, palette.primary])) {
+        emit.count = Math.min(emit.count, player.isHuman ? 10 : 6);
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.floats.add(seat.x, seat.y - 8, `+${player.wonThisHand}`, {
+        color: palette.amber,
+        size: player.isHuman ? 16 : 13,
+        life: 1,
+      });
+    }
+  }
+
   private finishHand() {
     this.pendingSystemAction = null;
     this.pendingSystemDelay = 0;
@@ -633,6 +682,7 @@ export class TexasHoldGame extends BaseGame {
     this.stage = 'showdown';
     this.completedHands += 1;
     this.score = this.players[0].chips;
+    this.emitPayoutFx();
 
     for (const player of this.players) {
       player.out = player.chips <= 0;
@@ -665,6 +715,16 @@ export class TexasHoldGame extends BaseGame {
       en: `Tournament over. Score ${this.score}.`,
       zh: `牌局结束。得分 ${this.score}。`,
     };
+    const palette = getRetroPalette(this.isDarkTheme());
+    if (this.players[0].chips > 0) {
+      this.particles.emit(fx.confetti(W / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+    } else {
+      for (const emit of fx.explosion(this.seatLayout[0].x, this.seatLayout[0].y, [palette.red, palette.amber])) {
+        if (!this.isDarkTheme()) emit.blend = 'source-over';
+        this.particles.emit(emit);
+      }
+      this.shake.add(0.4);
+    }
 
     this.submitScoreOnce(this.score);
   }
@@ -974,14 +1034,13 @@ export class TexasHoldGame extends BaseGame {
 
   private drawTable(ctx: CanvasRenderingContext2D, theme: ThemePalette) {
     ctx.save();
-    ctx.fillStyle = theme.felt;
-    this.roundRect(ctx, 18, 26, W - 36, 418, 26);
-    ctx.fill();
-
-    ctx.strokeStyle = theme.border;
-    ctx.lineWidth = 2;
-    this.roundRect(ctx, 18, 26, W - 36, 418, 26);
-    ctx.stroke();
+    fillGlassPanel(ctx, 18, 26, W - 36, 418, 26, {
+      fill: theme.felt,
+      fill2: this.isDarkTheme() ? '#0b2030' : '#c9eee8',
+      border: theme.border,
+      glow: theme.primary,
+      shadow: theme.shadow,
+    });
 
     ctx.strokeStyle = `${theme.primary}55`;
     ctx.lineWidth = 1.5;
@@ -1048,6 +1107,9 @@ export class TexasHoldGame extends BaseGame {
       const rightX = seat.x + CARD_GAP / 2;
       const dim = player.folded || player.out;
 
+      if (this.currentPlayerIndex === index && this.state === 'playing') {
+        drawGlow(ctx, seat.x, cardY + CARD_H / 2, 72, theme.primary, this.isDarkTheme() ? 0.24 : 0.08);
+      }
       if (player.hole[0]) this.drawCard(ctx, leftX, cardY, player.hole[0], reveal, theme, dim);
       if (player.hole[1]) this.drawCard(ctx, rightX, cardY, player.hole[1], reveal, theme, dim);
 
@@ -1112,11 +1174,12 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private drawStatusBar(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    ctx.fillStyle = theme.surface;
-    this.roundRect(ctx, 18, 450, W - 36, 36, 10);
-    ctx.fill();
-    ctx.strokeStyle = theme.border;
-    ctx.stroke();
+    fillGlassPanel(ctx, 18, 450, W - 36, 36, 10, {
+      fill: theme.surface,
+      fill2: theme.surfaceMuted,
+      border: theme.border,
+      shadow: theme.shadow,
+    });
 
     ctx.textAlign = 'center';
     ctx.font = '11px system-ui, sans-serif';
@@ -1133,11 +1196,9 @@ export class TexasHoldGame extends BaseGame {
     const buttons = this.getActionButtons();
     for (const button of buttons) {
       ctx.save();
-      ctx.fillStyle = button.enabled ? theme.surface : theme.surfaceMuted;
-      this.roundRect(ctx, button.x, button.y, button.w, button.h, 8);
-      ctx.fill();
-      ctx.strokeStyle = button.enabled ? theme.primary : theme.border;
-      ctx.stroke();
+      fillBevelTile(ctx, button.x, button.y, button.w, button.h, 8, button.enabled ? theme.surface : theme.surfaceMuted, {
+        border: button.enabled ? theme.primary : theme.border,
+      });
 
       ctx.textAlign = 'center';
       ctx.font = '11px system-ui, sans-serif';
@@ -1202,19 +1263,17 @@ export class TexasHoldGame extends BaseGame {
     ctx.save();
     if (dim) ctx.globalAlpha = 0.55;
 
-    ctx.shadowColor = theme.shadow;
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 3;
+    ctx.fillStyle = theme.shadow;
+    ctx.beginPath();
+    ctx.ellipse(x + CARD_W / 2, y + CARD_H + 2, CARD_W * 0.4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     if (!faceUp) {
-      ctx.fillStyle = theme.cardBack;
-      this.roundRect(ctx, x, y, CARD_W, CARD_H, 6);
-      ctx.fill();
-      ctx.strokeStyle = theme.cardBackAlt;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      fillBevelTile(ctx, x, y, CARD_W, CARD_H, 6, theme.cardBack, {
+        border: theme.cardBackAlt,
+        borderWidth: 1.5,
+      });
 
-      ctx.shadowColor = 'transparent';
       ctx.strokeStyle = theme.cardBackAlt;
       for (let i = 0; i < 4; i += 1) {
         ctx.beginPath();
@@ -1226,14 +1285,10 @@ export class TexasHoldGame extends BaseGame {
       return;
     }
 
-    ctx.fillStyle = theme.cardFace;
-    this.roundRect(ctx, x, y, CARD_W, CARD_H, 6);
-    ctx.fill();
-    ctx.strokeStyle = theme.border;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    fillBevelTile(ctx, x, y, CARD_W, CARD_H, 6, theme.cardFace, {
+      border: theme.border,
+    });
 
-    ctx.shadowColor = 'transparent';
     const color = card.suit === 0 || card.suit === 1 ? theme.red : theme.black;
     const rank = this.rankLabel(card.rank);
     const suit = this.suitSymbol(card.suit);
