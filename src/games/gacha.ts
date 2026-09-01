@@ -14,7 +14,6 @@
  * menu shows a mode switcher automatically once more than one exists.
  */
 
-import { drawItemArt, drawGunSilhouette } from './gunImages.js';
 import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
 import { GachaSfx } from './gachaAudio.js';
 import {
@@ -35,7 +34,6 @@ import {
   fillSphere,
   drawVignette,
   makeSprite,
-  drawSprite,
   shade as shadeFx,
   withAlpha,
   clamp,
@@ -159,7 +157,6 @@ export class GachaGame extends BaseGame {
   private ambientT = 0;      // clock for dust drift and idle pulses
   private dustMotes: DustMote[] = [];
   private caseBodyCache: { dark: boolean; sprite: HTMLCanvasElement } | null = null;
-  private readonly weaponSprites = new Map<string, HTMLCanvasElement>();
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 640, 480));
@@ -876,12 +873,14 @@ export class GachaGame extends BaseGame {
       ctx.restore();
     }
 
-    // Content — pre-rendered weapon silhouette with a rarity-colored aura
+    // Content — the same orthographic side profile used by every thumbnail.
     const iconId = item.icon ?? item.kind;
-    if (!drawItemArt(ctx, iconId, 0, -34, 172, { maxW: 310, glow: tier.color })) {
-      const icon = this.weaponSprite(iconId, tier.color, 0.95);
-      drawSprite(ctx, icon, 0, -30, 195, 195, { shadowColor: tier.color, shadowBlur: 26 });
-    }
+    const resultIconSize = item.kind === 'pistol' ? 220 : item.kind === 'knife' ? 230 : 270;
+    ctx.save();
+    ctx.shadowColor = tier.color;
+    ctx.shadowBlur = 26;
+    drawWeaponIcon(ctx, iconId, 0, -46, { color: tier.color, size: resultIconSize, mono: false });
+    ctx.restore();
     ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.text;
     ctx.fillText(truncate(item.nameZh, 14), 0, 52);
@@ -920,19 +919,6 @@ export class GachaGame extends BaseGame {
     // Buttons — one primary action only
     const again = this.hitAgain();
     this.primaryButton(ctx, again, zh ? '再抽一次' : 'DRAW AGAIN', p);
-  }
-
-  /** Pre-rendered weapon silhouette, cached per icon + color. */
-  private weaponSprite(iconId: string, color: string, alpha: number): HTMLCanvasElement {
-    const key = `${iconId}|${color}|${alpha}`;
-    let sprite = this.weaponSprites.get(key);
-    if (!sprite) {
-      sprite = makeSprite(120, 120, (c) => {
-        drawWeaponIcon(c, iconId, 60, 60, { color, alpha, size: 104, mono: false });
-      }, 2);
-      this.weaponSprites.set(key, sprite);
-    }
-    return sprite;
   }
 
   /* ─── Gallery (prize showcase, all prizes on one page) ─── */
@@ -1026,17 +1012,18 @@ export class GachaGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const iconSize = Math.min(w * 0.62, 46);
-    const blit = iconSize * 1.16;
+    const iconSize = Math.min(w - 10, 74);
 
     if (locked) {
-      if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { alpha: 0.68, maxW: w - 14 })) {
-        const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#cbd5e1' : '#475569', 1);
-        drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit, { alpha: 0.68 });
-      }
+      drawWeaponIcon(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 12, {
+        color: dark ? '#cbd5e1' : '#475569',
+        alpha: 0.66,
+        size: iconSize,
+        mono: false,
+      });
       ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
-      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
+      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 18);
       return;
     }
 
@@ -1053,13 +1040,14 @@ export class GachaGame extends BaseGame {
     ctx.fillRect(-3, -3, 6, 6);
     ctx.restore();
 
-    if (!drawItemArt(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 6, iconSize, { maxW: w - 14 })) {
-      const icon = this.weaponSprite(item.icon ?? item.kind, dark ? '#e8edf4' : '#334155', 0.9);
-      drawSprite(ctx, icon, x + w / 2, y + h / 2 - 6, blit, blit);
-    }
+    drawWeaponIcon(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 12, {
+      color: dark ? '#e8edf4' : '#334155',
+      size: iconSize,
+      mono: false,
+    });
     ctx.font = '600 9px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
-    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 15);
+    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h / 2 + 18);
 
     ctx.font = '600 9px ui-monospace, SFMono-Regular, monospace';
     ctx.fillStyle = p.textFaint;
@@ -1185,9 +1173,7 @@ export class GachaGame extends BaseGame {
       const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
       if (!tier || !item) continue;
       const iconId = item.icon ?? item.kind;
-      if (!drawGunSilhouette(ctx, iconId, hx + 14, hy + 8, 26, p.textDim)) {
-        drawWeaponIcon(ctx, iconId, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
-      }
+      drawWeaponIcon(ctx, iconId, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
       ctx.beginPath();
       ctx.fillStyle = tier.color;
       ctx.arc(hx + 14, hy + 26, 2.5, 0, Math.PI * 2);

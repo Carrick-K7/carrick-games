@@ -1,14 +1,13 @@
 /*
  * Hand-drawn per-weapon icons for the Gacha game — no image assets.
  *
- * drawWeaponIcon(ctx, iconId, cx, cy, opts) renders a vector weapon as a
- * realistic multi-tone drawing (dark steel body + lighter top highlight +
- * colored wooden/polymer/glass components) whose distinctive profile makes
- * each weapon recognizable at a glance: the AK-47's curved magazine, the
- * P90's top-loaded slab, the AWP's big scope and long bull barrel, and so on.
- * Coordinates are normalized to -0.5..0.5 (gun points +x) and scale with
- * `size` (max width in logical px), so the same drawing works from tiny
- * ground sprites up to large cards.
+ * drawWeaponIcon(ctx, iconId, cx, cy, opts) renders one orthographic side
+ * profile: no three-quarter camera angle and no perspective foreshortening.
+ * Multi-tone steel, wood, polymer, mounts, sights, magazines, and controls
+ * keep each weapon recognizable while preserving a clean outer silhouette.
+ * Coordinates are normalized to -0.5..0.5 (gun points +x). Every profile is
+ * supersampled into a cached offscreen canvas and smoothly reduced, so the
+ * same art stays crisp from tiny reel thumbnails up to large result cards.
  *
  * The first argument was broadened from the coarse WeaponKind to a free
  * `iconId` string: every weapon has its own id, unknown ids fall back to a
@@ -33,7 +32,37 @@ export interface WeaponIconOptions {
   mono?: boolean;
 }
 
-/** Render a weapon icon centered at (cx, cy). */
+const PROFILE_WIDTH = 1.18;
+const PROFILE_HEIGHT = 0.88;
+const profileCache = new Map<string, HTMLCanvasElement>();
+
+function profileSprite(iconId: string, size: number, color: string, mono: boolean): HTMLCanvasElement {
+  const cacheColor = mono ? color : 'full-color';
+  const key = `${iconId}|${size.toFixed(2)}|${cacheColor}`;
+  const cached = profileCache.get(key);
+  if (cached) return cached;
+
+  const logicalWidth = size * PROFILE_WIDTH;
+  const logicalHeight = size * PROFILE_HEIGHT;
+  const supersample = size >= 180 ? 3 : 4;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.ceil(logicalWidth * supersample));
+  canvas.height = Math.max(1, Math.ceil(logicalHeight * supersample));
+  const spriteCtx = canvas.getContext('2d');
+  if (spriteCtx) {
+    spriteCtx.scale(supersample, supersample);
+    spriteCtx.translate(logicalWidth / 2, logicalHeight / 2);
+    spriteCtx.imageSmoothingEnabled = true;
+    spriteCtx.imageSmoothingQuality = 'high';
+    spriteCtx.lineJoin = 'round';
+    spriteCtx.lineCap = 'round';
+    drawIcon(spriteCtx, iconId, size, color, mono);
+  }
+  profileCache.set(key, canvas);
+  return canvas;
+}
+
+/** Render a supersampled flat side profile centered at (cx, cy). */
 export function drawWeaponIcon(
   ctx: CanvasRenderingContext2D,
   iconId: string,
@@ -41,11 +70,18 @@ export function drawWeaponIcon(
   cy: number,
   options: WeaponIconOptions,
 ) {
+  const size = Math.max(1, options.size);
+  const mono = options.mono ?? false;
+  const sprite = profileSprite(iconId, size, options.color, mono);
+  const width = size * PROFILE_WIDTH;
+  const height = size * PROFILE_HEIGHT;
   ctx.save();
   ctx.translate(cx, cy);
   if (options.mirror) ctx.scale(-1, 1);
-  ctx.globalAlpha = options.alpha ?? 1;
-  drawIcon(ctx, iconId, options.size, options.color, options.mono ?? false);
+  ctx.globalAlpha *= options.alpha ?? 1;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
   ctx.restore();
 }
 
@@ -167,6 +203,46 @@ function ringN(
   ctx.strokeStyle = color;
   ctx.lineWidth = Math.abs(width) * px;
   ctx.stroke();
+}
+
+/** Side-view trigger bow and trigger, kept open so it reads at thumbnail size. */
+function triggerAssembly(
+  ctx: CanvasRenderingContext2D,
+  n: Norm,
+  t: Org,
+  cx: number,
+  top: number,
+  width = 0.15,
+  height = 0.15,
+) {
+  const { p } = n;
+  const left = cx - width / 2;
+  const right = cx + width / 2;
+  ctx.beginPath();
+  ctx.moveTo(...p(left, top));
+  ctx.lineTo(...p(right, top));
+  ctx.quadraticCurveTo(...p(right + width * 0.08, top + height), ...p(cx, top + height));
+  ctx.quadraticCurveTo(...p(left - width * 0.08, top + height), ...p(left, top));
+  ctx.strokeStyle = t.edge;
+  ctx.lineWidth = Math.max(0.9, n.p(0.018, 0)[0]);
+  ctx.stroke();
+  lineN(ctx, n, t.metal, Math.max(0.8, n.p(0.012, 0)[0]), cx + width * 0.08, top + 0.025, cx - width * 0.03, top + height * 0.68);
+}
+
+/** Fine vertical slide/receiver serrations. */
+function serrations(
+  ctx: CanvasRenderingContext2D,
+  n: Norm,
+  color: string,
+  x: number,
+  y0: number,
+  y1: number,
+  count = 3,
+  step = 0.022,
+) {
+  for (let i = 0; i < count; i++) {
+    lineN(ctx, n, color, Math.max(0.55, n.p(0.007, 0)[0]), x + i * step, y0, x + i * step, y1);
+  }
 }
 
 /** Fill a crescent between two normalized polylines (curved magazine). */
@@ -497,15 +573,18 @@ function drawRifle(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: 
 
 // P90: bullpup with the flat top-loaded magazine strip.
 function drawP90(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.22, 0.24, -0.04, 0.11); // bullpup body
-  beam(ctx, n, t, 0.24, 0.44, 0.0, 0.045); // short barrel
-  // top magazine slab
-  fillPoly(ctx, n, [[-0.16, -0.17], [0.3, -0.17], [0.3, -0.09], [-0.16, -0.09]], t.poly, t.edge);
-  fillPoly(ctx, n, [[-0.16, -0.17], [0.3, -0.17], [0.3, -0.145], [-0.16, -0.145]], t.polyLight);
-  fillPoly(ctx, n, [[0.02, 0.11], [0.12, 0.11], [0.14, 0.23], [0.02, 0.23]], t.grip, t.edge); // vertical grip
-  fillPoly(ctx, n, [[0.14, 0.11], [0.21, 0.11], [0.23, 0.21], [0.14, 0.21]], t.grip, t.edge); // foregrip
+  // One continuous bullpup shell, seen square-on from the side.
+  fillPoly(ctx, n, [[-0.34, -0.075], [0.29, -0.075], [0.33, -0.025], [0.25, 0.075], [0.13, 0.15], [-0.16, 0.15], [-0.32, 0.075]], t.poly, t.edge);
+  fillPoly(ctx, n, [[-0.3, -0.06], [0.27, -0.06], [0.27, -0.025], [-0.28, -0.025]], t.polyLight);
+  beam(ctx, n, t, 0.29, 0.49, -0.025, 0.02); // short barrel
+  // Flat top-loaded magazine locked directly onto the receiver.
+  fillPoly(ctx, n, [[-0.24, -0.155], [0.3, -0.155], [0.3, -0.075], [-0.24, -0.075]], t.body, t.edge);
+  fillPoly(ctx, n, [[-0.21, -0.145], [0.27, -0.145], [0.27, -0.12], [-0.21, -0.12]], t.bodyLight);
+  fillPoly(ctx, n, [[-0.23, 0.12], [-0.1, 0.12], [-0.07, 0.25], [-0.22, 0.25]], t.grip, t.edge); // rear grip
+  fillPoly(ctx, n, [[0.08, 0.115], [0.17, 0.115], [0.19, 0.225], [0.08, 0.225]], t.grip, t.edge); // foregrip
+  triggerAssembly(ctx, n, t, 0.19, 0.015, 0.115, 0.11);
+  rect(ctx, n, 0.31, -0.055, 0.025, 0.055, t.metal); // front sight block
 }
 
 // MP5: slim receiver, curved magazine, fixed slim stock, front sight.
@@ -537,8 +616,9 @@ function drawMac10(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: 
   beam(ctx, n, t, -0.28, 0.22, -0.07, 0.08); // boxy body
   beam(ctx, n, t, 0.22, 0.42, 0.0, 0.05); // short barrel
   rect(ctx, n, -0.2, -0.11, 0.1, 0.045, t.metal); // top charging handle
-  ringN(ctx, n, t.metal, 0.16, -0.02, 0.06, 0.035); // front sling loop
+  ringN(ctx, n, t.metal, 0.18, -0.015, 0.025, 0.012); // small front sling loop
   fillPoly(ctx, n, [[0.0, 0.08], [0.1, 0.08], [0.1, 0.26], [0.0, 0.26]], t.poly, t.edge); // straight mag
+  triggerAssembly(ctx, n, t, -0.075, 0.065, 0.11, 0.1);
 }
 
 // TMP: small body, forward vertical grip, straight magazine.
@@ -597,34 +677,47 @@ function drawSmg(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: bo
 
 // Glock: boxy compact slide, square frame, slight grip angle.
 function drawGlock(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.28, 0.16, -0.12, -0.02); // slide
-  fillPoly(ctx, n, [[-0.28, -0.02], [0.04, -0.02], [0.04, 0.035], [-0.28, 0.035]], t.poly, t.edge); // frame
-  fillPoly(ctx, n, [[-0.24, 0.03], [-0.1, 0.03], [-0.08, 0.3], [-0.24, 0.3]], t.grip, t.edge); // grip
-  ringN(ctx, n, t.metal, 0.02, 0.12, 0.08, 0.04); // trigger guard
+  fillPoly(ctx, n, [[-0.3, -0.13], [0.2, -0.13], [0.22, -0.095], [0.22, -0.025], [-0.3, -0.025]], t.body, t.edge); // slide
+  fillPoly(ctx, n, [[-0.27, -0.12], [0.18, -0.12], [0.18, -0.095], [-0.27, -0.095]], t.bodyLight); // slide plane
+  fillPoly(ctx, n, [[-0.28, -0.025], [0.12, -0.025], [0.1, 0.04], [-0.28, 0.04]], t.poly, t.edge); // frame
+  fillPoly(ctx, n, [[-0.24, 0.035], [-0.08, 0.035], [-0.055, 0.31], [-0.23, 0.31]], t.grip, t.edge); // angled grip
+  rect(ctx, n, -0.035, -0.105, 0.11, 0.045, t.barrelLight); // ejection port
+  rect(ctx, n, 0.18, -0.1, 0.035, 0.05, t.barrel); // muzzle face
+  rect(ctx, n, -0.26, -0.155, 0.025, 0.025, t.metal); // rear sight
+  rect(ctx, n, 0.15, -0.15, 0.02, 0.02, t.metal); // front sight
+  serrations(ctx, n, t.edge, -0.22, -0.115, -0.04, 4, 0.022);
+  triggerAssembly(ctx, n, t, 0.015, 0.025, 0.145, 0.135);
 }
 
 // USP-S: boxy slide with a long suppressor cylinder.
 function drawUsp(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.3, 0.06, -0.11, -0.02); // slide
-  fillPoly(ctx, n, [[-0.28, -0.02], [0.02, -0.02], [0.02, 0.03], [-0.28, 0.03]], t.poly, t.edge);
-  fillPoly(ctx, n, [[0.06, -0.075], [0.46, -0.075], [0.46, 0.015], [0.06, 0.015]], t.barrel, t.edge); // suppressor
-  fillPoly(ctx, n, [[0.06, -0.075], [0.46, -0.075], [0.46, -0.05], [0.06, -0.05]], t.barrelLight);
-  fillPoly(ctx, n, [[-0.24, 0.03], [-0.06, 0.03], [-0.04, 0.28], [-0.22, 0.28]], t.grip, t.edge);
-  ringN(ctx, n, t.metal, 0.06, 0.12, 0.08, 0.04);
+  fillPoly(ctx, n, [[-0.31, -0.125], [0.08, -0.125], [0.1, -0.085], [0.1, -0.025], [-0.31, -0.025]], t.body, t.edge); // slide
+  fillPoly(ctx, n, [[-0.28, -0.115], [0.07, -0.115], [0.07, -0.09], [-0.28, -0.09]], t.bodyLight);
+  fillPoly(ctx, n, [[-0.29, -0.025], [0.08, -0.025], [0.07, 0.04], [-0.29, 0.04]], t.poly, t.edge); // frame
+  fillPoly(ctx, n, [[0.08, -0.095], [0.48, -0.095], [0.48, 0.005], [0.08, 0.005]], t.barrel, t.edge); // suppressor
+  fillPoly(ctx, n, [[0.1, -0.085], [0.47, -0.085], [0.47, -0.06], [0.1, -0.06]], t.barrelLight);
+  rect(ctx, n, 0.16, -0.09, 0.018, 0.09, t.edge);
+  rect(ctx, n, 0.36, -0.09, 0.018, 0.09, t.edge);
+  fillPoly(ctx, n, [[-0.24, 0.035], [-0.055, 0.035], [-0.035, 0.3], [-0.22, 0.3]], t.grip, t.edge);
+  rect(ctx, n, -0.07, -0.102, 0.1, 0.04, t.barrelLight); // ejection port
+  serrations(ctx, n, t.edge, -0.25, -0.11, -0.04, 4, 0.022);
+  triggerAssembly(ctx, n, t, 0.025, 0.025, 0.145, 0.135);
 }
 
 // P250: rounded compact pistol.
 function drawP250(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.26, 0.1, -0.11, -0.02); // compact slide
-  fillPoly(ctx, n, [[-0.24, -0.02], [0.04, -0.02], [0.04, 0.03], [-0.24, 0.03]], t.poly, t.edge);
-  fillPoly(ctx, n, [[-0.2, 0.03], [-0.06, 0.03], [-0.06, 0.27], [-0.2, 0.27]], t.grip, t.edge);
-  ringN(ctx, n, t.metal, 0.04, 0.12, 0.08, 0.045);
+  fillPoly(ctx, n, [[-0.27, -0.12], [0.15, -0.12], [0.18, -0.08], [0.16, -0.02], [-0.27, -0.02]], t.body, t.edge);
+  fillPoly(ctx, n, [[-0.24, -0.11], [0.13, -0.11], [0.13, -0.085], [-0.24, -0.085]], t.bodyLight);
+  fillPoly(ctx, n, [[-0.25, -0.02], [0.11, -0.02], [0.09, 0.04], [-0.25, 0.04]], t.poly, t.edge);
+  fillPoly(ctx, n, [[-0.205, 0.035], [-0.045, 0.035], [-0.04, 0.285], [-0.2, 0.285]], t.grip, t.edge);
+  rect(ctx, n, -0.02, -0.1, 0.09, 0.04, t.barrelLight);
+  rect(ctx, n, -0.23, -0.145, 0.02, 0.025, t.metal);
+  rect(ctx, n, 0.11, -0.14, 0.018, 0.02, t.metal);
+  serrations(ctx, n, t.edge, -0.21, -0.105, -0.035, 3, 0.024);
+  triggerAssembly(ctx, n, t, 0.035, 0.025, 0.14, 0.13);
 }
 
 // P228: rounded, slightly longer compact.
@@ -639,23 +732,31 @@ function drawP228(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: b
 
 // Desert Eagle: long heavy slide, large grip, big barrel.
 function drawDeagle(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.32, 0.2, -0.12, -0.02); // long heavy slide
-  fillPoly(ctx, n, [[-0.28, -0.02], [0.02, -0.02], [0.02, 0.03], [-0.28, 0.03]], t.poly, t.edge);
-  fillPoly(ctx, n, [[0.2, -0.09], [0.3, -0.09], [0.3, -0.04], [0.2, -0.04]], t.barrel, t.edge); // barrel
-  fillPoly(ctx, n, [[-0.2, 0.03], [0.0, 0.03], [0.02, 0.28], [-0.2, 0.28]], t.grip, t.edge); // grip
-  ringN(ctx, n, t.metal, 0.1, 0.12, 0.09, 0.045); // trigger guard
+  fillPoly(ctx, n, [[-0.31, -0.15], [0.27, -0.15], [0.34, -0.095], [0.34, -0.025], [-0.31, -0.025]], t.barrel, t.edge); // heavy slide
+  fillPoly(ctx, n, [[-0.27, -0.14], [0.25, -0.14], [0.29, -0.105], [-0.27, -0.105]], t.barrelLight);
+  fillPoly(ctx, n, [[-0.27, -0.025], [0.13, -0.025], [0.1, 0.045], [-0.27, 0.045]], t.body, t.edge);
+  fillPoly(ctx, n, [[-0.215, 0.04], [-0.015, 0.04], [0.015, 0.32], [-0.2, 0.32]], t.grip, t.edge);
+  fillPoly(ctx, n, [[-0.03, -0.125], [0.13, -0.125], [0.1, -0.075], [-0.03, -0.075]], t.metal, t.edge); // chamber
+  rect(ctx, n, 0.3, -0.115, 0.035, 0.065, t.edge);
+  rect(ctx, n, -0.25, -0.177, 0.025, 0.027, t.metal);
+  rect(ctx, n, 0.23, -0.172, 0.02, 0.022, t.metal);
+  serrations(ctx, n, t.edge, -0.24, -0.135, -0.045, 4, 0.025);
+  triggerAssembly(ctx, n, t, 0.055, 0.025, 0.16, 0.145);
 }
 
 // FN57: long square slide, thin high-capacity grip.
 function drawFn57(ctx: CanvasRenderingContext2D, n: Norm, color: string, mono: boolean) {
-
   const t = tone(color, mono);
-  beam(ctx, n, t, -0.3, 0.14, -0.11, -0.02); // long slide
-  fillPoly(ctx, n, [[-0.28, -0.02], [0.02, -0.02], [0.02, 0.03], [-0.28, 0.03]], t.poly, t.edge);
-  fillPoly(ctx, n, [[-0.16, 0.03], [-0.04, 0.03], [-0.04, 0.3], [-0.16, 0.3]], t.grip, t.edge); // thin grip
-  ringN(ctx, n, t.metal, 0.08, 0.12, 0.08, 0.04);
+  fillPoly(ctx, n, [[-0.3, -0.125], [0.19, -0.125], [0.22, -0.085], [0.2, -0.02], [-0.3, -0.02]], t.body, t.edge);
+  fillPoly(ctx, n, [[-0.27, -0.115], [0.17, -0.115], [0.18, -0.09], [-0.27, -0.09]], t.bodyLight);
+  fillPoly(ctx, n, [[-0.27, -0.02], [0.13, -0.02], [0.11, 0.04], [-0.27, 0.04]], t.poly, t.edge);
+  fillPoly(ctx, n, [[-0.18, 0.035], [-0.035, 0.035], [-0.025, 0.31], [-0.17, 0.31]], t.grip, t.edge);
+  rect(ctx, n, 0.0, -0.103, 0.105, 0.04, t.barrelLight);
+  rect(ctx, n, -0.27, -0.15, 0.02, 0.025, t.metal);
+  rect(ctx, n, 0.15, -0.145, 0.018, 0.02, t.metal);
+  serrations(ctx, n, t.edge, -0.245, -0.11, -0.04, 4, 0.022);
+  triggerAssembly(ctx, n, t, 0.055, 0.025, 0.145, 0.135);
 }
 
 // Tec-9: boxy body with a long forward-tilted straight magazine.

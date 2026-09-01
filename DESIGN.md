@@ -55,7 +55,7 @@ The canvas is the only dominant visual object on the page.
 
 - Center it in the available viewport.
 - Keep its logical dimensions and HiDPI behavior unchanged.
-- Fit it without reserving space for permanent side panels.
+- Fit it without permanent side panels; on wide desktops, use the natural side gutters for compact contextual controls rather than extending the page vertically.
 - Use only a 1px bezel, small radius, and near-flat shadow in the shell.
 - Keep fullscreen affordance quiet and reveal it on hover/focus; touch may keep it faintly visible.
 - Start through the canvas overlay. Do not duplicate the action with a large external start button.
@@ -65,7 +65,7 @@ The canvas is the only dominant visual object on the page.
 
 ## Input Mapping
 
-Fine-pointer desktops show a compact mapping strip under the canvas.
+Fine-pointer desktops show a compact mapping beside the canvas when side space permits, and below it only on narrower layouts.
 
 - Render only controls the current game uses.
 - Group keycaps with their action label.
@@ -79,7 +79,7 @@ Hide the entire mapping on `pointer: coarse` and narrow mobile layouts. Touch ga
 
 A game-specific shell utility is allowed only when removing it would block gameplay.
 
-- Parking keeps level selection as a compact `Level N` disclosure below the canvas.
+- Parking keeps level selection as a compact `Level N` disclosure in the left desktop gutter or below the canvas on compact layouts.
 - Demo actions live in the overflow menu and appear only for games that support them.
 - Scores and moment-to-moment telemetry belong in the game canvas whenever possible.
 - Large steering instruments, records cards, game descriptions, and progress dashboards are not persistent shell UI.
@@ -151,6 +151,7 @@ The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing on
 - Cache detailed sprites with `makeSprite()`/`drawSprite()` rather than rebuilding them every frame.
 - Avoid per-frame `shadowBlur` storms.
 - Shooter-family games may use `three`, rendered back into the game's 2D canvas so shell contracts remain intact.
+- Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. Profiles stay orthographic and side-on, with supersampling for clean small thumbnails; do not add a second perspective asset path.
 
 Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `src/core/render.ts`. Shell minimalism must not flatten or remove useful game feedback.
 
@@ -180,7 +181,8 @@ Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.i
 ### Desktop
 
 - Keep the header thin and the canvas centered.
-- Show the compact keyboard/mouse mapping.
+- Keep the full shell inside the viewport on wide fine-pointer layouts; do not require page-level vertical scrolling.
+- Put the compact keyboard/mouse mapping in the right gutter and necessary game context in the left gutter.
 - Open game switching in a centered modal.
 
 ### Mobile and coarse pointer

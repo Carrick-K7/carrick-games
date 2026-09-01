@@ -478,9 +478,9 @@ function updateFullscreenToggle(meta: GameMeta) {
 }
 
 /**
- * Fit the game canvas to the available stage space. Width comes from the
- * centered stage; height is capped so canvas + compact input strip stay in
- * the first viewport on common laptops. The backing store is re-sized by
+ * Fit the game canvas to the available stage space. Wide fine-pointer layouts
+ * reserve quiet side rails for contextual controls; compact layouts keep the
+ * controls below. Height remains inside the first viewport. The backing store is re-sized by
  * `setDisplayScale`, so the upscaled picture stays sharp.
  */
 let lastFittedCanvasWidth = 0;
@@ -494,14 +494,23 @@ function fitGameCanvas() {
   if (!meta) return;
   const { width: lw, height: lh } = meta.canvasSize;
   const aspect = lh / lw;
-  const colW = wrapper.clientWidth;
+  const stage = wrapper.parentElement;
+  if (!stage) return;
+  const useSideRails = window.matchMedia('(min-width: 960px) and (pointer: fine)').matches;
+  const stageW = stage.clientWidth;
+  const railReserve = Math.max(460, Math.min(600, stageW * 0.4));
+  const colW = useSideRails ? stageW - railReserve : wrapper.clientWidth;
   if (colW <= 0) return;
   const top = wrapper.getBoundingClientRect().top;
-  const availH = window.innerHeight - top - 14 - 44 - 12; // input strip + breathing room
+  const availH = useSideRails
+    ? stage.clientHeight - 8
+    : window.innerHeight - top - 14 - 44 - 12;
   const cssW = Math.round(Math.max(280, Math.min(colW, availH / aspect, lw * 2.5)));
+  const cssWidth = `${cssW}px`;
+  stage.style.setProperty('--canvas-css-width', cssWidth);
+  wrapper.style.setProperty('--canvas-css-width', cssWidth);
   if (cssW === lastFittedCanvasWidth) return;
   lastFittedCanvasWidth = cssW;
-  wrapper.style.setProperty('--canvas-css-width', `${cssW}px`);
   currentGameInstance.setDisplayScale?.(cssW);
 }
 

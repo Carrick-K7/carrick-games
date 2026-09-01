@@ -688,6 +688,17 @@ test.describe('Game rules', () => {
     expect(hasWon).toBe(false);
   });
 
+  test('Gacha uses one supersampled flat-profile renderer across prize surfaces', () => {
+    const gachaSource = readFileSync(join(process.cwd(), 'src/games/gacha.ts'), 'utf8');
+    const reelSource = readFileSync(join(process.cwd(), 'src/games/gachaModeCsgo.ts'), 'utf8');
+    const profileSource = readFileSync(join(process.cwd(), 'src/games/gachaWeaponIcons.ts'), 'utf8');
+    expect(gachaSource).not.toContain('gunImages');
+    expect(gachaSource.match(/drawWeaponIcon/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    expect(reelSource).toContain('drawWeaponIcon');
+    expect(profileSource).toContain('orthographic side');
+    expect(profileSource).toContain('supersample');
+  });
+
   test('Gacha records deterministic pulls, persists stats, and supports reset', async ({ page }) => {
     await page.goto('/#/gacha');
     await expect(page.locator('#startOverlay')).toHaveClass(/active/);
@@ -883,6 +894,26 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect
       .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState))
       .toBe('playing');
+  });
+
+  test('wide desktop uses side gutters without page scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await expect.poll(async () => (await page.locator('#gameCanvas').boundingBox())?.width ?? 0).toBeGreaterThan(550);
+    const canvas = await page.locator('#gameCanvas').boundingBox();
+    const inputs = await page.locator('#keyboardPanel').boundingBox();
+    const context = await page.locator('#statsPanel').boundingBox();
+    expect(canvas).not.toBeNull();
+    expect(inputs).not.toBeNull();
+    expect(context).not.toBeNull();
+    if (!canvas || !inputs || !context) return;
+    expect(context.x + context.width).toBeLessThan(canvas.x);
+    expect(inputs.x).toBeGreaterThan(canvas.x + canvas.width);
+    const viewport = await page.evaluate(() => ({
+      clientHeight: document.documentElement.clientHeight,
+      scrollHeight: document.documentElement.scrollHeight,
+    }));
+    expect(viewport.scrollHeight).toBe(viewport.clientHeight);
   });
 
   test('system light theme renders the canvas with light game colors', async ({ page }) => {
