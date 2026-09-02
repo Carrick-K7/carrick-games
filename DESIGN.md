@@ -151,7 +151,7 @@ The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing on
 - Cache detailed sprites with `makeSprite()`/`drawSprite()` rather than rebuilding them every frame.
 - Avoid per-frame `shadowBlur` storms.
 - Shooter-family games may use `three`, rendered back into the game's 2D canvas so shell contracts remain intact.
-- Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. Profiles stay orthographic and side-on, with supersampling for clean small thumbnails; do not add a second perspective asset path.
+- Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. Profiles stay orthographic and top-down (三视图俯视图: muzzle +x, spine on y=0, no perspective), with supersampling for clean small thumbnails; knives and gloves keep their flat-face view because edge-on top views are illegible. Do not add a second perspective asset path.
 
 Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `src/core/render.ts`. Shell minimalism must not flatten or remove useful game feedback.
 

@@ -387,11 +387,11 @@ export class CsgoStripMode implements GachaOpenMode {
     c.textBaseline = 'middle';
     c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 22);
 
-    // The same flat, supersampled side profile used by results and inventory.
+    // The same flat, supersampled top view used by results and inventory.
     drawWeaponIcon(c, card.item.icon ?? card.item.kind, CARD_W / 2, REEL_H / 2 - 12, {
       color: dark ? '#f1f5f9' : '#ffffff',
       alpha: 0.95,
-      size: 96,
+      size: 100,
       mono: false,
     });
 

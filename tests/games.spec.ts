@@ -695,7 +695,7 @@ test.describe('Game rules', () => {
     expect(gachaSource).not.toContain('gunImages');
     expect(gachaSource.match(/drawWeaponIcon/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(reelSource).toContain('drawWeaponIcon');
-    expect(profileSource).toContain('orthographic side');
+    expect(profileSource).toContain('orthographic top');
     expect(profileSource).toContain('supersample');
   });
 
@@ -785,12 +785,12 @@ test.describe('Game rules', () => {
 });
 
 test('failed dynamic game loads show a retry path', async ({ page }) => {
-  const parkingModule = builtModuleUrl('src/games/parking.ts');
-  await page.route(`**${parkingModule}`, (route) => route.abort());
+  const gachaModule = builtModuleUrl('src/games/gacha.ts');
+  await page.route(`**${gachaModule}`, (route) => route.abort());
   await page.goto('/');
   await expect(page.locator('#loadError')).toBeVisible();
   await expect(page.locator('#retryLoadBtn')).toBeVisible();
-  await page.unroute(`**${parkingModule}`);
+  await page.unroute(`**${gachaModule}`);
   await page.locator('#retryLoadBtn').click();
   await expect(page.locator('#startOverlay')).toHaveClass(/active/);
   await expect(page.locator('#loadError')).toBeHidden();
@@ -881,24 +881,32 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    expect([...new Set(gameModules)]).toEqual(['parking.js']);
+    expect([...new Set(gameModules)]).toEqual(['gacha.js']);
   });
 
-  test('parking is the first game and default entry is playable', async ({ page }) => {
-    await expect(page.locator('#selectedGameLabel')).toHaveText('停车');
+  test('gacha is the first game and default entry is playable', async ({ page }) => {
+    await expect(page.locator('#selectedGameLabel')).toHaveText('抽卡');
     await page.locator('#gamePickerBtn').click();
-    await expect(page.locator('.game-list-item').first()).toHaveAttribute('data-id', 'parking');
+    await expect(page.locator('.game-list-item').first()).toHaveAttribute('data-id', 'gacha');
     await page.locator('#libraryCloseBtn').click();
 
     await startGame(page);
+    const box = await page.locator('#gameCanvas').boundingBox();
+    expect(box).toBeTruthy();
+    if (box) {
+      // Click the crate: the unlock prelude starts.
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    }
     await expect
-      .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState))
-      .toBe('playing');
+      .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.gachaScreen))
+      .toMatch(/unlock|opening|result/);
   });
 
   test('wide desktop uses side gutters without page scrolling', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
+    // Parking owns the level-picker context panel the gutter layout needs.
+    await selectGame(page, 'parking');
     await expect.poll(async () => (await page.locator('#gameCanvas').boundingBox())?.width ?? 0).toBeGreaterThan(550);
     const canvas = await page.locator('#gameCanvas').boundingBox();
     const inputs = await page.locator('#keyboardPanel').boundingBox();

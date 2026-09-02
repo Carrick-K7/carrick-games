@@ -477,7 +477,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'parking',
-    group: 'casual', order: 0, icon: 'parking',
+    group: 'casual', order: 1, icon: 'parking',
     name: 'Parking',
     nameZh: '停车',
     desc: 'Top-down parking challenge. Steer into the spot without crashing.',
@@ -518,7 +518,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'gacha',
-    group: 'casual', order: 1, icon: 'gacha',
+    group: 'casual', order: 0, icon: 'gacha',
     name: 'Gacha',
     nameZh: '抽卡',
     desc: 'CS:GO-grade case opening. Official odds, strip spin reveal, and pull statistics.',

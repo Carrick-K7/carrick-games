@@ -653,6 +653,17 @@ main {
   height: 36px;
   border: 1px solid var(--border-strong);
   border-radius: 13px 13px 11px 11px;
+  background: var(--surface-raised);
+}
+
+/* Hairline split between the left and right buttons */
+.compact-mouse::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 13px;
+  border-left: 1px solid var(--border);
+  content: "";
 }
 
 .compact-mouse::after {
@@ -669,10 +680,18 @@ main {
   top: 0;
   width: 50%;
   height: 13px;
+  transition: background-color 90ms ease, box-shadow 90ms ease;
 }
 
-.compact-mouse-left { left: 0; }
-.compact-mouse-right { right: 0; }
+.compact-mouse-left {
+  left: 0;
+  border-radius: 12px 0 0;
+}
+
+.compact-mouse-right {
+  right: 0;
+  border-radius: 0 12px 0 0;
+}
 
 .compact-mouse-wheel {
   position: absolute;
@@ -684,12 +703,26 @@ main {
   background: var(--border-strong);
   border-radius: 3px;
   transform: translateX(-50%);
+  transition: background-color 90ms ease, box-shadow 90ms ease;
 }
 
-.compact-mouse-button.pressed,
+.compact-mouse-button.pressed {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 7px var(--accent-soft);
+}
+
 .compact-mouse-wheel.pressed,
 .compact-mouse-wheel.scrolling {
   background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+.compact-mouse-wheel.scrolling {
+  animation: vmouse-wheel-roll 140ms ease;
+}
+
+@keyframes vmouse-wheel-roll {
+  50% { transform: translateX(-50%) translateY(1.5px); }
 }
 
 /* Game-specific context: currently the parking level picker. */

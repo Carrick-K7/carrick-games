@@ -10,6 +10,11 @@
  * gradients, hairline borders, restrained glow. Not pixel art: this
  * game renders the same design in both shell style modes.
  *
+ * Art direction: engineering-blueprint orthographic. The crate is a
+ * top-down plan view (三视图俯视图), weapons use the matching top views
+ * from gachaWeaponIcons.ts, and backdrop grids/crosshairs reinforce the
+ * drafting-table mood.
+ *
  * Opening animations are pluggable through src/games/gachaModes.ts; the
  * menu shows a mode switcher automatically once more than one exists.
  */
@@ -155,6 +160,7 @@ export class GachaGame extends BaseGame {
   private revealFlash = 0;   // fullscreen rarity flash on top-tier reveals
   private beamT = 0;         // result light-pillar timer
   private ambientT = 0;      // clock for dust drift and idle pulses
+  private sparkleAcc = 0;    // cadence for ambient result-screen sparkles
   private dustMotes: DustMote[] = [];
   private caseBodyCache: { dark: boolean; sprite: HTMLCanvasElement } | null = null;
 
@@ -308,6 +314,7 @@ export class GachaGame extends BaseGame {
 
     if (this.screen === 'result') {
       this.revealT += dt;
+      if (this.roll && RESULT_PARTICLES_TIERS.has(this.roll.tier.id)) this.emitResultSparkle(dt);
       return;
     }
 
@@ -327,13 +334,12 @@ export class GachaGame extends BaseGame {
     }
   }
 
-  /** Energy motes converge on the case mouth as the unlock charge builds. */
-  private emitChargeParticles() {
+  /** Energy motes converge on the case mouth as the unlock charge builds. */private emitChargeParticles() {
     if (this.burst.count > 150) return;
     const t = clamp(this.unlockT / UNLOCK_DURATION, 0, 1);
     if (Math.random() > 0.3 + t * 0.65) return;
     const mouthX = this.width / 2;
-    const mouthY = 216 - 46;
+    const mouthY = 208; // crate center (top view)
     const a = Math.random() * TAU;
     const r = 80 + Math.random() * 80;
     const sx = mouthX + Math.cos(a) * r * 1.5;
@@ -349,6 +355,29 @@ export class GachaGame extends BaseGame {
       life: (r / speed) * (0.85 + Math.random() * 0.3),
       size: [1, 2.6],
       colors: ['#ffe9a8', '#ffd076', '#7dd3fc'],
+      shape: 'glow',
+    });
+  }
+
+  /** Slow twinkling motes drifting around the result card on high tiers. */
+  private emitResultSparkle(dt: number) {
+    this.sparkleAcc += dt;
+    if (this.sparkleAcc < 0.24 || this.burst.count > 220) return;
+    this.sparkleAcc = 0;
+    const tier = this.roll!.tier;
+    const cx = this.width / 2;
+    const x = cx + (Math.random() * 2 - 1) * 175;
+    const y = 216 + (Math.random() * 2 - 1) * 165;
+    this.burst.emit({
+      x,
+      y,
+      count: 1,
+      angle: -Math.PI / 2 + (Math.random() - 0.5) * 0.9,
+      spread: 0.2,
+      speed: [5, 16],
+      life: [0.5, 1.05],
+      size: [1, 2.4],
+      colors: [tier.color, '#ffffff'],
       shape: 'glow',
     });
   }
@@ -433,6 +462,7 @@ export class GachaGame extends BaseGame {
 
   private drawMenu(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
+    const dark = this.isDarkTheme();
     const t = performance.now() / 1000;
 
     // Slim header: plain title + ghost chips, hairline divider.
@@ -460,6 +490,42 @@ export class GachaGame extends BaseGame {
     // no odds strip, no operation hints (per design review).
     const cx = this.width / 2;
     const cy = 54 + (this.height - 54) / 2 - 10;
+
+    // Drafting reticle behind the case: a hairline circle with four
+    // cardinal ticks, echoing the top-view blueprint art direction.
+    const reticleR = 132;
+    ctx.save();
+    ctx.strokeStyle = p.panelBorder;
+    ctx.globalAlpha = dark ? 0.5 : 0.8;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 7]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, reticleR, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + Math.PI / 4 * 0; // cardinal points
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (reticleR - 6), cy + Math.sin(a) * (reticleR - 6));
+      ctx.lineTo(cx + Math.cos(a) * (reticleR + 6), cy + Math.sin(a) * (reticleR + 6));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Radar pulse: a slow expanding hairline ring invites the click.
+    const pulse = (t % 2.6) / 2.6;
+    if (pulse < 0.92) {
+      const pr = 96 + pulse * 76;
+      ctx.save();
+      ctx.globalAlpha = (1 - pulse) * 0.28 * (dark ? 1 : 0.7);
+      ctx.strokeStyle = p.accent;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pr, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     this.drawCase(ctx, cx, cy, 216, 144);
 
     // Mode switcher (only when more than one animation exists)
@@ -509,88 +575,98 @@ export class GachaGame extends BaseGame {
     const bob = Math.sin(t * 1.55) * 3.5 + shake;
 
     // Ambient halo behind the case
-    drawGlow(ctx, cx + bob, cy - 6, w * 0.72, accentColor, dark ? 0.16 + 0.05 * Math.sin(t * 1.1) : 0.1);
+    drawGlow(ctx, cx + bob, cy, w * 0.72, accentColor, dark ? 0.16 + 0.05 * Math.sin(t * 1.1) : 0.1);
 
     ctx.save();
     ctx.translate(cx + bob, cy);
 
-    // Soft ground shadow
+    // Soft contact shadow under the crate
     ctx.fillStyle = dark ? 'rgba(0,0,0,0.32)' : 'rgba(15,23,42,0.18)';
     ctx.beginPath();
-    ctx.ellipse(0, hh - 4, hw * 0.64, 10, 0, 0, TAU);
+    ctx.ellipse(0, hh + 8, hw * 0.72, 10, 0, 0, TAU);
     ctx.fill();
 
-    // Pre-rendered brushed-metal body (rebuilt on theme switch)
+    // Pre-rendered top-view crate shell (rebuilt on theme switch)
     const body = this.caseBody(dark);
     ctx.drawImage(body, -hw - 28, -hh - 28, w + 56, h + 56);
 
-    // Glowing seam along the lid line — breathes, brightens while opening
+    // Breathing accent seam tracing the lid perimeter
     const seamPulse = clamp(0.45 + 0.3 * Math.sin(t * 2.2) + lidOpen * 0.6, 0, 1);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = seamPulse * (dark ? 0.55 : 0.4);
-    const seam = ctx.createLinearGradient(-hw, 0, hw, 0);
-    seam.addColorStop(0, 'rgba(125,211,252,0)');
-    seam.addColorStop(0.5, dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.8)');
-    seam.addColorStop(1, 'rgba(125,211,252,0)');
-    ctx.fillStyle = seam;
-    roundRectPath(ctx, -hw + 8, -hh + 12, w - 16, 3, 1.5);
-    ctx.fill();
+    ctx.globalAlpha = seamPulse * (dark ? 0.5 : 0.36);
+    ctx.strokeStyle = dark ? 'rgba(125,211,252,0.85)' : 'rgba(2,132,199,0.75)';
+    ctx.lineWidth = 1.2;
+    roundRectPath(ctx, -hw + 10, -hh + 10, w - 20, h - 20, 12);
+    ctx.stroke();
     ctx.restore();
 
-    // Inner glow when the lid opens
+    // Interior cavity glow wells up as the lid slides away
     if (lidOpen > 0) {
-      const glow = ctx.createRadialGradient(0, -hh + 26, 4, 0, -hh + 26, w * 0.9);
-      glow.addColorStop(0, `rgba(255,244,205,${0.6 * lidOpen})`);
+      const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, w * 0.62);
+      glow.addColorStop(0, `rgba(255,244,205,${0.65 * lidOpen})`);
       glow.addColorStop(1, 'rgba(255,244,205,0)');
       ctx.fillStyle = glow;
-      ctx.fillRect(-hw, -hh, w, h);
+      roundRectPath(ctx, -hw + 16, -hh + 16, w - 32, h - 32, 10);
+      ctx.fill();
       ctx.font = '52px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = lidOpen;
-      ctx.fillText('✦', 0, -hh + 44);
+      ctx.fillText('✦', 0, -lidOpen * 12);
       ctx.globalAlpha = 1;
     }
 
-    // Lid — live because it tilts back around its top-left corner
+    // Lid — live because it slides up and lifts off the plan view
     ctx.save();
-    ctx.translate(-hw - 3, -hh + 6);
     if (lidOpen > 0) {
-      ctx.rotate(-lidOpen * 0.55);
-      ctx.translate(0, -lidOpen * 30);
+      ctx.translate(0, -lidOpen * (h * 0.78));
+      ctx.globalAlpha = clamp(1.15 - lidOpen, 0, 1);
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 22 * lidOpen;
+      ctx.shadowOffsetY = 10 * lidOpen;
     }
-    const lidGrad = ctx.createLinearGradient(0, 0, 0, 30);
+    // Lid panel: brushed slab with emblem plate and grip groove
+    const lidGrad = ctx.createLinearGradient(0, -hh + 16, 0, hh - 16);
     lidGrad.addColorStop(0, dark ? '#46536a' : '#eef2f7');
     lidGrad.addColorStop(0.55, dark ? '#2b3444' : '#aeb9c8');
     lidGrad.addColorStop(1, dark ? '#1d2430' : '#8a97a8');
     ctx.fillStyle = lidGrad;
-    roundRectPath(ctx, 0, 0, w + 6, 24, 10);
+    roundRectPath(ctx, -hw + 16, -hh + 16, w - 32, h - 32, 10);
     ctx.fill();
-    // Sheen on the lid's top edge
+    // Sheen along the lid's upper edge
     ctx.save();
-    roundRectPath(ctx, 0, 0, w + 6, 24, 10);
+    roundRectPath(ctx, -hw + 16, -hh + 16, w - 32, h - 32, 10);
     ctx.clip();
-    const lidSheen = ctx.createLinearGradient(0, 0, 0, 12);
-    lidSheen.addColorStop(0, 'rgba(255,255,255,0.28)');
+    const lidSheen = ctx.createLinearGradient(0, -hh + 16, 0, -hh + 40);
+    lidSheen.addColorStop(0, 'rgba(255,255,255,0.26)');
     lidSheen.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = lidSheen;
-    ctx.fillRect(0, 0, w + 6, 12);
+    ctx.fillRect(-hw + 16, -hh + 16, w - 32, 24);
     ctx.restore();
     ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 1;
-    roundRectPath(ctx, 0.5, 0.5, w + 5, 23, 10);
+    roundRectPath(ctx, -hw + 16.5, -hh + 16.5, w - 33, h - 33, 10);
     ctx.stroke();
-    // Recessed grip rib on the lid
+    // Recessed emblem plate on the lid
+    ctx.strokeStyle = dark ? 'rgba(125,211,252,0.4)' : 'rgba(2,132,199,0.45)';
+    roundRectPath(ctx, -hw + 40, -hh + 34, w - 80, h - 68, 8);
+    ctx.stroke();
+    ctx.font = '30px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = dark ? 'rgba(224,242,254,0.92)' : 'rgba(3,105,161,0.85)';
+    ctx.fillText('◇', 0, 0);
+    // Grip groove across the lid's lower third
     ctx.fillStyle = dark ? 'rgba(0,0,0,0.25)' : 'rgba(15,23,42,0.12)';
-    roundRectPath(ctx, 14, 10, w - 22, 4, 2);
+    roundRectPath(ctx, -hw + 56, hh - 42, w - 112, 4, 2);
     ctx.fill();
     ctx.restore();
 
     ctx.restore();
   }
 
-  /** Static case body art, pre-rendered once per theme. */
+  /** Static top-view crate shell art, pre-rendered once per theme. */
   private caseBody(dark: boolean): HTMLCanvasElement {
     if (this.caseBodyCache && this.caseBodyCache.dark === dark) return this.caseBodyCache.sprite;
     const w = 200;
@@ -600,74 +676,88 @@ export class GachaGame extends BaseGame {
       const hw = w / 2;
       const hh = h / 2;
 
-      // Brushed-metal shell
+      // Crate shell — a machined slab seen straight from above
       const grad = c.createLinearGradient(0, -hh, 0, hh);
       grad.addColorStop(0, dark ? '#333f51' : '#d7dee8');
       grad.addColorStop(0.45, dark ? '#1e2632' : '#9aa7b8');
       grad.addColorStop(1, dark ? '#10141b' : '#5f6c7f');
       c.fillStyle = grad;
-      roundRectPath(c, -hw, -hh + 14, w, h - 14, 16);
+      roundRectPath(c, -hw, -hh, w, h, 18);
       c.fill();
 
       c.save();
-      roundRectPath(c, -hw, -hh + 14, w, h - 14, 16);
+      roundRectPath(c, -hw, -hh, w, h, 18);
       c.clip();
-      // Top bevel light / bottom shade
-      const top = c.createLinearGradient(0, -hh + 14, 0, -hh + 42);
+      // Top bevel light / bottom shade (light from above-left)
+      const top = c.createLinearGradient(0, -hh, 0, -hh + 28);
       top.addColorStop(0, 'rgba(255,255,255,0.22)');
       top.addColorStop(1, 'rgba(255,255,255,0)');
       c.fillStyle = top;
-      c.fillRect(-hw, -hh + 14, w, 28);
+      c.fillRect(-hw, -hh, w, 28);
       const bottom = c.createLinearGradient(0, hh - 22, 0, hh);
       bottom.addColorStop(0, 'rgba(0,0,0,0)');
       bottom.addColorStop(1, 'rgba(0,0,0,0.35)');
       c.fillStyle = bottom;
       c.fillRect(-hw, hh - 22, w, 22);
-      // Brushed vertical striations
+      // Brushed lengthwise striations
       c.globalAlpha = dark ? 0.05 : 0.08;
       c.fillStyle = '#ffffff';
       for (let i = 0; i < 7; i++) {
-        c.fillRect(-hw + 18 + i * 26, -hh + 16, 1, h - 18);
+        c.fillRect(-hw + 18 + i * 26, -hh + 4, 1, h - 8);
       }
       c.globalAlpha = 1;
       c.restore();
 
-      // Hairline edge
+      // Hairline outer edge
       c.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.5)';
       c.lineWidth = 1;
-      roundRectPath(c, -hw + 0.5, -hh + 14.5, w - 1, h - 15, 16);
+      roundRectPath(c, -hw + 0.5, -hh + 0.5, w - 1, h - 1, 18);
       c.stroke();
 
-      // Recessed emblem plate
-      const plate = c.createLinearGradient(0, -hh + 46, 0, hh - 18);
-      plate.addColorStop(0, dark ? 'rgba(255,255,255,0.075)' : 'rgba(255,255,255,0.35)');
-      plate.addColorStop(1, dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.12)');
-      c.fillStyle = plate;
-      roundRectPath(c, -hw + 20, -hh + 46, w - 40, h - 64, 12);
+      // Lid seam — the recessed parting line around the lid panel
+      c.strokeStyle = dark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.3)';
+      c.lineWidth = 2;
+      roundRectPath(c, -hw + 10, -hh + 10, w - 20, h - 20, 12);
+      c.stroke();
+
+      // Interior cavity (visible once the lid slides away): dark recess
+      // with an inner shadow on the upper wall.
+      const cavity = c.createLinearGradient(0, -hh + 16, 0, hh - 16);
+      cavity.addColorStop(0, dark ? '#090b10' : '#1c232e');
+      cavity.addColorStop(1, dark ? '#12161e' : '#2b3442');
+      c.fillStyle = cavity;
+      roundRectPath(c, -hw + 16, -hh + 16, w - 32, h - 32, 10);
       c.fill();
-      c.strokeStyle = dark ? 'rgba(125,211,252,0.4)' : 'rgba(2,132,199,0.45)';
-      c.lineWidth = 1;
-      roundRectPath(c, -hw + 20.5, -hh + 46.5, w - 41, h - 65, 12);
-      c.stroke();
-      c.font = '40px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillStyle = dark ? 'rgba(224,242,254,0.92)' : 'rgba(3,105,161,0.85)';
-      c.fillText('◇', 0, 16);
+      c.save();
+      roundRectPath(c, -hw + 16, -hh + 16, w - 32, h - 32, 10);
+      c.clip();
+      const innerShade = c.createLinearGradient(0, -hh + 16, 0, -hh + 34);
+      innerShade.addColorStop(0, 'rgba(0,0,0,0.55)');
+      innerShade.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = innerShade;
+      c.fillRect(-hw + 16, -hh + 16, w - 32, 18);
+      c.restore();
 
-      // Corner rivets
+      // Corner rivets on the shell
       const rivetBase = dark ? '#5b6b82' : '#b8c2d0';
-      for (const [rx, ry] of [[-hw + 12, -hh + 26], [hw - 12, -hh + 26], [-hw + 12, hh - 12], [hw - 12, hh - 12]] as const) {
+      for (const [rx, ry] of [[-hw + 12, -hh + 12], [hw - 12, -hh + 12], [-hw + 12, hh - 12], [hw - 12, hh - 12]] as const) {
         fillSphere(c, rx, ry, 2.6, rivetBase, { rim: 0.2 });
       }
 
-      // Latch — accent gradient bar
+      // Side carry slots on the left/right edges
+      c.fillStyle = dark ? 'rgba(0,0,0,0.4)' : 'rgba(15,23,42,0.22)';
+      roundRectPath(c, -hw + 2, -14, 5, 28, 2.5);
+      c.fill();
+      roundRectPath(c, hw - 7, -14, 5, 28, 2.5);
+      c.fill();
+
+      // Latch — accent tab straddling the seam at bottom center
       const latch = c.createLinearGradient(-13, 0, 13, 0);
       latch.addColorStop(0, dark ? 'rgba(125,211,252,0.25)' : 'rgba(2,132,199,0.3)');
       latch.addColorStop(0.5, dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.85)');
       latch.addColorStop(1, dark ? 'rgba(125,211,252,0.25)' : 'rgba(2,132,199,0.3)');
       c.fillStyle = latch;
-      roundRectPath(c, -13, 26, 26, 3, 1.5);
+      roundRectPath(c, -13, hh - 16, 26, 8, 3);
       c.fill();
     }, 2);
     this.caseBodyCache = { dark, sprite };
@@ -739,13 +829,13 @@ export class GachaGame extends BaseGame {
     this.drawCase(ctx, cx, cy, 200, 134, lidOpen, shake);
 
     if (lidOpen > 0) {
-      // Warm energy welling out of the case mouth
-      drawGlow(ctx, cx, cy - 46, 60 + 90 * lidOpen, '#ffe9a8', 0.5 * lidOpen);
+      // Warm energy welling out of the crate cavity
+      drawGlow(ctx, cx, cy - 8, 60 + 90 * lidOpen, '#ffe9a8', 0.5 * lidOpen);
     }
 
     if (lidOpen > 0) {
       ctx.save();
-      ctx.translate(cx, cy - 46);
+      ctx.translate(cx, cy - 8);
       ctx.globalAlpha = lidOpen;
       ctx.strokeStyle = 'rgba(255,238,180,0.75)';
       ctx.lineWidth = 2;
@@ -819,12 +909,51 @@ export class GachaGame extends BaseGame {
       drawGlow(ctx, cx, this.height / 2 - 26, 200, tier.color, (dark ? 0.3 : 0.2) * beamA);
     }
 
-    // Tier kicker
-    ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
-    ctx.textAlign = 'center';
+    // Tier kicker — letter-spaced mono with the official odds
+    ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = tier.color;
-    ctx.fillText((zh ? tier.nameZh : tier.name).toUpperCase(), cx, 38);
+    const kicker = `${(zh ? tier.nameZh : tier.name).toUpperCase()} · ${(tier.odds * 100).toFixed(2)}%`;
+    fillSpacedText(ctx, kicker, cx, 38, 2.5);
+
+    // Rotating segmented rarity ring behind the card, with cardinal ticks
+    const ringR = 172;
+    ctx.save();
+    ctx.translate(cx, 216);
+    ctx.rotate(this.ambientT * 0.18);
+    ctx.strokeStyle = tier.color;
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = 1.5;
+    const segs = 28;
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * TAU;
+      const a1 = a0 + (TAU / segs) * 0.58;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, a0, a1);
+      ctx.stroke();
+    }
+    ctx.rotate(-this.ambientT * 0.36);
+    ctx.globalAlpha = 0.14;
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * TAU;
+      const a1 = a0 + (TAU / segs) * 0.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR - 14, a0, a1);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = tier.color;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (ringR + 4), 216 + Math.sin(a) * (ringR + 4));
+      ctx.lineTo(cx + Math.cos(a) * (ringR + 12), 216 + Math.sin(a) * (ringR + 12));
+      ctx.stroke();
+    }
+    ctx.restore();
 
     // Card pop-in
     const cw = 252;
@@ -873,9 +1002,42 @@ export class GachaGame extends BaseGame {
       ctx.restore();
     }
 
-    // Content — the same orthographic side profile used by every thumbnail.
+    // Content — the same orthographic top view used by every thumbnail,
+    // presented on a blueprint backdrop inside the card.
     const iconId = item.icon ?? item.kind;
-    const resultIconSize = item.kind === 'pistol' ? 220 : item.kind === 'knife' ? 230 : 270;
+    const resultIconSize = item.kind === 'pistol' ? 240 : item.kind === 'knife' ? 250 : 280;
+
+    // Blueprint panel behind the weapon: hairline grid + center crosshair
+    ctx.save();
+    roundRectPath(ctx, -cw / 2 + 14, -chh / 2 + 14, cw - 28, 168, 14);
+    ctx.clip();
+    ctx.fillStyle = dark ? 'rgba(255,255,255,0.025)' : 'rgba(2,132,199,0.045)';
+    ctx.fillRect(-cw / 2 + 14, -chh / 2 + 14, cw - 28, 168);
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.05)' : 'rgba(2,132,199,0.09)';
+    ctx.lineWidth = 1;
+    for (let gx = -cw / 2 + 14; gx <= cw / 2 - 14; gx += 18) {
+      ctx.beginPath();
+      ctx.moveTo(gx, -chh / 2 + 14);
+      ctx.lineTo(gx, -chh / 2 + 182);
+      ctx.stroke();
+    }
+    for (let gy = -chh / 2 + 14; gy <= -chh / 2 + 182; gy += 18) {
+      ctx.beginPath();
+      ctx.moveTo(-cw / 2 + 14, gy);
+      ctx.lineTo(cw / 2 - 14, gy);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = withAlpha(tier.color, 0.4);
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(-cw / 2 + 14, -46);
+    ctx.lineTo(cw / 2 - 14, -46);
+    ctx.moveTo(0, -chh / 2 + 14);
+    ctx.lineTo(0, -chh / 2 + 182);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
     ctx.save();
     ctx.shadowColor = tier.color;
     ctx.shadowBlur = 26;
@@ -1012,7 +1174,7 @@ export class GachaGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const iconSize = Math.min(w - 10, 74);
+    const iconSize = Math.min(w - 14, 92);
 
     if (locked) {
       drawWeaponIcon(ctx, item.icon ?? item.kind, x + w / 2, y + h / 2 - 12, {
@@ -1173,7 +1335,7 @@ export class GachaGame extends BaseGame {
       const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
       if (!tier || !item) continue;
       const iconId = item.icon ?? item.kind;
-      drawWeaponIcon(ctx, iconId, hx + 14, hy + 8, { color: p.textDim, size: 26, mono: true });
+      drawWeaponIcon(ctx, iconId, hx + 14, hy + 8, { color: p.textDim, size: 30, mono: true });
       ctx.beginPath();
       ctx.fillStyle = tier.color;
       ctx.arc(hx + 14, hy + 26, 2.5, 0, Math.PI * 2);
@@ -1388,12 +1550,41 @@ function drawBg(ctx: CanvasRenderingContext2D, width: number, height: number, p:
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
+  // Drafting grid, barely-there — the blueprint behind the whole scene
+  ctx.strokeStyle = p.textFaint;
+  ctx.globalAlpha = 0.1;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let gx = 24; gx < width; gx += 36) {
+    ctx.moveTo(gx, 0);
+    ctx.lineTo(gx, height);
+  }
+  for (let gy = 24; gy < height; gy += 36) {
+    ctx.moveTo(0, gy);
+    ctx.lineTo(width, gy);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
   // Soft ambient accent
   const ambient = ctx.createRadialGradient(width / 2, height * 0.35, 30, width / 2, height * 0.35, width * 0.75);
   ambient.addColorStop(0, p.glow);
   ambient.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = ambient;
   ctx.fillRect(0, 0, width, height);
+}
+
+/** Centered letter-spaced text (canvas has no letter-spacing). */
+function fillSpacedText(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, spacing: number) {
+  const chars = [...text];
+  const widths = chars.map((ch) => ctx.measureText(ch).width);
+  const total = widths.reduce((acc, w) => acc + w, 0) + spacing * (chars.length - 1);
+  let x = cx - total / 2;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i], x, y);
+    x += widths[i] + spacing;
+  }
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
