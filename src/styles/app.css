@@ -448,6 +448,18 @@ main {
   padding: 24px;
 }
 
+/* Phones and touch tablets: keep the canvas vertically centered. The
+   desktop grid below (min-width: 960px, fine pointer) takes over instead. */
+@media (max-width: 959px), (pointer: coarse) {
+  main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100vh - 56px);
+    min-height: calc(100dvh - 56px);
+  }
+}
+
 .game-layout,
 .game-center {
   width: 100%;

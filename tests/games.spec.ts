@@ -695,7 +695,7 @@ test.describe('Game rules', () => {
     expect(gachaSource).not.toContain('gunImages');
     expect(gachaSource.match(/drawWeaponIcon/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(reelSource).toContain('drawWeaponIcon');
-    expect(profileSource).toContain('orthographic top');
+    expect(profileSource).toContain('orthographic front');
     expect(profileSource).toContain('supersample');
   });
 
