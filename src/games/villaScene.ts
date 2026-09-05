@@ -11,6 +11,9 @@ import { createVillaDrivingCourse } from './villaDrivingCourse.js';
 import type { VillaRaceState } from './villaRacing.js';
 import type { VillaSnookerState } from './villaSnooker.js';
 import { createVillaSnookerModel } from './villaSnookerModel.js';
+import { createVillaGarden } from './villaGarden.js';
+import { createVillaPetModel } from './villaPetModel.js';
+import type { VillaPetsState } from './villaPets.js';
 import {
   EYE_HEIGHT, POOL, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
   type VillaCollider, type VillaMaterial, type VillaPosition,
@@ -19,7 +22,7 @@ import {
 export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number; fov?: number }
 export type VillaSceneState = VillaFurnishingState & VillaActivityState & {
   elevator: VillaElevatorState; driving: VillaDrivingState; race: VillaRaceState;
-  snooker: VillaSnookerState; snookerActive: boolean;
+  snooker: VillaSnookerState; snookerActive: boolean; pets: VillaPetsState;
 };
 
 /** Small studio/sky reflection probe; all pixels are authored locally, no asset fetches. */
@@ -106,6 +109,7 @@ export class VillaScene {
   private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
   private readonly course: ReturnType<typeof createVillaDrivingCourse>;
   private readonly snooker: ReturnType<typeof createVillaSnookerModel>;
+  private readonly pets: ReturnType<typeof createVillaPetModel>;
   readonly drivingObstacles: VillaCollider[];
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
@@ -364,9 +368,12 @@ export class VillaScene {
     this.elevator = createVillaElevatorModel(this.scene);
     this.course = createVillaDrivingCourse(this.scene);
     this.snooker = createVillaSnookerModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders);
-    this.drivingObstacles = this.colliders.filter(c => !isVillaVehicleCollider(c));
-    this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders]);
+    const garden = createVillaGarden(this.scene);
+    this.pets = createVillaPetModel(this.scene);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders);
+    // Pets never block a walking visitor; the sedan stops before reaching them.
+    this.drivingObstacles = [...this.colliders.filter(c => !isVillaVehicleCollider(c)), ...this.pets.drivingColliders];
+    this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 
@@ -381,7 +388,8 @@ export class VillaScene {
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, 96, 96);
     const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace;
     const material = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
-    const parts = colliders.map(collider => {
+    // Contact shadows belong on floors, not beneath elevated drawers or mirrors.
+    const parts = colliders.filter(collider => [0, 3.6, 7.2].some(y => Math.abs(collider.minY - y) < .08)).map(collider => {
       const g = new THREE.PlaneGeometry((collider.maxX - collider.minX) * 1.42, (collider.maxZ - collider.minZ) * 1.42);
       g.rotateX(-Math.PI / 2);
       g.translate((collider.minX + collider.maxX) / 2, collider.minY + 0.039, (collider.minZ + collider.maxZ) / 2);
@@ -389,7 +397,7 @@ export class VillaScene {
     });
     const geometry = mergeGeometries(parts);
     parts.forEach(g => g.dispose());
-    if (geometry) this.scene.add(new THREE.Mesh(geometry, material));
+    if (geometry) { const mesh = new THREE.Mesh(geometry, material); mesh.name = 'villa-contact-shadows'; this.scene.add(mesh); }
     else { material.dispose(); map.dispose(); }
   }
 
@@ -400,7 +408,11 @@ export class VillaScene {
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
     if (this.snooker.update(state.snooker, state.snookerActive)) this.renderer.shadowMap.needsUpdate = true;
     this.course.update(state.driving);
+    this.updatePets(time, state.pets);
   }
+
+  /** Keep the vehicle-only pet bounds in sync without dirtying baked sun shadows. */
+  updatePets(time: number, state: VillaPetsState) { if (state) this.pets.update(time, state); }
 
   get carDoorProgress(): number { return this.vehicle.doorProgress; }
 
@@ -427,7 +439,7 @@ export class VillaScene {
     const scale = this.lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
     const w = Math.round(width * scale), h = Math.round(height * scale);
     const now = performance.now();
-    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}`;
+    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}`;
     this.updateActivities(time, state);
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
     // longer than the time budget. A wall-clock cap alone starves real key events

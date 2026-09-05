@@ -195,6 +195,10 @@ export function villaFloor(y: number): number { return Math.max(0, Math.min(2, M
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
   if (floor === 0 && p.z >= 24) return { id: 'driving-course', name: 'Driving practice course', zh: '试驾练习场' };
+  if (floor === 0 && p.x < -3.4 && p.x > -22.8 && p.z >= 12.8 && p.z < 24) {
+    return p.x > -11.6 && p.z >= 17 ? { id: 'garden', name: 'Vegetable garden', zh: '花园 · 菜地' }
+      : { id: 'garden', name: 'Orchard & pets', zh: '果园 · 小伙伴' };
+  }
   if (villaElevatorShaftContains(p.x, p.z)) return { id: 'elevator', name: 'Elevator', zh: '电梯' };
   if (inRect(p.x, p.z, STAIR_HOLE)) return { id: 'stairs', name: 'Oak staircase', zh: '橡木楼梯' };
   const room = VILLA_ROOMS.find(r => r.floor === floor && inRect(p.x, p.z, r));
@@ -274,11 +278,13 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | `pet-${'dog' | 'cat' | 'parrot' | 'rabbit'}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: 0, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
   { id: 'aquarium', x: -3.5, y: 0, z: 2, name: 'Feed the fish', zh: '喂喂小鱼' },
+  { id: 'faucet', x: -5.67, y: 0, z: -7.2, radius: 1.05, name: 'Kitchen tap on / off', zh: '开关厨房水龙头' },
+  { id: 'tea-bar', x: -6.7, y: 0, z: -1.65, radius: .95, name: 'Brew a pot of tea', zh: '冲一壶茶' },
   { id: 'gaming', x: 6.65, y: 0, z: 4.9, radius: 1.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
   { id: 'car', ...VILLA_CAR.door, radius: 1.75, name: 'Open the driver door / take a seat', zh: '打开驾驶位车门 / 入座' },
   { id: 'racing', ...VILLA_RACING.exit, radius: 1.2, name: 'Sit in the simulator', zh: '坐进驾驶模拟器' },

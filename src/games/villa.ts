@@ -14,6 +14,10 @@ import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrou
 import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarExitClear } from './villaDriving.js';
 import { advanceVillaRace, createVillaRace } from './villaRacing.js';
 import { advanceVillaSnooker, createVillaSnooker, shootVillaSnooker } from './villaSnooker.js';
+import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, VILLA_PET_LABELS } from './villaPets.js';
+import { VILLA_FAUCET } from './villaFaucet.js';
+import { VILLA_TEA_BAR } from './villaTeaBar.js';
+import { VILLA_VEGETABLE_BEDS } from './villaGarden.js';
 
 interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
@@ -21,7 +25,7 @@ const UI_FONT = 'system-ui, -apple-system, sans-serif';
 const initialVillaState = (): VillaSceneState => ({
   evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(),
   elevator: createVillaElevator(), driving: createVillaDriving(), race: createVillaRace(),
-  snooker: createVillaSnooker(), snookerActive: false,
+  snooker: createVillaSnooker(), snookerActive: false, pets: createVillaPets(), faucetOn: false, teaUntil: 0,
 });
 
 /** A quiet, non-scoring first-person home. All scene resources belong to this game. */
@@ -228,6 +232,10 @@ export class VillaGame extends BaseGame {
     }
     advanceVillaSnooker(this.state.snooker, dt);
     this.scene?.updateActivities(this.time, this.state);
+    // A current car footprint and swept pet bounds keep all encounters peaceful.
+    advanceVillaPets(this.state.pets, dt, this.scene?.colliders ?? [],
+      enabled && !this.state.seated && !lift.riding ? this.groundPosition() : undefined);
+    this.scene?.updatePets(this.time, this.state.pets);
     this.promptAlpha += ((this.hotspot() && !this.state.seated && !this.state.snookerActive ? 1 : 0) - this.promptAlpha) * Math.min(1, dt * 10);
     this.publishState();
   }
@@ -253,7 +261,16 @@ export class VillaGame extends BaseGame {
   private hotspot(): VillaHotspot | null {
     const car = this.state.driving, p = this.groundPosition();
     const localX = (p.x - car.x) * Math.cos(car.yaw) - (p.z - car.z) * Math.sin(car.yaw);
-    return nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 });
+    const fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 });
+    const pet = nearestVillaPet(this.state.pets, p, this.scene?.colliders ?? []);
+    if (pet && (!fixture || Math.hypot(pet.x - p.x, pet.z - p.z) < Math.hypot(fixture.x - p.x, fixture.z - p.z))) {
+      const { zh, en: name } = VILLA_PET_LABELS[pet.kind];
+      return { id: `pet-${pet.kind}`, x: pet.x, y: 0, z: pet.z, radius: 2.2,
+        zh: pet.cooldown > 0 ? `${zh}吃饱啦` : `投喂${zh}`, name: pet.cooldown > 0 ? `${name} is full` : `Feed ${name.toLowerCase()}` };
+    }
+    if (fixture?.id === 'faucet') return { ...fixture, zh: this.state.faucetOn ? '关闭水龙头' : '打开水龙头', name: this.state.faucetOn ? 'Turn tap off' : 'Turn tap on' };
+    if (fixture?.id === 'tea-bar' && this.time < (this.state.teaUntil ?? 0)) return { ...fixture, zh: '茶正在泡着', name: 'Tea is brewing' };
+    return fixture;
   }
 
   /** Read-only DOM telemetry is useful for accessibility and browser regression tests. */
@@ -270,6 +287,11 @@ export class VillaGame extends BaseGame {
     data.villaFireplace = String(this.state.fireplace);
     data.villaGaming = String(this.state.gaming);
     data.villaFed = String(this.time < this.state.fedUntil);
+    data.villaFaucet = this.state.faucetOn ? 'on' : 'off';
+    data.villaTea = this.time < (this.state.teaUntil ?? 0) ? 'brewing' : this.state.teaUntil ? 'ready' : 'idle';
+    data.villaPets = JSON.stringify(this.state.pets.pets.map(({ kind, x, y, z, mode, feedCount, cooldown }) => ({
+      kind, x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3), mode, feedCount, cooldown: +cooldown.toFixed(2),
+    })));
     data.villaSeat = this.state.seated ?? 'none';
     data.villaCarDoor = this.state.carDoorOpen ? 'open' : 'closed';
     data.villaScreenSource = this.state.screenSource;
@@ -523,8 +545,23 @@ export class VillaGame extends BaseGame {
       this.scene?.updateActivities(this.time, this.state); this.publishState(); return;
     }
     if (this.state.seated === 'racing') { this.leaveSeat(); this.publishState(); return; }
-    if (!hotspot) { this.message(zh ? '走近可互动的家具、车门或驾驶座，再按 E。' : 'Walk closer to a furnishing, driver door or simulator seat, then press E.'); return; }
+    if (!hotspot) { this.message(zh ? '走近家具、水龙头、小动物或驾驶座，再按 E。' : 'Walk closer to a furnishing, tap, pet or driving seat, then press E.'); return; }
+    const pet = this.state.pets.pets.find(p => `pet-${p.kind}` === hotspot.id);
+    if (pet) {
+      const labels = VILLA_PET_LABELS[pet.kind], name = zh ? labels.zh : labels.en;
+      if (feedVillaPet(this.state.pets, pet.kind)) this.message(zh ? `给${name}添了${labels.foodZh}。` : `${name} has some ${labels.foodEn.toLowerCase()}.`);
+      else this.message(zh ? (pet.cooldown > 0 ? `${name}吃饱了，先歇一会儿。` : '再靠近一点，等它停稳。')
+        : (pet.cooldown > 0 ? `${name} is full. Let it rest a little.` : 'Come a little closer and let it settle.'));
+      this.scene?.updatePets(this.time, this.state.pets); this.publishState(); return;
+    }
     switch (hotspot.id) {
+      case 'tea-bar':
+        if (this.time < (this.state.teaUntil ?? 0)) this.message(zh ? '茶正在慢慢泡着，稍等片刻。' : 'The tea is steeping. Take a quiet moment.');
+        else { this.state.teaUntil = this.time + VILLA_TEA_BAR.duration; this.message(zh ? '开始泡茶了，慢慢享受这一刻。' : 'Brewing a fresh pot of tea. Enjoy a little pause.'); }
+        break;
+      case 'faucet':
+        this.state.faucetOn = !this.state.faucetOn;
+        this.message(zh ? (this.state.faucetOn ? '水龙头打开了，清水流入水槽。' : '水龙头关好了。') : (this.state.faucetOn ? 'Fresh water is flowing into the sink.' : 'The tap is off.')); break;
       case 'snooker': {
         const from = this.view(); this.state.snookerActive = true; this.motion = createVillaMotion();
         this.transition = { from, at: this.time }; this.clearInput();
@@ -810,8 +847,9 @@ export class VillaGame extends BaseGame {
       media: { ...VILLA_RACING.screen }, snooker: { ...VILLA_SNOOKER.center, y: VILLA_SNOOKER.height + .15 },
       fireplace: { x: -10, y: 1.35, z: .78 }, aquarium: { x: -3.5, y: 1.5, z: 1.1 },
       elevator: { x: 0, y: target.y + 1.45, z: VILLA_ELEVATOR.frontZ + .06 },
+      faucet: { ...VILLA_FAUCET.outlet, y: 1.4 }, 'tea-bar': VILLA_TEA_BAR.anchor,
     };
-    const anchor = anchors[target.id] ?? { x: target.x, y: target.y + 1.4, z: target.z };
+    const anchor = anchors[target.id] ?? { x: target.x, y: target.y + (target.id.startsWith('pet-') ? .88 : 1.4), z: target.z };
     anchor.y = Math.min(anchor.y, target.y + villaEyeHeight(this.motion) + .2);
     const point = this.scene.projectInteraction(anchor, this.width, this.height);
     if (!point) { this.canvas.dataset.villaPrompt = ''; return; }
@@ -866,6 +904,14 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = '#37505a'; ctx.font = `${12 * s}px ${UI_FONT}`; ctx.fillText(zh ? '泳池' : 'Pool', mx(-18.25), mz(0), 7 * scale);
       ctx.fillStyle = '#e9dfcb'; ctx.fillRect(mx(-1.7), mz(9), 3.4 * scale, 14 * scale);
       ctx.fillStyle = '#85897d'; ctx.fillRect(mx(13), mz(10), 6 * scale, (grounds ? 16 : 14) * scale);
+      for (const bed of VILLA_VEGETABLE_BEDS) {
+        ctx.fillStyle = '#75634c'; ctx.fillRect(mx(bed.x - bed.w / 2), mz(bed.z - bed.d / 2), bed.w * scale, bed.d * scale);
+        ctx.fillStyle = '#a4b475'; ctx.fillRect(mx(bed.x - bed.w / 2) + 1, mz(bed.z - bed.d / 2) + 1, Math.max(1, bed.w * scale - 2), Math.max(1, bed.d * scale - 2));
+      }
+      ctx.fillStyle = dark ? '#f3e7c4' : '#3c4b3e'; ctx.textAlign = 'center'; ctx.font = `${this.touchMode ? 10 * s : 12}px ${UI_FONT}`;
+      ctx.fillText(zh ? '小伙伴' : 'Pets', mx(-17), mz(13.8), 9 * scale);
+      ctx.fillText(zh ? '菜地' : 'Veg beds', mx(-7.9), mz(16), 7 * scale);
+      for (const pet of this.state.pets.pets) { ctx.fillStyle = '#ead9a8'; ctx.beginPath(); ctx.arc(mx(pet.x), mz(pet.z), 2.5, 0, Math.PI * 2); ctx.fill(); }
       if (grounds) {
         ctx.fillStyle = '#586366'; ctx.fillRect(mx(-10), mz(25), 34 * scale, 28 * scale);
         ctx.strokeStyle = '#f4e4a3'; ctx.lineWidth = 1;
@@ -913,13 +959,13 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), p = this.panel(ctx, zh ? '慢慢走，像在自己家一样' : 'Make yourself at home');
     const rows = zh ? [
       ['W A S D', '行走；Shift 跑步；↑↓ 行走，←→ 转向'], ['鼠标 / Esc', '移动自动环顾；Esc 释放光标，点击画面恢复'],
-      ['C / 空格', '蹲下或站起 / 跳跃；头顶空间不足时不会强行站起'], ['E / Q', '互动、入座、离开 / 车门与大屏信号'],
+      ['C / 空格', '蹲下或站起 / 跳跃；头顶空间不足时不会强行站起'], ['E / Q', '互动、投喂、泡茶、水龙头、入座 / 车门与信号'],
       ['驾驶 / 赛车', 'W/S 前进倒车或制动，A/D 转向，空格刹车；R 复位'], ['斯诺克', '鼠标或←→瞄准，↑↓力度，空格击球，R重摆，E离开'],
       ['楼梯 / 电梯', 'E 呼叫电梯，进入后 1/2/3 选层；无人四秒后关门'], ['I 沉浸', '仅保留当前位置；手机点左上位置信息恢复按钮'],
       ['M / T / H', '导览图 / 日光黄昏 / 回到门口并停住车辆'], ['手机 / 平板', '左杆行走或驾驶，右侧环顾；情景按钮蹲跳、刹车、击球'],
     ] : [
       ['W A S D', 'Walk; Shift runs. Up/down walks, left/right turns.'], ['Mouse / Esc', 'Move to look. Esc frees cursor; click scene to resume.'],
-      ['C / Space', 'Crouch or stand / jump, subject to head clearance.'], ['E / Q', 'Interact, sit, leave / car door and screen input.'],
+      ['C / Space', 'Crouch or stand / jump, subject to head clearance.'], ['E / Q', 'Interact, feed, tap, seats / car door and screen input.'],
       ['Drive / race', 'W/S throttle/reverse or brake; A/D steer; Space brake; R reset.'], ['Snooker', 'Mouse/←→ aim; ↑↓ power; Space shoot; R rack; E leave.'],
       ['Stairs / Lift', 'E calls lift; 1/2/3 inside. Empty doors close after four seconds.'], ['I immersive', 'Location-only HUD; touch the location to restore controls.'],
       ['M / T / H', 'Floor plan / daylight or sunset / return home and stop car.'], ['Touch', 'Left stick walks/drives; right looks; action buttons depend on activity.'],

@@ -512,7 +512,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['C'], action: 'Crouch / stand', actionZh: '蹲下 / 站起' },
         { keys: ['Space'], action: 'Jump / brake / shoot', actionZh: '跳跃 / 刹车 / 击球' },
         { keys: ['Esc'], action: 'Free cursor', actionZh: '释放光标' },
-        { keys: ['E'], action: 'Interact / sit / exit', actionZh: '互动 / 入座 / 起身' },
+        { keys: ['E'], action: 'Interact / feed / sit', actionZh: '互动 / 投喂 / 入座' },
         { keys: ['Q'], action: 'Door / screen input', actionZh: '车门 / 大屏信号' },
         { keys: ['1', '2', '3'], action: 'Elevator floor', actionZh: '电梯选层' },
         { keys: ['I', 'M'], action: 'Immersive / floor plan', actionZh: '沉浸 / 导览图' },

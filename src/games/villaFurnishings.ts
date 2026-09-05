@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VILLA_SNOOKER } from './villaActivities.js';
+import { createVillaFaucet } from './villaFaucet.js';
+import { createVillaBedroom } from './villaBedroom.js';
+import { createVillaTeaBar } from './villaTeaBar.js';
 import type { VillaCollider } from './villaWorld.js';
 
 export interface VillaFurnishingState {
@@ -10,6 +13,8 @@ export interface VillaFurnishingState {
   gaming: boolean;
   /** Expiry uses the same elapsed-seconds clock as update(). */
   fedUntil: number;
+  faucetOn?: boolean;
+  teaUntil?: number;
 }
 
 /** Procedural, scene-owned furnishings. The host disposes geometry/material/maps by traversal. */
@@ -253,7 +258,9 @@ export function furnishVilla(scene: THREE.Scene): {
   cyl(-5.67, 0.919, -8.35, 0.043, 0.043, 0.007, dark);
   cyl(-5.67, 1.18, -8.77, 0.023, 0.023, 0.36, steel);
   put(new THREE.TorusGeometry(0.135, 0.023, 7, 16, Math.PI), steel, -5.67, 1.355, -8.635, 0, Math.PI / 2);
-  cyl(-5.67, 1.31, -8.5, 0.024, 0.024, 0.09, steel); box(-5.52, 1.06, -8.77, 0.14, 0.025, 0.035, steel);
+  cyl(-5.67, 1.31, -8.5, 0.024, 0.024, 0.09, steel);
+  const faucet = createVillaFaucet(root);
+  const teaBar = createVillaTeaBar(root); colliders.push(...teaBar.colliders);
   // Cookware: pot with lid/handles, kettle, chopping board and safe knife block.
   cyl(-8.38, 1.125, -8.53, 0.135, 0.12, 0.21, steel); cyl(-8.38, 1.239, -8.53, 0.145, 0.145, 0.025, steel); orb(-8.38, 1.275, -8.53, 0.037, 0.027, 0.037, black);
   for (const x of [-8.56, -8.2]) box(x, 1.17, -8.53, 0.09, 0.035, 0.075, black, 0.01);
@@ -353,10 +360,8 @@ export function furnishVilla(scene: THREE.Scene): {
 
   // First floor bedrooms and library.
   bed(-8, 3.6, 5.5, 0); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
-  at(-11.1, 3.6, 2.05, Math.PI / 2, () => {
-    box(0, 1.34, 0, 2.2, 2.68, 0.78, oak); for (const x of [-0.55, 0.55]) { box(x, 1.36, 0.405, 1.05, 2.51, 0.04, linen); box(x + (x < 0 ? 0.37 : -0.37), 1.2, 0.455, 0.03, 0.45, 0.04, brass); } hit(0, 0, 0, 2.2, 2.7, 0.88);
-  });
-  at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage)); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-7, 5.65, 0.14, 2.1, 1.2, 0);
+  const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
+  at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage)); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-2.14, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.
   for (const x of [-11.05, -8.97, -5.72, -2.8]) {
     for (let i = 0; i < 4; i++) cyl(x + (i - 1.5) * 0.075, 5.13, 8.72, 0.055, 0.065, 2.77, linen);
@@ -413,13 +418,11 @@ export function furnishVilla(scene: THREE.Scene): {
   cyl(-13, 0.065, 6, 0.42, 0.48, 0.13, stone); cyl(-13, 1.3, 6, 0.037, 0.037, 2.6, walnut); put(new THREE.ConeGeometry(1.65, 0.53, 10, 1, true), linen, -13, 2.63, 6);
   for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; rod(new THREE.Vector3(-13, 2.895, 6), new THREE.Vector3(-13 + Math.cos(a) * 1.65, 2.365, 6 + Math.sin(a) * 1.65), 0.014, oak); }
   for (const x of [-3, 3]) { plant(x, 0, 10.3, 1.25, true); hit(x, 0, 10.3, 0.6, 0.48, 0.6); }
-  function tree(x: number, z: number, s: number) {
-    cyl(x, 1.45 * s, z, 0.14 * s, 0.25 * s, 2.9 * s, walnut);
-    for (let i = 0; i < 5; i++) { const a = i * 2.4, px = x + Math.cos(a) * 0.75 * s, pz = z + Math.sin(a) * 0.75 * s; rod(new THREE.Vector3(x, 1.7 * s, z), new THREE.Vector3(px, (2.6 + i * 0.16) * s, pz), 0.075 * s, walnut); orb(px, (3 + i * 0.13) * s, pz, 1.04 * s, 1.2 * s, 0.95 * s, i % 2 ? leaf : leafLight); } hit(x, 0, z, 0.5 * s, 2.9 * s, 0.5 * s);
-  }
-  for (const [x, z, s] of [[-23.2, -11, 1.25], [-23, 8.2, 1], [-22, 19, 1.25], [-14, 22.8, 1], [8, 23, 1.15], [23.2, 19, 1.2], [23.4, 7, 1], [22.7, -12, 1.2], [-8, -14.5, 1.15], [8, -14.5, 1.1]]) tree(x, z, s);
+  // The same ten perimeter tree sites are now planted by villaGarden.
   for (let i = 0; i < 28; i++) orb(i < 14 ? -23.35 : 23.35, 0.49, -12 + (i % 14) * 2.45, 0.72, 0.55 + random() * 0.25, 0.82, i % 3 ? leaf : leafLight);
   for (const [x, z] of [[-9, 11], [-10.5, 16], [7, 11], [8.5, 18], [-19, 8]]) { plant(x, 0, z, 1, true); plant(x + 0.8, 0, z + 0.3, 0.65, true); }
+  // These two existing pots share the pets' lawn: preserve their solid footprints.
+  hit(-10.5, 0, 16, .5, .39, .5); hit(-9.7, 0, 16.3, .325, .2535, .325);
 
   // Static geometry is merged per material, not per chair/slat/book/leaf.
   let staticVertices = 0;
@@ -433,6 +436,7 @@ export function furnishVilla(scene: THREE.Scene): {
   let previousTime = 0, foodBlend = 0;
   const update = (time: number, state: VillaFurnishingState) => {
     const t = Number.isFinite(time) ? Math.max(0, time) : 0, feeding = t < state.fedUntil;
+    faucet.update(t, !!state.faucetOn); teaBar.update(t, t < (state.teaUntil ?? 0));
     const dt = Math.min(0.25, Math.max(0, t - previousTime)); previousTime = t;
     foodBlend += ((feeding ? 1 : 0) - foodBlend) * (1 - Math.exp(-dt * 2.4));
     fish.forEach((f, i) => {
