@@ -52,7 +52,7 @@ export interface GachaItem {
 
 export const GACHA_TIERS: GachaTier[] = [
   {
-    id: 'milspec', name: 'Mil-Spec', nameZh: '军规',
+    id: 'milspec', name: 'Mil-Spec Grade', nameZh: '军规级',
     color: '#4B69FF', glow: 'rgba(75,105,255,0.55)',
     odds: 0.7992,
   },
@@ -72,7 +72,7 @@ export const GACHA_TIERS: GachaTier[] = [
     odds: 0.0064,
   },
   {
-    id: 'rarespecial', name: 'Rare Special', nameZh: '稀有特殊',
+    id: 'rarespecial', name: 'Rare Special', nameZh: '罕见特殊',
     color: '#E4AE39', glow: 'rgba(228,174,57,0.75)',
     odds: 0.0026,
   },

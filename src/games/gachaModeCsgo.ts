@@ -318,18 +318,17 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.lineTo(cx + this.cardW / 2 + 18, cy + 8);
     ctx.fill();
 
-    // Current-cell readout: what the winning slot holds right now.
+    // Current-cell readout: what the winning slot holds right now. Tier is
+    // carried by color alone — no rarity text during the spin.
     const current = this.centerCard();
     const tier = current.tier;
     const name = this.ctx.zh ? current.item.nameZh : current.item.name;
-    const tierName = this.ctx.zh ? tier.nameZh : tier.name;
-    const label = `${name} · ${tierName}`;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = tier.color;
-    ctx.fillText(label, cx, this.readoutY + 8);
+    ctx.fillText(name, cx, this.readoutY + 8);
   }
 
   /* ─── Card face sprites ─── */

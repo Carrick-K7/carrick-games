@@ -1019,42 +1019,6 @@ export class GachaGame extends BaseGame {
     return sprite;
   }
 
-  private drawTierStrip(ctx: CanvasRenderingContext2D, p: GachaPalette, x: number, y: number, w: number, h: number) {
-    const zh = this.isZhLang();
-    const gap = 8;
-    const segW = (w - gap * (GACHA_TIERS.length - 1)) / GACHA_TIERS.length;
-
-    for (let i = 0; i < GACHA_TIERS.length; i++) {
-      const tier = GACHA_TIERS[i];
-      const sx = x + i * (segW + gap);
-
-      // Glass cell with a soft vertical falloff
-      const cell = ctx.createLinearGradient(0, y, 0, y + h);
-      cell.addColorStop(0, p.cardFillTop);
-      cell.addColorStop(1, p.cardFillBottom);
-      ctx.fillStyle = cell;
-      roundRectPath(ctx, sx, y, segW, h, 10);
-      ctx.fill();
-      ctx.strokeStyle = p.panelBorderSoft;
-      ctx.lineWidth = 1;
-      roundRectPath(ctx, sx, y, segW, h, 10);
-      ctx.stroke();
-
-      // Rarity underline with a soft glow
-      ctx.fillStyle = tier.color;
-      ctx.globalAlpha = 0.85;
-      roundRectPath(ctx, sx + segW / 2 - 14, y, 28, 2.5, 1.2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      drawGlow(ctx, sx + segW / 2, y + 2, 16, tier.color, this.isDarkTheme() ? 0.35 : 0.2);
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = p.text;
-      ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(zh ? tier.nameZh : tier.name, sx + segW / 2, y + h / 2);
-    }
-  }
 
   /* ─── Unlock prelude ─── */
 
@@ -1237,7 +1201,6 @@ export class GachaGame extends BaseGame {
     const dark = this.isDarkTheme();
     const tier = this.roll.tier;
     const item = this.roll.item;
-    const owned = this.stats.itemCounts[item.id] ?? 0;
     const cx = this.width / 2;
     const topTier = tier.id === 'covert' || tier.id === 'rarespecial';
 
@@ -1269,13 +1232,7 @@ export class GachaGame extends BaseGame {
       drawGlow(ctx, cx, cardCy, cw * 0.72, tier.color, (dark ? 0.3 : 0.2) * beamA);
     }
 
-    // Tier kicker — letter-spaced rarity name; odds are never shown,
-    // the color and name carry the prestige.
-    ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = tier.color;
-    fillSpacedText(ctx, (zh ? tier.nameZh : tier.name).toUpperCase(), cx, 28, 3);
-
+    // No tier kicker: the frame, ring, and glow colors carry the prestige.
     // Rotating segmented rarity ring behind the card, with cardinal ticks
     const ringR = Math.max(cw, chh) * 0.62;
     ctx.save();
@@ -1361,46 +1318,15 @@ export class GachaGame extends BaseGame {
       ctx.restore();
     }
 
-    // Content — the weapon's real inventory render on a blueprint panel
-    // that is as wide as the gun itself. Silhouette stands in while the
-    // texture streams in.
+    // Content — the weapon's real inventory render floating on clean glass;
+    // no blueprint grid or guides: the rarity glow alone frames it.
+    // Silhouette stands in while the texture streams in.
     const iconId = item.icon ?? item.kind;
     const panelX = -cw / 2 + 16;
     const panelY = -chh / 2 + 16;
     const panelW = cw - 32;
     const panelH = chh * 0.52;
     const iconCy = panelY + panelH / 2;
-
-    // Blueprint panel behind the weapon: hairline grid + center crosshair
-    ctx.save();
-    roundRectPath(ctx, panelX, panelY, panelW, panelH, 14);
-    ctx.clip();
-    ctx.fillStyle = dark ? 'rgba(255,255,255,0.025)' : 'rgba(2,132,199,0.045)';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.05)' : 'rgba(2,132,199,0.09)';
-    ctx.lineWidth = 1;
-    for (let gx = panelX; gx <= panelX + panelW; gx += 20) {
-      ctx.beginPath();
-      ctx.moveTo(gx, panelY);
-      ctx.lineTo(gx, panelY + panelH);
-      ctx.stroke();
-    }
-    for (let gy = panelY; gy <= panelY + panelH; gy += 20) {
-      ctx.beginPath();
-      ctx.moveTo(panelX, gy);
-      ctx.lineTo(panelX + panelW, gy);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = withAlpha(tier.color, 0.4);
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(panelX, iconCy);
-    ctx.lineTo(panelX + panelW, iconCy);
-    ctx.moveTo(0, panelY);
-    ctx.lineTo(0, panelY + panelH);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
 
     ctx.save();
     ctx.shadowColor = tier.color;
@@ -1410,11 +1336,12 @@ export class GachaGame extends BaseGame {
     });
     ctx.restore();
 
-    // Caption block vertically centered in the space under the panel.
+    // Caption block vertically centered in the space under the weapon:
+    // item name only — tier text is never shown, color carries the prestige.
     const restTop = panelY + panelH;
     const restH = chh / 2 - 16 - restTop;
     const hasSub = item.name !== item.nameZh;
-    const nameY = restTop + restH / 2 - (hasSub ? 18 : 6);
+    const nameY = restTop + restH / 2 - (hasSub ? 12 : 0);
     ctx.textAlign = 'center';
     ctx.font = '600 21px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.text;
@@ -1424,11 +1351,8 @@ export class GachaGame extends BaseGame {
     if (hasSub) {
       ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textDim;
-      ctx.fillText(truncate(item.name, 30), 0, nameY + 24);
+      ctx.fillText(truncate(item.name, 30), 0, nameY + 26);
     }
-    ctx.fillStyle = tier.color;
-    ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
-    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, nameY + (hasSub ? 50 : 30));
 
     // Diagonal shine sweep across the card, looping with a rest period
     const sweepT = (this.revealT - 0.4) % 3.6;
@@ -1553,9 +1477,9 @@ export class GachaGame extends BaseGame {
         roundRectPath(ctx, row.x + row.w / 2 - 14, row.y + 5, 28, 2.5, 1.25);
         ctx.fill();
         ctx.textAlign = 'center';
-        ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.fillStyle = selected ? tier.color : p.text;
-        ctx.fillText(zh ? tier.nameZh : tier.name, row.x + row.w / 2, row.y + 21);
+        ctx.fillText(truncate(zh ? tier.nameZh : tier.name, zh ? 4 : 9), row.x + row.w / 2, row.y + 21);
         ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
         ctx.fillStyle = ownedCount > 0 ? tier.color : p.textFaint;
         ctx.fillText(`${ownedCount}/${items.length}`, row.x + row.w / 2, row.y + 36);
@@ -2107,19 +2031,6 @@ function drawBg(ctx: CanvasRenderingContext2D, width: number, height: number, p:
   ambient.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = ambient;
   ctx.fillRect(0, 0, width, height);
-}
-
-/** Centered letter-spaced text (canvas has no letter-spacing). */
-function fillSpacedText(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, spacing: number) {
-  const chars = [...text];
-  const widths = chars.map((ch) => ctx.measureText(ch).width);
-  const total = widths.reduce((acc, w) => acc + w, 0) + spacing * (chars.length - 1);
-  let x = cx - total / 2;
-  ctx.textAlign = 'left';
-  for (let i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], x, y);
-    x += widths[i] + spacing;
-  }
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
