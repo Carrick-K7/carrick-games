@@ -69,7 +69,6 @@ test.describe('responsive shell design contracts', () => {
             await expect(page.locator('#keyboardPanel')).toBeHidden();
             await touchTarget(page.locator('#gamePickerBtn'));
             await touchTarget(page.locator('#overflowBtn'));
-            await touchTarget(page.locator('#fullscreenBtn'));
           } else {
             await expect(page.locator('#keyboardPanel')).toBeVisible();
           }
@@ -318,52 +317,6 @@ test.describe('responsive shell design contracts', () => {
     }
   });
 
-  test('fullscreen keeps the start overlay aligned with the displayed canvas and exits cleanly', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await openShell(page);
-    const canvas = page.locator('#gameCanvas');
-    const overlay = page.locator('#startOverlay');
-    const fullscreen = page.locator('#fullscreenBtn');
-    const original = await bounds(canvas);
-    await fullscreen.focus();
-    await fullscreen.click();
-    await expect(page.locator('#canvasWrapper')).toHaveClass(/fullscreen/);
-    await expect(fullscreen).toHaveAccessibleName('Exit fullscreen');
-    await expect.poll(async () => {
-      const box = await bounds(canvas);
-      return Math.abs(box.x + box.width / 2 - 640) + Math.abs(box.y + box.height / 2 - 400);
-    }).toBeLessThanOrEqual(3);
-    // Poll the overlay-to-canvas alignment: under CI load the fit reflow
-    // lands on a later animation frame, so a single snapshot can catch the
-    // overlay mid-refit even though the settled state always aligns.
-    const displayed = await bounds(canvas);
-    await expect.poll(async () => {
-      const start = await bounds(overlay);
-      const now = await bounds(canvas);
-      return Math.max(
-        Math.abs(start.x - now.x),
-        Math.abs(start.y - now.y),
-        Math.abs(start.width - now.width),
-        Math.abs(start.height - now.height),
-      );
-    }).toBeLessThanOrEqual(2);
-    expect(displayed.x).toBeGreaterThanOrEqual(0);
-    expect(displayed.y).toBeGreaterThanOrEqual(0);
-    expect(displayed.x + displayed.width).toBeLessThanOrEqual(1281);
-    expect(displayed.y + displayed.height).toBeLessThanOrEqual(801);
-    await noHorizontalOverflow(page);
-    // The palette must layer above the fullscreen stage, not be obscured by it.
-    await page.keyboard.press('Control+k');
-    await expect(page.locator('#searchInput')).toBeFocused();
-    await page.locator('#libraryCloseBtn').click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await expect(page.locator('#canvasWrapper')).toHaveClass(/fullscreen/);
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#canvasWrapper')).not.toHaveClass(/fullscreen/);
-    await expect(fullscreen).toHaveAccessibleName('Fullscreen');
-    await expect.poll(async () => Math.abs((await bounds(canvas)).width - original.width)).toBeLessThanOrEqual(2);
-    await expect(overlay).toBeVisible();
-  });
 
   for (const game of [
     { id: 'snake', name: 'Snake' },

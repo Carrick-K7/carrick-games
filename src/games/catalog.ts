@@ -28,8 +28,6 @@ export interface GameMeta {
     touch?: { icon: 'tap' | 'swipe' | 'swipe-up' | 'swipe-down' | 'swipe-left' | 'swipe-right' | 'hold'; action: string; actionZh: string }[];
   };
   canvasSize: { width: number; height: number };
-  /** Games can opt out of the shell fullscreen control. Defaults to true. */
-  fullscreen?: boolean;
 }
 
 export const GAMES: GameMeta[] = [

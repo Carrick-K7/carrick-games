@@ -480,24 +480,12 @@ export async function prepareGame(name: string) {
   updateActionButton();
   updateGameTitle();
   renderControls();
-  updateFullscreenToggle(meta);
   setStartOverlay(true);
   lastFittedCanvasWidth = 0;
   requestAnimationFrame(fitGameCanvas);
 }
 
-/** Some games opt out of the shell fullscreen control (e.g. kiosk-style UX). */
-function updateFullscreenToggle(meta: GameMeta) {
-  const btn = document.getElementById('fullscreenBtn');
-  if (!btn) return;
-  // Inline style: .icon-btn's display:flex would otherwise override [hidden].
-  // On coarse-pointer devices (phones/tablets) fullscreen is meaningless.
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  btn.style.display = meta.fullscreen === false || coarse ? 'none' : '';
-}
-
-/**
- * Fit the game canvas to the available stage space. Wide fine-pointer layouts
+/** Fit the game canvas to the available stage space. Wide fine-pointer layouts
  * reserve quiet side rails for contextual controls; compact layouts keep the
  * controls below. Height remains inside the first viewport. The backing store is re-sized by
  * `setDisplayScale`, so the upscaled picture stays sharp.
@@ -508,7 +496,6 @@ function fitGameCanvas() {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
   const wrapper = document.getElementById('canvasWrapper');
   if (!canvas || !wrapper || !currentGameInstance) return;
-  const fullscreen = wrapper.classList.contains('fullscreen');
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (!meta) return;
   const { width: lw, height: lh } = meta.canvasSize;
@@ -519,8 +506,7 @@ function fitGameCanvas() {
   const gap = parseFloat(getComputedStyle(stage).columnGap) || 0;
   // Match the CSS's two 180px minimum gutters, rather than estimating a
   // reserve that can overflow near the desktop breakpoint.
-  const colW = fullscreen ? window.innerWidth - 40
-    : useSideRails ? stage.clientWidth - 360 - gap * 2 : wrapper.clientWidth;
+  const colW = useSideRails ? stage.clientWidth - 360 - gap * 2 : wrapper.clientWidth;
   if (colW <= 0) return;
   const main = document.querySelector('main');
   const mainStyle = main ? getComputedStyle(main) : null;
@@ -531,10 +517,10 @@ function fitGameCanvas() {
     .reduce((height, child) => height + (child as HTMLElement).offsetHeight + gap, 0);
   // Measure the viewport, not the vertically centered wrapper's top; the
   // latter creates a resize feedback loop on phones and short windows.
-  const availH = fullscreen ? window.innerHeight - 40 : window.innerHeight - headerH - padding - extras - 2;
+  const availH = window.innerHeight - headerH - padding - extras - 2;
   const cssW = Math.floor(Math.max(1, Math.min(colW, availH / aspect, lw * 2.5)));
   const cssWidth = `${cssW}px`;
-  if (!fullscreen) stage.style.setProperty('--canvas-css-width', cssWidth);
+  stage.style.setProperty('--canvas-css-width', cssWidth);
   wrapper.style.setProperty('--canvas-css-width', cssWidth);
   if (cssW !== lastFittedCanvasWidth) {
     lastFittedCanvasWidth = cssW;
@@ -725,7 +711,6 @@ function setLang(lang: 'en' | 'zh') {
     const labels = lang === 'zh' ? { light: '浅色', dark: '深色', system: '跟随系统' } : { light: 'Light', dark: 'Dark', system: 'System' };
     button.textContent = labels[button.dataset.set as keyof typeof labels];
   });
-  updateFullscreenLabel();
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
     b.classList.toggle('active', target === lang);
@@ -783,31 +768,6 @@ window.addEventListener('blur', () => {
   pressedKeys.clear();
   updateVirtualKeyboardHighlight(pressedKeys);
 });
-
-function updateFullscreenLabel() {
-  const fullscreen = document.getElementById('canvasWrapper')?.classList.contains('fullscreen');
-  const label = isZhLang() ? (fullscreen ? '退出全屏' : '全屏') : (fullscreen ? 'Exit fullscreen' : 'Fullscreen');
-  const button = document.getElementById('fullscreenBtn');
-  button?.setAttribute('title', label);
-  button?.setAttribute('aria-label', label);
-}
-
-// Fullscreen toggle
-function toggleFullscreen() {
-  const wrapper = document.getElementById('canvasWrapper');
-  if (!wrapper) return;
-  wrapper.classList.toggle('fullscreen');
-  const isFullscreen = wrapper.classList.contains('fullscreen');
-  const btn = document.getElementById('fullscreenBtn');
-  if (btn) {
-    updateFullscreenLabel();
-    btn.innerHTML = isFullscreen
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
-  }
-  lastFittedCanvasWidth = 0;
-  requestAnimationFrame(fitGameCanvas);
-}
 
 // Refit the canvas whenever the centered stage changes size (window resize or
 // responsive breakpoint switches). Debounced via rAF.
@@ -904,9 +864,6 @@ const canvasFitObserver = new ResizeObserver(() => {
       event.stopPropagation();
       setOverflowOpen(false);
       document.getElementById('overflowBtn')?.focus();
-    } else if (event.key === 'Escape' && document.getElementById('canvasWrapper')?.classList.contains('fullscreen')) {
-      event.stopPropagation();
-      toggleFullscreen();
     } else if ((event.target instanceof Element && event.target.closest('.header-actions'))) {
       event.stopPropagation();
     }
@@ -993,12 +950,6 @@ const canvasFitObserver = new ResizeObserver(() => {
       setOverflowOpen(false);
       startDemoForCurrentGame();
     });
-  }
-
-  // Fullscreen button
-  const fsBtn = document.getElementById('fullscreenBtn');
-  if (fsBtn) {
-    fsBtn.addEventListener('click', toggleFullscreen);
   }
 
   const retryLoadBtn = document.getElementById('retryLoadBtn');
