@@ -5,15 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Carrick Games</title>
   <meta name="description" content="A little space to play. Discover 26 thoughtfully crafted browser games at Carrick Games. 简单好玩的在线游戏，随时开始。">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23202723'/%3E%3Cpath d='M18 8.5h-6a5.5 5.5 0 0 0 0 11h6M18 12v4m-2-2h4' fill='none' stroke='%23f6f7f5' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%230d9488' d='M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/src/styles/app.css">
 </head>
 <body>
   <header class="app-header">
-    <span class="wordmark">
-      <svg class="brand-mark" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="currentColor"/><path d="M18 8.5h-6a5.5 5.5 0 0 0 0 11h6M18 12v4m-2-2h4" stroke="var(--page)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Carrick<span class="wordmark-secondary"> Games</span></span>
-    </span>
+    <span class="wordmark">Carrick<span class="wordmark-secondary"> Games</span></span>
     <button class="game-picker-trigger" id="gamePickerBtn" type="button" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" aria-keyshortcuts="Control+k Meta+k">
       <svg class="picker-grid" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg>
       <span class="selected-game-label" id="selectedGameLabel">Select a game</span>
@@ -48,21 +45,21 @@
 
   <div class="game-library" id="gameLibrary" aria-hidden="true">
     <button class="library-backdrop" type="button" data-library-close aria-label="Close game library"></button>
-    <section class="library-dialog" role="dialog" aria-modal="true" aria-labelledby="libraryHeadingTitle">
+    <section class="library-dialog" role="dialog" aria-modal="true" aria-labelledby="libraryHeadingTitle" tabindex="-1">
       <div class="library-dialog-header">
-        <div>
+        <div class="library-title">
           <h1 id="libraryHeadingTitle">Games</h1>
           <p id="librarySummary">Choose what to play.</p>
         </div>
+        <label class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="M21 21l-4.35-4.35"></path>
+          </svg>
+          <input type="search" id="searchInput" aria-label="Search games / 搜索游戏" placeholder="Search games" autocomplete="off" spellcheck="false" aria-controls="gameList">
+        </label>
         <button class="dialog-close" id="libraryCloseBtn" type="button" aria-label="Close"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       </div>
-      <label class="search-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7"></circle>
-          <path d="M21 21l-4.35-4.35"></path>
-        </svg>
-        <input type="search" id="searchInput" aria-label="Search games / 搜索游戏" placeholder="Search games" autocomplete="off" spellcheck="false" aria-controls="gameList">
-      </label>
       <div class="game-list" id="gameList"></div>
       <footer class="library-footer">
         <span class="library-result-count" id="libraryResultCount" role="status" aria-live="polite" aria-atomic="true"></span>

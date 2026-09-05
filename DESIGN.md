@@ -40,16 +40,19 @@ The current game name is always visible in the header and is the game-switch tri
 The picker:
 
 - opens only on demand from the current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop trigger;
-- uses a 600px-wide desktop dialog, capped at `min(760px, calc(100dvh - 64px))`, with a 24px heading, concise supporting line, and 46px search field;
-- puts search first and matches both English and Chinese names and descriptions;
-- uses simple 12px text group headings with subdued result counts rather than colored category pills;
-- presents one flat, at least 62px row per game: a 36px monochrome icon tile with 24px line artwork, a 14px game name, a 12px description, and a reserved status column;
+- shows all 26 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
+- uses a desktop dialog up to 1040px wide, with the heading, search, and close action in one compact toolbar;
+- matches both English and Chinese names and descriptions; descriptions remain available to assistive technology and search but do not occupy visible rows;
+- lays out four category columns on desktop, with simple 12px group headings and subdued counts, rather than colored category pills;
+- uses compact 40–44px game buttons with 22px monochrome line icons and complete, wrapping 13px names; do not truncate names;
+- uses a three-column, text-first grid on phones and a five-column grid on short landscape screens; visually hide group headings and icons in these compact layouts, while keeping semantic grouping;
+- focuses the dialog rather than search on coarse pointers so opening the picker does not summon a software keyboard and obscure the choices; desktop retains search autofocus;
 - marks the selected game with an inset accent line and tick, not color alone; an arrow appears on unselected rows on hover/focus;
 - supports Arrow Up/Down navigation through results, Enter to select, Escape/backdrop/close-button dismissal, focus trapping, and focus restoration to the opener;
 - closes immediately after selection, without changing the current game simply by moving keyboard focus;
 - shows a polite live result count in a hairline-separated footer, alongside compact desktop keyboard hints; keep the count but hide keyboard hints on mobile/coarse pointers;
 - gives an empty search a clear heading and helpful secondary line;
-- uses a bottom sheet with a small visual handle on mobile; the handle is decorative, not a promise of drag-to-dismiss behavior;
+- uses a bottom sheet on mobile, with only the toolbar, choices, and a compact count; short landscape hides the footer to preserve 40px targets;
 - may preload a game on pointer or focus intent, but must not eagerly fetch every game.
 
 Game names and grouping come from `src/games/catalog.ts`. Do not maintain a second game registry.
@@ -125,10 +128,10 @@ Rules:
 
 Use the system UI stack for the shell and canvases unless a symbol font is necessary.
 
-- Wordmark: 16px semibold with a 28px monochrome brand mark; 14px and 24px on mobile. Keep “Carrick” visible and hide only the secondary “ Games” span on mobile.
+- Preserve the original text-only wordmark: “Carrick Games” at 15px, 650 weight, and -0.015em tracking; mobile shows “Carrick” at 14px. No added monogram or brand icon. Preserve the original teal gamepad favicon.
 - Current game: 14px medium (13px mobile), with truncation for long names.
-- Dialog heading: 24px semibold with tight tracking; support copy: 13px.
-- Game row name: 14px medium; descriptions: 12px; section labels: 12px.
+- Dialog heading: 22px semibold with tight tracking; desktop support copy: 12px.
+- Game button name: 13px medium; section labels: 12px. Keep full names readable, including English two-line labels on phones.
 - Start title: 28–32px desktop, 24px mobile, 600 weight and tight tracking.
 - Avoid uppercase eyebrow labels and decorative display fonts.
 - Keep Chinese and English at equivalent visual weight.
@@ -141,8 +144,9 @@ Use the system UI stack for the shell and canvases unless a symbol font is neces
 - Overflow and close buttons: 40×40px. Settings menu: 264px wide, 12px radius, subtle dividers, 12px section padding, and segmented text theme/language options at least 40px tall.
 - Canvas radius: 8px, 1px bezel, near-flat shadow only.
 - Buttons and fields: 6–8px radius; desktop dialog: 12px; mobile sheet: 16px top corners.
-- Desktop picker header and search side inset: 26px; mobile: 20px. Rows use 12px horizontal padding and 10–12px gaps.
-- Dialog footer preserves bottom safe-area inset. Mobile sheet caps at `min(88dvh, 760px)` and keeps search and footer outside its scrolling result region.
+- Desktop picker side inset: 24px, category gap: 16px, button gap: 4px. Phone grids use 12px side insets and 4px gaps; touch targets remain at least 40px high.
+- The mobile sheet may use `calc(100dvh - 12px)` to fit all games. At heights below 700px, reduce toolbar spacing and buttons to 40px; at short landscape widths of at least 560px, use five columns and hide nonessential copy/footer. Never hide games to force a fit.
+- Preserve footer bottom safe-area inset; retain a scroll fallback if zoom, larger fonts, or an open keyboard makes one-screen fitting impossible.
 - Desktop stage padding: 24px; grid max-width: 1320px. Use natural side gutters of `minmax(180px, 1fr)` with `clamp(24px, 3vw, 48px)` gaps. Canvas fitting must subtract both real computed gaps and both 180px minimum gutters, not assume a percentage of the viewport.
 - Keycaps have a quiet raised fill, 6px radius, and a 2px bottom inset edge; pressed state moves down 1px and uses a crisp accent border. Mouse feedback is a crisp accent, not a glow.
 - Ordinary components have no floating shadow; only menus and dialogs use noticeable elevation.

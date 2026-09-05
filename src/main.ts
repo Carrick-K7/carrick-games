@@ -597,7 +597,12 @@ function setGameLibraryOpen(open: boolean) {
     // Release held movement keys before modal input is isolated.
     releaseHeldInputs();
     renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
-    (document.getElementById('searchInput') as HTMLInputElement | null)?.focus({ preventScroll: true });
+    // Keep the full touch grid visible: focusing search would open the phone's
+    // software keyboard before the player has chosen to type.
+    const focusTarget = window.matchMedia('(pointer: coarse)').matches
+      ? library.querySelector<HTMLElement>('.library-dialog')
+      : document.getElementById('searchInput');
+    focusTarget?.focus({ preventScroll: true });
   } else {
     trigger.focus({ preventScroll: true });
     library.setAttribute('aria-hidden', 'true');
@@ -677,7 +682,8 @@ function renderGameList(filter = '') {
       const group = GAME_GROUPS.find((gr) => gr.id === groupId);
       if (group) {
         const groupCount = filtered.filter((game) => game.group === group.id).length;
-        html += `<div class="game-list-group" data-group="${group.id}">${zh ? group.nameZh : group.name}<span class="game-group-count" data-count="${groupCount}" aria-hidden="true"></span></div>`;
+        if (lastGroup) html += '</div></section>';
+        html += `<section class="game-list-section" aria-labelledby="library-group-${group.id}"><h2 class="game-list-group" id="library-group-${group.id}" data-group="${group.id}">${zh ? group.nameZh : group.name}<span class="game-group-count" data-count="${groupCount}" aria-hidden="true"></span></h2><div class="game-group-games">`;
       }
       lastGroup = groupId;
     }
@@ -693,8 +699,7 @@ function renderGameList(filter = '') {
     `;
   }
 
-  list.innerHTML = html;
-
+  list.innerHTML = `${html}</div></section>`;
 }
 
 function setLang(lang: 'en' | 'zh') {
@@ -879,7 +884,10 @@ const canvasFitObserver = new ResizeObserver(() => {
         const focusable = Array.from(library.querySelectorAll<HTMLElement>('.library-dialog button, .library-dialog input'));
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
+        if (document.activeElement === library.querySelector('.library-dialog')) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
           last?.focus();
         } else if (!event.shiftKey && document.activeElement === last) {
