@@ -338,12 +338,7 @@ export function furnishVilla(scene: THREE.Scene): {
       const a = i * Math.PI / 32, b = (i + 1) * Math.PI / 32;
       rod(new THREE.Vector3(Math.cos(a) * dRadius, h + 0.002, baulkZ + Math.sin(a) * dRadius), new THREE.Vector3(Math.cos(b) * dRadius, h + 0.002, baulkZ + Math.sin(b) * dRadius), 0.0017, chalk);
     }
-    const ballRadius = 0.02625;
-    const redBall = mat('#b51f24', 0.18), ballColors = ['#e9bd26', '#208844', '#714028', '#255bbb', '#e99aa9', '#101113', '#fff9e6'].map(c => mat(c, 0.16));
-    const ball = (x: number, z: number, material: THREE.Material) => put(new THREE.SphereGeometry(ballRadius, 14, 10), material, x, h + ballRadius, z);
-    for (let row = 0; row < 5; row++) for (let col = 0; col <= row; col++) ball((col - row / 2) * 0.0535, -0.975 - row * 0.04634, redBall);
-    ball(dRadius, baulkZ, ballColors[0]); ball(-dRadius, baulkZ, ballColors[1]); ball(0, baulkZ, ballColors[2]);
-    ball(0, 0, ballColors[3]); ball(0, -pl / 4, ballColors[4]); ball(0, -pl / 2 + 0.324, ballColors[5]); ball(-0.12, baulkZ + 0.16, ballColors[6]);
+    // The playable ball set and cue are owned by villaSnookerModel, not baked into this table.
     hit(0, 0, 0, w, 0.92, l);
   });
   // Shallow north-wall cue rack, outside the cue sweep and all through paths.

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { CAR_DOOR_SECONDS, VILLA_CAR, type VillaActivityState } from './villaActivities.js';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
-import type { VillaCollider } from './villaWorld.js';
+import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
+import { registerVillaVehicleColliders, type VillaDrivingState } from './villaDriving.js';
 
 type Point = [number, number, number];
 
@@ -44,7 +45,7 @@ function station(z: number): { width: number; belt: number } {
 
 export function createVillaVehicle(parent: THREE.Object3D): {
   colliders: VillaCollider[];
-  update(time: number, state: VillaActivityState): boolean;
+  update(time: number, state: VillaActivityState & { driving?: VillaDrivingState }): boolean;
   readonly doorProgress: number;
 } {
   const car = new THREE.Group();
@@ -52,6 +53,20 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   car.position.set(VILLA_CAR.center.x, VILLA_CAR.center.y, VILLA_CAR.center.z);
   car.userData = { kind: 'vehicle', style: 'electric-fastback-sedan', forward: '+Z', driverSide: '+X', hollowCabin: true };
   parent.add(car);
+  // A cheap travelling contact shadow grounds the car even beyond the villa's
+  // fixed sun-shadow map (and on software renderers). Never leave a stain at home.
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const shade = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+      shade.addColorStop(0, 'rgba(0,0,0,.65)'); shade.addColorStop(.58, 'rgba(0,0,0,.38)'); shade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shade; ctx.fillRect(0, 0, 64, 64);
+      const texture = new THREE.CanvasTexture(canvas);
+      const contact = new THREE.Mesh(new THREE.PlaneGeometry(2.65, 5.35), new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .68, depthWrite: false, toneMapped: false }));
+      contact.name = 'vehicle-contact-shadow'; contact.rotation.x = -Math.PI / 2; contact.position.y = .032; car.add(contact);
+    }
+  }
 
   const paint = new THREE.MeshPhysicalMaterial({ color: 0xdfe6e7, roughness: 0.25, metalness: 0.22, clearcoat: 1, clearcoatRoughness: 0.16, side: THREE.DoubleSide });
   const dark = villaMaterial(0x171d23, 0.43, 0.12); dark.side = THREE.DoubleSide;
@@ -323,8 +338,28 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   const doorCollider: VillaCollider = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY: 1.46 };
   const localDoorBounds = new THREE.Box3(new THREE.Vector3(-0.155, 0.27, -1.21), new THREE.Vector3(0.011, 1.455, 0.013));
   const worldDoorBounds = new THREE.Box3();
+  const localBodyBounds = new THREE.Box3(new THREE.Vector3(-0.96, 0, -2.36), new THREE.Vector3(0.96, 1.48, 2.36));
+  const worldBodyBounds = new THREE.Box3();
+  registerVillaVehicleColliders([bodyCollider, doorCollider]);
+  const bodyInverse = new THREE.Matrix4(), doorInverse = new THREE.Matrix4();
+  const query = new THREE.Vector3();
+  // World AABBs remain plain legacy snapshots; only the final walking test uses
+  // hinge/body-local rectangles, so their empty rotated corners stay walkable.
+  for (const [collider, bounds, inverse] of [[bodyCollider, localBodyBounds, bodyInverse], [doorCollider, localDoorBounds, doorInverse]] as const) {
+    setVillaColliderNarrowPhase(collider, p => {
+      query.set(p.x, p.y, p.z).applyMatrix4(inverse);
+      const dx = query.x - THREE.MathUtils.clamp(query.x, bounds.min.x, bounds.max.x);
+      const dz = query.z - THREE.MathUtils.clamp(query.z, bounds.min.z, bounds.max.z);
+      return dx * dx + dz * dz < PLAYER_RADIUS * PLAYER_RADIUS;
+    });
+  }
   const updateCollider = () => {
     doorPivot.updateWorldMatrix(true, false);
+    bodyInverse.copy(car.matrixWorld).invert(); doorInverse.copy(doorPivot.matrixWorld).invert();
+    worldBodyBounds.copy(localBodyBounds).applyMatrix4(car.matrixWorld);
+    // Keep legacy spawn values bit-for-bit, including decimal rounding.
+    if (car.position.x === VILLA_CAR.center.x && car.position.z === VILLA_CAR.center.z && car.rotation.y === 0) Object.assign(bodyCollider, VILLA_CAR.body);
+    else Object.assign(bodyCollider, { minX: worldBodyBounds.min.x, maxX: worldBodyBounds.max.x, minZ: worldBodyBounds.min.z, maxZ: worldBodyBounds.max.z, minY: worldBodyBounds.min.y, maxY: worldBodyBounds.max.y });
     worldDoorBounds.copy(localDoorBounds).applyMatrix4(doorPivot.matrixWorld);
     doorCollider.minX = worldDoorBounds.min.x; doorCollider.maxX = worldDoorBounds.max.x;
     doorCollider.minZ = worldDoorBounds.min.z; doorCollider.maxZ = worldDoorBounds.max.z;
@@ -337,20 +372,25 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     get doorProgress() { return progress; },
     update(time, state) {
       if (!Number.isFinite(time)) return false;
+      const pose = state.driving;
+      const x = pose?.x ?? VILLA_CAR.center.x, z = pose?.z ?? VILLA_CAR.center.z, yaw = pose?.yaw ?? 0;
+      const moved = car.position.x !== x || car.position.z !== z || car.rotation.y !== yaw;
+      car.position.set(x, 0, z); car.rotation.y = yaw;
+      if (moved) updateCollider();
       const target = state.carDoorOpen ? 1 : 0;
       if (time === 0 || (previousTime !== undefined && time < previousTime)) {
-        const changed = progress !== target;
+        const changed = moved || progress !== target;
         progress = target; previousTime = time; doorPivot.rotation.y = -1.1 * smooth(progress); updateCollider(); return changed;
       }
       const elapsed = previousTime === undefined ? 0 : Math.max(0, time - previousTime);
       previousTime = time;
-      if (target === progress) return false;
+      if (target === progress) return moved;
       let next = target > progress ? Math.min(1, progress + elapsed / CAR_DOOR_SECONDS) : Math.max(0, progress - elapsed / CAR_DOOR_SECONDS);
       if (Math.abs(next - target) < 1e-9) next = target;
-      if (next === progress) return false;
+      if (next === progress) return moved;
       progress = next;
       const angle = -1.1 * smooth(progress);
-      if (doorPivot.rotation.y === angle) return false;
+      if (doorPivot.rotation.y === angle) return moved;
       doorPivot.rotation.y = angle;
       updateCollider();
       return true;

@@ -5,6 +5,11 @@ import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
 export interface VillaCollider {
   minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number;
 }
+const colliderNarrowPhases = new WeakMap<VillaCollider, (p: VillaPosition, height: number) => boolean>();
+/** Optional precise geometry for moving/rotated props; keeps collider snapshots plain. */
+export function setVillaColliderNarrowPhase(collider: VillaCollider, test: (p: VillaPosition, height: number) => boolean): void {
+  colliderNarrowPhases.set(collider, test);
+}
 export type VillaMaterial = 'plaster' | 'oak' | 'stone' | 'glass' | 'bronze' | 'roof';
 export interface VillaBlock {
   x: number; y: number; z: number; w: number; h: number; d: number;
@@ -189,6 +194,7 @@ function inRect(x: number, z: number, r: { minX: number; maxX: number; minZ: num
 export function villaFloor(y: number): number { return Math.max(0, Math.min(2, Math.floor((y + 0.15) / STOREY))); }
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
+  if (floor === 0 && p.z >= 24) return { id: 'driving-course', name: 'Driving practice course', zh: '试驾练习场' };
   if (villaElevatorShaftContains(p.x, p.z)) return { id: 'elevator', name: 'Elevator', zh: '电梯' };
   if (inRect(p.x, p.z, STAIR_HOLE)) return { id: 'stairs', name: 'Oak staircase', zh: '橡木楼梯' };
   const room = VILLA_ROOMS.find(r => r.floor === floor && inRect(p.x, p.z, r));
@@ -205,14 +211,16 @@ export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: s
  * that would block both ascent and descent precisely at y=3.6. The visible stair
  * construction uses the same thin tread/landing thickness and open underside.
  */
-export function villaSupportAt(x: number, z: number, previousY: number): number | null {
+export function villaSupportAt(x: number, z: number, previousY: number, headHeight = EYE_HEIGHT + 0.1): number | null {
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(previousY)) return null;
-  if (x < -24.5 || x > 24.5 || z < -16.5 || z > 23.5) return null;
+  if (x < -24.5 || x > 27.5 || z < -16.5 || z > 56.5) return null;
   if (inRect(x, z, POOL, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
   const heights: number[] = [0];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {
-    if (inRect(x, z, { minX: -12.1, maxX: 12.1, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) heights.push(y);
+    if (inRect(x, z, { minX: -12.1, maxX: 12.1, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) {
+      heights.push(y); overhead.push({ top: y, thickness: .2 });
+    }
   }
   if (inRect(x, z, { minX: -11.5, maxX: 1.5, minZ: 9, maxZ: 11.5 })) heights.push(STOREY);
   for (const ramp of VILLA_RAMPS) {
@@ -234,19 +242,21 @@ export function villaSupportAt(x: number, z: number, previousY: number): number 
   const support = Math.max(...candidates);
   // Walking under a tall flight is fine, but one's head cannot pass through its
   // low end. The supported tread itself is excluded from the headroom test.
-  if (overhead.some(surface => surface.top > support + 0.24 && surface.top - surface.thickness < support + EYE_HEIGHT + 0.1)) return null;
+  if (overhead.some(surface => surface.top > support + 0.24 && surface.top - surface.thickness < support + headHeight)) return null;
   return support;
 }
-export function villaCollides(p: VillaPosition, colliders: readonly VillaCollider[]): boolean {
+export function villaCollides(p: VillaPosition, colliders: readonly VillaCollider[], height = 1.55): boolean {
   return colliders.some(c => {
-    if (p.y + 1.55 <= c.minY + 0.02 || p.y >= c.maxY - 0.025) return false;
+    if (p.y + height <= c.minY + 0.02 || p.y >= c.maxY - 0.025) return false;
+    const narrow = colliderNarrowPhases.get(c);
+    if (narrow) return narrow(p, height);
     const x = Math.max(c.minX, Math.min(p.x, c.maxX));
     const z = Math.max(c.minZ, Math.min(p.z, c.maxZ));
     return (p.x - x) ** 2 + (p.z - z) ** 2 < PLAYER_RADIUS ** 2;
   });
 }
 /** Substeps prevent tunnelling; split axes slide naturally along walls and furniture. */
-export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number, colliders: readonly VillaCollider[], supportAt = villaSupportAt): VillaPosition {
+export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number, colliders: readonly VillaCollider[], supportAt = villaSupportAt, height = 1.55): VillaPosition {
   const p = { ...position };
   if (!Number.isFinite(dx) || !Number.isFinite(dz)) return p;
   const distance = Math.hypot(dx, dz);
@@ -258,13 +268,13 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
       const support = supportAt(next.x, next.z, p.y);
       if (support == null) continue;
       next.y = support;
-      if (!villaCollides(next, colliders)) Object.assign(p, next);
+      if (!villaCollides(next, colliders, height)) Object.assign(p, next);
     }
   }
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: 0, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
@@ -273,17 +283,19 @@ export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'car', ...VILLA_CAR.door, radius: 1.75, name: 'Open the driver door / take a seat', zh: '打开驾驶位车门 / 入座' },
   { id: 'racing', ...VILLA_RACING.exit, radius: 1.2, name: 'Sit in the simulator', zh: '坐进驾驶模拟器' },
   { id: 'media', x: 7.5, y: 0, z: 8.25, radius: 1.25, name: 'Screen input: PC / PlayStation / Switch', zh: '大屏信号源：PC / PlayStation / Switch' },
-  { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Miku collection · display lights', zh: '初音手办收藏 · 开关柜灯' },
+  { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Original chibi collection · display lights', zh: '原创 Q 版手办 · 开关柜灯' },
+  { id: 'snooker', x: 9.15, y: 0, z: -.95, radius: 1.1, name: 'Play snooker practice', zh: '开始斯诺克练习' },
   { id: 'replicas', x: 10.35, y: 0, z: 4.1, radius: 1.15, name: 'Replica collection · display lights', zh: '仿真武器收藏 · 开关柜灯' },
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
 ];
-export function nearestVillaHotspot(p: VillaPosition): VillaHotspot | null {
+export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;
   let distance = Infinity;
-  for (const h of VILLA_HOTSPOTS) {
+  for (const original of VILLA_HOTSPOTS) {
+    const h = original.id === 'car' && car ? { ...original, ...car.door } : original;
     if (Math.abs(h.y - p.y) > 0.4) continue;
-    if (h.id === 'car' && p.x < VILLA_CAR.body.maxX) continue;
+    if (h.id === 'car' && (car ? !car.driverSide : p.x < VILLA_CAR.body.maxX)) continue;
     if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x) > 0.85)) continue;
     const d = Math.hypot(h.x - p.x, h.z - p.z);
     if (d < (h.radius ?? 2.4) && d < distance) { nearest = h; distance = d; }

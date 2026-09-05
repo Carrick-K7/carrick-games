@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VILLA_ELEVATOR, advanceVillaElevator, createVillaElevator, createVillaElevatorColliders,
+  ELEVATOR_IDLE_SECONDS, VILLA_ELEVATOR, advanceVillaElevator, createVillaElevator, createVillaElevatorColliders, idleVillaElevator,
   requestVillaElevator, villaElevatorCabinContains, villaElevatorDoorwayObstructed,
   villaElevatorShaftContains, villaElevatorSupportAt, type VillaElevatorState,
 } from '../../src/games/villaElevator';
@@ -50,7 +50,7 @@ describe('Villa elevator state machine', () => {
   it('starts closed at ground level and opens a same-floor call without travelling', () => {
     const state = createVillaElevator();
     expect(state).toEqual({ y: 0, floor: 0, target: 0, phase: 'closed', door: 0,
-      fromY: 0, travel: 0, riding: false });
+      fromY: 0, travel: 0, riding: false, idleFor: 0 });
     expect(requestVillaElevator(state, 0)).toBe(true);
     expect(state.phase).toBe('opening');
     untilOpen(state);
@@ -160,6 +160,68 @@ describe('Villa elevator state machine', () => {
   });
 });
 
+describe('Villa elevator idle closure', () => {
+  it.each([0, 1, 2])('closes an empty car on floor %i after four seconds without phantom travel', floor => {
+    const s = atFloor(floor, true);
+    expect(ELEVATOR_IDLE_SECONDS).toBe(4);
+    for (let i = 0; i < 39; i++) idleVillaElevator(s, .1, false, false);
+    expect(s.phase).toBe('open'); expect(s.idleFor).toBeCloseTo(3.9);
+    idleVillaElevator(s, .1, false, false);
+    expect(s).toMatchObject({ phase: 'closing', target: floor, riding: false, idleFor: 0 });
+    for (let i = 0; i < 100; i++) {
+      advanceVillaElevator(s, .02); idleVillaElevator(s, .02, false, false);
+      expect(s.phase).not.toBe('moving'); expect(s.y).toBe(floors[floor]); expect(s.travel).toBe(0);
+    }
+    expect(s).toMatchObject({ phase: 'closed', door: 0, floor, target: floor });
+  });
+  it.each([[true, false], [false, true], [true, true]])('holds open with occupied=%s obstructed=%s', (occupied, obstructed) => {
+    const s = atFloor(0, true); s.idleFor = 3.9;
+    for (let i = 0; i < 120; i++) {
+      idleVillaElevator(s, .1, occupied, obstructed); advanceVillaElevator(s, .1, obstructed);
+      expect(s).toMatchObject({ phase: 'open', door: 1, idleFor: 0 });
+    }
+    for (let i = 0; i < 39; i++) idleVillaElevator(s, .1, false, false);
+    expect(s.phase).toBe('open');
+    idleVillaElevator(s, .1, false, false); expect(s.phase).toBe('closing');
+  });
+  it.each([[true, false], [false, true]])('reopens idle closure for re-entry occupied=%s obstructed=%s', (occupied, obstructed) => {
+    const s = atFloor(1, true); s.idleFor = 3.95;
+    idleVillaElevator(s, .1, false, false); advanceVillaElevator(s, .1);
+    expect(s.door).toBeLessThan(1);
+    const door = s.door; idleVillaElevator(s, .02, occupied, obstructed);
+    expect(s).toMatchObject({ phase: 'opening', door, target: 1, idleFor: 0, riding: false });
+    untilOpen(s); expect(s.y).toBe(floors[1]); expect(s.travel).toBe(0);
+  });
+  it('a same-floor call cancels idle closure or resets the open timer', () => {
+    const s = atFloor(2, true); s.idleFor = 3.9;
+    expect(requestVillaElevator(s, 2)).toBe(true); expect(s.idleFor).toBe(0);
+    s.idleFor = 3.95; idleVillaElevator(s, .1, false, false); advanceVillaElevator(s, .1);
+    expect(requestVillaElevator(s, 2)).toBe(true); expect(s.phase).toBe('opening');
+    untilOpen(s); expect(s).toMatchObject({ y: floors[2], floor: 2, target: 2, travel: 0 });
+  });
+  it('does not cancel an intentional occupied journey or count idle time during travel', () => {
+    const s = atFloor(0, true); requestVillaElevator(s, 2, true);
+    idleVillaElevator(s, .1, true, false);
+    expect(s).toMatchObject({ phase: 'closing', target: 2, riding: true });
+    for (let i = 0; i < 1000 && s.phase !== 'open'; i++) {
+      idleVillaElevator(s, .02, true, false); advanceVillaElevator(s, .02);
+      expect(s.idleFor).toBe(0);
+    }
+    expect(s).toMatchObject({ phase: 'open', floor: 2, y: floors[2] });
+  });
+  it.each([0, -.1, NaN, Infinity, -Infinity])('ignores invalid idle timestep %s on an empty open car', dt => {
+    const s = atFloor(1, true); s.idleFor = 2;
+    const before = { ...s }; idleVillaElevator(s, dt, false, false); expect(s).toEqual(before);
+  });
+  it('caps large idle dt and clears stale idle time outside the open phase', () => {
+    const s = atFloor(1, true); idleVillaElevator(s, 100, false, false); expect(s.idleFor).toBe(.1);
+    for (const phase of ['closed', 'closing', 'opening', 'moving'] as const) {
+      const state = { ...s, phase, idleFor: 3 };
+      idleVillaElevator(state, .02, false, false); expect(state.idleFor).toBe(0);
+    }
+  });
+});
+
 describe('Villa elevator support and safety gates', () => {
   it.each([0, 1, 2])('blocks every landing except fully open aligned floor %i', floor => {
     const gates = createVillaElevatorColliders();
@@ -179,6 +241,21 @@ describe('Villa elevator support and safety gates', () => {
     a.update(atFloor(0, true));
     expect(villaCollides({ x: 0, y: 0, z: -5.1 }, a.colliders)).toBe(false);
     expect(villaCollides({ x: 0, y: 0, z: -5.1 }, b.colliders)).toBe(true);
+  });
+  it('keeps the mutable cabin ceiling attached between floors and rejects head penetration', () => {
+    const gates = createVillaElevatorColliders();
+    const ceiling = gates.colliders.find(c => Math.abs(c.minY - 2.3) < 1e-8 && Math.abs(c.maxY - 2.48) < 1e-8)!;
+    expect(ceiling).toBeDefined();
+    for (const y of [0, 1.8, 3.6, 5.4, 7.2]) {
+      gates.update({ ...createVillaElevator(), y });
+      expect(ceiling.minY).toBeCloseTo(y + 2.3); expect(ceiling.maxY).toBeCloseTo(y + 2.48);
+      expect(villaCollides({ x: 0, y, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
+      expect(villaCollides({ x: 0, y: y + .5, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
+      expect(villaCollides({ x: 0, y: y + .65, z: -6.3 }, gates.colliders, 1.75)).toBe(true);
+    }
+    const independent = createVillaElevatorColliders();
+    expect(villaCollides({ x: 0, y: .65, z: -6.3 }, independent.colliders, 1.75)).toBe(true);
+    expect(villaCollides({ x: 0, y: .65, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
   });
   it('removes static support throughout the shaft on all floors and between floors', () => {
     for (const y of [0, 1.8, 3.6, 5.4, 7.2]) for (const x of [-1, 0, 1]) for (const z of [-7.45, -6.3, -5.11]) {

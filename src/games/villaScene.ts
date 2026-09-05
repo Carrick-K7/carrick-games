@@ -6,13 +6,21 @@ import { createVillaGaming } from './villaGaming.js';
 import { createVillaElevatorModel } from './villaElevatorModel.js';
 import { createVillaElevatorColliders, villaElevatorShaftContains, type VillaElevatorState } from './villaElevator.js';
 import type { VillaActivityState } from './villaActivities.js';
+import { isVillaVehicleCollider, type VillaDrivingState } from './villaDriving.js';
+import { createVillaDrivingCourse } from './villaDrivingCourse.js';
+import type { VillaRaceState } from './villaRacing.js';
+import type { VillaSnookerState } from './villaSnooker.js';
+import { createVillaSnookerModel } from './villaSnookerModel.js';
 import {
   EYE_HEIGHT, POOL, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
   type VillaCollider, type VillaMaterial, type VillaPosition,
 } from './villaWorld.js';
 
-export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number }
-export type VillaSceneState = VillaFurnishingState & VillaActivityState & { elevator: VillaElevatorState };
+export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number; fov?: number }
+export type VillaSceneState = VillaFurnishingState & VillaActivityState & {
+  elevator: VillaElevatorState; driving: VillaDrivingState; race: VillaRaceState;
+  snooker: VillaSnookerState; snookerActive: boolean;
+};
 
 /** Small studio/sky reflection probe; all pixels are authored locally, no asset fetches. */
 function reflectionProbe(): THREE.CubeTexture {
@@ -96,6 +104,9 @@ export class VillaScene {
   private readonly vehicle: ReturnType<typeof createVillaVehicle>;
   private readonly gaming: ReturnType<typeof createVillaGaming>;
   private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
+  private readonly course: ReturnType<typeof createVillaDrivingCourse>;
+  private readonly snooker: ReturnType<typeof createVillaSnookerModel>;
+  readonly drivingObstacles: VillaCollider[];
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
   private lastStateKey = '';
@@ -249,6 +260,9 @@ export class VillaScene {
     for (const [minX, maxX, minZ, maxZ] of [[-25, -22, -17, 24], [-14.5, 25, -17, 24], [-22, -14.5, -17, -6], [-22, -14.5, 5, 24]]) {
       box((minX + maxX) / 2, -0.08, (minZ + maxZ) / 2, maxX - minX, 0.12, maxZ - minZ, grass);
     }
+    // Extend the front lawn to the private driving course, beyond the old garden.
+    box(1.5, -.08, 41, 54, .12, 34, grass);
+    box(26.5, -.08, 3.5, 3, .12, 41, grass);
     // Concrete in the attached garage and pale tile in the upstairs wet room.
     box(16, -0.025, -3, 8, 0.08, 10, materials.stone);
     box(9.25, 3.61, -4, 5.45, 0.025, 9.8, materials.stone);
@@ -303,6 +317,18 @@ export class VillaScene {
     for (const x of [-24.8, 24.8]) for (const y of [0.35, 0.9]) box(x, y, 3.5, 0.075, 0.085, 40, materials.oak);
     for (let x = -24; x <= 24; x += 2) box(x, 0.6, -16.8, 0.12, 1.2, 0.12, materials.oak);
     for (const y of [0.35, 0.9]) box(0, y, -16.8, 49.5, 0.085, 0.075, materials.oak);
+    // The visible old garden fence must remain solid after expanding the grounds.
+    for (const x of [-24.8, 24.8]) this.colliders.push({ minX: x - .06, maxX: x + .06, minZ: -16.8, maxZ: 23.5, minY: 0, maxY: 1.2 });
+    this.colliders.push({ minX: -24.8, maxX: 24.8, minZ: -16.86, maxZ: -16.74, minY: 0, maxY: 1.2 });
+    // A wider boundary encloses the practice lawn; the driveway stays unobstructed.
+    for (const x of [-24.8, 27.8]) {
+      for (let z = 25; z <= 57; z += 2) box(x, .6, z, .12, 1.2, .12, materials.oak);
+      for (const y of [.35, .9]) box(x, y, 41, .075, .085, 32, materials.oak);
+      this.colliders.push({ minX: x - .06, maxX: x + .06, minZ: 25, maxZ: 57, minY: 0, maxY: 1.2 });
+    }
+    for (let x = -24; x <= 27; x += 2) box(x, .6, 57, .12, 1.2, .12, materials.oak);
+    for (const y of [.35, .9]) box(1.5, y, 57, 52.6, .085, .075, materials.oak);
+    this.colliders.push({ minX: -24.8, maxX: 27.8, minZ: 56.94, maxZ: 57.06, minY: 0, maxY: 1.2 });
     for (const z of [11, 15, 19]) for (const x of [-2.3, 2.3]) {
       box(x, 0.3, z, 0.11, 0.6, 0.11, materials.bronze);
       box(x, 0.56, z, 0.115, 0.08, 0.115, this.glow);
@@ -336,8 +362,11 @@ export class VillaScene {
     this.vehicle = createVillaVehicle(this.scene);
     this.gaming = createVillaGaming(this.scene);
     this.elevator = createVillaElevatorModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders);
-    this.addContactShadows([...this.furnishings.colliders, this.vehicle.colliders[0], ...this.gaming.colliders]);
+    this.course = createVillaDrivingCourse(this.scene);
+    this.snooker = createVillaSnookerModel(this.scene);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders);
+    this.drivingObstacles = this.colliders.filter(c => !isVillaVehicleCollider(c));
+    this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 
@@ -369,6 +398,28 @@ export class VillaScene {
     if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
+    if (this.snooker.update(state.snooker, state.snookerActive)) this.renderer.shadowMap.needsUpdate = true;
+    this.course.update(state.driving);
+  }
+
+  get carDoorProgress(): number { return this.vehicle.doorProgress; }
+
+  /** A small in-world interaction badge, never visible through walls or behind the camera. */
+  projectInteraction(point: VillaPosition, width: number, height: number): { x: number; y: number } | null {
+    const origin = this.camera.position, end = new THREE.Vector3(point.x, point.y, point.z);
+    for (const c of this.colliders) {
+      if (point.x >= c.minX && point.x <= c.maxX && point.y >= c.minY && point.y <= c.maxY && point.z >= c.minZ && point.z <= c.maxZ) continue;
+      let lo = 0, hi = .96;
+      for (const [axis, min, max] of [['x', c.minX, c.maxX], ['y', c.minY, c.maxY], ['z', c.minZ, c.maxZ]] as const) {
+        const delta = end[axis] - origin[axis];
+        if (Math.abs(delta) < 1e-7) { if (origin[axis] < min || origin[axis] > max) { lo = 1; break; } }
+        else { const a = (min - origin[axis]) / delta, b = (max - origin[axis]) / delta; lo = Math.max(lo, Math.min(a, b)); hi = Math.min(hi, Math.max(a, b)); }
+      }
+      if (lo <= hi && hi > .05) return null;
+    }
+    end.project(this.camera);
+    return end.z >= -1 && end.z <= 1 && Math.abs(end.x) < .88 && Math.abs(end.y) < .7
+      ? { x: (end.x + 1) * width / 2, y: (1 - end.y) * height / 2 } : null;
   }
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
@@ -376,7 +427,7 @@ export class VillaScene {
     const scale = this.lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
     const w = Math.round(width * scale), h = Math.round(height * scale);
     const now = performance.now();
-    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}`;
+    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}`;
     this.updateActivities(time, state);
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
     // longer than the time budget. A wall-clock cap alone starves real key events
@@ -388,7 +439,7 @@ export class VillaScene {
       ctx.drawImage(this.cachedFrame, 0, 0, width, height); return true;
     }
     if (this.renderer.domElement.width !== w || this.renderer.domElement.height !== h) this.renderer.setSize(w, h, false);
-    this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
+    this.camera.aspect = width / height; this.camera.fov = view.fov ?? 64; this.camera.updateProjectionMatrix();
     this.camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
     this.camera.rotation.set(view.pitch, view.yaw, 0);
     if (this.lastEvening !== state.evening) {

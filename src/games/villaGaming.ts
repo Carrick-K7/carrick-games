@@ -2,16 +2,17 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_RACING, type VillaActivityState, type VillaScreenSource } from './villaActivities.js';
 import type { VillaCollider } from './villaWorld.js';
+import { createVillaRace, drawVillaRace, type VillaRaceState } from './villaRacing.js';
 
 type V3 = [number, number, number];
 
 /** Authored, nonfunctional display replicas and virtual-input gaming furniture.
- * All geometry is static and batched by material; the owner disposes the scene.
+ * Geometry is batched by material, with one steerable wheel group; the owner disposes the scene.
  * Time is seconds. Texture/emissive updates never require shadow invalidation.
  */
 export function createVillaGaming(parent: THREE.Object3D): {
   colliders: VillaCollider[];
-  update(time: number, state: VillaActivityState & { gaming: boolean }): boolean;
+  update(time: number, state: VillaActivityState & { gaming: boolean; race?: VillaRaceState }): boolean;
 } {
   const b = new VillaModelBuilder(parent, 'villaGaming');
   const black = villaMaterial('#12191e', .43, .25);
@@ -260,64 +261,75 @@ export function createVillaGaming(parent: THREE.Object3D): {
   b.collide(10.35, .125, 3.3, 2.9, 2.55, .44);
   mark('lockedReplicaCabinet', [10.35, 1.4, 3.3], { locked: true, decorativeOnly: true, replicaNames: ['AK47', 'MosinNagant', 'MP5K'], orangeMuzzleTips: true });
 
-  // Individual authored chibi-scale Miku fan sculptures. Default forward is +Z.
+  // Nine original garden-club girls, sculpted here from primitives. No IP references.
+  // Oversized rounded heads, cheerful faces, full sleeves and ankle coverage.
   const figureNames: string[] = [];
-  const figure = (x: number, y: number, variant: number, index: number) => b.at(x, y, -.006, 0, () => {
-    const winter = variant === 1, outfit = winter ? white : variant === 3 ? blue : grey;
-    b.cylinder(0, .023, 0, .145, .145, .035, black, [0, 0, 0], 22);
-    ring(0, .042, 0, .124, .005, turquoise, [Math.PI / 2, 0, 0]);
+  const chibiDesigns = [
+    { name: 'Hazel / seed keeper', hair: wood, style: 'bob', outfit: green, clothing: 'long dress and cardigan', pose: 'seed pouch' },
+    { name: 'Alba / cloud reader', hair: white, style: 'side bun', outfit: blue, clothing: 'overalls and long-sleeve shirt', pose: 'wave' },
+    { name: 'Poppy / picnic planner', hair: villaMaterial('#ad543b', .7), style: 'braid', outfit: pink, clothing: 'long dress and cardigan', pose: 'book' },
+    { name: 'Violet / letter writer', hair: villaMaterial('#7e6b98', .7), style: 'bob', outfit: white, clothing: 'cardigan and trousers', pose: 'wave' },
+    { name: 'Maren / pebble finder', hair: black, style: 'side bun', outfit: grey, clothing: 'overalls and long-sleeve shirt', pose: 'seed pouch' },
+    { name: 'Saffron / morning baker', hair: villaMaterial('#d9ae63', .7), style: 'curls', outfit: orange, clothing: 'long dress and cardigan', pose: 'book' },
+    { name: 'Fern / kite maker', hair: villaMaterial('#547464', .7), style: 'braid', outfit: white, clothing: 'cardigan and trousers', pose: 'wave' },
+    { name: 'Rosie / berry gardener', hair: pink, style: 'curls', outfit: green, clothing: 'overalls and long-sleeve shirt', pose: 'seed pouch' },
+    { name: 'Dove / little painter', hair: grey, style: 'bob', outfit: red, clothing: 'long dress and cardigan', pose: 'book' },
+  ];
+  const chibiGirl = (x: number, y: number, index: number) => b.at(x, y, -.006, 0, () => {
+    const design = chibiDesigns[index]!, dress = design.clothing.startsWith('long dress'), overalls = design.clothing.startsWith('overalls');
+    b.cylinder(0, .023, 0, .145, .145, .035, walnut, [0, 0, 0], 18);
+    ring(0, .042, 0, .124, .004, design.outfit, [Math.PI / 2, 0, 0]);
     for (const side of [-1, 1]) {
-      const lx = side * .046;
-      b.beam([lx, .12, .008], [lx + side * .012, .28, 0], .021, skin);
-      b.cylinder(lx, .125, .005, .028, .023, .16, winter ? white : black);
-      b.ellipsoid(lx, .055, .028, .031, .021, .05, winter ? white : black);
-      b.box(lx, .195, .008, .05, .014, .043, turquoise, .003);
+      // Opaque leggings/trousers run into substantial closed sneakers.
+      b.cylinder(side * .043, .17, 0, .031, .029, .22, overalls ? design.outfit : grey, [0, 0, 0], 10);
+      b.ellipsoid(side * .044, .064, .025, .039, .025, .056, white);
+      b.box(side * .044, .047, .027, .078, .012, .102, rubber, .004);
+      b.box(side * .044, .084, .041, .044, .009, .025, design.outfit, .003);
     }
-    // A pleated flared skirt, not an opaque labelled box.
-    const skirt = new THREE.CylinderGeometry(.054, .103, .104, 24, 1, false);
-    const positions = skirt.getAttribute('position');
-    for (let i = 0; i < positions.count; i++) {
-      const a = Math.atan2(positions.getX(i), positions.getZ(i));
-      const k = 1 + .085 * Math.cos(a * 12); positions.setX(i, positions.getX(i) * k); positions.setZ(i, positions.getZ(i) * k);
+    if (dress) b.cylinder(0, .232, 0, .059, .099, .29, design.outfit, [0, 0, 0], 16);
+    b.cylinder(0, .355, 0, .071, .066, .17, overalls ? white : design.outfit, [0, 0, 0], 14);
+    if (overalls) {
+      b.box(0, .322, .06, .093, .113, .026, design.outfit, .006);
+      for (const side of [-1, 1]) b.beam([side * .038, .427, .046], [side * .033, .328, .079], .009, design.outfit, 6);
+      b.box(0, .319, .079, .046, .032, .009, white, .003);
+    } else {
+      b.beam([0, .422, .068], [0, .307, .068], .0035, white, 6);
+      for (const yy of [.33, .365, .4]) b.ellipsoid(.012, yy, .071, .005, .005, .003, walnut);
     }
-    skirt.computeVertexNormals(); b.geometry(skirt, winter ? white : black, [0, .29, 0]);
-    ring(0, .239, 0, .099, .004, turquoise, [Math.PI / 2, 0, 0]);
-    b.cylinder(0, .385, 0, .069, .05, .14, outfit, [0, 0, 0], 12);
-    b.beam([0, .442, .063], [0, .351, .058], .009, turquoise);
-    silhouette([[0, .01], [-.016, -.021], [0, -.038], [.016, -.021]], .003, turquoise, [0, .36, .06]);
-    b.cylinder(0, .468, 0, .021, .022, .025, skin);
-    b.ellipsoid(0, .542, 0, .076, .086, .061, skin);
-    b.ellipsoid(0, .579, -.011, .08, .058, .063, turquoise);
-    for (let i = 0; i < 5; i++) b.geometry(new THREE.ConeGeometry(.017, .056, 7), turquoise, [-.052 + i * .025, .558, .05], [0, 0, Math.PI + (i - 2) * .15]);
+    // High round collar: no exposed torso, shoulders or neckline.
+    b.cylinder(0, .435, 0, .035, .047, .023, white, [0, 0, 0], 12);
+    b.ellipsoid(0, .535, -.019, .111, .11, .087, design.hair);
+    b.ellipsoid(0, .527, .02, .102, .096, .079, skin);
+    b.ellipsoid(0, .596, -.006, .109, .051, .084, design.hair);
+    for (let i = 0; i < 4; i++) b.ellipsoid(-.071 + i * .044, .577 + Math.sin(i) * .006, .073, .032, .032, .021, design.hair);
     for (const side of [-1, 1]) {
-      b.ellipsoid(side * .027, .535, .057, .014, .019, .006, white);
-      b.ellipsoid(side * .026, .534, .063, .008, .014, .003, turquoise);
-      b.ellipsoid(side * .025, .535, .066, .003, .011, .0015, black);
-      b.ellipsoid(side * .028 - .003, .541, .068, .0025, .0035, .001, white);
-      b.beam([side * .014, .551, .061], [side * .04, .554, .058], .0025, black, 6);
-      b.ellipsoid(side * .05, .516, .05, .012, .004, .002, pink);
-      b.ellipsoid(side * .081, .55, 0, .016, .032, .025, black);
-      b.box(side * .08, .579, -.007, .025, .033, .036, pink, .003);
-      const sway = (variant === 2 ? .034 : -.012) * side;
-      cable([[side * .085, .576, -.02], [side * .122, .49, -.027], [side * .126 + sway, .32, -.035], [side * .165 + sway, .19, .002]], .025, turquoise);
-      const elbow: V3 = [side * .11, variant === 2 && side === 1 ? .48 : .353, .009];
-      const hand: V3 = [side * .139, variant === 2 && side === 1 ? .556 : .307, .04];
-      b.beam([side * .061, .435, 0], elbow, .018, skin);
-      b.beam(elbow, hand, .025, winter ? white : black);
-      b.ellipsoid(...hand, .017, .021, .017, skin);
-      b.box(side * .094, .379, .031, .023, .009, .013, turquoise, .002);
+      b.ellipsoid(side * .095, .538, -.012, .024, .059, .064, design.hair);
+      b.ellipsoid(side * .034, .53, .095, .014, .019, .006, black);
+      b.ellipsoid(side * .034 - .004, .536, .101, .0045, .006, .0015, white);
+      b.ellipsoid(side * .066, .508, .083, .014, .006, .003, pink);
+      const waving = design.pose === 'wave' && side === 1;
+      const elbow: V3 = [side * .106, waving ? .423 : .338, .018];
+      const hand: V3 = [side * (waving ? .142 : .065), waving ? .484 : .305, .09];
+      b.beam([side * .063, .407, 0], elbow, .028, overalls ? white : design.outfit);
+      b.beam(elbow, hand, .025, overalls ? white : design.outfit);
+      b.ellipsoid(...hand, .022, .022, .019, skin);
     }
-    b.beam([-.009, .507, .058], [.009, .507, .058], .0018, pink, 6);
-    b.beam([.08, .534, .012], [.043, .505, .069], .003, black, 6);
-    if (winter) {
-      b.cylinder(0, .61, -.004, .049, .084, .03, white);
-      b.ellipsoid(0, .646, -.008, .055, .035, .049, white);
-      b.ellipsoid(.04, .67, -.008, .019, .021, .019, white);
-      ring(0, .451, 0, .045, .012, white, [Math.PI / 2, 0, 0]);
+    // A tiny curved smile, rather than an idol microphone or headset.
+    b.geometry(new THREE.TorusGeometry(.014, .0025, 5, 10, Math.PI), walnut, [0, .507, .098], [0, 0, Math.PI]);
+    if (design.style === 'side bun') b.ellipsoid(.106, .609, -.029, .046, .043, .043, design.hair);
+    if (design.style === 'braid') for (let i = 0; i < 4; i++) b.ellipsoid(-.109 + (i % 2) * .01, .489 - i * .03, -.021, .024, .024, .029, design.hair);
+    if (design.style === 'curls') for (const side of [-1, 1]) for (let i = 0; i < 3; i++) b.ellipsoid(side * .1, .562 - i * .032, -.003, .026, .025, .043, design.hair);
+    if (design.pose === 'book') {
+      b.box(0, .307, .101, .115, .084, .023, walnut, .003);
+      b.box(0, .307, .115, .104, .072, .009, white, .002);
+      b.beam([0, .275, .122], [0, .34, .122], .002, design.outfit, 6);
     }
-    if (variant === 3) b.box(-.1, .35, .08, .054, .08, .018, white, .002);
-    const name = ['Hatsune Miku / classic', 'Snow Miku / winter white', 'Hatsune Miku / waving', 'Hatsune Miku / ocean blue'][variant]!;
-    figureNames.push(name); mark(`mikuFigure-${index}`, [2.32, y, 6.45 - x], { character: name, authored3D: true, twinTails: true });
+    if (design.pose === 'seed pouch') {
+      b.ellipsoid(0, .293, .099, .047, .045, .025, walnut);
+      b.ellipsoid(0, .297, .123, .009, .015, .004, green);
+    }
+    figureNames.push(design.name);
+    mark(`originalChibiGirl-${index}`, [2.32, y, 6.45 - x], { character: design.name, authored3D: true, originalDesigns: true, modestClothing: true, hairstyle: design.style, clothing: design.clothing, pose: design.pose });
   });
   b.at(2.32, 0, 6.45, Math.PI / 2, () => {
     b.box(0, 1.27, -.207, 3.7, 2.5, .045, walnut);
@@ -326,11 +338,11 @@ export function createVillaGaming(parent: THREE.Object3D): {
     for (const y of [.035, .85, 1.67, 2.515]) b.box(0, y, 0, 3.7, .037, .48, walnut);
     for (const x of [-.61, .61]) b.box(x, 1.27, 0, .025, 2.46, .44, walnut);
     for (const y of [.81, 1.63, 2.47]) b.box(0, y, -.135, 3.58, .015, .018, warm, .002);
-    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) figure((col - 1) * 1.22, .065 + row * .82, (row * 3 + col) % 4, row * 3 + col);
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) chibiGirl((col - 1) * 1.22, .065 + row * .82, row * 3 + col);
     for (let i = 0; i < 3; i++) b.box((i - 1) * 1.22, 1.275, .241, 1.19, 2.43, .006, glass, 0);
   });
   b.collide(2.32, 0, 6.45, .49, 2.52, 3.7);
-  mark('mikuFigureWall', [2.32, 0, 6.45], { figureNames, compartments: 9, variants: 4, facing: '+X', frontMaxX: 2.564 });
+  mark('originalChibiGirlWall', [2.32, 0, 6.45], { figureNames, compartments: 9, variants: 9, originalDesigns: true, modestClothing: true, facing: '+X', frontMaxX: 2.564 });
 
   // Independent aluminium-profile FFB simulator; central seating reference is shared.
   const sx = VILLA_RACING.seat.x, sz = VILLA_RACING.seat.z;
@@ -346,19 +358,19 @@ export function createVillaGaming(parent: THREE.Object3D): {
   b.box(sx, .93, 7.065, 1.1, .055, .35, black);
   b.box(sx, 1.01, 7.05, .32, .16, .31, black);
   for (let i = 0; i < 5; i++) b.box(sx - .11 + i * .055, 1.095, 7.065, .02, .01, .21, steel, .001);
-  // Wheel plane faces the driver (-Z), inclined twenty degrees towards their hands.
-  b.at(sx, 1.045, 6.825, 0, () => {
-    const wheelRotation: V3 = [-.25, 0, 0];
-    ring(0, 0, 0, .178, .018, rubber, wheelRotation);
-    b.cylinder(0, 0, .014, .057, .057, .055, black, [Math.PI / 2 - .25, 0, 0]);
-    for (const a of [0, Math.PI, Math.PI * 1.5]) b.beam([0, 0, 0], [Math.cos(a) * .16, Math.sin(a) * .155, -Math.sin(a) * .04], .013, steel);
-    b.box(0, .164, -.042, .022, .023, .03, turquoise, .003);
-    for (const side of [-1, 1]) {
-      b.box(side * .092, .016, .055, .047, .125, .014, steel, .008);
-      b.cylinder(side * .068, .019, -.025, .009, .009, .009, red, [Math.PI / 2, 0, 0], 8);
-      b.cylinder(side * .105, .019, -.025, .009, .009, .009, blue, [Math.PI / 2, 0, 0], 8);
-    }
-  });
+  // Only the wheel is transformable: three material batches, no per-button meshes.
+  const wheelMount = new THREE.Group(); wheelMount.position.set(sx, 1.045, 6.825); wheelMount.rotation.x = -.25; b.root.add(wheelMount);
+  const wheel = new VillaModelBuilder(wheelMount, 'interactiveRacingWheel');
+  wheel.geometry(new THREE.TorusGeometry(.178, .018, 6, 24), rubber);
+  wheel.cylinder(0, 0, .014, .057, .057, .055, rubber, [Math.PI / 2, 0, 0]);
+  for (const a of [0, Math.PI, Math.PI * 1.5]) wheel.beam([0, 0, 0], [Math.cos(a) * .16, Math.sin(a) * .16, 0], .013, steel);
+  wheel.box(0, .174, 0, .022, .023, .03, turquoise, .003);
+  for (const side of [-1, 1]) {
+    wheel.box(side * .092, .016, .055, .047, .125, .014, steel, .008);
+    for (const x of [.068, .105]) wheel.cylinder(side * x, .019, -.025, .009, .009, .009, turquoise, [Math.PI / 2, 0, 0], 8);
+  }
+  wheel.finish();
+  wheel.root.traverse(node => { if (node instanceof THREE.Mesh) node.castShadow = false; });
   b.box(sx, .24, 7.66, .67, .045, .64, black);
   for (let i = 0; i < 3; i++) {
     const x = sx - .22 + i * .22;
@@ -424,29 +436,11 @@ export function createVillaGaming(parent: THREE.Object3D): {
   const polygon = (ctx: CanvasRenderingContext2D, color: string, pts: [number, number][]) => {
     ctx.fillStyle = color; ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill();
   };
-  const drawSource = (ctx: CanvasRenderingContext2D, source: VillaScreenSource, t: number, width: number, height: number) => {
+  const fallbackRace = createVillaRace();
+  const drawSource = (ctx: CanvasRenderingContext2D, source: VillaScreenSource, t: number, width: number, height: number, race = fallbackRace) => {
     ctx.save(); ctx.scale(width / 960, height / 540);
     if (source === 'pc') {
-      const sky = ctx.createLinearGradient(0, 0, 0, 350); sky.addColorStop(0, '#347ca5'); sky.addColorStop(1, '#d5ebd2'); ctx.fillStyle = sky; ctx.fillRect(0, 0, 960, 540);
-      polygon(ctx, '#587d77', [[0, 255], [170, 135], [305, 245], [510, 169], [740, 241], [890, 154], [960, 255]]);
-      ctx.fillStyle = '#669565'; ctx.fillRect(0, 255, 960, 285);
-      const bend = Math.sin(t * .23) * 42;
-      polygon(ctx, '#414951', [[453 + bend, 255], [507 + bend, 255], [855, 540], [90, 540]]);
-      polygon(ctx, '#dfdbbe', [[446 + bend, 255], [453 + bend, 255], [90, 540], [76, 540]]);
-      polygon(ctx, '#dfdbbe', [[507 + bend, 255], [514 + bend, 255], [868, 540], [855, 540]]);
-      for (let i = 0; i < 10; i++) {
-        const p = ((i / 10 + t * .23) % 1), p2 = Math.min(1, p + .037), y = 255 + p * p * 285, y2 = 255 + p2 * p2 * 285;
-        const center = 480 + bend * (1 - p);
-        polygon(ctx, '#f7edce', [[center - 2 - p * 4, y], [center + 2 + p * 4, y], [center + 2 + p2 * 4, y2], [center - 2 - p2 * 4, y2]]);
-      }
-      for (let i = 0; i < 7; i++) {
-        const p = (i / 7 + t * .11) % 1, y = 255 + p * p * 270, size = 8 + p * 45;
-        for (const side of [-1, 1]) { const x = 480 + side * (50 + p * 520); ctx.fillStyle = '#735c43'; ctx.fillRect(x - 3, y - size, 6, size); polygon(ctx, '#315c48', [[x, y - size * 2.3], [x - size * .55, y - size * .5], [x + size * .55, y - size * .5]]); }
-      }
-      polygon(ctx, '#131b23', [[0, 445], [205, 410], [755, 410], [960, 445], [960, 540], [0, 540]]);
-      ctx.strokeStyle = '#687b83'; ctx.lineWidth = 18; ctx.beginPath(); ctx.arc(480, 538, 95, Math.PI, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#9af5e9'; ctx.font = '30px monospace'; ctx.fillText(String(112 + Math.floor(Math.sin(t) * 8)), 449, 463); ctx.font = '12px Arial'; ctx.fillText('km/h', 463, 481);
-      ctx.fillStyle = '#f4f9f8'; ctx.font = '16px Arial'; ctx.fillText('COAST DRIVE', 30, 36); ctx.fillText('LAP 02 / 05', 802, 36);
+      drawVillaRace(ctx, 960, 540, race);
     } else if (source === 'ps') {
       const sky = ctx.createLinearGradient(0, 0, 960, 540); sky.addColorStop(0, '#062774'); sky.addColorStop(1, '#3974bd'); ctx.fillStyle = sky; ctx.fillRect(0, 0, 960, 540);
       for (let i = 0; i < 72; i++) { ctx.fillStyle = `rgba(220,240,255,${.35 + .25 * Math.sin(i + t)})`; ctx.fillRect((i * 137) % 960, (i * 79) % 370, 2, 2); }
@@ -469,13 +463,14 @@ export function createVillaGaming(parent: THREE.Object3D): {
   };
   drawSource(pcCanvas.ctx, 'pc', 0, 768, 432); pcCanvas.map.needsUpdate = true;
   drawSource(tvCanvas.ctx, 'pc', 0, 960, 540); tvCanvas.map.needsUpdate = true;
-  b.root.userData = { keyboardKeys: keyCount, fanCount: 3, replicaNames: ['AK47', 'MosinNagant', 'MP5K'], figureNames, consoleSources: ['pc', 'ps', 'switch'], virtualInputs: true, noDynamicTransforms: true };
+  b.root.userData = { keyboardKeys: keyCount, fanCount: 3, replicaNames: ['AK47', 'MosinNagant', 'MP5K'], figureNames, originalDesigns: true, modestClothing: true, consoleSources: ['pc', 'ps', 'switch'], virtualInputs: true, playableRacing: true, dynamicTransforms: ['interactiveRacingWheel'] };
   b.finish();
   let lastTick = -1, lastGaming: boolean | undefined, lastLights: boolean | undefined, lastSource: VillaScreenSource | undefined;
   return {
     colliders: b.colliders,
     update(time, state) {
-      const tick = Math.floor(time * 12);
+      const tick = Math.floor(time * (state.screenSource === 'pc' ? 30 : 12));
+      wheel.root.rotation.z = -(state.race?.steer ?? 0) * .55;
       if (state.gaming !== lastGaming || state.displayLights !== lastLights) {
         rgb.emissiveIntensity = state.gaming && state.displayLights ? 1.1 : 0;
         rgbPink.emissiveIntensity = state.gaming && state.displayLights ? .8 : 0;
@@ -486,8 +481,8 @@ export function createVillaGaming(parent: THREE.Object3D): {
         pcMonitorMat.color.set(state.gaming ? '#ffffff' : '#030607'); sideMonitorMat.color.copy(pcMonitorMat.color);
       }
       if (tick !== lastTick || lastSource !== state.screenSource || lastGaming !== state.gaming) {
-        drawSource(tvCanvas.ctx, state.screenSource, time, 960, 540); tvCanvas.map.needsUpdate = true;
-        if (state.gaming) { drawSource(pcCanvas.ctx, 'pc', time, 768, 432); pcCanvas.map.needsUpdate = true; }
+        drawSource(tvCanvas.ctx, state.screenSource, time, 960, 540, state.race); tvCanvas.map.needsUpdate = true;
+        if (state.gaming) { drawSource(pcCanvas.ctx, 'pc', time, 768, 432, state.race); pcCanvas.map.needsUpdate = true; }
       }
       lastTick = tick; lastGaming = state.gaming; lastLights = state.displayLights; lastSource = state.screenSource;
       return false;

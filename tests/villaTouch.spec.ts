@@ -34,8 +34,9 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
     const tabW = (p.w - 64 * s) / 3 - 4 * s;
     const client = (x: number, y: number) => ({ x: r.x + x * r.width / 1120, y: r.y + y * r.height / 700 });
     return {
-      map: client(1120 - 24 - 123 * s, 22 + 21 * s),
-      home: client(1120 - 24 - 21 * s, 22 + 21 * s),
+      // Map, time, home, immersive: four equally spaced top buttons.
+      map: client(1120 - 24 - 175 * s, 22 + 22 * s),
+      home: client(1120 - 24 - 73 * s, 22 + 22 * s),
       thirdFloor: client(p.x + 8 * s + 2 * (tabW + 4 * s) + tabW / 2, p.y + 28 * s),
       close: client(p.x + p.w - 26 * s, p.y + 28 * s),
       tabHeight: 44 * s * r.height / 700,

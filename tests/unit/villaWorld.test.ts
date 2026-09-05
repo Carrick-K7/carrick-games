@@ -175,10 +175,51 @@ describe('Villa collision, support and safe boundaries', () => {
   });
   it('blocks the pool and property bounds even without walls', () => {
     expect(moveVillaPlayer({ x: -13, y: 0, z: 0 }, -12, 0, []).x).toBeGreaterThan(-14.5 + PLAYER_RADIUS);
-    expect(moveVillaPlayer({ x: 0, y: 0, z: 22 }, 0, 10, []).z).toBeLessThanOrEqual(23.5);
-    for (const [x, z] of [[-25, 0], [25, 0], [0, -17], [0, 24], [-18, 0]]) {
+    expect(moveVillaPlayer({ x: 0, y: 0, z: 22 }, 0, 10, []).z).toBeCloseTo(32);
+    expect(moveVillaPlayer({ x: 0, y: 0, z: 55 }, 0, 10, []).z).toBeLessThanOrEqual(56.5);
+    for (const [x, z] of [[-25, 0], [28, 0], [0, -17], [0, 57], [-18, 0]]) {
       expect(villaSupportAt(x, z, 0)).toBeNull();
     }
+  });
+  it('supports all inclusive expanded ground bounds and rejects positions just outside', () => {
+    for (const [x, z] of [[-24.5, 20], [27.5, 20], [0, -16.5], [0, 56.5], [25, 0], [0, 24], [27.5, 56.5]]) {
+      expect(villaSupportAt(x, z, 0)).toBe(0);
+    }
+    for (const [x, z] of [[-24.501, 20], [27.501, 20], [0, -16.501], [0, 56.501]]) {
+      expect(villaSupportAt(x, z, 0)).toBeNull();
+    }
+    for (const [x, z, dx, dz] of [[-24, 20, -5, 0], [27, 20, 5, 0], [0, -16, 0, -5], [0, 56, 0, 5]]) {
+      const p = moveVillaPlayer({ x, y: 0, z }, dx, dz, []);
+      expect(p.x).toBeGreaterThanOrEqual(-24.5); expect(p.x).toBeLessThanOrEqual(27.5);
+      expect(p.z).toBeGreaterThanOrEqual(-16.5); expect(p.z).toBeLessThanOrEqual(56.5);
+      expect(p.y).toBe(0); expect(villaSupportAt(p.x, p.z, p.y)).toBe(0);
+    }
+  });
+  it('allows crouched headroom under low stairs and enforces upper floor undersides', () => {
+    for (const [x, z] of [[5.2, -5.4], [4.2, -6.2]]) {
+      expect(villaSupportAt(x, z, 0)).toBeNull();
+      expect(villaSupportAt(x, z, 0, 1.05)).toBe(0);
+      expect(villaSupportAt(x, z, 0, 1.75)).toBeNull();
+    }
+    expect(villaSupportAt(0, 0, 0, 3.39)).toBe(0);
+    expect(villaSupportAt(0, 0, 0, 3.41)).toBeNull();
+    expect(villaSupportAt(0, 0, STOREY, 1.75)).toBe(STOREY);
+    // Posture never manufactures support inside the swimming pool or empty shaft.
+    for (const height of [1.05, 1.75, 2.4]) {
+      expect(villaSupportAt(-18, 0, 0, height)).toBeNull();
+      expect(villaSupportAt(0, -6.3, 0, height)).toBeNull();
+    }
+  });
+  it('applies optional body height to collision and substepped movement', () => {
+    const beam: VillaCollider = { minX: -1, maxX: 1, minZ: 14, maxZ: 15, minY: 1.3, maxY: 1.5 };
+    const beneath = { x: 0, y: 0, z: 14.5 };
+    expect(villaCollides(beneath, [beam], 1.05)).toBe(false);
+    expect(villaCollides(beneath, [beam], 1.75)).toBe(true);
+    const start = { x: 0, y: 0, z: 13 };
+    const standing = moveVillaPlayer(start, 0, 3, [beam], villaSupportAt, 1.75);
+    const crouched = moveVillaPlayer(start, 0, 3, [beam], villaSupportAt, 1.05);
+    expect(standing.z).toBeLessThanOrEqual(14 - PLAYER_RADIUS);
+    expect(crouched.z).toBeCloseTo(16); expect(crouched.y).toBe(0);
   });
   it('keeps balcony and roof safe on all exposed edges', () => {
     const edges = [

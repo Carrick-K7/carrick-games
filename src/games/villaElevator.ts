@@ -10,11 +10,12 @@ export const VILLA_ELEVATOR = {
 export type VillaElevatorPhase = 'closed' | 'opening' | 'open' | 'closing' | 'moving';
 export interface VillaElevatorState {
   y: number; floor: number; target: number; phase: VillaElevatorPhase;
-  door: number; fromY: number; travel: number; riding: boolean;
+  door: number; fromY: number; travel: number; riding: boolean; idleFor: number;
 }
 export const ELEVATOR_DOOR_SECONDS = 0.8;
+export const ELEVATOR_IDLE_SECONDS = 4;
 export function createVillaElevator(): VillaElevatorState {
-  return { y: 0, floor: 0, target: 0, phase: 'closed', door: 0, fromY: 0, travel: 0, riding: false };
+  return { y: 0, floor: 0, target: 0, phase: 'closed', door: 0, fromY: 0, travel: 0, riding: false, idleFor: 0 };
 }
 export function villaElevatorShaftContains(x: number, z: number): boolean {
   const e = VILLA_ELEVATOR;
@@ -33,8 +34,11 @@ export function villaElevatorDoorwayObstructed(p: VillaPosition, state: VillaEle
 /** No queuing or destination changes during a journey. Same-floor calls open the doors. */
 export function requestVillaElevator(state: VillaElevatorState, floor: number, riding = false): boolean {
   if (!Number.isInteger(floor) || floor < 0 || floor > 2) return false;
+  if (state.phase === 'closing' && !state.riding && state.target === state.floor && floor === state.floor) {
+    state.phase = 'opening'; state.idleFor = 0; return true;
+  }
   if (state.phase !== 'closed' && state.phase !== 'open') return false;
-  state.target = floor;
+  state.target = floor; state.idleFor = 0;
   if (floor === state.floor) {
     if (state.phase === 'closed') state.phase = 'opening';
     return true;
@@ -49,7 +53,10 @@ export function advanceVillaElevator(state: VillaElevatorState, dt: number, obst
   if (state.phase === 'closing') {
     if (obstructed) { state.phase = 'opening'; state.target = state.floor; state.riding = false; return; }
     state.door = Math.max(0, state.door - dt / ELEVATOR_DOOR_SECONDS);
-    if (state.door === 0) { state.phase = 'moving'; state.fromY = state.y; state.travel = 0; }
+    if (state.door === 0) {
+      state.phase = state.target === state.floor ? 'closed' : 'moving';
+      state.fromY = state.y; state.travel = 0; state.idleFor = 0;
+    }
   } else if (state.phase === 'moving') {
     const targetY = VILLA_ELEVATOR.floors[state.target];
     const duration = Math.abs(targetY - state.fromY) / 1.2 + 0.8;
@@ -60,6 +67,20 @@ export function advanceVillaElevator(state: VillaElevatorState, dt: number, obst
   } else if (state.phase === 'opening') {
     state.door = Math.min(1, state.door + dt / ELEVATOR_DOOR_SECONDS);
     if (state.door === 1) { state.phase = 'open'; state.riding = false; }
+  }
+}
+/** An empty car closes after a short delay; a person or blocked sill cancels it. */
+export function idleVillaElevator(state: VillaElevatorState, dt: number, occupied: boolean, obstructed: boolean): void {
+  dt = Number.isFinite(dt) ? Math.max(0, Math.min(.1, dt)) : 0;
+  if (occupied || obstructed) {
+    state.idleFor = 0;
+    if (state.phase === 'closing' && !state.riding && state.target === state.floor) state.phase = 'opening';
+    return;
+  }
+  if (state.phase !== 'open') { state.idleFor = 0; return; }
+  state.idleFor += dt;
+  if (state.idleFor >= ELEVATOR_IDLE_SECONDS) {
+    state.target = state.floor; state.phase = 'closing'; state.riding = false; state.idleFor = 0;
   }
 }
 export function villaElevatorSupportAt(state: VillaElevatorState, x: number, z: number, previousY: number): number | null {
@@ -85,13 +106,16 @@ export function createVillaElevatorColliders(): { colliders: VillaCollider[]; up
     box(0, y + 2.3, e.frontZ, 1.3, height - 2.3, 0.12);
     return box(0, y, e.frontZ, 1.3, 2.3, 0.12);
   });
-  const update = (state: VillaElevatorState) => gates.forEach((gate, floor) => {
-    // Keep the complete opening blocked during motion/partial opening. The doors
-    // remain open indefinitely on arrival, so there is no closing deadline to race.
+  const ceiling = box(0, 2.3, e.centerZ, 1.96, .18, 2.36);
+  const update = (state: VillaElevatorState) => {
+    ceiling.minY = state.y + 2.3; ceiling.maxY = state.y + 2.48;
+    gates.forEach((gate, floor) => {
+    // Passage is possible only after the aligned landing is completely open.
     const open = state.phase === 'open' && state.floor === floor && state.door === 1
       && Math.abs(state.y - e.floors[floor]) < 0.001;
     gate.minY = open ? -10 : e.floors[floor];
     gate.maxY = open ? -9 : e.floors[floor] + 2.3;
-  });
+    });
+  };
   return { colliders, update };
 }
