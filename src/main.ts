@@ -491,7 +491,9 @@ function updateFullscreenToggle(meta: GameMeta) {
   const btn = document.getElementById('fullscreenBtn');
   if (!btn) return;
   // Inline style: .icon-btn's display:flex would otherwise override [hidden].
-  btn.style.display = meta.fullscreen === false ? 'none' : '';
+  // On coarse-pointer devices (phones/tablets) fullscreen is meaningless.
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  btn.style.display = meta.fullscreen === false || coarse ? 'none' : '';
 }
 
 /**

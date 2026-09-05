@@ -726,6 +726,7 @@ test.describe('Game rules', () => {
       game.startUnlock();
       const screenDuringUnlock = game.screen;
       const openStats = JSON.parse(JSON.stringify(game.stats));
+      const firstPullIsNew = game.isNewItem;
 
       // Drive the unlock prelude and the strip animation to completion.
       let guard = 0;
@@ -735,16 +736,30 @@ test.describe('Game rules', () => {
       }
       const finalStats = JSON.parse(JSON.stringify(game.stats));
 
+      // Pull the very same item again: the NEW badge is only for the
+      // first-ever pull of an item.
+      const sequence2 = [0.9999, 0];
+      game.random = () => sequence2.shift() ?? 0;
+      game.startUnlock();
+      const repeatPullIsNew = game.isNewItem;
+      while (game.screen !== 'result' && guard < 8000) {
+        game.update(1 / 60);
+        guard++;
+      }
+
       // Reset via Shift+R.
       game.handleInput(new KeyboardEvent('keydown', { key: 'R', shiftKey: true }));
       const resetStats = JSON.parse(JSON.stringify(game.stats));
       const storageWasCleared = localStorage.getItem('gacha-stats') === null;
 
       game.destroy();
-      return { screenDuringUnlock, openStats, finalStats, resetStats, storageWasCleared };
+      return { screenDuringUnlock, openStats, finalStats, resetStats, storageWasCleared, firstPullIsNew, repeatPullIsNew };
     }, builtModuleUrl('src/games/gacha.ts'));
 
     expect(result.screenDuringUnlock).toBe('unlock');
+    // NEW badge: only the first-ever pull of an item, never a repeat.
+    expect(result.firstPullIsNew).toBe(true);
+    expect(result.repeatPullIsNew).toBe(false);
     // Stats are recorded at open time, before the animation ends.
     expect(result.openStats.totalPulls).toBe(1);
     expect(result.openStats.tierCounts.rarespecial).toBe(1);

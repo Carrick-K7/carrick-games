@@ -1233,6 +1233,8 @@ export class GachaGame extends BaseGame {
     }
 
     // No tier kicker: the frame, ring, and glow colors carry the prestige.
+    // Middle baseline keeps badge and caption text vertically centered.
+    ctx.textBaseline = 'middle';
     // Rotating segmented rarity ring behind the card, with cardinal ticks
     const ringR = Math.max(cw, chh) * 0.62;
     ctx.save();
