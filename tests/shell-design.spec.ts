@@ -333,11 +333,20 @@ test.describe('responsive shell design contracts', () => {
       const box = await bounds(canvas);
       return Math.abs(box.x + box.width / 2 - 640) + Math.abs(box.y + box.height / 2 - 400);
     }).toBeLessThanOrEqual(3);
+    // Poll the overlay-to-canvas alignment: under CI load the fit reflow
+    // lands on a later animation frame, so a single snapshot can catch the
+    // overlay mid-refit even though the settled state always aligns.
     const displayed = await bounds(canvas);
-    const start = await bounds(overlay);
-    for (const key of ['x', 'y', 'width', 'height'] as const) {
-      expect(Math.abs(start[key] - displayed[key]), `overlay ${key} aligns with canvas`).toBeLessThanOrEqual(2);
-    }
+    await expect.poll(async () => {
+      const start = await bounds(overlay);
+      const now = await bounds(canvas);
+      return Math.max(
+        Math.abs(start.x - now.x),
+        Math.abs(start.y - now.y),
+        Math.abs(start.width - now.width),
+        Math.abs(start.height - now.height),
+      );
+    }).toBeLessThanOrEqual(2);
     expect(displayed.x).toBeGreaterThanOrEqual(0);
     expect(displayed.y).toBeGreaterThanOrEqual(0);
     expect(displayed.x + displayed.width).toBeLessThanOrEqual(1281);
