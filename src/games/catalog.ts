@@ -498,6 +498,33 @@ export const GAMES: GameMeta[] = [
     },
   },
   {
+    id: 'villa',
+    group: 'casual', order: 1.5, icon: 'villa',
+    name: 'Warm Villa',
+    nameZh: '暖居别墅',
+    desc: 'Explore a cozy three-story 3D villa, from garden and pool to bedrooms and roof terrace.',
+    descZh: '漫步温馨写实的三层 3D 别墅,探索花园、泳池、卧室与屋顶露台。',
+    loader: () => import('./villa.js').then((m) => m.VillaGame),
+    canvasSize: { width: 1120, height: 700 },
+    controls: {
+      keyboard: [
+        { keys: ['W', 'A', 'S', 'D'], action: 'Move', actionZh: '移动' },
+        { keys: ['↑', '↓'], action: 'Walk forward / back', actionZh: '前进 / 后退' },
+        { keys: ['←', '→'], action: 'Turn', actionZh: '转向' },
+        { keys: ['Mouse'], action: 'Drag to look', actionZh: '拖动环视' },
+        { keys: ['Shift'], action: 'Brisk walk', actionZh: '快步走' },
+        { keys: ['E'], action: 'Interact', actionZh: '互动' },
+        { keys: ['M'], action: 'Floor plan', actionZh: '楼层平面图' },
+        { keys: ['T'], action: 'Day / evening', actionZh: '白天 / 傍晚' },
+        { keys: ['H'], action: 'Return to entrance', actionZh: '返回入口' },
+      ],
+      touch: [
+        { icon: 'swipe', action: 'Left joystick: move; right drag: look', actionZh: '左侧摇杆移动,右侧拖动环视' },
+        { icon: 'tap', action: 'Tap interact / map / time / home buttons', actionZh: '点击互动 / 地图 / 时间 / 回家按钮' },
+      ],
+    },
+  },
+  {
     id: 'connectfour',
     group: 'tabletop', order: 22, icon: 'connectfour',
     name: 'Connect Four',

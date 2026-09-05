@@ -8,12 +8,13 @@ Current release line: `0.1.x`.
 
 ## Games
 
-Carrick Games currently ships 26 playable games:
+Carrick Games currently ships 27 playable games:
 
 | Game | Chinese | Type |
 |------|---------|------|
 | Gacha | 抽卡 | Casual |
 | Parking | 停车 | Casual |
+| Warm Villa | 暖居别墅 | Casual |
 | Snake | 贪吃蛇 | Casual |
 | Flappy Bird | 像素鸟 | Casual |
 | Doodle Jump | 涂鸦跳跃 | Casual |
@@ -39,6 +40,13 @@ Carrick Games currently ships 26 playable games:
 | Solitaire | 纸牌 | Board & Card |
 | Texas Hold'em | 德州扑克 | Board & Card |
 
+## 3D Exploration: Warm Villa
+
+[Play Warm Villa / 暖居别墅](https://games.carrick7.com/#/villa): walk through a realistic, cozy three-story home with continuous stairs, collisions, day/evening lighting, and interactive furnishings. Explore the ground-floor living room, garden, pool, aquarium, gaming room, garage, and kitchen; upstairs bedrooms, bathroom, and library; and the roof terrace.
+
+- **Desktop:** WASD moves; ↑/↓ walks forward/back and ←/→ turns; drag the mouse to look. Hold Shift for a brisk walk. E interacts, M opens the floor plan, T switches day/evening, and H returns to the entrance.
+- **Touch:** left joystick moves, right-side dragging looks; on-canvas buttons provide interaction, map, time, and home actions.
+
 ## Features
 
 - Bilingual interface: English and Chinese.
@@ -52,7 +60,7 @@ Carrick Games currently ships 26 playable games:
 ## Tech Stack
 
 - TypeScript, Vite, and browser ES modules.
-- HTML5 Canvas 2D rendering.
+- HTML5 Canvas 2D rendering; the existing Three.js dependency supports shooter-family real 3D and the user-requested Warm Villa exploration experience within the same canvas shell.
 - CSS custom properties for theming.
 - Playwright end-to-end tests.
 - Vitest unit tests.

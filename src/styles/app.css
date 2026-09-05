@@ -587,6 +587,11 @@ main { width: 100%; min-width: 0; padding: 24px; }
   .game-list-item { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
   .library-footer { min-height: 32px; padding-top: 5px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
 }
+/* Leave room for Villa's ninth casual row on short desktop screens. */
+@media (min-width: 721px) and (max-height: 699px) {
+  .game-library { padding: 24px; }
+  .library-dialog { max-height: calc(100dvh - 48px); }
+}
 @media (max-width: 720px) and (max-height: 699px) {
   .library-dialog-header { gap: 4px; padding: 8px 12px; }
 }

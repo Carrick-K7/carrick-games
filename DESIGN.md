@@ -40,7 +40,7 @@ The current game name is always visible in the header and is the game-switch tri
 The picker:
 
 - opens only on demand from the current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop trigger;
-- shows all 26 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
+- shows all 27 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
 - uses a desktop dialog up to 1040px wide, with the heading, search, and close action in one compact toolbar;
 - matches both English and Chinese names and descriptions; descriptions remain available to assistive technology and search but do not occupy visible rows;
 - lays out four category columns on desktop, with simple 12px group headings and subdued counts, rather than colored category pills;
@@ -171,7 +171,7 @@ The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing on
 - Use shared particles, screen shake, tweens, and float text for meaningful feedback; keep counts bounded.
 - Cache detailed sprites with `makeSprite()`/`drawSprite()` rather than rebuilding them every frame.
 - Avoid per-frame `shadowBlur` storms.
-- Shooter-family games may use `three`, rendered back into the game's 2D canvas so shell contracts remain intact.
+- Shooter-family games and the user-requested Warm Villa (`villa`) exploration experience may use the existing `three` dependency, rendered back into the game's 2D canvas so shell contracts remain intact. Villa favors realistic cozy materials, warm day/evening lighting, walkable continuous stairs, and collisions; its floor plan and interaction controls stay in-canvas.
 - Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. The artwork is real Counter-Strike silhouettes: `src/games/gachaWeaponSilhouettes.ts` holds SVG path data traced from Valve's official inventory renders (never hand-drawn approximations). Profiles stay orthographic and use the principal front view (三视图正视图: muzzle +x, flat profile square to the viewer, no perspective), with supersampling for clean small thumbnails. Do not add a second perspective asset path. Every container sizes icons through `weaponIconFitSize()` using the measured per-weapon extents in `WEAPON_SILHOUETTE_DIMS`, so wide snipers fill their cells without overflow and tall knives stay inside theirs; never hand-pick a fixed pixel size for a new surface. Drop odds are never displayed anywhere; rarity color and tier name carry the prestige.
 
 Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `src/core/render.ts`. Shell minimalism must not flatten or remove useful game feedback.
@@ -186,7 +186,7 @@ Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `
 
 ## Overlays
 
-Terminal win/loss/completion states use `BaseGame.drawResultOverlay()`; Gacha remains the published exception because it has no terminal state.
+Terminal win/loss/completion states use `BaseGame.drawResultOverlay()`; Gacha and Warm Villa have no terminal state and do not need a result overlay.
 
 Start overlays contain only:
 
@@ -225,9 +225,9 @@ Theme and language changes must repaint static canvases immediately and fit both
 
 ## Game Families
 
-The published collection contains 26 games across four broad families:
+The published collection contains 27 games across four broad families:
 
-- Casual: Parking, Gacha, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
+- Casual: Gacha, Parking, Warm Villa, Snake, Flappy Bird, Doodle Jump, Breakout, Pong, Stacker.
 - Action: Counter-Strike, I Wanna, Space Shooter, Galaga, Asteroids, Aim Lab.
 - Puzzle: Bubble Shooter, Tetris, 2048, Simon Says, Minesweeper, Wordle, Sudoku.
 - Board & Card: Checkers, Chess, Connect Four, Solitaire, Texas Hold'em.

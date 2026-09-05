@@ -167,6 +167,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'counterstrike', keys: ['w', 'a', 's', 'd', 'r', 'b', 'q', '1', '2', '3', '4', 'g', ' '], delayMs: 2500 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
+  { id: 'villa', keys: ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift+w', 'e', 'm', 'm', 't', 'h'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: '2048', keys: ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'], delayMs: 1500 },
 ];
@@ -195,11 +196,11 @@ const ALL_GAME_IDS = [
 test.describe('Game rules', () => {
   test('published game catalog matches source and README', () => {
     const ids = GAMES.map((g) => g.id);
-    expect(ids).toHaveLength(26);
+    expect(ids).toHaveLength(27);
     expect(new Set(ids).size).toBe(ids.length);
 
     const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
-    expect(readme).toContain('Carrick Games currently ships 26 playable games');
+    expect(readme).toContain('Carrick Games currently ships 27 playable games');
     const readmeNames = [...readme.matchAll(/^\| ([^|]+?) \| [^|]+? \| (?:Casual|Action|Puzzle|Board & Card) \|$/gm)]
       .map((match) => match[1]);
     expect(readmeNames).toHaveLength(ids.length);
@@ -808,7 +809,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await page.locator('#gamePickerBtn').click();
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
-    await expect(gameItems).toHaveCount(26);
+    await expect(gameItems).toHaveCount(27);
     await expect(page.locator('.game-list-group')).toHaveText(['休闲', '动作', '益智', '棋牌']);
     await expect(page.locator('#librarySummary')).toHaveText('搜索或从列表中选择。');
   });
@@ -1050,7 +1051,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('all 26 games are registered in the list', async ({ page }) => {
+  test('all 27 games are registered in the list', async ({ page }) => {
     await page.locator('#gamePickerBtn').click();
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);

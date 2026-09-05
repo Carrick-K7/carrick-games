@@ -23,6 +23,7 @@ const paths: Record<string, string> = {
   iwanna: '<path d="M3 21h18M4 21l4-7 4 7m0 0 4-7 4 7M12 8v4m-3-2 3-2 3 2"/><circle cx="12" cy="4" r="2"/>',
   texashold: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v4m0 10v4M3 12h4m10 0h4m-8-2h3l-3 4h3"/>',
   parking: '<path d="m5 9 2-5h10l2 5M4 9h16v9H4zM7 18v2m10-2v2M7 13h2m6 0h2"/>',
+  villa: '<path d="m3 9 9-6 9 6M5 8v13h14V8M3 21h18M5 13h14M10 21v-5h4v5M8 10h1m6 0h1M8 16h1m6 0h1"/>',
   connectfour: '<rect x="3" y="3" width="18" height="16" rx="2"/><path d="M6 19v2m12-2v2"/><circle cx="8" cy="8" r="1.5"/><circle cx="16" cy="8" r="1.5"/><circle cx="8" cy="14" r="1.5"/><circle cx="16" cy="14" r="1.5"/>',
   gacha: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 12h18M12 7v14m0-14C5 7 6 1 9 3l3 4Zm0 0c7 0 6-6 3-4l-3 4Z"/>',
   aimlab: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',

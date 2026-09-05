@@ -35,8 +35,8 @@ async function openPicker(page: Page) {
 }
 
 async function expectAllGamesFit(page: Page) {
-  await expect(page.locator('.game-list-item')).toHaveCount(26);
-  await expect(page.locator('.game-list-name:visible')).toHaveCount(26);
+  await expect(page.locator('.game-list-item')).toHaveCount(27);
+  await expect(page.locator('.game-list-name:visible')).toHaveCount(27);
   const failures = await page.evaluate(() => {
     const errors: string[] = [];
     const tolerance = 1;
@@ -100,7 +100,7 @@ for (const viewport of viewports) {
   test.describe(`single-screen picker ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport, hasTouch: mobile, isMobile: mobile });
 
-    test('all 26 complete labels fit in English and Chinese with text-only branding', async ({ page }) => {
+    test('all 27 complete labels fit in English and Chinese with text-only branding', async ({ page }) => {
       await openShell(page);
       expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(mobile);
       const wordmark = page.locator('.wordmark');
@@ -178,7 +178,7 @@ test.describe('coarse-pointer picker interaction', () => {
     await expect(page.locator('.game-list-item')).toHaveCount(0);
     await expect(page.locator('.search-empty')).toBeVisible();
     await search.fill('');
-    await expect(page.locator('.game-list-item')).toHaveCount(26);
+    await expect(page.locator('.game-list-item')).toHaveCount(27);
     await page.locator('#libraryCloseBtn').tap();
     await expect(dialog).toBeHidden();
     await expect(page.locator('#gamePickerBtn')).toBeFocused();
