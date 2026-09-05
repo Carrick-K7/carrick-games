@@ -161,3 +161,98 @@ export function drawWeaponIcon(
   ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
   ctx.restore();
 }
+
+/* ─── real weapon renders (photos) ──────────────────────────────────────
+ * The prize-pool weapons also ship the official inventory render as a WebP
+ * photo under `gacha/weapons/<id>.webp` (traced silhouette and photo share
+ * the same source render and the same muzzle-right convention). Owned pulls
+ * and the opening interface show the real texture; locked gallery entries
+ * stay silhouettes. While a photo is still arriving the silhouette stands
+ * in, so first frames never look empty.
+ */
+
+/** Natural width/height aspect of each shipped photo render. */
+const WEAPON_PHOTO_ASPECTS: Record<string, number> = {
+  ak47: 1.9512,
+  awp: 2.4903,
+  butterfly: 1.2008,
+  deagle: 1.1896,
+  fn57: 1.2053,
+  g3sg1: 1.8391,
+  glock: 1.2648,
+  karambit: 1.4035,
+  m4a1s: 2.4521,
+  m4a4: 1.7204,
+  mac10: 0.795,
+  mp5: 1.6,
+  p250: 1.0095,
+  p90: 1.604,
+  ump45: 1.3913,
+  usp: 1.9048,
+};
+
+const photoCache = new Map<string, HTMLImageElement | 'error'>();
+
+export function weaponPhotoAspect(iconId: string): number | undefined {
+  const key = resolveSilhouetteId(iconId);
+  return key ? WEAPON_PHOTO_ASPECTS[key] : undefined;
+}
+
+function weaponPhoto(iconId: string): HTMLImageElement | undefined {
+  const key = resolveSilhouetteId(iconId);
+  if (!key || !(key in WEAPON_PHOTO_ASPECTS)) return undefined;
+  let entry = photoCache.get(key);
+  if (entry === 'error') return undefined;
+  if (!entry) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = `gacha/weapons/${key}.webp`; // relative: the SPA always serves from root
+    img.onerror = () => photoCache.set(key, 'error');
+    photoCache.set(key, img);
+    entry = img;
+  }
+  return entry.complete && entry.naturalWidth > 0 ? entry : undefined;
+}
+
+/** Start loading every available photo render (call when the game boots). */
+export function preloadWeaponPhotos(): void {
+  for (const key of Object.keys(WEAPON_PHOTO_ASPECTS)) weaponPhoto(key);
+}
+
+/**
+ * Draw the real weapon render contain-fitted inside `maxWidth` × `maxHeight`
+ * centered at (cx, cy). Returns false when the photo is unavailable and the
+ * silhouette fallback was drawn instead.
+ */
+export function drawWeaponPhoto(
+  ctx: CanvasRenderingContext2D,
+  iconId: string,
+  cx: number,
+  cy: number,
+  maxWidth: number,
+  maxHeight: number,
+  options: { alpha?: number; mirror?: boolean; fallbackColor?: string } = {},
+): boolean {
+  const img = weaponPhoto(iconId);
+  const aspect = weaponPhotoAspect(iconId);
+  if (img && aspect) {
+    const width = Math.min(maxWidth, maxHeight * aspect);
+    const height = width / aspect;
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (options.mirror) ctx.scale(-1, 1);
+    ctx.globalAlpha *= options.alpha ?? 1;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, -width / 2, -height / 2, width, height);
+    ctx.restore();
+    return true;
+  }
+  drawWeaponIcon(ctx, iconId, cx, cy, {
+    size: weaponIconFitSize(iconId, maxWidth, maxHeight),
+    color: options.fallbackColor ?? '#5c6672',
+    alpha: options.alpha,
+    mirror: options.mirror,
+  });
+  return false;
+}

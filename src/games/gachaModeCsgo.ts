@@ -29,16 +29,9 @@ import {
   type GachaTier,
 } from './gachaData.js';
 import type { GachaOpenContext, GachaOpenMode, GachaOpenModeFactory } from './gachaModes.js';
-import { drawWeaponIcon, weaponIconFitSize } from './gachaWeaponIcons.js';
+import { drawWeaponPhoto } from './gachaWeaponIcons.js';
 import { clamp, drawGlow, fillGlassPanel, makeSprite, shade } from '../core/fx.js';
 
-// ── Layout ──
-const CARD_W = 150;
-const CARD_GAP = 14;
-const CARD_PITCH = CARD_W + CARD_GAP;
-const REEL_Y = 128;
-const REEL_H = 216;
-const READOUT_Y = REEL_Y + REEL_H + 30;
 
 // ── Motion: continuous constant deceleration (CS:GO-style) ──
 // v(t) = v0 · (1 − t/T), s(t) = v0·t − ½·a·t²
@@ -70,18 +63,33 @@ export class CsgoStripMode implements GachaOpenMode {
   private started = false;
   private readonly viewportLeft: number;
   private readonly viewportRight: number;
+  // Fluid geometry in real display pixels (the host canvas is responsive):
+  // landscape cards sized from the strip height, matching weapon aspect.
+  private readonly cardW: number;
+  private readonly cardH: number;
+  private readonly pitch: number;
+  private readonly reelY: number;
+  private readonly readoutY: number;
 
   // Pre-rendered card faces: index → sprite (winner has a lit variant)
   private readonly cardSprites = new Map<number, HTMLCanvasElement>();
+  private readonly faceAttempts = new Map<number, number>();
   private winnerLandedSprite: HTMLCanvasElement | null = null;
+  private winnerAttempts = 0;
   private markerPulse = 0;
 
   constructor(ctx: GachaOpenContext) {
     this.ctx = ctx;
     this.sfx = ctx.sfx;
     this.dark = ctx.dark;
-    this.viewportLeft = 40;
-    this.viewportRight = ctx.width - 40;
+    const margin = Math.round(clamp(ctx.width * 0.04, 10, 40));
+    this.viewportLeft = margin;
+    this.viewportRight = ctx.width - margin;
+    this.cardH = Math.round(clamp(ctx.height * 0.36, 120, 250));
+    this.cardW = Math.round(this.cardH * 1.42);
+    this.pitch = this.cardW + Math.round(clamp(this.cardH * 0.07, 8, 14));
+    this.reelY = Math.round(ctx.height * 0.47 - this.cardH / 2);
+    this.readoutY = this.reelY + this.cardH + Math.round(clamp(ctx.height * 0.05, 18, 30));
   }
 
   start() {
@@ -109,7 +117,7 @@ export class CsgoStripMode implements GachaOpenMode {
 
     // Distance the strip must travel so card WIN_INDEX lands centered.
     const cx = this.ctx.width / 2;
-    this.totalDistance = this.viewportLeft + WIN_INDEX * CARD_PITCH - (cx - CARD_W / 2);
+    this.totalDistance = this.viewportLeft + WIN_INDEX * this.pitch - (cx - this.cardW / 2);
     // Constant deceleration from v0 to 0 over TIME_TOTAL: v0 = 2D/T, a = v0/T.
     this.accel = (2 * this.totalDistance) / (TIME_TOTAL * TIME_TOTAL);
     this.startVelocity = this.accel * TIME_TOTAL;
@@ -121,7 +129,7 @@ export class CsgoStripMode implements GachaOpenMode {
   private centerCard(): StripCard {
     const cx = this.ctx.width / 2;
     const centerAt = this.traveled + (cx - this.viewportLeft);
-    const index = Math.max(0, Math.min(this.cards.length - 1, Math.floor(centerAt / CARD_PITCH)));
+    const index = Math.max(0, Math.min(this.cards.length - 1, Math.floor(centerAt / this.pitch)));
     return this.cards[index];
   }
 
@@ -149,7 +157,7 @@ export class CsgoStripMode implements GachaOpenMode {
     // Tick when a card boundary crosses the window center line.
     const cx = this.ctx.width / 2;
     const centerAt = this.traveled + (cx - this.viewportLeft);
-    const centerIndex = Math.floor(centerAt / CARD_PITCH);
+    const centerIndex = Math.floor(centerAt / this.pitch);
     if (centerIndex !== this.lastTickedCenter) {
       if (this.lastTickedCenter >= 0 && centerIndex > this.lastTickedCenter) {
         this.sfx.tick(this.speedRatio());
@@ -176,12 +184,12 @@ export class CsgoStripMode implements GachaOpenMode {
     if (!this.started) this.start();
 
     const cx = this.ctx.width / 2;
-    const cy = REEL_Y + REEL_H / 2;
+    const cy = this.reelY + this.cardH / 2;
     const dark = this.dark;
     const speed = this.speedRatio();
 
     // Reel backdrop — glass track
-    fillGlassPanel(ctx, this.viewportLeft - 24, REEL_Y - 14, this.viewportRight - this.viewportLeft + 48, REEL_H + 28, 18, {
+    fillGlassPanel(ctx, this.viewportLeft - 24, this.reelY - 14, this.viewportRight - this.viewportLeft + 48, this.cardH + 28, 18, {
       fill: dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.72)',
       fill2: dark ? 'rgba(255,255,255,0.015)' : 'rgba(255,255,255,0.45)',
       border: dark ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.09)',
@@ -195,7 +203,7 @@ export class CsgoStripMode implements GachaOpenMode {
       ctx.lineWidth = 1;
       const trackW = this.viewportRight - this.viewportLeft;
       for (let i = 0; i < 6; i++) {
-        const y = REEL_Y + 16 + ((i * 53) % (REEL_H - 28));
+        const y = this.reelY + 16 + ((i * 53) % (this.cardH - 28));
         const x0 = this.viewportLeft - 10 + ((i * 197 + Math.floor(this.elapsed * 900)) % trackW);
         ctx.beginPath();
         ctx.moveTo(x0, y);
@@ -206,13 +214,13 @@ export class CsgoStripMode implements GachaOpenMode {
     }
 
     // Visible card range
-    const firstVisible = Math.max(0, Math.floor((this.traveled - CARD_W) / CARD_PITCH));
-    const lastVisible = Math.min(this.cards.length - 1, Math.floor((this.traveled + (this.viewportRight - this.viewportLeft) + CARD_W) / CARD_PITCH));
-    const centerIndex = Math.floor((this.traveled + (cx - this.viewportLeft)) / CARD_PITCH);
+    const firstVisible = Math.max(0, Math.floor((this.traveled - this.cardW) / this.pitch));
+    const lastVisible = Math.min(this.cards.length - 1, Math.floor((this.traveled + (this.viewportRight - this.viewportLeft) + this.cardW) / this.pitch));
+    const centerIndex = Math.floor((this.traveled + (cx - this.viewportLeft)) / this.pitch);
 
     for (let i = firstVisible; i <= lastVisible; i++) {
       const card = this.cards[i];
-      const x = this.viewportLeft + i * CARD_PITCH - this.traveled;
+      const x = this.viewportLeft + i * this.pitch - this.traveled;
       const isWinnerLanded = i === WIN_INDEX && this.landed;
       const sprite = isWinnerLanded ? this.winnerSprite() : this.cardSprite(i, card);
 
@@ -222,12 +230,12 @@ export class CsgoStripMode implements GachaOpenMode {
       if (!this.landed && speed < 0.3 && i === centerIndex) {
         scale = 1 + 0.05 * clamp(1 - speed / 0.3, 0, 1) * (0.5 + 0.5 * Math.sin(this.elapsed * 14));
       }
-      const dw = CARD_W * stretch * scale;
-      const dh = REEL_H * scale;
-      const dx = x + (CARD_W - dw) / 2;
-      const dy = REEL_Y + (REEL_H - dh) / 2;
+      const dw = this.cardW * stretch * scale;
+      const dh = this.cardH * scale;
+      const dx = x + (this.cardW - dw) / 2;
+      const dy = this.reelY + (this.cardH - dh) / 2;
 
-      if (x > this.ctx.width || x + CARD_W < 0) continue;
+      if (x > this.ctx.width || x + this.cardW < 0) continue;
 
       // Ghost trail behind the direction of travel (strip moves left)
       if (speed > 0.35 && !isWinnerLanded) {
@@ -257,27 +265,27 @@ export class CsgoStripMode implements GachaOpenMode {
     leftFade.addColorStop(0, `rgba(${edge},0.95)`);
     leftFade.addColorStop(1, `rgba(${edge},0)`);
     ctx.fillStyle = leftFade;
-    ctx.fillRect(this.viewportLeft - 24, REEL_Y - 14, fadeW, REEL_H + 28);
+    ctx.fillRect(this.viewportLeft - 24, this.reelY - 14, fadeW, this.cardH + 28);
     const rightFade = ctx.createLinearGradient(this.viewportRight + 24, 0, this.viewportRight + 24 - fadeW, 0);
     rightFade.addColorStop(0, `rgba(${edge},0.95)`);
     rightFade.addColorStop(1, `rgba(${edge},0)`);
     ctx.fillStyle = rightFade;
-    ctx.fillRect(this.viewportRight + 24 - fadeW, REEL_Y - 14, fadeW, REEL_H + 28);
+    ctx.fillRect(this.viewportRight + 24 - fadeW, this.reelY - 14, fadeW, this.cardH + 28);
 
     // Center highlight window — soft inner glow, not a hard box
-    const winX = cx - CARD_W / 2;
-    const winGrad = ctx.createRadialGradient(cx, cy, 20, cx, cy, CARD_W * 0.9);
+    const winX = cx - this.cardW / 2;
+    const winGrad = ctx.createRadialGradient(cx, cy, 20, cx, cy, this.cardW * 0.9);
     winGrad.addColorStop(0, dark ? 'rgba(255,255,255,0.10)' : 'rgba(17,24,39,0.07)');
     winGrad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = winGrad;
-    ctx.fillRect(winX, REEL_Y - 6, CARD_W, REEL_H + 12);
+    ctx.fillRect(winX, this.reelY - 6, this.cardW, this.cardH + 12);
 
     if (this.landed && this.landFlash > 0) {
       drawGlow(ctx, cx, cy, 130, this.ctx.roll.tier.color, this.landFlash * 1.2);
       ctx.save();
       ctx.strokeStyle = `rgba(255,255,255,${this.landFlash * 1.8})`;
       ctx.lineWidth = 2;
-      ctx.strokeRect(winX - 2, REEL_Y - 8, CARD_W + 4, REEL_H + 16);
+      ctx.strokeRect(winX - 2, this.reelY - 8, this.cardW + 4, this.cardH + 16);
       ctx.restore();
     }
 
@@ -287,8 +295,8 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(this.viewportLeft - 16, cy);
-    ctx.lineTo(cx - CARD_W / 2 - 10, cy);
-    ctx.moveTo(cx + CARD_W / 2 + 10, cy);
+    ctx.lineTo(cx - this.cardW / 2 - 10, cy);
+    ctx.moveTo(cx + this.cardW / 2 + 10, cy);
     ctx.lineTo(this.viewportRight + 16, cy);
     ctx.stroke();
     ctx.lineCap = 'butt';
@@ -296,18 +304,18 @@ export class CsgoStripMode implements GachaOpenMode {
     // Markers — chevrons with a glow that pulses on every tick
     const markerColor = dark ? '#7dd3fc' : '#0284c7';
     const glowStrength = 0.35 + this.markerPulse * 0.6;
-    drawGlow(ctx, cx - CARD_W / 2 - 13, cy, 18, markerColor, glowStrength * 0.7);
-    drawGlow(ctx, cx + CARD_W / 2 + 13, cy, 18, markerColor, glowStrength * 0.7);
+    drawGlow(ctx, cx - this.cardW / 2 - 13, cy, 18, markerColor, glowStrength * 0.7);
+    drawGlow(ctx, cx + this.cardW / 2 + 13, cy, 18, markerColor, glowStrength * 0.7);
     ctx.fillStyle = dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.9)';
     ctx.beginPath();
-    ctx.moveTo(cx - CARD_W / 2 - 18, cy - 8);
-    ctx.lineTo(cx - CARD_W / 2 - 7, cy);
-    ctx.lineTo(cx - CARD_W / 2 - 18, cy + 8);
+    ctx.moveTo(cx - this.cardW / 2 - 18, cy - 8);
+    ctx.lineTo(cx - this.cardW / 2 - 7, cy);
+    ctx.lineTo(cx - this.cardW / 2 - 18, cy + 8);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(cx + CARD_W / 2 + 18, cy - 8);
-    ctx.lineTo(cx + CARD_W / 2 + 7, cy);
-    ctx.lineTo(cx + CARD_W / 2 + 18, cy + 8);
+    ctx.moveTo(cx + this.cardW / 2 + 18, cy - 8);
+    ctx.lineTo(cx + this.cardW / 2 + 7, cy);
+    ctx.lineTo(cx + this.cardW / 2 + 18, cy + 8);
     ctx.fill();
 
     // Current-cell readout: what the winning slot holds right now.
@@ -321,7 +329,7 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.textBaseline = 'middle';
     ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = tier.color;
-    ctx.fillText(label, cx, READOUT_Y + 8);
+    ctx.fillText(label, cx, this.readoutY + 8);
   }
 
   /* ─── Card face sprites ─── */
@@ -329,26 +337,41 @@ export class CsgoStripMode implements GachaOpenMode {
   private cardSprite(index: number, card: StripCard): HTMLCanvasElement {
     let sprite = this.cardSprites.get(index);
     if (!sprite) {
-      sprite = makeSprite(CARD_W, REEL_H, (c) => this.renderCardFace(c, card, false), 2);
-      this.cardSprites.set(index, sprite);
+      let baked = false;
+      sprite = makeSprite(this.cardW, this.cardH, (c) => { baked = this.renderCardFace(c, card, false); }, 2);
+      // Cache only once the real photo texture is baked in; before that,
+      // re-render each frame so cards swap from silhouette to photo as soon
+      // as the texture arrives (give up after a while to avoid churn).
+      const attempts = (this.faceAttempts.get(index) ?? 0) + 1;
+      this.faceAttempts.set(index, attempts);
+      if (baked || attempts > 90) this.cardSprites.set(index, sprite);
     }
     return sprite;
   }
 
   private winnerSprite(): HTMLCanvasElement {
     if (!this.winnerLandedSprite) {
-      this.winnerLandedSprite = makeSprite(CARD_W, REEL_H, (c) => this.renderCardFace(c, this.cards[WIN_INDEX], true), 2);
+      let baked = false;
+      const sprite = makeSprite(this.cardW, this.cardH, (c) => { baked = this.renderCardFace(c, this.cards[WIN_INDEX], true); }, 2);
+      this.winnerAttempts += 1;
+      if (baked || this.winnerAttempts > 90) this.winnerLandedSprite = sprite;
+      return sprite;
     }
     return this.winnerLandedSprite;
   }
 
-  /** Static card art, drawn once into a sprite at origin (0,0). */
-  private renderCardFace(c: CanvasRenderingContext2D, card: StripCard, landed: boolean) {
+  /**
+   * Static card art, drawn once into a sprite at origin (0,0).
+   * Returns true when the real photo texture was baked in; false means the
+   * silhouette fallback was used and the caller should retry next frame
+   * instead of caching.
+   */
+  private renderCardFace(c: CanvasRenderingContext2D, card: StripCard, landed: boolean): boolean {
     const tier = card.tier;
     const dark = this.dark;
 
     // Sheet: glassy neutral base, rarity-tinted gradient on top
-    const grad = c.createLinearGradient(0, 0, 0, REEL_H);
+    const grad = c.createLinearGradient(0, 0, 0, this.cardH);
     if (landed) {
       grad.addColorStop(0, shade(tier.color, 0.15));
       grad.addColorStop(1, shade(tier.color, -0.5));
@@ -356,51 +379,55 @@ export class CsgoStripMode implements GachaOpenMode {
       grad.addColorStop(0, dark ? shade(tier.color, -0.62) : shade(tier.color, -0.05));
       grad.addColorStop(1, dark ? shade(tier.color, -0.75) : shade(tier.color, -0.45));
     }
-    roundRectPath(c, 0, 0, CARD_W, REEL_H, 14);
+    roundRectPath(c, 0, 0, this.cardW, this.cardH, 14);
     c.fillStyle = grad;
     c.fill();
 
     // Glass sheen across the top third
     c.save();
-    roundRectPath(c, 0, 0, CARD_W, REEL_H, 14);
+    roundRectPath(c, 0, 0, this.cardW, this.cardH, 14);
     c.clip();
-    const sheen = c.createLinearGradient(0, 0, 0, REEL_H * 0.4);
+    const sheen = c.createLinearGradient(0, 0, 0, this.cardH * 0.4);
     sheen.addColorStop(0, 'rgba(255,255,255,0.16)');
     sheen.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = sheen;
-    c.fillRect(0, 0, CARD_W, REEL_H * 0.4);
+    c.fillRect(0, 0, this.cardW, this.cardH * 0.4);
     c.restore();
 
     // Inner hairline
     c.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.65)';
     c.lineWidth = 1;
-    roundRectPath(c, 0.5, 0.5, CARD_W - 1, REEL_H - 1, 13.5);
+    roundRectPath(c, 0.5, 0.5, this.cardW - 1, this.cardH - 1, 13.5);
     c.stroke();
 
-    // Rarity chip — small pill under the weapon
-    c.fillStyle = dark ? 'rgba(9,11,16,0.55)' : 'rgba(255,255,255,0.75)';
-    roundRectPath(c, CARD_W / 2 - 38, REEL_H - 32, 76, 18, 9);
-    c.fill();
-    c.fillStyle = dark ? '#e6edf5' : '#3d4a5c';
-    c.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 23);
-
-    // The same flat, supersampled front view used by results and
-    // inventory, sized to this weapon's true aspect so nothing overflows.
+    // The weapon's real inventory render, contain-fitted to the landscape
+    // card — a soft studio glow behind it lifts the gunmetal off the tint.
     const iconId = card.item.icon ?? card.item.kind;
-    drawWeaponIcon(c, iconId, CARD_W / 2, REEL_H / 2 - 18, {
-      color: dark ? '#f1f5f9' : '#ffffff',
-      alpha: 0.95,
-      size: weaponIconFitSize(iconId, CARD_W - 30, REEL_H - 96),
-      mono: false,
+    const photoW = this.cardW - 18;
+    const photoH = this.cardH - 42;
+    const photoCy = 6 + photoH / 2;
+    drawGlow(c, this.cardW / 2, photoCy, Math.min(photoW, photoH) * 0.62, dark ? '#e8f1fb' : '#ffffff', dark ? 0.16 : 0.34);
+    const photoUsed = drawWeaponPhoto(c, iconId, this.cardW / 2, photoCy, photoW, photoH, {
+      fallbackColor: dark ? '#f1f5f9' : '#ffffff',
+      alpha: 0.98,
     });
 
-    // Item name
+    // Caption strip: item name, with a rarity dot.
+    c.fillStyle = dark ? 'rgba(9,11,16,0.5)' : 'rgba(17,24,39,0.32)';
+    roundRectPath(c, 6, this.cardH - 30, this.cardW - 12, 24, 8);
+    c.fill();
     c.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    c.fillStyle = dark ? '#f1f5f9' : '#ffffff';
-    c.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 14), CARD_W / 2, REEL_H - 52);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#f6f8fb';
+    const name = truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 16);
+    c.fillText(name, this.cardW / 2 + 5, this.cardH - 17);
+    c.fillStyle = tier.color;
+    c.beginPath();
+    c.arc(this.cardW / 2 - c.measureText(name).width / 2 - 4, this.cardH - 17, 3, 0, Math.PI * 2);
+    c.fill();
+
+    return photoUsed;
   }
 }
 

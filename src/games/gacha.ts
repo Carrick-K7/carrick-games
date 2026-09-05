@@ -60,7 +60,8 @@ import {
   type GachaOpenContext,
   type GachaOpenMode,
 } from './gachaModes.js';
-import { drawWeaponIcon, weaponIconFitSize } from './gachaWeaponIcons.js';
+import { GAMES } from './catalog.js';
+import { drawWeaponIcon, drawWeaponPhoto, preloadWeaponPhotos, weaponIconFitSize } from './gachaWeaponIcons.js';
 
 type Screen = 'menu' | 'unlock' | 'opening' | 'result' | 'gallery' | 'stats';
 
@@ -153,6 +154,7 @@ export class GachaGame extends BaseGame {
   private statsPage = 0;
   private galleryTier: GachaTierId = 'rarespecial';
   private unlockT = 0;
+  private crackSparked = false; // one-shot spark burst when the lid cracks
   private startedOnce = false;
 
   /* ─── Visual-craft state (cosmetic only — never touches odds/state) ─── */
@@ -169,6 +171,45 @@ export class GachaGame extends BaseGame {
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 640, 480));
     this.stats = loadGachaStats();
+  }
+
+  /**
+   * Responsive logical pixels: the game lays out in real display pixels, so
+   * text stays legible on phones and spacing stays premium on desktop and
+   * fullscreen. Portrait phones also switch the catalog box itself to a
+   * tall 4:5 canvas (the shell reads canvasSize on every fit, so the next
+   * refit converges); landscape keeps the classic 4:3.
+   */
+  override setDisplayScale(cssWidth: number) {
+    if (Number.isFinite(cssWidth) && cssWidth > 0) {
+      const meta = GAMES.find((g) => g.id === 'gacha');
+      const portrait = typeof window !== 'undefined'
+        && window.innerWidth < 700 && window.innerHeight > window.innerWidth * 1.05;
+      const want = portrait ? { width: 480, height: 600 } : { width: 640, height: 480 };
+      if (meta && (meta.canvasSize.width !== want.width || meta.canvasSize.height !== want.height)) {
+        meta.canvasSize = want;
+        this.canvas.dataset.logicalWidth = String(want.width);
+        this.canvas.dataset.logicalHeight = String(want.height);
+        // Same width, new aspect: ask the shell to refresh its cached vars.
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 0);
+      }
+      const logicalW = Math.round(clamp(cssWidth, 300, 1560));
+      const logicalH = Math.round(logicalW * (want.height / want.width));
+      if (logicalW !== this.width || logicalH !== this.height) {
+        this.width = logicalW;
+        this.height = logicalH;
+        this.dustMotes = []; // reseed ambient dust for the new extent
+      }
+    }
+    super.setDisplayScale(cssWidth);
+    // Logical dimensions can change while DPR stays identical. Resizing
+    // clears the backing canvas, including before the animation starts.
+    this.renderFrame();
+  }
+
+  /** Narrow layout (phones): rails become chip rows, panels stack. */
+  private get compact(): boolean {
+    return this.width < 560;
   }
 
   /* ─── Lifecycle ─── */
@@ -193,6 +234,7 @@ export class GachaGame extends BaseGame {
       this.startedOnce = true;
       // Holds the audio context open so the first pull already has sound.
       this.sfx.prime();
+      preloadWeaponPhotos();
     }
   }
 
@@ -221,6 +263,7 @@ export class GachaGame extends BaseGame {
     this.isNewItem = !hadItem;
 
     this.unlockT = 0;
+    this.crackSparked = false;
     this.screen = 'unlock';
     this.canvas.dataset.gachaScreen = 'unlock';
     this.canvas.dataset.gachaTier = roll.tier.id;
@@ -255,7 +298,7 @@ export class GachaGame extends BaseGame {
 
     const tier = this.roll.tier;
     const cx = this.width / 2;
-    const cy = this.height / 2 - 26;
+    const cy = 50 + (this.height - 50 - 72) / 2;
 
     // Rarity-graded ceremony: common gets a small pop; classified adds a
     // shock ring; covert/gold get flash, confetti, light pillar, shake.
@@ -340,8 +383,9 @@ export class GachaGame extends BaseGame {
     if (this.burst.count > 150) return;
     const t = clamp(this.unlockT / UNLOCK_DURATION, 0, 1);
     if (Math.random() > 0.3 + t * 0.65) return;
+    const caseH = this.unlockCaseH();
     const mouthX = this.width / 2;
-    const mouthY = 216 - 46;
+    const mouthY = this.unlockCaseY() - caseH * 0.43;
     const a = Math.random() * TAU;
     const r = 80 + Math.random() * 80;
     const sx = mouthX + Math.cos(a) * r * 1.5;
@@ -361,6 +405,20 @@ export class GachaGame extends BaseGame {
     });
   }
 
+  /** Golden sparks sprayed from the crack the moment the lid bursts. */
+  private emitCrackSparks(mouthX: number, mouthY: number) {
+    this.burst.emit({
+      x: mouthX, y: mouthY, count: 26,
+      angle: -Math.PI / 2, spread: 0.9,
+      speed: [220, 560], life: [0.35, 0.9], size: [1, 2.6],
+      colors: ['#fff3cf', '#ffd876', '#ffb84d'], shape: 'spark', gravity: 620, drag: 1.6,
+    });
+    this.burst.emit({
+      x: mouthX, y: mouthY, count: 1, speed: 0, life: 0.5, size: [10, 13],
+      colors: ['#fff6dd'], shape: 'ring', endScale: 16,
+    });
+  }
+
   /** Slow twinkling motes drifting around the result card on high tiers. */
   private emitResultSparkle(dt: number) {
     this.sparkleAcc += dt;
@@ -368,8 +426,9 @@ export class GachaGame extends BaseGame {
     this.sparkleAcc = 0;
     const tier = this.roll!.tier;
     const cx = this.width / 2;
-    const x = cx + (Math.random() * 2 - 1) * 175;
-    const y = 216 + (Math.random() * 2 - 1) * 165;
+    const cy = 50 + (this.height - 50 - 72) / 2;
+    const x = cx + (Math.random() * 2 - 1) * Math.min(this.width * 0.4, 300);
+    const y = cy + (Math.random() * 2 - 1) * Math.min(this.height * 0.38, 200);
     this.burst.emit({
       x,
       y,
@@ -486,14 +545,17 @@ export class GachaGame extends BaseGame {
     // Right-side icon chips
     this.drawNav(ctx, p);
 
-    // Case — hero object, centered. The home screen shows only the case:
-    // no odds strip, no operation hints (per design review).
+    // Case — hero object, centered and scaled to the actual viewport: the
+    // bigger the canvas, the grander the case. The home screen shows only
+    // the case: no odds strip, no operation hints (per design review).
     const cx = this.width / 2;
     const cy = 54 + (this.height - 54) / 2 - 10;
+    const caseW = Math.min(this.width * 0.56, (this.height - 84) * 0.78, 560);
+    const caseH = caseW * (220 / 330);
 
     // Drafting reticle behind the case: a hairline circle with four
     // cardinal ticks, echoing the blueprint art direction.
-    const reticleR = 196;
+    const reticleR = caseW * 0.6;
     ctx.save();
     ctx.strokeStyle = p.panelBorder;
     ctx.globalAlpha = dark ? 0.5 : 0.8;
@@ -515,7 +577,7 @@ export class GachaGame extends BaseGame {
     // Radar pulse: a slow expanding hairline ring invites the click.
     const pulse = (t % 2.6) / 2.6;
     if (pulse < 0.92) {
-      const pr = 148 + pulse * 108;
+      const pr = caseW * (0.45 + pulse * 0.33);
       ctx.save();
       ctx.globalAlpha = (1 - pulse) * 0.28 * (dark ? 1 : 0.7);
       ctx.strokeStyle = p.accent;
@@ -526,7 +588,7 @@ export class GachaGame extends BaseGame {
       ctx.restore();
     }
 
-    this.drawCase(ctx, cx, cy, 330, 220);
+    this.drawCase(ctx, cx, cy, caseW, caseH);
 
     // Mode switcher (only when more than one animation exists)
     if (openingModeCount() > 1) {
@@ -996,9 +1058,15 @@ export class GachaGame extends BaseGame {
 
   /* ─── Unlock prelude ─── */
 
+  /** Case geometry for the unlock stage, sized to the live viewport. */
+  private unlockCaseW() { return Math.min(this.width * 0.52, (this.height - 96) * 0.76, 520); }
+  private unlockCaseH() { return this.unlockCaseW() * (206 / 310); }
+  private unlockCaseY() { return this.height * 0.47; }
+
   private drawUnlock(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
     const t = this.unlockT / UNLOCK_DURATION;
+    const dark = this.isDarkTheme();
 
     ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
@@ -1010,7 +1078,9 @@ export class GachaGame extends BaseGame {
     this.drawNav(ctx, p);
 
     const cx = this.width / 2;
-    const cy = 236;
+    const cy = this.unlockCaseY();
+    const caseW = this.unlockCaseW();
+    const caseH = this.unlockCaseH();
     // Charge-up tremble: amplitude grows as energy builds toward the pop,
     // then settles while the lid swings open.
     const charge = clamp(t / 0.45, 0, 1);
@@ -1018,34 +1088,127 @@ export class GachaGame extends BaseGame {
       ? Math.sin(t * 90) * (1.2 + 7 * charge * charge)
       : Math.sin(t * 40) * 1.5 * (1 - t);
     const lidOpen = Math.min(1, Math.max(0, (t - 0.35) / 0.5));
-    this.drawCase(ctx, cx, cy, 310, 206, lidOpen, shake);
 
-    if (lidOpen > 0) {
-      // Warm energy welling out of the case mouth
-      drawGlow(ctx, cx, cy - 60, 80 + 120 * lidOpen, '#ffe9a8', 0.5 * lidOpen);
-    }
-
-    if (lidOpen > 0) {
-      ctx.save();
-      ctx.translate(cx, cy - 60);
-      ctx.globalAlpha = lidOpen;
-      ctx.strokeStyle = 'rgba(255,238,180,0.75)';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 12; i++) {
-        const a = -Math.PI / 2 + (i - 5.5) * 0.15 + Math.sin(t * 6 + i) * 0.03;
-        const len = 90 + 130 * lidOpen;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
-        ctx.stroke();
-      }
-      ctx.restore();
-      ctx.globalAlpha = 1;
-    }
-
-    if (t > 0.86) {
-      ctx.fillStyle = `rgba(255,246,214,${(t - 0.86) / 0.14 * 0.34})`;
+    // Cinematic focus: the room falls away as the charge builds.
+    if (t > 0.08) {
+      const focus = Math.min(1, t / 0.4) * (1 - lidOpen * 0.55);
+      const dim = ctx.createRadialGradient(cx, cy, caseW * 0.5, cx, cy, Math.max(this.width, this.height) * 0.78);
+      dim.addColorStop(0, 'rgba(6,8,12,0)');
+      dim.addColorStop(1, `rgba(6,8,12,${(dark ? 0.42 : 0.18) * focus})`);
+      ctx.fillStyle = dim;
       ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    // Overhead key light: a soft cone gathering over the case.
+    if (t > 0.05) {
+      const coneA = 0.16 * clamp(t / 0.5, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const cone = ctx.createLinearGradient(0, 0, 0, cy);
+      cone.addColorStop(0, `rgba(255,236,190,${coneA})`);
+      cone.addColorStop(1, 'rgba(255,236,190,0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(cx - caseW * 0.22, 0);
+      ctx.lineTo(cx + caseW * 0.22, 0);
+      ctx.lineTo(cx + caseW * 0.62, cy);
+      ctx.lineTo(cx - caseW * 0.62, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    this.drawCase(ctx, cx, cy, caseW, caseH, lidOpen, shake);
+
+    // ── Photoreal crack lighting: hot core, volumetric shafts, anamorphic
+    // flare and ground spill — all additive, all breathing with the lid. ──
+    if (lidOpen > 0) {
+      const mouthX = cx;
+      const mouthY = cy - caseH * 0.43;
+
+      if (!this.crackSparked) {
+        this.crackSparked = true;
+        this.emitCrackSparks(mouthX, mouthY);
+      }
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      // Hot core: white-hot heart wrapped in amber falloff.
+      drawGlow(ctx, mouthX, mouthY, 46 + 90 * lidOpen, '#fff4d2', 0.85 * lidOpen);
+      drawGlow(ctx, mouthX, mouthY, 120 + 170 * lidOpen, '#ffcf7a', 0.5 * lidOpen);
+      drawGlow(ctx, mouthX, mouthY, 240 + 220 * lidOpen, '#ff9d3c', 0.22 * lidOpen);
+
+      // Volumetric shafts: gradient wedges fanning up from the mouth,
+      // slowly sweeping and flickering like real light through a crack.
+      const shaftCount = 7;
+      for (let i = 0; i < shaftCount; i++) {
+        const frac = i / (shaftCount - 1);
+        const baseA = lerp(-Math.PI + 0.32, -0.32, frac);
+        const sweep = Math.sin(this.ambientT * 0.9 + i * 1.7) * 0.06;
+        const a = baseA + sweep;
+        const flicker = 0.72 + 0.28 * Math.sin(this.ambientT * 7.3 + i * 2.4);
+        const len = (caseH * 0.9 + this.height * 0.52 * lidOpen) * flicker;
+        const halfWidth = (7 + 13 * Math.abs(Math.sin(i * 2.1))) * (0.6 + 0.6 * lidOpen);
+        const alpha = (0.34 - Math.abs(frac - 0.5) * 0.22) * lidOpen * flicker * (dark ? 1 : 0.75);
+        const beam = ctx.createLinearGradient(mouthX, mouthY, mouthX + Math.cos(a) * len, mouthY + Math.sin(a) * len);
+        beam.addColorStop(0, `rgba(255,226,158,${alpha})`);
+        beam.addColorStop(0.55, `rgba(255,200,110,${alpha * 0.45})`);
+        beam.addColorStop(1, 'rgba(255,190,100,0)');
+        ctx.fillStyle = beam;
+        const nx = Math.cos(a + Math.PI / 2);
+        const ny = Math.sin(a + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(mouthX - nx * halfWidth, mouthY - ny * halfWidth);
+        ctx.lineTo(mouthX + nx * halfWidth, mouthY + ny * halfWidth);
+        ctx.lineTo(mouthX + Math.cos(a) * len, mouthY + Math.sin(a) * len);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Anamorphic lens flare: an ultra-wide horizontal streak through the
+      // crack plus a tight hot line at its heart.
+      ctx.translate(mouthX, mouthY);
+      ctx.scale(1, 0.016);
+      const flare = ctx.createRadialGradient(0, 0, 0, 0, 0, this.width * 0.62);
+      flare.addColorStop(0, `rgba(255,240,200,${0.5 * lidOpen})`);
+      flare.addColorStop(0.4, `rgba(255,206,120,${0.22 * lidOpen})`);
+      flare.addColorStop(1, 'rgba(255,190,100,0)');
+      ctx.fillStyle = flare;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.width * 0.62, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const streak = ctx.createLinearGradient(mouthX - this.width * 0.3, 0, mouthX + this.width * 0.3, 0);
+      streak.addColorStop(0, 'rgba(255,236,190,0)');
+      streak.addColorStop(0.5, `rgba(255,246,220,${0.65 * lidOpen})`);
+      streak.addColorStop(1, 'rgba(255,236,190,0)');
+      ctx.fillStyle = streak;
+      ctx.fillRect(mouthX - this.width * 0.3, mouthY - 1.2, this.width * 0.6, 2.4);
+
+      // Ground spill: warm light pooling under the case as it opens.
+      const spill = ctx.createRadialGradient(cx, cy + caseH * 0.5, 6, cx, cy + caseH * 0.5, caseW * (0.5 + 0.5 * lidOpen));
+      spill.addColorStop(0, `rgba(255,205,120,${0.28 * lidOpen})`);
+      spill.addColorStop(1, 'rgba(255,190,100,0)');
+      ctx.fillStyle = spill;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + caseH * 0.5, caseW * (0.5 + 0.5 * lidOpen), 14 + 22 * lidOpen, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // White-out handoff into the reel, warmed at the edges.
+    if (t > 0.86) {
+      const k = (t - 0.86) / 0.14;
+      ctx.fillStyle = `rgba(255,246,214,${k * 0.34})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      drawGlow(ctx, cx, cy - caseH * 0.43, 300 + 500 * k, '#ffedbe', 0.55 * k);
+      ctx.restore();
     }
   }
 
@@ -1078,8 +1241,14 @@ export class GachaGame extends BaseGame {
     const cx = this.width / 2;
     const topTier = tier.id === 'covert' || tier.id === 'rarespecial';
 
+    // Landscape result card: weapons are far wider than tall, so the card
+    // and its photo panel follow the weapon instead of fighting it.
+    const cw = Math.min(this.width - 36, 580);
+    const chh = Math.min(this.height - 150, cw * 0.72);
+    const cardCy = 50 + (this.height - 50 - 72) / 2;
+
     // Rarity radial wash (restrained on light theme to avoid a heavy blob)
-    const grad = ctx.createRadialGradient(cx, 226, 20, cx, 226, 380);
+    const grad = ctx.createRadialGradient(cx, cardCy, 20, cx, cardCy, Math.max(this.width, this.height) * 0.6);
     grad.addColorStop(0, tier.glow);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.save();
@@ -1096,8 +1265,8 @@ export class GachaGame extends BaseGame {
       beam.addColorStop(0.5, withAlpha(tier.color, 0.26 * beamA));
       beam.addColorStop(1, withAlpha(tier.color, 0));
       ctx.fillStyle = beam;
-      ctx.fillRect(cx - 56, 0, 112, this.height);
-      drawGlow(ctx, cx, 226, 240, tier.color, (dark ? 0.3 : 0.2) * beamA);
+      ctx.fillRect(cx - cw * 0.18, 0, cw * 0.36, this.height);
+      drawGlow(ctx, cx, cardCy, cw * 0.72, tier.color, (dark ? 0.3 : 0.2) * beamA);
     }
 
     // Tier kicker — letter-spaced rarity name; odds are never shown,
@@ -1108,9 +1277,9 @@ export class GachaGame extends BaseGame {
     fillSpacedText(ctx, (zh ? tier.nameZh : tier.name).toUpperCase(), cx, 28, 3);
 
     // Rotating segmented rarity ring behind the card, with cardinal ticks
-    const ringR = 198;
+    const ringR = Math.max(cw, chh) * 0.62;
     ctx.save();
-    ctx.translate(cx, 226);
+    ctx.translate(cx, cardCy);
     ctx.rotate(this.ambientT * 0.18);
     ctx.strokeStyle = tier.color;
     ctx.globalAlpha = 0.22;
@@ -1140,23 +1309,21 @@ export class GachaGame extends BaseGame {
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (ringR + 4), 226 + Math.sin(a) * (ringR + 4));
-      ctx.lineTo(cx + Math.cos(a) * (ringR + 12), 226 + Math.sin(a) * (ringR + 12));
+      ctx.moveTo(cx + Math.cos(a) * (ringR + 4), cardCy + Math.sin(a) * (ringR + 4));
+      ctx.lineTo(cx + Math.cos(a) * (ringR + 12), cardCy + Math.sin(a) * (ringR + 12));
       ctx.stroke();
     }
     ctx.restore();
 
     // Card pop-in
-    const cw = 316;
-    const chh = 372;
     const pop = Math.min(1, this.revealT * 3);
     const scale = 0.86 + 0.14 * ease('outBack', pop);
 
     // Breathing rarity halo behind the card
-    drawGlow(ctx, cx, 226, 240, tier.color, (dark ? 0.28 : 0.18) * (0.7 + 0.3 * Math.sin(this.ambientT * 2.4)));
+    drawGlow(ctx, cx, cardCy, cw * 0.72, tier.color, (dark ? 0.28 : 0.18) * (0.7 + 0.3 * Math.sin(this.ambientT * 2.4)));
 
     ctx.save();
-    ctx.translate(cx, 226);
+    ctx.translate(cx, cardCy);
     ctx.scale(scale, scale);
 
     // Glass sheet with rarity edge glow
@@ -1189,21 +1356,20 @@ export class GachaGame extends BaseGame {
       ctx.fill();
       ctx.fillStyle = '#12151b';
       ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(zh ? 'NEW' : 'NEW', cw / 2 - 40, -chh / 2 + 25);
+      ctx.textAlign = 'center';
+      ctx.fillText('NEW', cw / 2 - 40, -chh / 2 + 25);
       ctx.restore();
     }
 
-    // Content — the same orthographic front view used by every thumbnail,
-    // presented on a blueprint backdrop inside the card. The icon is sized
-    // from the weapon's measured silhouette extents so wide snipers fill
-    // the panel without spilling over it and tall knives stay inside.
+    // Content — the weapon's real inventory render on a blueprint panel
+    // that is as wide as the gun itself. Silhouette stands in while the
+    // texture streams in.
     const iconId = item.icon ?? item.kind;
     const panelX = -cw / 2 + 16;
     const panelY = -chh / 2 + 16;
     const panelW = cw - 32;
-    const panelH = 212;
+    const panelH = chh * 0.52;
     const iconCy = panelY + panelH / 2;
-    const resultIconSize = weaponIconFitSize(iconId, panelW - 22, panelH - 24);
 
     // Blueprint panel behind the weapon: hairline grid + center crosshair
     ctx.save();
@@ -1239,21 +1405,30 @@ export class GachaGame extends BaseGame {
     ctx.save();
     ctx.shadowColor = tier.color;
     ctx.shadowBlur = 26;
-    drawWeaponIcon(ctx, iconId, 0, iconCy, { color: tier.color, size: resultIconSize, mono: false });
+    drawWeaponPhoto(ctx, iconId, 0, iconCy, panelW - 22, panelH - 20, {
+      fallbackColor: tier.color,
+    });
     ctx.restore();
+
+    // Caption block vertically centered in the space under the panel.
+    const restTop = panelY + panelH;
+    const restH = chh / 2 - 16 - restTop;
+    const hasSub = item.name !== item.nameZh;
+    const nameY = restTop + restH / 2 - (hasSub ? 18 : 6);
+    ctx.textAlign = 'center';
     ctx.font = '600 21px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.text;
-    ctx.fillText(truncate(item.nameZh, 14), 0, 78);
+    ctx.fillText(truncate(item.nameZh, 14), 0, nameY);
     // Subtitle only when the English name differs (pure-weapon names would
     // otherwise print the same string twice).
-    if (item.name !== item.nameZh) {
+    if (hasSub) {
       ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textDim;
-      ctx.fillText(truncate(item.name, 30), 0, 106);
+      ctx.fillText(truncate(item.name, 30), 0, nameY + 24);
     }
     ctx.fillStyle = tier.color;
     ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
-    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, 142);
+    ctx.fillText(zh ? `拥有 ×${owned}` : `OWNED ×${owned}`, 0, nameY + (hasSub ? 50 : 30));
 
     // Diagonal shine sweep across the card, looping with a rest period
     const sweepT = (this.revealT - 0.4) % 3.6;
@@ -1283,17 +1458,51 @@ export class GachaGame extends BaseGame {
 
   /* ─── Gallery (collection book: tier rail + large showcase cards) ─── */
 
-  /** Left rail rows, one per rarity tier, highest first. */
+  /** Tier picker geometry: a left rail on desktop, a chip row on phones. */
   private galleryRailRows(): { tierId: GachaTierId; x: number; y: number; w: number; h: number }[] {
+    const order = [...GACHA_TIER_ORDER].reverse();
+    if (this.compact) {
+      const gap = 8;
+      const w = (this.width - 48 - gap * (order.length - 1)) / order.length;
+      return order.map((tierId, i) => ({ tierId, x: 24 + i * (w + gap), y: 68, w, h: 46 }));
+    }
     const rowH = 62;
     const gap = 10;
-    return [...GACHA_TIER_ORDER].reverse().map((tierId, i) => ({
+    const railW = clamp(this.width * 0.21, 140, 196);
+    return order.map((tierId, i) => ({
       tierId,
       x: 24,
       y: 76 + i * (rowH + gap),
-      w: 148,
+      w: railW,
       h: rowH,
     }));
+  }
+
+  /** Showcase area beside/below the tier picker. */
+  private galleryArea() {
+    if (this.compact) {
+      return { x: 24, y: 124, w: this.width - 48, h: this.height - 124 - 34 };
+    }
+    const railW = clamp(this.width * 0.21, 140, 196);
+    const x = 24 + railW + 18;
+    return { x, y: 76, w: this.width - x - 24, h: this.height - 76 - 40 };
+  }
+
+  /**
+   * Landscape-first card grid: weapons are much wider than tall, so cards
+   * are too. Picks the column count that maximizes the displayed weapon
+   * scale (a ~2:1 silhouette inside a card with a caption strip).
+   */
+  private galleryGrid(n: number, areaW: number, areaH: number, gap: number) {
+    let best = { cols: 1, rows: n, cw: areaW, ch: (areaH - gap * (n - 1)) / n, score: -1 };
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const cw = (areaW - gap * (cols - 1)) / cols;
+      const ch = (areaH - gap * (rows - 1)) / rows;
+      const score = Math.min(cw / 2.05, ch - 52);
+      if (score > best.score) best = { cols, rows, cw, ch, score };
+    }
+    return best;
   }
 
   private galleryRailAt(x: number, y: number): GachaTierId | null {
@@ -1304,6 +1513,7 @@ export class GachaGame extends BaseGame {
   private drawGallery(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
     const dark = this.isDarkTheme();
+    const compact = this.compact;
 
     ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
@@ -1318,7 +1528,7 @@ export class GachaGame extends BaseGame {
     ctx.stroke();
     this.drawNav(ctx, p);
 
-    // ── Tier rail: pick one rarity, browse its weapons large. ──
+    // ── Tier rail/chips: pick one rarity, browse its weapons large. ──
     for (const row of this.galleryRailRows()) {
       const tier = GACHA_TIERS.find((t) => t.id === row.tierId)!;
       const items = GACHA_POOL[row.tierId];
@@ -1337,52 +1547,60 @@ export class GachaGame extends BaseGame {
       roundRectPath(ctx, row.x + 0.5, row.y + 0.5, row.w - 1, row.h - 1, 12);
       ctx.stroke();
 
-      // Color spine
-      ctx.fillStyle = tier.color;
-      roundRectPath(ctx, row.x + 10, row.y + 12, 3.5, row.h - 24, 1.75);
-      ctx.fill();
+      if (compact) {
+        // Chip: rarity color bar on top, name + count centered.
+        ctx.fillStyle = tier.color;
+        roundRectPath(ctx, row.x + row.w / 2 - 14, row.y + 5, 28, 2.5, 1.25);
+        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = selected ? tier.color : p.text;
+        ctx.fillText(zh ? tier.nameZh : tier.name, row.x + row.w / 2, row.y + 21);
+        ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+        ctx.fillStyle = ownedCount > 0 ? tier.color : p.textFaint;
+        ctx.fillText(`${ownedCount}/${items.length}`, row.x + row.w / 2, row.y + 36);
+      } else {
+        // Color spine
+        ctx.fillStyle = tier.color;
+        roundRectPath(ctx, row.x + 10, row.y + 12, 3.5, row.h - 24, 1.75);
+        ctx.fill();
 
-      ctx.textAlign = 'left';
-      ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = selected ? tier.color : p.text;
-      ctx.fillText(zh ? tier.nameZh : tier.name, row.x + 24, row.y + 20);
-      ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillStyle = p.textFaint;
-      ctx.fillText(weaponFamilyLabel(zh, row.tierId), row.x + 24, row.y + 38);
+        ctx.textAlign = 'left';
+        ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = selected ? tier.color : p.text;
+        ctx.fillText(zh ? tier.nameZh : tier.name, row.x + 24, row.y + 20);
+        ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+        ctx.fillStyle = p.textFaint;
+        ctx.fillText(weaponFamilyLabel(zh, row.tierId), row.x + 24, row.y + 38);
 
-      // Owned progress, right-aligned
-      ctx.textAlign = 'right';
-      ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillStyle = ownedCount > 0 ? tier.color : p.textFaint;
-      ctx.fillText(`${ownedCount}/${items.length}`, row.x + row.w - 12, row.y + row.h - 16);
+        // Owned progress, right-aligned
+        ctx.textAlign = 'right';
+        ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
+        ctx.fillStyle = ownedCount > 0 ? tier.color : p.textFaint;
+        ctx.fillText(`${ownedCount}/${items.length}`, row.x + row.w - 12, row.y + row.h - 16);
+      }
       ctx.restore();
     }
 
-    // ── Showcase cards: the selected tier's weapons, as large as the
-    // panel allows, each icon fitted by its measured silhouette extents. ──
+    // ── Showcase cards: the selected tier's weapons in a landscape-first
+    // grid, each fitted by its true aspect — photos when owned. ──
     const tier = GACHA_TIERS.find((t) => t.id === this.galleryTier) ?? GACHA_TIERS[GACHA_TIERS.length - 1];
     const items = GACHA_POOL[tier.id] ?? [];
     const n = Math.max(1, items.length);
-    const areaX = 190;
-    const areaY = 76;
-    const areaW = this.width - areaX - 24;
-    const areaH = 358;
-    const cols = n <= 3 ? n : n === 4 ? 2 : 3;
-    const rows = Math.ceil(n / cols);
-    const gap = 16;
-    const cw = (areaW - gap * (cols - 1)) / cols;
-    const ch = rows === 1 ? Math.min(areaH, 290) : (areaH - gap * (rows - 1)) / rows;
-    const gridH = ch * rows + gap * (rows - 1);
-    const y0 = areaY + (areaH - gridH) / 2;
+    const area = this.galleryArea();
+    const gap = compact ? 10 : 14;
+    const grid = this.galleryGrid(n, area.w, area.h, gap);
+    const gridH = grid.ch * grid.rows + gap * (grid.rows - 1);
+    const y0 = area.y + (area.h - gridH) / 2;
 
     items.forEach((item, i) => {
-      const r = Math.floor(i / cols);
-      const c = i % cols;
+      const r = Math.floor(i / grid.cols);
+      const c = i % grid.cols;
       // Center a short last row under the full rows above it.
-      const inRow = Math.min(cols, n - r * cols);
-      const rowW = cw * inRow + gap * (inRow - 1);
-      const x0 = areaX + (areaW - rowW) / 2;
-      this.drawCollectionCard(ctx, x0 + c * (cw + gap), y0 + r * (ch + gap), cw, ch, tier, item, this.stats.itemCounts[item.id] ?? 0, p);
+      const inRow = Math.min(grid.cols, n - r * grid.cols);
+      const rowW = grid.cw * inRow + gap * (inRow - 1);
+      const x0 = area.x + (area.w - rowW) / 2;
+      this.drawCollectionCard(ctx, x0 + c * (grid.cw + gap), y0 + r * (grid.ch + gap), grid.cw, grid.ch, tier, item, this.stats.itemCounts[item.id] ?? 0, p);
     });
 
     ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
@@ -1452,30 +1670,37 @@ export class GachaGame extends BaseGame {
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Weapon: measured extents keep every silhouette inside the card while
-    // filling it as much as its true aspect allows.
+    // Weapon art: the real inventory render once owned; a monochrome
+    // silhouette while locked. Sized by the weapon's true aspect so wide
+    // snipers fill the card and tall knives stay inside it.
     const iconId = item.icon ?? item.kind;
-    const iconAreaH = h - 84;
-    const iconSize = weaponIconFitSize(iconId, w - 36, iconAreaH - 12);
-    const iconCy = y + 14 + iconAreaH / 2;
-    if (!locked) drawGlow(ctx, x + w / 2, iconCy, iconSize * 0.52, tier.color, dark ? 0.2 : 0.12);
-    drawWeaponIcon(ctx, iconId, x + w / 2, iconCy, {
-      color: locked ? (dark ? '#cbd5e1' : '#475569') : (dark ? '#eef2f8' : '#2b3648'),
-      alpha: locked ? 0.6 : 1,
-      size: iconSize,
-      mono: false,
-    });
+    const iconAreaH = h - 52;
+    const iconCy = y + 12 + (iconAreaH - 12) / 2;
+    if (locked) {
+      const iconSize = weaponIconFitSize(iconId, w - 28, iconAreaH - 14);
+      drawWeaponIcon(ctx, iconId, x + w / 2, iconCy, {
+        color: dark ? '#cbd5e1' : '#475569',
+        alpha: 0.55,
+        size: iconSize,
+        mono: true,
+      });
+    } else {
+      drawGlow(ctx, x + w / 2, iconCy, Math.min(w, iconAreaH) * 0.5, tier.color, dark ? 0.2 : 0.12);
+      drawWeaponPhoto(ctx, iconId, x + w / 2, iconCy, w - 24, iconAreaH - 12, {
+        fallbackColor: dark ? '#eef2f8' : '#2b3648',
+      });
+    }
 
     // Name + subtitle
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = locked ? p.textFaint : p.text;
-    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 12), x + w / 2, y + h - 34);
+    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 14), x + w / 2, y + h - 30);
     if (item.name !== item.nameZh) {
       ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = p.textFaint;
-      ctx.fillText(truncate(item.name, 26), x + w / 2, y + h - 16);
+      ctx.fillText(truncate(item.name, 30), x + w / 2, y + h - 13);
     }
 
     // Ownership badge / locked tag
@@ -1497,6 +1722,7 @@ export class GachaGame extends BaseGame {
   private drawStats(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
     const total = this.stats.totalPulls;
+    const compact = this.compact;
 
     // Slim header
     ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
@@ -1513,10 +1739,12 @@ export class GachaGame extends BaseGame {
     ctx.stroke();
 
     // ── Donut: tier distribution, total in the middle. ──
-    const dcx = 168;
-    const dcy = 246;
-    const radius = 96;
-    const ringW = 30;
+    const dcx = compact ? this.width * 0.26 : this.width * 0.24;
+    const dcy = compact ? 140 : 100 + (this.height - 100) * 0.42;
+    const radius = compact
+      ? clamp(Math.min(this.width, this.height) * 0.15, 44, 58)
+      : clamp(Math.min(this.width, this.height) * 0.2, 72, 118);
+    const ringW = Math.max(14, radius * 0.3);
     const tiersHighFirst = [...GACHA_TIER_ORDER].reverse();
 
     // Track ring
@@ -1546,19 +1774,20 @@ export class GachaGame extends BaseGame {
     ctx.lineCap = 'butt';
 
     // Center total
-    drawGlow(ctx, dcx, dcy, 60, p.accent, this.isDarkTheme() ? 0.14 : 0.08);
+    drawGlow(ctx, dcx, dcy, radius * 0.62, p.accent, this.isDarkTheme() ? 0.14 : 0.08);
     ctx.textAlign = 'center';
-    ctx.font = '700 32px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = `700 ${compact ? 22 : 32}px ui-monospace, SFMono-Regular, monospace`;
     ctx.fillStyle = p.text;
-    ctx.fillText(String(total), dcx, dcy - 6);
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(String(total), dcx, dcy - 4);
+    ctx.font = `${compact ? 9 : 11}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.fillStyle = p.textDim;
-    ctx.fillText(zh ? '累计抽取' : 'TOTAL PULLS', dcx, dcy + 22);
+    ctx.fillText(zh ? '累计抽取' : 'TOTAL PULLS', dcx, dcy + (compact ? 16 : 22));
 
-    // ── Right: per-tier rows with thin progress bars. ──
-    const rowX = 316;
-    const rowW = this.width - rowX - 30;
-    let y = 116;
+    // ── Per-tier rows with thin progress bars. ──
+    const rowX = compact ? this.width * 0.5 : this.width * 0.48;
+    const rowW = this.width - rowX - (compact ? 24 : 30);
+    const step = compact ? 36 : clamp((this.height - 220) / 5, 44, 58);
+    let y = compact ? 92 : 118;
     for (const tierId of tiersHighFirst) {
       const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
       const count = this.stats.tierCounts[tierId];
@@ -1591,11 +1820,11 @@ export class GachaGame extends BaseGame {
         roundRectPath(ctx, rowX + 12, y + 12, fillW, 4, 2);
         ctx.fill();
       }
-      y += 54;
+      y += step;
     }
 
-    // ── Bottom: recent pulls as colored icon chips. ──
-    const hy = 424;
+    // ── Recent pulls: real renders as colored chips. ──
+    const hy = compact ? Math.max(y + 16, this.height - 108) : this.height - 56;
     ctx.textAlign = 'left';
     ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = p.textDim;
@@ -1603,21 +1832,22 @@ export class GachaGame extends BaseGame {
     const allItems = GACHA_TIERS.flatMap((tier) => GACHA_POOL[tier.id].map((item) => ({ item, tier })));
     const recent = this.stats.history.slice(0, 14);
     let hx = 30;
+    const chipStep = compact ? 38 : 44;
+    const chipW = compact ? 30 : 34;
+    const chipH = compact ? 18 : 20;
     for (const entry of recent) {
       const tier = GACHA_TIERS.find((t) => t.id === entry.tierId);
       const item = allItems.find((e) => e.item.id === entry.itemId)?.item;
       if (!tier || !item) continue;
       const iconId = item.icon ?? item.kind;
-      drawWeaponIcon(ctx, iconId, hx + 17, hy + 6, {
-        color: p.textDim,
-        size: weaponIconFitSize(iconId, 34, 20),
-        mono: true,
+      drawWeaponPhoto(ctx, iconId, hx + chipW / 2, hy + 6, chipW, chipH, {
+        fallbackColor: p.textDim as string,
       });
       ctx.beginPath();
       ctx.fillStyle = tier.color;
-      ctx.arc(hx + 17, hy + 26, 2.5, 0, Math.PI * 2);
+      ctx.arc(hx + chipW / 2, hy + 26, 2.5, 0, Math.PI * 2);
       ctx.fill();
-      hx += 44;
+      hx += chipStep;
       if (hx > this.width - 60) break;
     }
     if (recent.length === 0) {
@@ -1680,7 +1910,10 @@ export class GachaGame extends BaseGame {
 
   /* ─── Hit regions ─── */
 
-  private hitAgain() { return { x: this.width / 2 - 96, y: 424, w: 192, h: 46 }; }
+  private hitAgain() {
+    const w = Math.min(220, this.width * 0.55);
+    return { x: this.width / 2 - w / 2, y: this.height - 62, w, h: 46 };
+  }
 
   /* ─── Input ─── */
 

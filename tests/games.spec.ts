@@ -688,13 +688,14 @@ test.describe('Game rules', () => {
     expect(hasWon).toBe(false);
   });
 
-  test('Gacha uses one supersampled flat-profile renderer across prize surfaces', () => {
+  test('Gacha shares photo artwork across revealed prizes and silhouettes for locked items', () => {
     const gachaSource = readFileSync(join(process.cwd(), 'src/games/gacha.ts'), 'utf8');
     const reelSource = readFileSync(join(process.cwd(), 'src/games/gachaModeCsgo.ts'), 'utf8');
     const profileSource = readFileSync(join(process.cwd(), 'src/games/gachaWeaponIcons.ts'), 'utf8');
     expect(gachaSource).not.toContain('gunImages');
-    expect(gachaSource.match(/drawWeaponIcon/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
-    expect(reelSource).toContain('drawWeaponIcon');
+    expect(gachaSource).toContain('drawWeaponIcon(ctx, iconId');
+    expect(gachaSource.match(/drawWeaponPhoto/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    expect(reelSource).toContain('drawWeaponPhoto');
     expect(profileSource).toContain('orthographic front');
     expect(profileSource).toContain('supersample');
   });
@@ -929,15 +930,13 @@ test.describe('Carrick Games - Lifecycle', () => {
     await page.goto('/');
     await expect(page.locator('#gameCanvas')).toBeVisible();
 
-    const topLeftPixel = await page.locator('#gameCanvas').evaluate((canvas) => {
+    // Responsive backing-store resize can clear pixels before the next paint.
+    await expect.poll(async () => page.locator('#gameCanvas').evaluate((canvas) => {
       const ctx = (canvas as HTMLCanvasElement).getContext('2d');
-      if (!ctx) return [];
-      return Array.from(ctx.getImageData(1, 1, 1, 1).data).slice(0, 3);
-    });
-
-    const [r, g, b] = topLeftPixel;
-    expect(r + g + b).toBeGreaterThan(360);
-    expect(g).toBeGreaterThan(120);
+      if (!ctx) return false;
+      const [r, g, b] = ctx.getImageData(1, 1, 1, 1).data;
+      return r + g + b > 360 && g > 120;
+    })).toBe(true);
   });
 
   test('high density displays use a scaled backing canvas without changing logical size', async ({ browser }) => {

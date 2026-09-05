@@ -525,7 +525,6 @@ export const GAMES: GameMeta[] = [
     descZh: 'CSGO 分级开箱:官方概率、转轮揭晓动画与抽取统计。',
     loader: () => import('./gacha.js').then((m) => m.GachaGame),
     canvasSize: { width: 640, height: 480 },
-    fullscreen: false,
     controls: {
       keyboard: [
         { keys: ['Space'], action: 'Open / draw again', actionZh: '开箱 / 再抽一次' },
