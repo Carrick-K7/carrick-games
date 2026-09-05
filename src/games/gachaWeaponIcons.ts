@@ -25,7 +25,7 @@
  * same art stays crisp from tiny reel thumbnails up to large result cards.
  */
 
-import { WEAPON_SILHOUETTES, resolveSilhouetteId } from './gachaWeaponSilhouettes.js';
+import { WEAPON_SILHOUETTES, WEAPON_SILHOUETTE_DIMS, resolveSilhouetteId } from './gachaWeaponSilhouettes.js';
 
 export interface WeaponIconOptions {
   color: string;
@@ -38,8 +38,8 @@ export interface WeaponIconOptions {
   mono?: boolean;
 }
 
-const PROFILE_WIDTH = 1.18;
-const PROFILE_HEIGHT = 0.88;
+const PROFILE_WIDTH = 1.2;
+const PROFILE_HEIGHT = 1.0;
 const profileCache = new Map<string, HTMLCanvasElement>();
 const pathCache = new Map<string, Path2D>();
 
@@ -52,6 +52,19 @@ function silhouettePath(iconId: string): Path2D | undefined {
   const path = new Path2D(d);
   pathCache.set(iconId, path);
   return path;
+}
+
+/**
+ * Draw size that makes the silhouette of `iconId` fit inside
+ * `maxWidth` × `maxHeight` logical pixels (each weapon keeps its true
+ * aspect ratio). Use this wherever an icon must stay inside a card or
+ * cell: `drawWeaponIcon(ctx, id, x, y, { size: weaponIconFitSize(id, w, h), ... })`.
+ */
+export function weaponIconFitSize(iconId: string, maxWidth: number, maxHeight: number): number {
+  const key = resolveSilhouetteId(iconId);
+  const dims = key ? WEAPON_SILHOUETTE_DIMS[key] : undefined;
+  if (!dims) return Math.max(1, Math.min(maxWidth, maxHeight));
+  return Math.max(1, Math.min(maxWidth / dims[0], maxHeight / dims[1]));
 }
 
 /* ─── colour shading ──────────────────────────────────────────────────── */

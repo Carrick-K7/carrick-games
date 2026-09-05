@@ -841,8 +841,8 @@ const canvasFitObserver = new ResizeObserver(() => {
     setOverflowOpen(open);
   });
   document.addEventListener('click', (event) => {
-    const target = event.target as Element;
-    if (!target.closest('.header-actions')) setOverflowOpen(false);
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest('.header-actions')) setOverflowOpen(false);
   });
   document.addEventListener('keydown', (event) => {
     const library = document.getElementById('gameLibrary');
@@ -955,7 +955,7 @@ const canvasFitObserver = new ResizeObserver(() => {
   const gameList = document.getElementById('gameList');
   if (gameList) {
     const getGameId = (target: EventTarget | null) =>
-      (target as Element | null)?.closest<HTMLButtonElement>('.game-list-item')?.dataset.id;
+      target instanceof Element ? target.closest<HTMLButtonElement>('.game-list-item')?.dataset.id : undefined;
     const warmFromEvent = (event: Event) => {
       const id = getGameId(event.target);
       if (id) warmGameClass(id);

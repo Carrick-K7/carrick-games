@@ -29,15 +29,15 @@ import {
   type GachaTier,
 } from './gachaData.js';
 import type { GachaOpenContext, GachaOpenMode, GachaOpenModeFactory } from './gachaModes.js';
-import { drawWeaponIcon } from './gachaWeaponIcons.js';
+import { drawWeaponIcon, weaponIconFitSize } from './gachaWeaponIcons.js';
 import { clamp, drawGlow, fillGlassPanel, makeSprite, shade } from '../core/fx.js';
 
 // ── Layout ──
-const CARD_W = 124;
-const CARD_GAP = 12;
+const CARD_W = 150;
+const CARD_GAP = 14;
 const CARD_PITCH = CARD_W + CARD_GAP;
-const REEL_Y = 150;
-const REEL_H = 170;
+const REEL_Y = 128;
+const REEL_H = 216;
 const READOUT_Y = REEL_Y + REEL_H + 30;
 
 // ── Motion: continuous constant deceleration (CS:GO-style) ──
@@ -379,26 +379,28 @@ export class CsgoStripMode implements GachaOpenMode {
 
     // Rarity chip — small pill under the weapon
     c.fillStyle = dark ? 'rgba(9,11,16,0.55)' : 'rgba(255,255,255,0.75)';
-    roundRectPath(c, CARD_W / 2 - 34, REEL_H - 30, 68, 16, 8);
+    roundRectPath(c, CARD_W / 2 - 38, REEL_H - 32, 76, 18, 9);
     c.fill();
     c.fillStyle = dark ? '#e6edf5' : '#3d4a5c';
-    c.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    c.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 22);
+    c.fillText(this.ctx.zh ? tier.nameZh : tier.name, CARD_W / 2, REEL_H - 23);
 
-    // The same flat, supersampled front view used by results and inventory.
-    drawWeaponIcon(c, card.item.icon ?? card.item.kind, CARD_W / 2, REEL_H / 2 - 12, {
+    // The same flat, supersampled front view used by results and
+    // inventory, sized to this weapon's true aspect so nothing overflows.
+    const iconId = card.item.icon ?? card.item.kind;
+    drawWeaponIcon(c, iconId, CARD_W / 2, REEL_H / 2 - 18, {
       color: dark ? '#f1f5f9' : '#ffffff',
       alpha: 0.95,
-      size: 96,
+      size: weaponIconFitSize(iconId, CARD_W - 30, REEL_H - 96),
       mono: false,
     });
 
     // Item name
-    c.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    c.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     c.fillStyle = dark ? '#f1f5f9' : '#ffffff';
-    c.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 14), CARD_W / 2, REEL_H / 2 + 36);
+    c.fillText(truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 14), CARD_W / 2, REEL_H - 52);
   }
 }
 
