@@ -12,7 +12,7 @@ Carrick Games is a simple, fun game collection. The shell exists only to help a 
 
 Everything else is contextual and optional. Games may be expressive; the page around them must stay quiet.
 
-The target feel is closer to Nuxt or Substack than to a game launcher dashboard: strong typography, generous breathing room, neutral surfaces, hairline dividers, and one clear content region.
+The target feel is a quiet boutique gaming space, not a game launcher dashboard: carefully weighted typography, generous breathing room, soft mineral surfaces, hairline dividers, and one clear content region. Premium means precise and calm, never a hero section, decorative background, or extra chrome.
 
 Do not add a separate visual-style document. Put durable visual decisions here.
 
@@ -39,12 +39,17 @@ The current game name is always visible in the header and is the game-switch tri
 
 The picker:
 
-- opens only on demand;
-- puts search first;
-- uses simple text group headings rather than colored category pills;
-- presents one flat row per game;
-- closes immediately after selection;
-- supports Escape, backdrop close, focus-visible states, and mobile touch targets;
+- opens only on demand from the current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop trigger;
+- uses a 600px-wide desktop dialog, capped at `min(760px, calc(100dvh - 64px))`, with a 24px heading, concise supporting line, and 46px search field;
+- puts search first and matches both English and Chinese names and descriptions;
+- uses simple 12px text group headings with subdued result counts rather than colored category pills;
+- presents one flat, at least 62px row per game: a 36px monochrome icon tile with 24px line artwork, a 14px game name, a 12px description, and a reserved status column;
+- marks the selected game with an inset accent line and tick, not color alone; an arrow appears on unselected rows on hover/focus;
+- supports Arrow Up/Down navigation through results, Enter to select, Escape/backdrop/close-button dismissal, focus trapping, and focus restoration to the opener;
+- closes immediately after selection, without changing the current game simply by moving keyboard focus;
+- shows a polite live result count in a hairline-separated footer, alongside compact desktop keyboard hints; keep the count but hide keyboard hints on mobile/coarse pointers;
+- gives an empty search a clear heading and helpful secondary line;
+- uses a bottom sheet with a small visual handle on mobile; the handle is decorative, not a promise of drag-to-dismiss behavior;
 - may preload a game on pointer or focus intent, but must not eagerly fetch every game.
 
 Game names and grouping come from `src/games/catalog.ts`. Do not maintain a second game registry.
@@ -96,14 +101,18 @@ Individual games may still use pixel art or another visual language inside their
 
 Use a neutral page with one accent color.
 
-| Purpose | Dark | Light |
+| Token / purpose | Light | Dark |
 |---|---|---|
-| Page | `#0f0f0f` | `#ffffff` |
-| Quiet surface | `#171717` | `#fafafa` |
-| Text | `#f5f5f5` | `#111111` |
-| Muted | `#a3a3a3` | `#6b7280` |
-| Border | `#2a2a2a` | `#e5e7eb` |
-| Accent | `#2dd4bf` | `#0d9488` |
+| `--page` | `#f6f7f5` | `#111512` |
+| `--surface` / quiet fill | `#eef0ec` | `#1a201c` |
+| `--surface-raised` / dialog and keycaps | `#ffffff` | `#202722` |
+| `--text` | `#202723` | `#edf1eb` |
+| `--muted` | `#666e68` | `#a0aba1` |
+| `--border` | `#dde2db` | `#2d3830` |
+| `--border-strong` | `#c7cec5` | `#435047` |
+| `--accent` | `#28745c` | `#8bd5b0` |
+
+Soft accent fills use 7% light-theme or 9% dark-theme accent opacity. Text uses the solid accent, never the tint, to preserve readable contrast.
 
 Rules:
 
@@ -116,26 +125,34 @@ Rules:
 
 Use the system UI stack for the shell and canvases unless a symbol font is necessary.
 
-- Wordmark: 15–16px, semibold.
-- Current game: 14px, medium.
-- Body and list rows: 12–14px.
+- Wordmark: 16px semibold with a 28px monochrome brand mark; 14px and 24px on mobile. Keep “Carrick” visible and hide only the secondary “ Games” span on mobile.
+- Current game: 14px medium (13px mobile), with truncation for long names.
+- Dialog heading: 24px semibold with tight tracking; support copy: 13px.
+- Game row name: 14px medium; descriptions: 12px; section labels: 12px.
+- Start title: 28–32px desktop, 24px mobile, 600 weight and tight tracking.
 - Avoid uppercase eyebrow labels and decorative display fonts.
 - Keep Chinese and English at equivalent visual weight.
 
-### Geometry and Elevation
+### Geometry, Spacing, and Elevation
 
-- Canvas radius: 6–8px.
-- Buttons and fields: 5–7px.
-- Modal or mobile sheet: 10–12px.
-- Ordinary components have no shadow.
-- Only dialogs may use obvious elevation.
+- Use `--header-height` consistently for viewport calculations: 64px desktop and 60px at widths up to 720px.
+- Desktop header side padding uses `clamp(24px, 4vw, 48px)`; mobile uses 12px, reducing to 8px at 360px and below.
+- Current-game trigger: subtly filled, outlined, at least 40px high, 8px radius, small grid icon, name, chevron, and desktop shortcut keycap.
+- Overflow and close buttons: 40×40px. Settings menu: 264px wide, 12px radius, subtle dividers, 12px section padding, and segmented text theme/language options at least 40px tall.
+- Canvas radius: 8px, 1px bezel, near-flat shadow only.
+- Buttons and fields: 6–8px radius; desktop dialog: 12px; mobile sheet: 16px top corners.
+- Desktop picker header and search side inset: 26px; mobile: 20px. Rows use 12px horizontal padding and 10–12px gaps.
+- Dialog footer preserves bottom safe-area inset. Mobile sheet caps at `min(88dvh, 760px)` and keeps search and footer outside its scrolling result region.
+- Desktop stage padding: 24px; grid max-width: 1320px. Use natural side gutters of `minmax(180px, 1fr)` with `clamp(24px, 3vw, 48px)` gaps. Canvas fitting must subtract both real computed gaps and both 180px minimum gutters, not assume a percentage of the viewport.
+- Keycaps have a quiet raised fill, 6px radius, and a 2px bottom inset edge; pressed state moves down 1px and uses a crisp accent border. Mouse feedback is a crisp accent, not a glow.
+- Ordinary components have no floating shadow; only menus and dialogs use noticeable elevation.
 - Avoid pill shapes except where semantics genuinely require them.
 
 ### Motion
 
 Motion communicates state, not decoration.
 
-- Menus and dialogs may use a short 120–160ms opacity/position transition.
+- Menus and dialogs enter with a 150ms opacity/5px position transition. Hover and border transitions stay within 120–150ms; the backdrop uses a restrained dark tint and optional 3px blur.
 - Keyboard and mouse indicators react immediately.
 - Do not stagger game-list entrances or animate every page component.
 - Honor `prefers-reduced-motion`.
@@ -172,7 +189,7 @@ Start overlays contain only:
 - the game name;
 - one concise click/tap-to-start instruction.
 
-Do not duplicate control teaching or large external start buttons.
+The title and hint sit on a restrained dark translucent canvas-sized backing with subtle 2px blur. A small CSS play triangle accompanies the hint, not a separate start control. Hover lightens the backing; keyboard focus gets a clearly visible inset outline. Do not duplicate control teaching or large external start buttons.
 
 Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.isRestartInput()` unless the game's continuation semantics require otherwise.
 
@@ -192,7 +209,9 @@ Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.i
 - Hide keyboard/mouse mapping completely.
 - Open game switching as a bottom sheet.
 - Do not render permanent descriptions, records, or control cards below the game.
-- Touch targets should be at least 40px where space allows.
+- Overflow, settings, close, fullscreen, and level-cell touch targets are at least 40px. Level grids auto-fit 40px minimum cells rather than squeezing a fixed column count.
+- A 320px viewport must fit without horizontal overflow; hide the decorative picker grid below 360px when necessary, not the current game name.
+- Use dynamic viewport height (`dvh`) for main, dialog, and fullscreen bounds. Fullscreen overlays remain aligned to the displayed canvas, not the wrapper.
 
 ## Themes and Language
 

@@ -19,6 +19,7 @@ import { saveStoredRecord } from './core/storage.js';
 import { isPixelMode } from './core/render.js';
 import { normalizeKey } from './ui/keyboard-input.js';
 import { renderVirtualKeyboard } from './ui/virtual-keyboard.js';
+import { renderGameIcon } from './ui/game-icons.js';
 import { renderLevelGridHTML, type LevelSelectState } from './core/levelselect.js';
 
 let currentGameName: string | null = null;
@@ -88,6 +89,12 @@ function updateGameTitle() {
   if (selectedGameLabel) {
     selectedGameLabel.textContent = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '选择游戏' : 'Select a game');
   }
+  const picker = document.getElementById('gamePickerBtn');
+  const gameName = meta ? (zh ? meta.nameZh : meta.name) : '';
+  if (picker) {
+    picker.setAttribute('aria-label', zh ? `切换游戏${gameName ? `：${gameName}` : ''}` : `Switch game${gameName ? `: ${gameName}` : ''}`);
+    picker.title = zh ? '打开游戏库' : 'Open game library';
+  }
   const canvas = document.getElementById('gameCanvas');
   if (canvas && meta) {
     const gameName = zh ? meta.nameZh : meta.name;
@@ -100,6 +107,12 @@ function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
     const k = el.getAttribute('data-key') || '';
     el.classList.toggle('pressed', pressedSet.has(k));
   });
+}
+
+function releaseHeldInputs() {
+  for (const key of [...pressedKeys]) window.dispatchEvent(new KeyboardEvent('keyup', { key }));
+  pressedKeys.clear();
+  updateVirtualKeyboardHighlight(pressedKeys);
 }
 
 function getLevelSelectState(): LevelSelectState | null {
@@ -181,7 +194,8 @@ function setStartOverlay(active: boolean) {
   const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
   if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
   // Control teaching stays in the compact desktop input strip.
-  if (hintEl) hintEl.textContent = zh ? '点击开始' : 'Click to start';
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  if (hintEl) hintEl.textContent = zh ? '点击开始' : (touch ? 'Tap to start' : 'Click to start');
 }
 
 let scorePollFrame: number | null = null;
@@ -410,11 +424,14 @@ export async function prepareGame(name: string) {
   currentGameName = name;
   updateActionButton();
   setLoadError(null);
+  setStartOverlay(false);
   setLoadingOverlay(true);
   updateGameTitle();
 
   document.querySelectorAll('.game-list-item').forEach((el) => {
-    el.classList.toggle('active', el.getAttribute('data-id') === name);
+    const active = el.getAttribute('data-id') === name;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-current', String(active));
   });
 
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -489,7 +506,7 @@ function fitGameCanvas() {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
   const wrapper = document.getElementById('canvasWrapper');
   if (!canvas || !wrapper || !currentGameInstance) return;
-  if (wrapper.classList.contains('fullscreen')) return;
+  const fullscreen = wrapper.classList.contains('fullscreen');
   const meta = GAMES.find((g) => g.id === currentGameName);
   if (!meta) return;
   const { width: lw, height: lh } = meta.canvasSize;
@@ -497,21 +514,31 @@ function fitGameCanvas() {
   const stage = wrapper.parentElement;
   if (!stage) return;
   const useSideRails = window.matchMedia('(min-width: 960px) and (pointer: fine)').matches;
-  const stageW = stage.clientWidth;
-  const railReserve = Math.max(460, Math.min(600, stageW * 0.4));
-  const colW = useSideRails ? stageW - railReserve : wrapper.clientWidth;
+  const gap = parseFloat(getComputedStyle(stage).columnGap) || 0;
+  // Match the CSS's two 180px minimum gutters, rather than estimating a
+  // reserve that can overflow near the desktop breakpoint.
+  const colW = fullscreen ? window.innerWidth - 40
+    : useSideRails ? stage.clientWidth - 360 - gap * 2 : wrapper.clientWidth;
   if (colW <= 0) return;
-  const top = wrapper.getBoundingClientRect().top;
-  const availH = useSideRails
-    ? stage.clientHeight - 8
-    : window.innerHeight - top - 14 - 44 - 12;
-  const cssW = Math.round(Math.max(280, Math.min(colW, availH / aspect, lw * 2.5)));
+  const main = document.querySelector('main');
+  const mainStyle = main ? getComputedStyle(main) : null;
+  const headerH = document.querySelector('.app-header')?.getBoundingClientRect().height ?? 64;
+  const padding = mainStyle ? parseFloat(mainStyle.paddingTop) + parseFloat(mainStyle.paddingBottom) : 48;
+  const extras = useSideRails ? 0 : Array.from(stage.children)
+    .filter((child) => child !== wrapper && child instanceof HTMLElement && child.offsetHeight > 0)
+    .reduce((height, child) => height + (child as HTMLElement).offsetHeight + gap, 0);
+  // Measure the viewport, not the vertically centered wrapper's top; the
+  // latter creates a resize feedback loop on phones and short windows.
+  const availH = fullscreen ? window.innerHeight - 40 : window.innerHeight - headerH - padding - extras - 2;
+  const cssW = Math.floor(Math.max(1, Math.min(colW, availH / aspect, lw * 2.5)));
   const cssWidth = `${cssW}px`;
-  stage.style.setProperty('--canvas-css-width', cssWidth);
+  if (!fullscreen) stage.style.setProperty('--canvas-css-width', cssWidth);
   wrapper.style.setProperty('--canvas-css-width', cssWidth);
-  if (cssW === lastFittedCanvasWidth) return;
-  lastFittedCanvasWidth = cssW;
-  currentGameInstance.setDisplayScale?.(cssW);
+  if (cssW !== lastFittedCanvasWidth) {
+    lastFittedCanvasWidth = cssW;
+    currentGameInstance.setDisplayScale?.(cssW);
+  }
+  wrapper.style.setProperty('--canvas-css-height', `${canvas.getBoundingClientRect().height}px`);
 }
 
 function startPreparedGame() {
@@ -558,13 +585,22 @@ function setGameLibraryOpen(open: boolean) {
   const library = document.getElementById('gameLibrary');
   const trigger = document.getElementById('gamePickerBtn');
   if (!library || !trigger) return;
+  const wasOpen = library.classList.contains('open');
+  if (wasOpen === open) return;
   library.classList.toggle('open', open);
-  library.setAttribute('aria-hidden', String(!open));
   trigger.setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('library-open', open);
+  document.querySelectorAll<HTMLElement>('.app-header, main').forEach((el) => { el.inert = open; });
   if (open) {
+    setOverflowOpen(false);
+    library.setAttribute('aria-hidden', 'false');
+    // Release held movement keys before modal input is isolated.
+    releaseHeldInputs();
     renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
-    window.setTimeout(() => (document.getElementById('searchInput') as HTMLInputElement | null)?.focus(), 0);
+    (document.getElementById('searchInput') as HTMLInputElement | null)?.focus({ preventScroll: true });
+  } else {
+    trigger.focus({ preventScroll: true });
+    library.setAttribute('aria-hidden', 'true');
   }
 }
 
@@ -576,8 +612,11 @@ function setOverflowOpen(open: boolean) {
   const menu = document.getElementById('overflowMenu');
   const trigger = document.getElementById('overflowBtn');
   if (!menu || !trigger) return;
+  const hadFocus = menu.contains(document.activeElement);
+  if (open && menu.hidden) releaseHeldInputs();
   menu.hidden = !open;
   trigger.setAttribute('aria-expanded', String(open));
+  if (!open && hadFocus) trigger.focus({ preventScroll: true });
 }
 
 function renderLibraryFilters(zh: boolean) {
@@ -586,7 +625,12 @@ function renderLibraryFilters(zh: boolean) {
   const summary = document.getElementById('librarySummary');
   if (summary) summary.textContent = zh ? '搜索或从列表中选择。' : 'Search or choose from the list.';
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
-  if (search) search.placeholder = zh ? '搜索游戏' : 'Search games';
+  if (search) {
+    search.placeholder = zh ? '搜索你的下一场游戏…' : 'Find your next game…';
+    search.setAttribute('aria-label', zh ? '搜索游戏' : 'Search games');
+  }
+  const hints = document.getElementById('libraryKeyboardHints');
+  if (hints) hints.innerHTML = `<span><kbd>↑</kbd><kbd>↓</kbd> ${zh ? '浏览' : 'Navigate'}</span><span><kbd>↵</kbd> ${zh ? '选择' : 'Select'}</span><span><kbd>Esc</kbd> ${zh ? '关闭' : 'Close'}</span>`;
 }
 
 function renderGameList(filter = '') {
@@ -617,8 +661,10 @@ function renderGameList(filter = '') {
     return aIndex - bIndex || a.name.localeCompare(b.name);
   });
 
+  const count = document.getElementById('libraryResultCount');
+  if (count) count.textContent = zh ? `${filtered.length} 款游戏` : `${filtered.length} ${filtered.length === 1 ? 'game' : 'games'}`;
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="search-empty">${zh ? '没有匹配的游戏' : 'No games found'}</div>`;
+    list.innerHTML = `<div class="search-empty"><strong>${zh ? '没有匹配的游戏' : 'No games found'}</strong><span>${zh ? '试试其他名称，或清空搜索再看看。' : 'Try another name, or clear your search to explore.'}</span></div>`;
     return;
   }
 
@@ -630,14 +676,19 @@ function renderGameList(filter = '') {
     if (groupId && groupId !== lastGroup) {
       const group = GAME_GROUPS.find((gr) => gr.id === groupId);
       if (group) {
-        html += `<div class="game-list-group" data-group="${group.id}">${zh ? group.nameZh : group.name}</div>`;
+        const groupCount = filtered.filter((game) => game.group === group.id).length;
+        html += `<div class="game-list-group" data-group="${group.id}">${zh ? group.nameZh : group.name}<span class="game-group-count" data-count="${groupCount}" aria-hidden="true"></span></div>`;
       }
       lastGroup = groupId;
     }
     html += `
-      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" data-id="${g.id}" title="${zh ? g.nameZh : g.name}">
-        <span class="game-list-name">${zh ? g.nameZh : g.name}</span>
-        <span class="game-list-desc">${zh ? g.descZh : g.desc}</span>
+      <button class="game-list-item ${g.id === currentGameName ? 'active' : ''}" type="button" data-id="${g.id}" aria-current="${g.id === currentGameName}" title="${zh ? g.nameZh : g.name}">
+        <span class="game-list-icon">${renderGameIcon(g.icon)}</span>
+        <span class="game-list-copy">
+          <span class="game-list-name">${zh ? g.nameZh : g.name}</span>
+          <span class="game-list-desc">${zh ? g.descZh : g.desc}</span>
+        </span>
+        <span class="game-list-status" aria-hidden="true">${g.id === currentGameName ? '✓' : ''}</span>
       </button>
     `;
   }
@@ -648,6 +699,7 @@ function renderGameList(filter = '') {
 
 function setLang(lang: 'en' | 'zh') {
   document.documentElement.setAttribute('data-lang', lang);
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   localStorage.setItem('cg-lang', lang);
   updateActionButton();
   updateGameTitle();
@@ -659,6 +711,14 @@ function setLang(lang: 'en' | 'zh') {
   if (languageLabel) languageLabel.textContent = lang === 'zh' ? '语言' : 'Language';
   if (themeLabel) themeLabel.textContent = lang === 'zh' ? '主题' : 'Theme';
   if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '更多设置' : 'More settings');
+  document.getElementById('libraryCloseBtn')?.setAttribute('aria-label', lang === 'zh' ? '关闭' : 'Close');
+  document.querySelector('[data-library-close]')?.setAttribute('aria-label', lang === 'zh' ? '关闭游戏库' : 'Close game library');
+  document.getElementById('keyboardPanel')?.setAttribute('aria-label', lang === 'zh' ? '键盘与鼠标操作' : 'Keyboard and mouse mapping');
+  document.querySelectorAll<HTMLButtonElement>('.theme-btn').forEach((button) => {
+    const labels = lang === 'zh' ? { light: '浅色', dark: '深色', system: '跟随系统' } : { light: 'Light', dark: 'Dark', system: 'System' };
+    button.textContent = labels[button.dataset.set as keyof typeof labels];
+  });
+  updateFullscreenLabel();
   document.querySelectorAll('.lang-btn').forEach((b) => {
     const target = b.getAttribute('data-lang');
     b.classList.toggle('active', target === lang);
@@ -698,6 +758,9 @@ function repaintCurrentFrame() {
 // Global keyboard highlight listener
 const pressedKeys = new Set<string>();
 window.addEventListener('keydown', (e) => {
+  const target = e.target instanceof Element ? e.target : null;
+  if (target?.closest('input, [contenteditable="true"]')) return;
+  if (target?.closest('button, summary') && (e.key === ' ' || e.key === 'Enter')) return;
   // Prevent page scrolling from arrow keys and Space
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
     e.preventDefault();
@@ -714,6 +777,14 @@ window.addEventListener('blur', () => {
   updateVirtualKeyboardHighlight(pressedKeys);
 });
 
+function updateFullscreenLabel() {
+  const fullscreen = document.getElementById('canvasWrapper')?.classList.contains('fullscreen');
+  const label = isZhLang() ? (fullscreen ? '退出全屏' : '全屏') : (fullscreen ? 'Exit fullscreen' : 'Fullscreen');
+  const button = document.getElementById('fullscreenBtn');
+  button?.setAttribute('title', label);
+  button?.setAttribute('aria-label', label);
+}
+
 // Fullscreen toggle
 function toggleFullscreen() {
   const wrapper = document.getElementById('canvasWrapper');
@@ -722,15 +793,13 @@ function toggleFullscreen() {
   const isFullscreen = wrapper.classList.contains('fullscreen');
   const btn = document.getElementById('fullscreenBtn');
   if (btn) {
-    btn.title = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+    updateFullscreenLabel();
     btn.innerHTML = isFullscreen
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
   }
-  if (!isFullscreen) {
-    lastFittedCanvasWidth = 0;
-    requestAnimationFrame(fitGameCanvas);
-  }
+  lastFittedCanvasWidth = 0;
+  requestAnimationFrame(fitGameCanvas);
 }
 
 // Refit the canvas whenever the centered stage changes size (window resize or
@@ -776,10 +845,69 @@ const canvasFitObserver = new ResizeObserver(() => {
     if (!target.closest('.header-actions')) setOverflowOpen(false);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    closeGameLibrary();
-    setOverflowOpen(false);
+    const library = document.getElementById('gameLibrary');
+    const open = library?.classList.contains('open');
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      event.stopPropagation();
+      setGameLibraryOpen(!open);
+      return;
+    }
+    if (open && library) {
+      // Palette typing/navigation must never reach the active game's window
+      // input listeners. Native button activation and search editing still work.
+      event.stopPropagation();
+      // IME candidate confirmation/navigation is editing, not game selection.
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeGameLibrary();
+        return;
+      }
+      const rows = Array.from(library.querySelectorAll<HTMLButtonElement>('.game-list-item'));
+      const activeIndex = rows.indexOf(document.activeElement as HTMLButtonElement);
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const next = activeIndex < 0 ? (event.key === 'ArrowDown' ? 0 : rows.length - 1)
+          : (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+        rows[next]?.focus({ preventScroll: true });
+        rows[next]?.scrollIntoView({ block: 'nearest' });
+      } else if (event.key === 'Enter' && event.target === document.getElementById('searchInput')) {
+        event.preventDefault();
+        rows[0]?.click();
+      } else if (event.key === 'Tab') {
+        const focusable = Array.from(library.querySelectorAll<HTMLElement>('.library-dialog button, .library-dialog input'));
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+      return;
+    }
+    const menuOpen = !document.getElementById('overflowMenu')?.hidden;
+    if (event.key === 'Escape' && menuOpen) {
+      event.stopPropagation();
+      setOverflowOpen(false);
+      document.getElementById('overflowBtn')?.focus();
+    } else if (event.key === 'Escape' && document.getElementById('canvasWrapper')?.classList.contains('fullscreen')) {
+      event.stopPropagation();
+      toggleFullscreen();
+    } else if ((event.target instanceof Element && event.target.closest('.header-actions'))) {
+      event.stopPropagation();
+    }
   });
+  document.addEventListener('keyup', (event) => {
+    if (document.body.classList.contains('library-open') || (event.target instanceof Element && event.target.closest('.header-actions'))) {
+      event.stopPropagation();
+    }
+  });
+  const shortcut = document.getElementById('pickerShortcut');
+  if (shortcut) shortcut.textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ K' : 'Ctrl K';
 
   // Mouse simulation: mirror real button presses and wheel ticks on the
   // little mouse next to the keyboard.
@@ -792,7 +920,7 @@ const canvasFitObserver = new ResizeObserver(() => {
   });
   let wheelTimer = 0;
   document.addEventListener('wheel', () => {
-    const wheel = document.querySelector('#vmouse .vmouse-wheel');
+    const wheel = document.querySelector('#vmouse .compact-mouse-wheel');
     if (!wheel) return;
     wheel.classList.add('scrolling');
     window.clearTimeout(wheelTimer);
@@ -815,6 +943,9 @@ const canvasFitObserver = new ResizeObserver(() => {
   const savedTheme = (localStorage.getItem('cg-theme') as 'light' | 'dark' | 'system') || 'system';
   setLang(savedLang);
   setTheme(savedTheme);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (!document.documentElement.hasAttribute('data-theme')) repaintCurrentFrame();
+  });
 
   const search = document.getElementById('searchInput') as HTMLInputElement | null;
   if (search) {
