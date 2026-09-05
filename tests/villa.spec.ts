@@ -30,6 +30,9 @@ test.describe('Warm Villa', () => {
       return values.size;
     });
     expect(colors).toBeGreaterThan(150);
+    // Release capture before a locator screenshot's scroll/stability action.
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
     await canvas.screenshot({ path: 'test-results/villa-exterior.png' });
     await page.keyboard.press('h');
     await expect(canvas).toHaveAttribute('data-villa-position', '{"x":0,"y":0,"z":11.5}');
@@ -52,9 +55,8 @@ test.describe('Warm Villa', () => {
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
     await page.mouse.move(box!.x + box!.width * 0.5, box!.y + box!.height * 0.5);
-    await page.mouse.down();
+    // Mouse movement alone changes view; no held button or drag gesture.
     await page.mouse.move(box!.x + box!.width * 0.66, box!.y + box!.height * 0.53, { steps: 4 });
-    await page.mouse.up();
     await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(lookBefore);
     await page.locator('#gamePickerBtn').click();
     await page.locator('.game-list-item[data-id="snake"]').click();
@@ -92,6 +94,10 @@ test.describe('Warm Villa', () => {
       const ascend = () => { walk(3.2, -6.2); walk(5.2, -6.2); walk(5.2, 1.4); floors.push(game.position.y); };
       ascend();
       walk(0, 1.4); walk(0, 2.6); walk(-3.4, 2.6); // master entry
+      const masterHudText: string[] = [], originalFillText = game.ctx.fillText;
+      game.ctx.fillText = (text: string) => masterHudText.push(text);
+      game.drawHud(game.ctx); game.ctx.fillText = originalFillText;
+      const masterHudHasRoomLabel = masterHudText.some(text => text.includes('主卧'));
       walk(0, 2.6); walk(0, -3.5); walk(-3.4, -3.5); // guest entry
       walk(0, -3.5); walk(0, 1.7); walk(8.2, 1.7); walk(8.2, -0.5); // bath entry
       walk(8.2, 1.7); walk(4.2, 1.7); walk(4.2, 4); // reading room entry
@@ -116,13 +122,14 @@ test.describe('Warm Villa', () => {
       game.destroy();
       const cleaned = game.scene === null && !canvas.hasAttribute('data-villa-renderer');
       canvas.remove();
-      return { floors, fed, fireOff, visited, scores, blurStopped, cleaned, roofImage, interiorImage };
+      return { floors, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, roofImage, interiorImage };
     }, villaModule());
     expect(result.floors[0]).toBeCloseTo(3.6, 4);
     expect(result.floors[1]).toBeCloseTo(7.2, 4);
     expect(result.floors[2]).toBeCloseTo(3.6, 4);
     expect(result.floors[3]).toBeCloseTo(0, 4);
     expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'gaming', 'garage', 'master', 'guest', 'bath', 'library', 'terrace', 'stairs']));
+    expect(result.masterHudHasRoomLabel).toBe(false);
     expect(result.fed).toBe(true);
     expect(result.fireOff).toBe(true);
     expect(result.blurStopped).toBe(true);

@@ -1,3 +1,5 @@
+import { VILLA_CAR, VILLA_RACING } from './villaActivities.js';
+
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
   minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number;
@@ -27,11 +29,17 @@ export const VILLA_RAMPS: VillaRamp[] = [0, STOREY].flatMap(base => [
   { minX: 2.3, maxX: 4.08, startZ: 0.5, endZ: -5.5, bottom: base, top: base + 1.8, base },
   { minX: 4.32, maxX: 6.1, startZ: -5.5, endZ: 0.5, bottom: base + 1.8, top: base + STOREY, base },
 ]);
+/** Separate structural soffit and oak finish: never share an exposed top plane. */
+export const STAIR_FINISH_THICKNESS = 0.04;
+export function villaTreadLayers(top: number) {
+  return { bodyBottom: top - STAIR_TREAD_THICKNESS, bodyTop: top - STAIR_FINISH_THICKNESS, finishBottom: top - STAIR_FINISH_THICKNESS, finishTop: top };
+}
 export const VILLA_ROOMS: VillaRoom[] = [
   { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
   { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: 12, minZ: 3, maxZ: 9 },
   { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, minX: 12, maxX: 20, minZ: -8, maxZ: 2 },
+  { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 6.7, maxX: 12, minZ: -9, maxZ: 1 },
   { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
   { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 6.5, maxX: 12, minZ: -9, maxZ: 1 },
@@ -78,7 +86,7 @@ function wall(axis: 'x' | 'z', fixed: number, from: number, to: number, base: nu
 
 // Ground floor facade, with four actual entrances, not painted-on doors.
 wall('x', 9, -12, 12, 0, [{ from: -11, to: -3 }, { from: -1.45, to: 1.45, door: true }, { from: 3, to: 11 }]);
-wall('x', -9, -12, 12, 0, [{ from: -11, to: -3 }, { from: -1.45, to: 1.45, door: true }, { from: 7, to: 11 }]);
+wall('x', -9, -12, 12, 0, [{ from: -10.8, to: -9 }, { from: -6.4, to: -3.3 }, { from: -1.45, to: 1.45, door: true }, { from: 7, to: 9 }]);
 wall('z', -12, -9, 9, 0, [{ from: -8, to: -1 }, { from: 1, to: 2.3 }, { from: 2.5, to: 5.2, door: true }, { from: 5.5, to: 8 }]);
 wall('z', 12, -9, 9, 0, [{ from: -7, to: -3 }, { from: -0.8, to: 1.8, door: true }, { from: 4, to: 8 }]);
 wall('x', 3, 2, 12, 0, [{ from: 3, to: 5.5, door: true }]);
@@ -245,21 +253,27 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof'; x: number; y: number; z: number; name: string; zh: string }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
   { id: 'aquarium', x: -3.5, y: 0, z: 2, name: 'Feed the fish', zh: '喂喂小鱼' },
-  { id: 'gaming', x: 8, y: 0, z: 5.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
+  { id: 'gaming', x: 6.65, y: 0, z: 4.9, radius: 1.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
+  { id: 'car', ...VILLA_CAR.door, radius: 1.75, name: 'Open the driver door / take a seat', zh: '打开驾驶位车门 / 入座' },
+  { id: 'racing', ...VILLA_RACING.exit, radius: 1.2, name: 'Sit in the simulator', zh: '坐进驾驶模拟器' },
+  { id: 'media', x: 7.5, y: 0, z: 8.25, radius: 1.25, name: 'Screen input: PC / PlayStation / Switch', zh: '大屏信号源：PC / PlayStation / Switch' },
+  { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Miku collection · display lights', zh: '初音手办收藏 · 开关柜灯' },
+  { id: 'replicas', x: 10.35, y: 0, z: 4.1, radius: 1.15, name: 'Replica collection · display lights', zh: '仿真武器收藏 · 开关柜灯' },
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
 ];
 export function nearestVillaHotspot(p: VillaPosition): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;
-  let distance = 2.4;
+  let distance = Infinity;
   for (const h of VILLA_HOTSPOTS) {
     if (Math.abs(h.y - p.y) > 0.4) continue;
+    if (h.id === 'car' && p.x < VILLA_CAR.body.maxX) continue;
     const d = Math.hypot(h.x - p.x, h.z - p.z);
-    if (d < distance) { nearest = h; distance = d; }
+    if (d < (h.radius ?? 2.4) && d < distance) { nearest = h; distance = d; }
   }
   return nearest;
 }

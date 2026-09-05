@@ -262,9 +262,9 @@ describe('Villa room and interaction classification', () => {
   });
   it('selects nearest hotspot and enforces distance and height limits', () => {
     expect(nearestVillaHotspot({ x: -8.2, y: 0, z: 3.5 })?.id).toBe('tea');
-    expect(nearestVillaHotspot({ x: 8, y: 0.39, z: 5.3 })?.id).toBe('gaming');
-    expect(nearestVillaHotspot({ x: 8, y: 0.41, z: 5.3 })).toBeNull();
-    expect(nearestVillaHotspot({ x: 8, y: 0, z: 8 })).toBeNull();
+    expect(nearestVillaHotspot({ x: 6.65, y: 0.39, z: 4.9 })?.id).toBe('gaming');
+    expect(nearestVillaHotspot({ x: 6.65, y: 0.41, z: 4.9 })).toBeNull();
+    expect(nearestVillaHotspot({ x: 11.5, y: 0, z: 6 })).toBeNull();
     expect(nearestVillaHotspot(VILLA_SPAWN)).toBeNull();
   });
 });

@@ -61,6 +61,12 @@ async function collectErrors(page: Page) {
 }
 
 async function selectGame(page: Page, gameId: string) {
+  // Villa captures the cursor on start. Follow its Esc contract before clicking
+  // shell controls; a locked pointer cannot target the picker with absolute CDP clicks.
+  if (await page.evaluate(() => !!document.pointerLockElement)) {
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
+  }
   await page.locator('#gamePickerBtn').click();
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
@@ -69,7 +75,8 @@ async function selectGame(page: Page, gameId: string) {
   const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
   if (meta) {
     await expect(page.locator('#selectedGameLabel')).toHaveText(zh ? meta.nameZh : meta.name);
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width));
+    // Cold software WebGL compilation of the furnished villa can exceed 5s.
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width), { timeout: gameId === 'villa' ? 30_000 : 5_000 });
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(meta.canvasSize.height));
   }
   await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
@@ -1249,6 +1256,7 @@ test.describe('Keyboard Games - Smoke', () => {
 
   for (const profile of KEYBOARD_GAMES) {
     test(`${profile.id}: starts and handles keyboard without errors`, async ({ page }) => {
+      if (profile.id === 'villa') test.setTimeout(60_000); // Cold software WebGL + fourteen real key gestures.
       const { consoleErrors, pageErrors } = await collectErrors(page);
 
       await selectGame(page, profile.id);

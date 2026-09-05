@@ -1,11 +1,16 @@
 import { test, expect } from '@playwright/test';
 
-test('villa releases pointer lock when its game picker opens', async ({ page }) => {
+test('villa captures mouse on start without extra keys and releases it for its picker', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/#/villa');
   await page.locator('#startOverlay').click();
-  await page.keyboard.press('l');
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('gameCanvas');
+  const canvas = page.locator('#gameCanvas');
+  const before = await canvas.getAttribute('data-villa-look');
+  // CDP absolute moves under pointer lock emit equal-and-opposite recenter
+  // events. Supply raw relative MouseEvent deltas to the real document listener.
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 70, movementY: 12, bubbles: true })));
+  await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(before);
   await page.keyboard.press('Control+k');
   await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBeNull();
@@ -69,4 +74,31 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   expect(await canvas.getAttribute('data-villa-position')).toBe(stopped);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test('villa hover-look works without dragging when capture is denied, and Escape frees the cursor', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.requestPointerLock = () => Promise.reject(new DOMException('Capture disabled by this test', 'NotAllowedError'));
+  });
+  await page.goto('/#/villa');
+  await page.locator('#startOverlay').click();
+  const canvas = page.locator('#gameCanvas');
+  await expect(canvas).toHaveAttribute('data-villa-mouse-look', 'active');
+  const box = (await canvas.boundingBox())!;
+  const y = box.y + box.height * 0.48;
+  await page.mouse.move(box.x + box.width * 0.4, y);
+  const before = await canvas.getAttribute('data-villa-look');
+  await page.mouse.move(box.x + box.width * 0.58, y + 15, { steps: 3 });
+  await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(before);
+  await page.keyboard.press('Escape');
+  await expect(canvas).toHaveAttribute('data-villa-mouse-look', 'cursor');
+  const freed = await canvas.getAttribute('data-villa-look');
+  await page.mouse.move(box.x + box.width * 0.7, y + 5, { steps: 3 });
+  expect(await canvas.getAttribute('data-villa-look')).toBe(freed);
+  await canvas.click({ position: { x: box.width * 0.5, y: box.height * 0.5 } });
+  await expect(canvas).toHaveAttribute('data-villa-mouse-look', 'active');
+  await page.mouse.move(box.x + box.width * 0.55, y);
+  await page.mouse.move(box.x + box.width * 0.65, y - 10);
+  await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(freed);
 });

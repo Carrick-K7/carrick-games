@@ -44,8 +44,9 @@ Carrick Games currently ships 27 playable games:
 
 [Play Warm Villa / 暖居别墅](https://games.carrick7.com/#/villa): walk through a realistic, cozy three-story home with continuous stairs, collisions, day/evening lighting, and interactive furnishings. Explore the ground-floor living room, garden, pool, aquarium, gaming room, garage, and kitchen; upstairs bedrooms, bathroom, and library; and the roof terrace.
 
-- **Desktop:** WASD moves; ↑/↓ walks forward/back and ←/→ turns; drag the mouse to look. Hold Shift for a brisk walk. E interacts, M opens the floor plan, T switches day/evening, and H returns to the entrance.
-- **Touch:** left joystick moves, right-side dragging looks; on-canvas buttons provide interaction, map, time, and home actions.
+- **Desktop:** WASD moves; hold Shift to run. Moving the mouse looks around automatically, without holding a button; Esc frees the cursor, and clicking the scene resumes capture. ↑/↓ walks and ←/→ turns. E interacts / sits / stands up, Q operates the car door or switches the big screen's virtual PC / PlayStation / Switch input. M opens the floor plan, T switches day/evening, and H returns to the entrance.
+- **Touch:** left joystick moves, right-side dragging looks; on-canvas buttons provide interaction, door / screen input, map, time, and home actions.
+- **At home:** a Tesla-inspired sedan with an opening driver door and furnished cabin; a detailed mechanical keyboard, mouse, panoramic glass PC and gaming chair; a wheel/pedals cockpit and big-screen console corner; glazed Miku figurine and non-functional replica-weapon collections; a full-size snooker table and fitted kitchen. Screen inputs are original virtual scene demos, not a connection to physical consoles. Room names appear only in the optional floor plan, not as scene signs or persistent HUD labels.
 
 ## Features
 

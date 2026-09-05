@@ -1,12 +1,33 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { furnishVilla, type VillaFurnishingState } from './villaFurnishings.js';
+import { createVillaVehicle } from './villaVehicle.js';
+import { createVillaGaming } from './villaGaming.js';
+import type { VillaActivityState } from './villaActivities.js';
 import {
-  EYE_HEIGHT, POOL, STAIR_TREAD_THICKNESS, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
+  EYE_HEIGHT, POOL, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
   type VillaCollider, type VillaMaterial, type VillaPosition,
 } from './villaWorld.js';
 
-export interface VillaView extends VillaPosition { yaw: number; pitch: number }
+export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number }
+export type VillaSceneState = VillaFurnishingState & VillaActivityState;
+
+/** Small studio/sky reflection probe; all pixels are authored locally, no asset fetches. */
+function reflectionProbe(): THREE.CubeTexture {
+  const images = Array.from({ length: 6 }, (_, side) => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 0, 64);
+    g.addColorStop(0, '#d5e4ec'); g.addColorStop(0.48, '#c9c7bb'); g.addColorStop(0.52, '#7b7166'); g.addColorStop(1, '#746957');
+    ctx.fillStyle = side === 2 ? '#e9e6dc' : side === 3 ? '#75664e' : g; ctx.fillRect(0, 0, 64, 64);
+    if (side !== 2 && side !== 3) {
+      ctx.fillStyle = '#f5eee0'; ctx.fillRect(6, 10, 18, 32); ctx.fillRect(40, 10, 18, 32);
+      ctx.fillStyle = '#a29883'; ctx.fillRect(13, 10, 1, 32); ctx.fillRect(48, 10, 1, 32);
+    }
+    return c;
+  });
+  const map = new THREE.CubeTexture(images); map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true; return map;
+}
 
 function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile'): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -70,6 +91,10 @@ export class VillaScene {
   private readonly ambient = new THREE.AmbientLight(0xffe2bd, 0.34);
   private readonly lamps: THREE.PointLight[] = [];
   private readonly furnishings: ReturnType<typeof furnishVilla>;
+  private readonly vehicle: ReturnType<typeof createVillaVehicle>;
+  private readonly gaming: ReturnType<typeof createVillaGaming>;
+  private readonly environment = reflectionProbe();
+  private lastStateKey = '';
   private readonly water: THREE.Mesh;
   private readonly waterMap: THREE.CanvasTexture;
   private readonly sky: THREE.ShaderMaterial;
@@ -80,6 +105,7 @@ export class VillaScene {
   private readonly cachedFrame = document.createElement('canvas');
   private lastDrawAt = -Infinity;
   private cachedTime = -1;
+  private softwareInputFrames = 0;
   private readonly onContextLost = (event: Event) => { event.preventDefault(); this.contextLost = true; };
   private readonly onContextRestored = () => { this.contextLost = false; this.renderer.shadowMap.needsUpdate = true; };
 
@@ -101,13 +127,18 @@ export class VillaScene {
     this.camera.rotation.order = 'YXZ';
     this.scene.fog = new THREE.Fog(0xd6cbbb, 60, 170);
     this.scene.add(this.hemi, this.ambient, this.sun);
+    // Keep the reflection probe on hardware; CPU rasterizers retain diffuse
+    // room lighting and baked contacts without paying for IBL on every surface.
+    this.scene.environment = this.lowSpec ? null : this.environment;
+    this.scene.environmentIntensity = 0.32;
     this.sun.position.set(-24, 26, 24);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(this.sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, near: 0.5, far: 100 });
+    Object.assign(this.sun.shadow.camera, { left: -29, right: 29, top: 29, bottom: -29, near: 0.5, far: 100 });
     this.sun.shadow.camera.updateProjectionMatrix();
-    this.sun.shadow.bias = -0.0003;
-    this.sun.shadow.normalBias = 0.045;
+    // Small bias protects the 11cm soffit; large bias detached shadows from the treads.
+    this.sun.shadow.bias = -0.00006;
+    this.sun.shadow.normalBias = 0.012;
 
     this.sky = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false,
@@ -146,6 +177,7 @@ export class VillaScene {
       bronze: new THREE.MeshStandardMaterial({ color: 0x554a3c, roughness: 0.42, metalness: 0.42 }),
       roof: new THREE.MeshStandardMaterial({ color: 0xa99b83, roughness: 0.8 }),
     };
+    const stairNosing = materials.oak.clone(); stairNosing.color.set('#dac5a7'); stairNosing.name = 'Oak tread end grain';
     this.glow = new THREE.MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffbe66, emissiveIntensity: 2, roughness: 0.45 });
     const batches = new Map<THREE.Material, THREE.BufferGeometry[]>();
     const batch = (geo: THREE.BufferGeometry, material: THREE.Material) => {
@@ -177,9 +209,15 @@ export class VillaScene {
       for (let i = 0; i < 12; i++) {
         const z = r.startZ + (r.endZ - r.startZ) * (i + 0.5) / 12;
         const top = r.bottom + (r.top - r.bottom) * (i + 1) / 12;
-        box((r.minX + r.maxX) / 2, top - STAIR_TREAD_THICKNESS / 2, z, r.maxX - r.minX, STAIR_TREAD_THICKNESS, 0.5, materials.plaster);
-        box((r.minX + r.maxX) / 2, top - 0.026, z, r.maxX - r.minX + 0.055, 0.052, 0.52, materials.oak);
-        if (i % 3 === 0) box(r.minX + 0.04, top + 0.012, z + 0.2, 0.12, 0.018, 0.03, this.glow);
+        const layer = villaTreadLayers(top), x = (r.minX + r.maxX) / 2, w = r.maxX - r.minX;
+        box(x, (layer.bodyBottom + layer.bodyTop) / 2, z, w, layer.bodyTop - layer.bodyBottom, 0.5, materials.plaster);
+        const front = Math.sign(r.startZ - r.endZ), finishY = (layer.finishBottom + layer.finishTop) / 2;
+        // The 2cm end-grain lip meets (never overlays) the main cap, making each
+        // descending step legible without reintroducing coplanar z-fighting.
+        box(x, finishY, z - front * 0.01, w + 0.055, layer.finishTop - layer.finishBottom, 0.48, materials.oak);
+        box(x, finishY, z + front * 0.24, w + 0.055, layer.finishTop - layer.finishBottom, 0.02, stairNosing);
+        // Recessed warm strip below the nosing, never a glowing patch on the walking face.
+        if (i % 3 === 0) box(x, top - 0.065, z + Math.sign(r.startZ - r.endZ) * 0.251, w * 0.66, 0.012, 0.009, this.glow);
       }
       for (const x of [r.minX - 0.045, r.maxX + 0.045]) {
         beam(new THREE.Vector3(x, r.bottom + 1.06, r.startZ), new THREE.Vector3(x, r.top + 1.06, r.endZ), 0.033, materials.oak);
@@ -276,7 +314,7 @@ export class VillaScene {
     for (const [material, geometries] of batches) {
       const merged = mergeGeometries(geometries);
       if (merged) {
-        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = !material.transparent; mesh.receiveShadow = true; this.scene.add(mesh);
+        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = !material.transparent && material !== this.glow; mesh.receiveShadow = true; this.scene.add(mesh);
       }
       geometries.forEach(g => g.dispose());
     }
@@ -289,15 +327,11 @@ export class VillaScene {
       hill.scale.set(24 + i % 3 * 8, 13 + i % 4 * 4, 25); this.scene.add(hill);
     }
     this.furnishings = furnishVilla(this.scene);
-    this.colliders.push(...this.furnishings.colliders);
-    this.addContactShadows(this.furnishings.colliders);
-    this.sign('暖居', 'THE WARM HOUSE', -2.55, 2.25, 9.3, 0, 1.15);
-    this.sign('回家，慢一点', 'MAKE YOURSELF AT HOME', 0, 2.65, -8.82, 0, 2.3);
-    this.sign('电竞房', 'PLAY ROOM', 6.2, 2.25, 2.86, Math.PI, 1.3);
-    this.sign('主卧', 'PRIMARY SUITE', -1.86, 5.9, 4.6, Math.PI / 2, 1.2);
-    this.sign('次卧', 'GUEST SUITE', -1.86, 5.9, -1.65, Math.PI / 2, 1.2);
-    this.sign('天台花园', 'ROOFTOP GARDEN', 4.2, 10.29, 1.55, 0, 2.4);
-    this.sign('上楼 ↑', 'BEDROOMS · ROOF', 6.65, 1.85, 0.2, 0, 1.35);
+    this.vehicle = createVillaVehicle(this.scene);
+    this.gaming = createVillaGaming(this.scene);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders);
+    this.addContactShadows([...this.furnishings.colliders, this.vehicle.colliders[0], ...this.gaming.colliders]);
+    // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 
   /** Cheap baked contact occlusion keeps furniture grounded even on software GL. */
@@ -323,30 +357,30 @@ export class VillaScene {
     else { material.dispose(); map.dispose(); }
   }
 
-  private sign(zh: string, en: string, x: number, y: number, z: number, rotation: number, width: number) {
-    const c = document.createElement('canvas'); c.width = 512; c.height = 192;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#ede1cd'; ctx.fillRect(0, 0, 512, 192);
-    ctx.fillStyle = '#645341'; ctx.textAlign = 'center'; ctx.font = '500 52px system-ui'; ctx.fillText(zh, 256, 86);
-    ctx.fillStyle = '#8b765d'; ctx.font = '23px system-ui'; ctx.fillText(en, 256, 140);
-    const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * 192 / 512), new THREE.MeshStandardMaterial({ map, roughness: 0.85 }));
-    mesh.position.set(x, y, z); mesh.rotation.y = rotation; this.scene.add(mesh);
+  /** Advance door collisions even between cached software-GL frames. */
+  updateActivities(time: number, state: VillaSceneState) {
+    if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
   }
 
-  render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaFurnishingState): boolean {
+  render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
     if (this.disposed || this.contextLost) return false;
     const scale = this.lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
     const w = Math.round(width * scale), h = Math.round(height * scale);
     const now = performance.now();
-    // Keep input/simulation responsive on CPU rasterizers; reuse a 2D copy between 24 Hz renders.
+    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}`;
+    this.updateActivities(time, state);
+    // Guarantee input-only RAFs even if browser compositing AFTER render() took
+    // longer than the time budget. A wall-clock cap alone starves real key events
+    // on SwiftShader. Long manual time jumps and activity changes still draw now.
     if (this.lowSpec && this.cachedFrame.width === w && this.cachedFrame.height === h
-      && now - this.lastDrawAt < 1000 / 24 && time >= this.cachedTime && this.lastEvening === state.evening) {
+      && (this.softwareInputFrames > 0 || now - this.lastDrawAt < 1000 / 24)
+      && time >= this.cachedTime && time - this.cachedTime < 0.5 && this.lastStateKey === stateKey) {
+      this.softwareInputFrames = Math.max(0, this.softwareInputFrames - 1);
       ctx.drawImage(this.cachedFrame, 0, 0, width, height); return true;
     }
     if (this.renderer.domElement.width !== w || this.renderer.domElement.height !== h) this.renderer.setSize(w, h, false);
     this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
-    this.camera.position.set(view.x, view.y + EYE_HEIGHT, view.z);
+    this.camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
     this.camera.rotation.set(view.pitch, view.yaw, 0);
     if (this.lastEvening !== state.evening) {
       this.lastEvening = state.evening;
@@ -362,12 +396,14 @@ export class VillaScene {
     this.waterMap.offset.set(Math.sin(time * 0.025) * 0.12, time * 0.012 % 1);
     this.water.position.y = -0.035 + Math.sin(time * 0.8) * 0.008;
     this.furnishings.update(time, state);
+    this.gaming.update(time, state);
     this.renderer.render(this.scene, this.camera);
+    this.lastStateKey = stateKey;
     if (this.lowSpec) {
       if (this.cachedFrame.width !== w || this.cachedFrame.height !== h) { this.cachedFrame.width = w; this.cachedFrame.height = h; }
       this.cachedFrame.getContext('2d')!.drawImage(this.renderer.domElement, 0, 0);
       ctx.drawImage(this.cachedFrame, 0, 0, width, height);
-      this.lastDrawAt = now; this.cachedTime = time;
+      this.lastDrawAt = performance.now(); this.cachedTime = time; this.softwareInputFrames = 6;
     } else ctx.drawImage(this.renderer.domElement, 0, 0, width, height);
     return true;
   }
@@ -386,6 +422,7 @@ export class VillaScene {
     });
     materials.forEach(m => { Object.values(m).forEach(value => { if (value instanceof THREE.Texture) textures.add(value); }); m.dispose(); });
     textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose());
+    this.environment.dispose();
     this.sun.shadow.map?.dispose();
     this.renderer.dispose(); this.renderer.forceContextLoss(); this.scene.clear();
     this.cachedFrame.width = this.cachedFrame.height = 0;
