@@ -293,34 +293,26 @@ export class CsgoStripMode implements GachaOpenMode {
       ctx.restore();
     }
 
-    // Center line — fine hairlines with rounded caps
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.22)' : 'rgba(17,24,39,0.3)';
-    ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(this.viewportLeft - 16, cy);
-    ctx.lineTo(cx - this.cardW / 2 - 10, cy);
-    ctx.moveTo(cx + this.cardW / 2 + 10, cy);
-    ctx.lineTo(this.viewportRight + 16, cy);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-
-    // Markers — chevrons with a glow that pulses on every tick
+    // Winning-slot needle — a single pointer dropping from the top edge of
+    // the frame, CS:GO style. Glows on every tick, flares on land.
+    const trackTop = this.reelY - 14;
     const markerColor = dark ? '#7dd3fc' : '#0284c7';
     const glowStrength = 0.35 + this.markerPulse * 0.6;
-    drawGlow(ctx, cx - this.cardW / 2 - 13, cy, 18, markerColor, glowStrength * 0.7);
-    drawGlow(ctx, cx + this.cardW / 2 + 13, cy, 18, markerColor, glowStrength * 0.7);
-    ctx.fillStyle = dark ? 'rgba(125,211,252,0.9)' : 'rgba(2,132,199,0.9)';
+    drawGlow(ctx, cx, trackTop + 4, 20, markerColor, glowStrength * 0.8);
+    ctx.fillStyle = dark ? 'rgba(125,211,252,0.95)' : 'rgba(2,132,199,0.95)';
     ctx.beginPath();
-    ctx.moveTo(cx - this.cardW / 2 - 18, cy - 8);
-    ctx.lineTo(cx - this.cardW / 2 - 7, cy);
-    ctx.lineTo(cx - this.cardW / 2 - 18, cy + 8);
+    ctx.moveTo(cx - 9, trackTop - 6);
+    ctx.lineTo(cx + 9, trackTop - 6);
+    ctx.lineTo(cx, trackTop + 13);
+    ctx.closePath();
     ctx.fill();
+    // Bright leading edge on the left face of the needle
+    ctx.strokeStyle = dark ? 'rgba(224,242,254,0.8)' : 'rgba(186,230,253,0.9)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cx + this.cardW / 2 + 18, cy - 8);
-    ctx.lineTo(cx + this.cardW / 2 + 7, cy);
-    ctx.lineTo(cx + this.cardW / 2 + 18, cy + 8);
-    ctx.fill();
+    ctx.moveTo(cx - 9, trackTop - 6);
+    ctx.lineTo(cx, trackTop + 13);
+    ctx.stroke();
 
     // Current-cell readout: what the winning slot holds right now. Tier is
     // carried by color alone — no rarity text during the spin.
