@@ -28,6 +28,7 @@ import {
   type GachaItem,
   type GachaRoll,
   type GachaTier,
+  type GachaTierId,
 } from './gachaData.js';
 import {
   Particles,
@@ -150,6 +151,7 @@ export class GachaGame extends BaseGame {
   private notify = '';
   private notifyTimer = 0;
   private statsPage = 0;
+  private galleryTier: GachaTierId = 'rarespecial';
   private unlockT = 0;
   private startedOnce = false;
 
@@ -1279,16 +1281,35 @@ export class GachaGame extends BaseGame {
     this.primaryButton(ctx, again, zh ? '再抽一次' : 'DRAW AGAIN', p);
   }
 
-  /* ─── Gallery (prize showcase, all prizes on one page) ─── */
+  /* ─── Gallery (collection book: tier rail + large showcase cards) ─── */
+
+  /** Left rail rows, one per rarity tier, highest first. */
+  private galleryRailRows(): { tierId: GachaTierId; x: number; y: number; w: number; h: number }[] {
+    const rowH = 62;
+    const gap = 10;
+    return [...GACHA_TIER_ORDER].reverse().map((tierId, i) => ({
+      tierId,
+      x: 24,
+      y: 76 + i * (rowH + gap),
+      w: 148,
+      h: rowH,
+    }));
+  }
+
+  private galleryRailAt(x: number, y: number): GachaTierId | null {
+    const row = this.galleryRailRows().find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    return row?.tierId ?? null;
+  }
 
   private drawGallery(ctx: CanvasRenderingContext2D, p: GachaPalette) {
     const zh = this.isZhLang();
+    const dark = this.isDarkTheme();
 
     ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.text;
-    ctx.fillText(zh ? '全部奖品' : 'ALL PRIZES', 26, 32);
+    ctx.fillText(zh ? '收藏册' : 'COLLECTION', 26, 32);
     ctx.strokeStyle = p.panelBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1297,43 +1318,80 @@ export class GachaGame extends BaseGame {
     ctx.stroke();
     this.drawNav(ctx, p);
 
-    // One row per rarity color: tier label on the left, its items in a row.
-    const labelW = 120;
-    const gap = 8;
-    const cardH = 70;
-    let y = 66;
+    // ── Tier rail: pick one rarity, browse its weapons large. ──
+    for (const row of this.galleryRailRows()) {
+      const tier = GACHA_TIERS.find((t) => t.id === row.tierId)!;
+      const items = GACHA_POOL[row.tierId];
+      const ownedCount = items.filter((it) => (this.stats.itemCounts[it.id] ?? 0) > 0).length;
+      const selected = row.tierId === this.galleryTier;
 
-    for (const tierId of [...GACHA_TIER_ORDER].reverse()) {
-      const tier = GACHA_TIERS.find((t) => t.id === tierId)!;
-      const items = GACHA_POOL[tierId];
-      const cardW = (this.width - 48 - labelW - gap * (items.length - 1)) / items.length;
-
-      // Tier label column
-      ctx.textAlign = 'left';
-      ctx.fillStyle = tier.color;
-      roundRectPath(ctx, 26, y + 6, 3, 22, 1.5);
+      ctx.save();
+      if (selected) drawGlow(ctx, row.x + row.w / 2, row.y + row.h / 2, 64, tier.color, dark ? 0.16 : 0.1);
+      ctx.fillStyle = selected
+        ? withAlpha(tier.color, dark ? 0.14 : 0.08)
+        : dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.42)';
+      roundRectPath(ctx, row.x, row.y, row.w, row.h, 12);
       ctx.fill();
-      ctx.font = '600 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(tier.nameZh, 36, y + 14);
-      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = p.textDim;
-      ctx.fillText(zh ? `${items.length} 件` : `${items.length} items`, 36, y + 34);
+      ctx.strokeStyle = selected ? withAlpha(tier.color, 0.75) : p.panelBorderSoft;
+      ctx.lineWidth = selected ? 1.5 : 1;
+      roundRectPath(ctx, row.x + 0.5, row.y + 0.5, row.w - 1, row.h - 1, 12);
+      ctx.stroke();
+
+      // Color spine
+      ctx.fillStyle = tier.color;
+      roundRectPath(ctx, row.x + 10, row.y + 12, 3.5, row.h - 24, 1.75);
+      ctx.fill();
+
+      ctx.textAlign = 'left';
+      ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = selected ? tier.color : p.text;
+      ctx.fillText(zh ? tier.nameZh : tier.name, row.x + 24, row.y + 20);
       ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
       ctx.fillStyle = p.textFaint;
-      ctx.fillText(weaponFamilyLabel(zh, tierId), 36, y + 50);
+      ctx.fillText(weaponFamilyLabel(zh, row.tierId), row.x + 24, row.y + 38);
 
-      // Items row
-      for (let i = 0; i < items.length; i++) {
-        const owned = this.stats.itemCounts[items[i].id] ?? 0;
-        this.drawItemCard(ctx, 24 + labelW + i * (cardW + gap), y, cardW, cardH, tier, items[i], owned, p);
-      }
-
-      y += cardH + 12;
-      if (y > this.height - 6) break;
+      // Owned progress, right-aligned
+      ctx.textAlign = 'right';
+      ctx.font = '600 12px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = ownedCount > 0 ? tier.color : p.textFaint;
+      ctx.fillText(`${ownedCount}/${items.length}`, row.x + row.w - 12, row.y + row.h - 16);
+      ctx.restore();
     }
+
+    // ── Showcase cards: the selected tier's weapons, as large as the
+    // panel allows, each icon fitted by its measured silhouette extents. ──
+    const tier = GACHA_TIERS.find((t) => t.id === this.galleryTier) ?? GACHA_TIERS[GACHA_TIERS.length - 1];
+    const items = GACHA_POOL[tier.id] ?? [];
+    const n = Math.max(1, items.length);
+    const areaX = 190;
+    const areaY = 76;
+    const areaW = this.width - areaX - 24;
+    const areaH = 358;
+    const cols = n <= 3 ? n : n === 4 ? 2 : 3;
+    const rows = Math.ceil(n / cols);
+    const gap = 16;
+    const cw = (areaW - gap * (cols - 1)) / cols;
+    const ch = rows === 1 ? Math.min(areaH, 290) : (areaH - gap * (rows - 1)) / rows;
+    const gridH = ch * rows + gap * (rows - 1);
+    const y0 = areaY + (areaH - gridH) / 2;
+
+    items.forEach((item, i) => {
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      // Center a short last row under the full rows above it.
+      const inRow = Math.min(cols, n - r * cols);
+      const rowW = cw * inRow + gap * (inRow - 1);
+      const x0 = areaX + (areaW - rowW) / 2;
+      this.drawCollectionCard(ctx, x0 + c * (cw + gap), y0 + r * (ch + gap), cw, ch, tier, item, this.stats.itemCounts[item.id] ?? 0, p);
+    });
+
+    ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = p.textFaint;
+    ctx.fillText(zh ? '← → 切换稀有度' : '← → switch tier', this.width - 26, this.height - 14);
   }
 
-  private drawItemCard(
+  private drawCollectionCard(
     ctx: CanvasRenderingContext2D,
     x: number, y: number, w: number, h: number,
     tier: GachaTier, item: GachaItem, owned: number,
@@ -1342,79 +1400,96 @@ export class GachaGame extends BaseGame {
     const locked = owned <= 0;
     const dark = this.isDarkTheme();
 
-    // Sheet
+    // Sheet with a faint tier tint rising from the bottom
     const grad = ctx.createLinearGradient(x, y, x, y + h);
     if (locked) {
       grad.addColorStop(0, dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)');
       grad.addColorStop(1, dark ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.3)');
     } else {
       grad.addColorStop(0, p.cardFillTop);
-      grad.addColorStop(1, p.cardFillBottom);
+      grad.addColorStop(0.62, p.cardFillBottom);
+      grad.addColorStop(1, withAlpha(tier.color, dark ? 0.1 : 0.06));
     }
     ctx.fillStyle = grad;
-    roundRectPath(ctx, x, y, w, h, 10);
+    roundRectPath(ctx, x, y, w, h, 14);
     ctx.fill();
+
+    // Faint blueprint grid inside the card, echoing the result reveal
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, 14);
+    ctx.clip();
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.045)' : 'rgba(2,132,199,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let gx = x + 16; gx < x + w; gx += 18) {
+      ctx.moveTo(gx, y);
+      ctx.lineTo(gx, y + h);
+    }
+    for (let gy = y + 16; gy < y + h; gy += 18) {
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+    }
+    ctx.stroke();
+    ctx.restore();
 
     // Border: rarity gradient frame when owned, neutral hairline when locked
     if (locked) {
       ctx.strokeStyle = p.panelBorderSoft;
     } else {
       const frame = ctx.createLinearGradient(x, y, x, y + h);
-      frame.addColorStop(0, withAlpha(tier.color, 0.6));
-      frame.addColorStop(1, withAlpha(tier.color, 0.15));
+      frame.addColorStop(0, withAlpha(tier.color, 0.65));
+      frame.addColorStop(1, withAlpha(tier.color, 0.18));
       ctx.strokeStyle = frame;
     }
     ctx.lineWidth = 1;
-    roundRectPath(ctx, x, y, w, h, 10);
+    roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 14);
     ctx.stroke();
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    // Every weapon is sized from its measured silhouette so the icon fills
-    // the cell as much as its true aspect allows — no overflow, no float.
-    const iconId = item.icon ?? item.kind;
-    const iconSize = weaponIconFitSize(iconId, w - 14, h - 30);
-    const iconCy = y + (h - 24) / 2 + 1;
-
-    if (locked) {
-      drawWeaponIcon(ctx, iconId, x + w / 2, iconCy, {
-        color: dark ? '#cbd5e1' : '#475569',
-        alpha: 0.66,
-        size: iconSize,
-        mono: false,
-      });
-      ctx.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillStyle = p.textFaint;
-      ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h - 12);
-      return;
-    }
-
-    // Rarity top accent + corner diamond badge
+    // Rarity top accent
     ctx.fillStyle = tier.color;
-    ctx.globalAlpha = 0.9;
-    roundRectPath(ctx, x + w / 2 - 12, y + 5, 24, 2, 1);
+    ctx.globalAlpha = locked ? 0.35 : 0.9;
+    roundRectPath(ctx, x + w / 2 - 16, y + 7, 32, 2.5, 1.25);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.save();
-    ctx.translate(x + w - 8, y + 8);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = tier.color;
-    ctx.fillRect(-3, -3, 6, 6);
-    ctx.restore();
 
+    // Weapon: measured extents keep every silhouette inside the card while
+    // filling it as much as its true aspect allows.
+    const iconId = item.icon ?? item.kind;
+    const iconAreaH = h - 84;
+    const iconSize = weaponIconFitSize(iconId, w - 36, iconAreaH - 12);
+    const iconCy = y + 14 + iconAreaH / 2;
+    if (!locked) drawGlow(ctx, x + w / 2, iconCy, iconSize * 0.52, tier.color, dark ? 0.2 : 0.12);
     drawWeaponIcon(ctx, iconId, x + w / 2, iconCy, {
-      color: dark ? '#e8edf4' : '#334155',
+      color: locked ? (dark ? '#cbd5e1' : '#475569') : (dark ? '#eef2f8' : '#2b3648'),
+      alpha: locked ? 0.6 : 1,
       size: iconSize,
       mono: false,
     });
-    ctx.font = '600 10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.textDim;
-    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 9), x + w / 2, y + h - 12);
 
-    ctx.font = '600 9px ui-monospace, SFMono-Regular, monospace';
-    ctx.fillStyle = p.textFaint;
-    ctx.textAlign = 'right';
-    ctx.fillText(`×${owned}`, x + w - 6, iconCy);
+    // Name + subtitle
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = locked ? p.textFaint : p.text;
+    ctx.fillText(truncate(this.isZhLang() ? item.nameZh : item.name, 12), x + w / 2, y + h - 34);
+    if (item.name !== item.nameZh) {
+      ctx.font = '10px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = p.textFaint;
+      ctx.fillText(truncate(item.name, 26), x + w / 2, y + h - 16);
+    }
+
+    // Ownership badge / locked tag
+    if (locked) {
+      ctx.font = '600 9px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = p.textFaint;
+      ctx.textAlign = 'right';
+      ctx.fillText(this.isZhLang() ? '未获得' : 'LOCKED', x + w - 12, y + 16);
+    } else {
+      ctx.font = '600 11px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillStyle = tier.color;
+      ctx.textAlign = 'right';
+      ctx.fillText(`×${owned}`, x + w - 12, y + 17);
+    }
   }
 
   /* ─── Stats ─── */
@@ -1635,6 +1710,15 @@ export class GachaGame extends BaseGame {
         if (this.screen === 'gallery' || this.screen === 'stats' || this.screen === 'result') this.gotoMenu();
         return;
       }
+      // Gallery: arrow keys walk the tier rail.
+      if (this.screen === 'gallery' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const order = [...GACHA_TIER_ORDER].reverse();
+        const i = Math.max(0, order.indexOf(this.galleryTier));
+        const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+        this.galleryTier = order[(i + dir + order.length) % order.length];
+        this.sfx.click();
+        return;
+      }
       if (e.key === 'r' || e.key === 'R') {
         if (this.screen !== 'menu') this.gotoMenu();
         return;
@@ -1657,7 +1741,8 @@ export class GachaGame extends BaseGame {
     if (e instanceof MouseEvent && e.type === 'mousemove') {
       const pt = this.canvasPoint(e.clientX, e.clientY);
       const hover = pt ? this.navButtonAt(pt.x, pt.y) : null;
-      const clickable = hover !== null || this.screen === 'menu' || this.screen === 'result';
+      const overRail = this.screen === 'gallery' && pt !== null && this.galleryRailAt(pt.x, pt.y) !== null;
+      const clickable = hover !== null || overRail || this.screen === 'menu' || this.screen === 'result';
       this.hoverBtn = hover;
       this.canvas.style.cursor = clickable ? 'pointer' : '';
       return;
@@ -1695,6 +1780,7 @@ export class GachaGame extends BaseGame {
       this.sfx.click();
       // Bailing mid-spin is allowed: the pull is already recorded.
       this.animMode = null;
+      this.galleryTier = 'rarespecial';
       this.screen = 'gallery';
       this.canvas.dataset.gachaScreen = 'gallery';
       return;
@@ -1713,6 +1799,15 @@ export class GachaGame extends BaseGame {
     }
 
     switch (this.screen) {
+      case 'gallery': {
+        // Tier rail selection; clicks elsewhere on this screen are inert.
+        const tierId = this.galleryRailAt(x, y);
+        if (tierId && tierId !== this.galleryTier) {
+          this.galleryTier = tierId;
+          this.sfx.click();
+        }
+        return;
+      }
       case 'menu': {
         // Mode switcher (only when > 1 mode registered)
         if (openingModeCount() > 1) {
