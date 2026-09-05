@@ -151,7 +151,7 @@ The shared rendering toolkit is `src/core/fx.ts`. Reach for it before writing on
 - Cache detailed sprites with `makeSprite()`/`drawSprite()` rather than rebuilding them every frame.
 - Avoid per-frame `shadowBlur` storms.
 - Shooter-family games may use `three`, rendered back into the game's 2D canvas so shell contracts remain intact.
-- Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. Profiles stay orthographic and use the principal front view (三视图正视图: muzzle +x, flat profile square to the viewer, no perspective), with supersampling for clean small thumbnails. Do not add a second perspective asset path. Drop odds are never displayed anywhere; rarity color and tier name carry the prestige.
+- Gacha weapon prizes use `src/games/gachaWeaponIcons.ts` as the single artwork source across the reel, result, gallery, and history. The artwork is real Counter-Strike silhouettes: `src/games/gachaWeaponSilhouettes.ts` holds SVG path data traced from Valve's official inventory renders (never hand-drawn approximations). Profiles stay orthographic and use the principal front view (三视图正视图: muzzle +x, flat profile square to the viewer, no perspective), with supersampling for clean small thumbnails. Do not add a second perspective asset path. Drop odds are never displayed anywhere; rarity color and tier name carry the prestige.
 
 Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `src/core/render.ts`. Shell minimalism must not flatten or remove useful game feedback.
 
