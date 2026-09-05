@@ -116,7 +116,7 @@ describe('Villa continuous staircase routes', () => {
 describe('Villa doors and furniture-free room reachability', () => {
   const doors = [
     { name: 'front entrance', from: [0, 0, 11.5], to: [0, 7.5] },
-    { name: 'rear garden entrance', from: [0, 0, -10.5], to: [0, -7.5] },
+    { name: 'rear garden entrance', from: [0, 0, -10.5], to: [0, -8] },
     { name: 'pool garden entrance', from: [-13, 0, 3.8], to: [-10.5, 3.8] },
     { name: 'internal garage entrance', from: [10.5, 0, 0.5], to: [13.5, 0.5] },
     { name: 'garage rolling door', from: [16, 0, 3.5], to: [16, 0.5] },
@@ -256,7 +256,9 @@ describe('Villa room and interaction classification', () => {
   });
   it.each(VILLA_HOTSPOTS)('finds $id locally but never from another floor', hotspot => {
     expect(nearestVillaHotspot(hotspot)?.id).toBe(hotspot.id);
-    expect(nearestVillaHotspot({ ...hotspot, y: hotspot.y + STOREY })).toBeNull();
+    const above = hotspot.id === 'elevator'
+      ? VILLA_HOTSPOTS.find(h => h.id === 'elevator' && h.y === hotspot.y + STOREY) ?? null : null;
+    expect(nearestVillaHotspot({ ...hotspot, y: hotspot.y + STOREY })).toBe(above);
     expect(hotspot.name.length).toBeGreaterThan(0);
     expect(hotspot.zh.length).toBeGreaterThan(0);
   });

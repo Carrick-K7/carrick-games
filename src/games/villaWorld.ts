@@ -1,4 +1,5 @@
 import { VILLA_CAR, VILLA_RACING } from './villaActivities.js';
+import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
@@ -108,14 +109,23 @@ wall('x', -8, 12, 20, 0);
 wall('x', 2, 12, 20, 0, [{ from: 14, to: 18.5, door: true }]);
 add(16, 3.5, -3, 8.4, 0.22, 10.4, 'roof', false);
 
-// Slabs stop at the stairwell: there is no invisible ceiling across either flight.
+// Split slabs around the shaft, including the ground floor: no coplanar floor
+// below the car and no ceiling cutting through a passenger during vertical travel.
+function slabAroundElevator(minX: number, maxX: number, y: number, thickness: number, material: VillaMaterial) {
+  const e = VILLA_ELEVATOR, cy = y - thickness / 2;
+  add((minX + e.minX) / 2, cy, 0, e.minX - minX, thickness, 18.4, material, false);
+  add((e.maxX + maxX) / 2, cy, 0, maxX - e.maxX, thickness, 18.4, material, false);
+  add(0, cy, (-9.2 + e.minZ) / 2, 2.2, thickness, e.minZ + 9.2, material, false);
+  add(0, cy, (e.maxZ + 9.2) / 2, 2.2, thickness, 9.2 - e.maxZ, material, false);
+}
+// Slabs also stop at the stairwell: neither flight has an invisible ceiling.
 for (const y of [STOREY, STOREY * 2]) {
-  add(-4.925, y - 0.1, 0, 14.15, 0.2, 18.4, y === STOREY ? 'oak' : 'stone', false);
+  slabAroundElevator(-12, 2.15, y, 0.2, y === STOREY ? 'oak' : 'stone');
   add(9.225, y - 0.1, 0, 5.95, 0.2, 18.4, y === STOREY ? 'oak' : 'stone', false);
   add(4.2, y - 0.1, -8.1, 4.1, 0.2, 2.2, 'stone', false);
   add(4.2, y - 0.1, 4.85, 4.1, 0.2, 8.7, y === STOREY ? 'oak' : 'stone', false);
 }
-add(0, -0.13, 0, 24.4, 0.26, 18.4, 'oak', false);
+slabAroundElevator(-12.2, 12.2, 0, 0.26, 'oak');
 add(-5, STOREY - 0.1, 10.25, 13, 0.2, 2.5, 'stone', false);
 // Layered fascia and timber accent fins make a composed modern exterior.
 for (const y of [3.42, 7.02]) {
@@ -179,6 +189,7 @@ function inRect(x: number, z: number, r: { minX: number; maxX: number; minZ: num
 export function villaFloor(y: number): number { return Math.max(0, Math.min(2, Math.floor((y + 0.15) / STOREY))); }
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
+  if (villaElevatorShaftContains(p.x, p.z)) return { id: 'elevator', name: 'Elevator', zh: '电梯' };
   if (inRect(p.x, p.z, STAIR_HOLE)) return { id: 'stairs', name: 'Oak staircase', zh: '橡木楼梯' };
   const room = VILLA_ROOMS.find(r => r.floor === floor && inRect(p.x, p.z, r));
   if (room) return room;
@@ -197,7 +208,7 @@ export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: s
 export function villaSupportAt(x: number, z: number, previousY: number): number | null {
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(previousY)) return null;
   if (x < -24.5 || x > 24.5 || z < -16.5 || z > 23.5) return null;
-  if (inRect(x, z, POOL, PLAYER_RADIUS)) return null;
+  if (inRect(x, z, POOL, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
   const heights: number[] = [0];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {
@@ -235,7 +246,7 @@ export function villaCollides(p: VillaPosition, colliders: readonly VillaCollide
   });
 }
 /** Substeps prevent tunnelling; split axes slide naturally along walls and furniture. */
-export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number, colliders: readonly VillaCollider[]): VillaPosition {
+export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number, colliders: readonly VillaCollider[], supportAt = villaSupportAt): VillaPosition {
   const p = { ...position };
   if (!Number.isFinite(dx) || !Number.isFinite(dz)) return p;
   const distance = Math.hypot(dx, dz);
@@ -244,7 +255,7 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   for (let i = 0; i < steps; i++) {
     for (const axis of ['x', 'z'] as const) {
       const next = { ...p, [axis]: p[axis] + (axis === 'x' ? dx : dz) / steps };
-      const support = villaSupportAt(next.x, next.z, p.y);
+      const support = supportAt(next.x, next.z, p.y);
       if (support == null) continue;
       next.y = support;
       if (!villaCollides(next, colliders)) Object.assign(p, next);
@@ -253,8 +264,9 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator'; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
+  ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: 0, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
   { id: 'aquarium', x: -3.5, y: 0, z: 2, name: 'Feed the fish', zh: '喂喂小鱼' },
   { id: 'gaming', x: 6.65, y: 0, z: 4.9, radius: 1.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
@@ -272,6 +284,7 @@ export function nearestVillaHotspot(p: VillaPosition): VillaHotspot | null {
   for (const h of VILLA_HOTSPOTS) {
     if (Math.abs(h.y - p.y) > 0.4) continue;
     if (h.id === 'car' && p.x < VILLA_CAR.body.maxX) continue;
+    if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x) > 0.85)) continue;
     const d = Math.hypot(h.x - p.x, h.z - p.z);
     if (d < (h.radius ?? 2.4) && d < distance) { nearest = h; distance = d; }
   }

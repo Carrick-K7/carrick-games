@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { furnishVilla, type VillaFurnishingState } from './villaFurnishings.js';
 import { createVillaVehicle } from './villaVehicle.js';
 import { createVillaGaming } from './villaGaming.js';
+import { createVillaElevatorModel } from './villaElevatorModel.js';
+import { createVillaElevatorColliders, villaElevatorShaftContains, type VillaElevatorState } from './villaElevator.js';
 import type { VillaActivityState } from './villaActivities.js';
 import {
   EYE_HEIGHT, POOL, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
@@ -10,7 +12,7 @@ import {
 } from './villaWorld.js';
 
 export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number }
-export type VillaSceneState = VillaFurnishingState & VillaActivityState;
+export type VillaSceneState = VillaFurnishingState & VillaActivityState & { elevator: VillaElevatorState };
 
 /** Small studio/sky reflection probe; all pixels are authored locally, no asset fetches. */
 function reflectionProbe(): THREE.CubeTexture {
@@ -93,6 +95,8 @@ export class VillaScene {
   private readonly furnishings: ReturnType<typeof furnishVilla>;
   private readonly vehicle: ReturnType<typeof createVillaVehicle>;
   private readonly gaming: ReturnType<typeof createVillaGaming>;
+  private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
+  private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
   private lastStateKey = '';
   private readonly water: THREE.Mesh;
@@ -308,7 +312,9 @@ export class VillaScene {
       const lamp = new THREE.PointLight(0xffd097, 16, 14, 2); lamp.position.set(x, y, z); this.lamps.push(lamp); this.scene.add(lamp);
     }
     for (const y of [3.28, 6.88]) {
-      for (const x of [-10, -5, 0, 8]) for (const z of [-6.5, 1.7, 7.5]) box(x, y, z, 0.24, 0.03, 0.24, this.glow);
+      for (const x of [-10, -5, 0, 8]) for (const z of [-6.5, 1.7, 7.5]) {
+        if (!villaElevatorShaftContains(x, z)) box(x, y, z, 0.24, 0.03, 0.24, this.glow);
+      }
       box(-1.7, y, 0, 0.025, 0.04, 17.4, this.glow);
     }
     for (const [material, geometries] of batches) {
@@ -329,7 +335,8 @@ export class VillaScene {
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
     this.gaming = createVillaGaming(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders);
+    this.elevator = createVillaElevatorModel(this.scene);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders);
     this.addContactShadows([...this.furnishings.colliders, this.vehicle.colliders[0], ...this.gaming.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
@@ -360,6 +367,8 @@ export class VillaScene {
   /** Advance door collisions even between cached software-GL frames. */
   updateActivities(time: number, state: VillaSceneState) {
     if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
+    this.elevatorCollisions.update(state.elevator);
+    if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
   }
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
@@ -367,7 +376,7 @@ export class VillaScene {
     const scale = this.lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
     const w = Math.round(width * scale), h = Math.round(height * scale);
     const now = performance.now();
-    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}`;
+    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}`;
     this.updateActivities(time, state);
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
     // longer than the time budget. A wall-clock cap alone starves real key events

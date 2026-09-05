@@ -46,6 +46,7 @@ Carrick Games currently ships 27 playable games:
 
 - **Desktop:** WASD moves; hold Shift to run. Moving the mouse looks around automatically, without holding a button; Esc frees the cursor, and clicking the scene resumes capture. ↑/↓ walks and ←/→ turns. E interacts / sits / stands up, Q operates the car door or switches the big screen's virtual PC / PlayStation / Switch input. M opens the floor plan, T switches day/evening, and H returns to the entrance.
 - **Touch:** left joystick moves, right-side dragging looks; on-canvas buttons provide interaction, door / screen input, map, time, and home actions.
+- **Elevator:** at the north end of the central gallery, press E (or tap Use) to call the glass elevator. Walk inside after the doors open, then press 1 / 2 / 3 or tap the cabin's on-screen floor buttons. The car travels continuously between all three floors and opens on arrival; walk out normally. Doors remain open until a new journey, and cannot depart while you straddle the sill. The stairs remain usable.
 - **At home:** a Tesla-inspired sedan with an opening driver door and furnished cabin; a detailed mechanical keyboard, mouse, panoramic glass PC and gaming chair; a wheel/pedals cockpit and big-screen console corner; glazed Miku figurine and non-functional replica-weapon collections; a full-size snooker table and fitted kitchen. Screen inputs are original virtual scene demos, not a connection to physical consoles. Room names appear only in the optional floor plan, not as scene signs or persistent HUD labels.
 
 ## Features

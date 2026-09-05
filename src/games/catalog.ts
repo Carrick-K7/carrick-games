@@ -516,6 +516,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Esc'], action: 'Free cursor', actionZh: '释放光标' },
         { keys: ['E'], action: 'Interact / sit / exit', actionZh: '互动 / 入座 / 起身' },
         { keys: ['Q'], action: 'Door / screen input', actionZh: '车门 / 大屏信号' },
+        { keys: ['1', '2', '3'], action: 'Elevator floor', actionZh: '电梯选层' },
         { keys: ['M'], action: 'Floor plan', actionZh: '楼层平面图' },
         { keys: ['T'], action: 'Day / evening', actionZh: '白天 / 傍晚' },
         { keys: ['H'], action: 'Return to entrance', actionZh: '返回入口' },

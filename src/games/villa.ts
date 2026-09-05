@@ -2,7 +2,11 @@ import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js'
 import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.js';
 import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen, type VillaSeat } from './villaActivities.js';
 import {
-  moveVillaPlayer, nearestVillaHotspot, villaFloor, villaRoomAt,
+  advanceVillaElevator, createVillaElevator, requestVillaElevator, VILLA_ELEVATOR,
+  villaElevatorCabinContains, villaElevatorDoorwayObstructed, villaElevatorShaftContains, villaElevatorSupportAt,
+} from './villaElevator.js';
+import {
+  moveVillaPlayer, nearestVillaHotspot, villaFloor, villaRoomAt, villaSupportAt,
   VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_ROOMS, VILLA_SPAWN, POOL,
   EYE_HEIGHT, type VillaPosition,
 } from './villaWorld.js';
@@ -20,7 +24,7 @@ export class VillaGame extends BaseGame {
   private pitch = 0.14;
   private eyeY = 0;
   private time = 0;
-  private state: VillaSceneState = { evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities() };
+  private state: VillaSceneState = { evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(), elevator: createVillaElevator() };
   private readonly keys = new Set<string>();
   private lastMouse: Point | null = null;
   private mouseLookEnabled = true;
@@ -53,7 +57,7 @@ export class VillaGame extends BaseGame {
     this.clearInput();
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;
     this.time = 0; this.mapOpen = false; this.helpOpen = false; this.mapFloor = 0;
-    this.state = { evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities() };
+    this.state = { evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(), elevator: createVillaElevator() };
     this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.exitCarAt = Infinity;
     this.toast = ''; this.toastUntil = 0; this.visited = new Set(['garden']);
     this.touchMode = window.matchMedia?.('(pointer: coarse)').matches ?? false;
@@ -154,11 +158,17 @@ export class VillaGame extends BaseGame {
     if (this.transition && this.time - this.transition.at >= 0.45) this.transition = null;
     if (this.time >= this.closeCarAt) { this.state.carDoorOpen = false; this.closeCarAt = Infinity; }
     if (this.time >= this.exitCarAt) { this.exitCarAt = Infinity; this.leaveSeat(); }
+    const wasRiding = this.state.elevator.riding;
+    advanceVillaElevator(this.state.elevator, dt, villaElevatorDoorwayObstructed(this.position, this.state.elevator));
+    if (wasRiding) {
+      this.position.y = this.state.elevator.y; this.eyeY = this.position.y;
+      if (!this.state.elevator.riding) { this.clearInput(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
+    }
     this.scene?.updateActivities(this.time, this.state);
     if (!this.mapOpen && !this.helpOpen && !this.unavailable) {
       this.yaw += (Number(this.keys.has('arrowleft')) - Number(this.keys.has('arrowright'))) * dt * 1.5;
     }
-    if (!this.mapOpen && !this.helpOpen && !this.unavailable && !this.state.seated && !this.transition) {
+    if (!this.mapOpen && !this.helpOpen && !this.unavailable && !this.state.seated && !this.transition && !this.state.elevator.riding) {
       let forward = Number(this.keys.has('w') || this.keys.has('arrowup')) - Number(this.keys.has('s') || this.keys.has('arrowdown'));
       let side = Number(this.keys.has('d')) - Number(this.keys.has('a'));
       if (this.joystick) {
@@ -173,7 +183,8 @@ export class VillaGame extends BaseGame {
       const speed = this.keys.has('shift') ? VILLA_RUN_SPEED : VILLA_WALK_SPEED;
       const dx = (-Math.sin(this.yaw) * forward + Math.cos(this.yaw) * side) * speed * dt;
       const dz = (-Math.cos(this.yaw) * forward - Math.sin(this.yaw) * side) * speed * dt;
-      if (this.scene && (dx || dz)) this.position = moveVillaPlayer(this.position, dx, dz, this.scene.colliders);
+      if (this.scene && (dx || dz)) this.position = moveVillaPlayer(this.position, dx, dz, this.scene.colliders,
+        (x, z, y) => villaElevatorShaftContains(x, z) ? villaElevatorSupportAt(this.state.elevator, x, z, y) : villaSupportAt(x, z, y));
       this.eyeY += (this.position.y - this.eyeY) * Math.min(1, dt * 18);
       this.visited.add(villaRoomAt(this.position).id);
     }
@@ -200,8 +211,10 @@ export class VillaGame extends BaseGame {
     data.villaDisplayLights = String(this.state.displayLights);
     data.villaPointerLocked = String(document.pointerLockElement === this.canvas);
     data.villaMouseLook = this.mouseLookEnabled ? 'active' : 'cursor';
-    data.villaRunning = String(this.keys.has('shift') && !this.state.seated && !this.mapOpen && !this.helpOpen);
-    data.villaTarget = this.state.seated ?? nearestVillaHotspot(this.position)?.id ?? '';
+    data.villaRunning = String(this.keys.has('shift') && !this.state.seated && !this.mapOpen && !this.helpOpen && !this.state.elevator.riding);
+    data.villaElevator = JSON.stringify({ floor: this.state.elevator.floor + 1, target: this.state.elevator.target + 1,
+      y: +this.state.elevator.y.toFixed(3), phase: this.state.elevator.phase, riding: this.state.elevator.riding });
+    data.villaTarget = this.inElevator() ? 'elevator' : this.state.seated ?? nearestVillaHotspot(this.position)?.id ?? '';
     data.villaVisited = [...this.visited].join(',');
   }
 
@@ -224,6 +237,12 @@ export class VillaGame extends BaseGame {
     if (this.touchMode && (this.state.seated || target === 'car' || target === 'media')) {
       const door = this.state.seated === 'car' || target === 'car';
       buttons.push({ id: 'secondary', x: this.width - 168 * s, y: this.height - 98 * s, w: 46 * s, h: 46 * s, label: this.isZhLang() ? (door ? '车门' : '信号') : (door ? 'Door' : 'Input') });
+    }
+    if (this.inElevator()) {
+      const w = (this.touchMode ? 46 : 64) * s, gap = 8 * s;
+      for (let floor = 0; floor < 3; floor++) buttons.push({ id: `elevator-${floor}`, label: `${floor + 1}F`,
+        x: (this.width - 3 * w - 2 * gap) / 2 + floor * (w + gap),
+        y: this.touchMode ? 22 + 52 * s : this.height - 124, w, h: 44 * s });
     }
     return buttons;
   }
@@ -251,6 +270,7 @@ export class VillaGame extends BaseGame {
   }
 
   private activate(id: string) {
+    if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
     switch (id) {
       case 'map':
         this.mapOpen = !this.mapOpen; this.helpOpen = false; this.mapFloor = villaFloor(this.position.y); this.clearInput();
@@ -259,6 +279,7 @@ export class VillaGame extends BaseGame {
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.carDoorOpen = false; this.transition = null; this.closeCarAt = this.exitCarAt = Infinity;
+        this.state.elevator = createVillaElevator(); this.scene?.updateActivities(this.time, this.state);
         this.mapOpen = false; this.helpOpen = false; this.clearInput();
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
       case 'help':
@@ -302,6 +323,24 @@ export class VillaGame extends BaseGame {
     this.message(this.isZhLang() ? '已起身，可以继续参观。' : 'Back on your feet. Continue exploring.');
   }
 
+  private inElevator(): boolean {
+    return this.state.elevator.riding || villaElevatorCabinContains(this.position, this.state.elevator);
+  }
+
+  private selectElevatorFloor(floor: number) {
+    if (!this.inElevator() || this.state.seated || this.transition) return;
+    if (villaElevatorDoorwayObstructed(this.position, this.state.elevator)) {
+      this.message(this.isZhLang() ? '请完全走进轿厢，给电梯门留出空间。' : 'Step fully inside and clear the doorway.'); return;
+    }
+    if (!requestVillaElevator(this.state.elevator, floor, true)) {
+      this.message(this.isZhLang() ? '电梯运行中，请稍候。' : 'Please wait for the elevator.'); return;
+    }
+    this.clearInput();
+    this.message(this.isZhLang() ? (this.state.elevator.riding ? `前往 ${floor + 1}F，可以自由环顾。` : '已在这一层，可以走出电梯。')
+      : (this.state.elevator.riding ? `Going to ${floor + 1}F. Feel free to look around.` : 'Already on this floor. You may step out.'));
+    this.publishState();
+  }
+
   private atDriverDoor(): boolean {
     // Keep the standing visitor outside the complete swing, and enter through the
     // doorway rather than diagonally through the fender / windscreen / B-pillar.
@@ -330,6 +369,12 @@ export class VillaGame extends BaseGame {
   private interactionHint(): string | null {
     const zh = this.isZhLang();
     if (this.exitCarAt !== Infinity) return zh ? '车门正在打开…' : 'Opening the door…';
+    if (this.inElevator()) {
+      const lift = this.state.elevator;
+      if (lift.phase === 'open') return zh ? '1 / 2 / 3 选择楼层 · 开门后步行进出' : '1 / 2 / 3 select floor · Walk through open doors';
+      if (lift.phase === 'closed') return zh ? 'E 打开电梯门' : 'E open elevator doors';
+      return zh ? `电梯 → ${lift.target + 1}F · 请稍候，可自由环顾` : `Elevator → ${lift.target + 1}F · Please wait, look around`;
+    }
     if (this.state.seated === 'car') return zh ? 'E 下车 · Q 开关车门' : 'E exit · Q door';
     if (this.state.seated === 'racing') return zh ? `E 起身 · Q 信号源 ${this.state.screenSource.toUpperCase()}` : `E stand up · Q source ${this.state.screenSource.toUpperCase()}`;
     const hotspot = nearestVillaHotspot(this.position);
@@ -342,6 +387,10 @@ export class VillaGame extends BaseGame {
     if (this.transition || this.exitCarAt !== Infinity) return;
     const hotspot = nearestVillaHotspot(this.position);
     const zh = this.isZhLang();
+    if (this.inElevator()) {
+      if (this.state.elevator.phase === 'closed') requestVillaElevator(this.state.elevator, this.state.elevator.floor);
+      this.message(this.interactionHint() ?? ''); this.publishState(); return;
+    }
     if (this.state.seated === 'car') {
       this.closeCarAt = Infinity;
       this.exitCarAt = this.time + (this.state.carDoorOpen ? Math.max(0, this.doorReadyAt - this.time) : CAR_DOOR_SECONDS);
@@ -351,6 +400,12 @@ export class VillaGame extends BaseGame {
     if (this.state.seated === 'racing') { this.leaveSeat(); this.publishState(); return; }
     if (!hotspot) { this.message(zh ? '走近可互动的家具、车门或驾驶座，再按 E。' : 'Walk closer to a furnishing, driver door or simulator seat, then press E.'); return; }
     switch (hotspot.id) {
+      case 'elevator': {
+        const accepted = requestVillaElevator(this.state.elevator, villaFloor(this.position.y));
+        this.message(zh ? (accepted ? '电梯已呼叫。开门后走入，按 1 / 2 / 3 选层。' : '电梯正在运行，请稍候。')
+          : (accepted ? 'Elevator called. Walk inside, then press 1 / 2 / 3.' : 'The elevator is busy. Please wait.'));
+        break;
+      }
       case 'car':
         if (!this.atDriverDoor()) { this.message(zh ? '请站在打开车门的外侧，稍微后退，再按 E。' : 'Stand outside the driver doorway, a step back, then press E.'); break; }
         if (!this.state.carDoorOpen) this.secondaryInteraction();
@@ -419,6 +474,7 @@ export class VillaGame extends BaseGame {
         this.mapOpen = false; this.helpOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = wasPanel;
       }
       else if (this.mapOpen && ['1', '2', '3'].includes(key)) this.mapFloor = Number(key) - 1;
+      else if (!this.helpOpen && ['1', '2', '3'].includes(key) && this.inElevator()) this.selectElevatorFloor(Number(key) - 1);
       else if (key === 'm') this.activate('map');
       else if (key === 't') this.activate('time');
       else if (key === 'h') this.activate('home');
@@ -470,7 +526,7 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), dark = this.isDarkTheme();
     if (zh !== this.lastLang) {
       this.lastLang = zh;
-      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走，Shift 跑步，移动鼠标自动环顾，Esc 释放光标。沿楼梯上下楼。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口。' : 'Warm Villa. WASD walk, Shift run, move mouse to look, Esc releases cursor. Walk up the stairs. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance.');
+      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走，Shift 跑步，移动鼠标自动环顾，Esc 释放光标。沿楼梯上下楼，或在走廊尽头 E 呼叫电梯，进入后按 1、2、3 选层。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口。' : 'Warm Villa. WASD walk, Shift run, move mouse to look, Esc releases cursor. Use stairs or press E to call the elevator at the gallery end, then 1, 2, 3 inside. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance.');
     }
     ctx.fillStyle = dark ? '#252e2e' : '#d9d4c9'; ctx.fillRect(0, 0, this.width, this.height);
     const rendered = this.scene?.render(ctx, this.width, this.height, this.pixelRatio, this.view(), this.time, this.state);
@@ -503,7 +559,8 @@ export class VillaGame extends BaseGame {
       ctx.fillText(`${villaFloor(this.position.y) + 1}F  /  ${zh ? '自在漫游' : 'Take your time'}`, 40, 73);
     }
     for (const b of this.buttons()) {
-      ctx.fillStyle = 'rgba(33,35,31,.72)'; this.rounded(ctx, b.x, b.y, b.w, b.h);
+      ctx.fillStyle = b.id === `elevator-${this.state.elevator.target}` ? 'rgba(79,103,69,.92)' : 'rgba(33,35,31,.72)';
+      this.rounded(ctx, b.x, b.y, b.w, b.h);
       ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.font = `500 ${this.touchMode ? 17 * s : 13}px ${UI_FONT}`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     }
@@ -528,7 +585,9 @@ export class VillaGame extends BaseGame {
           : (zh ? 'WASD 行走 · Shift 跑步 · 移动鼠标环顾 · Esc 释放光标' : 'WASD walk · Shift run · Move mouse to look · Esc cursor'));
     // Keep touch actions meaningful while seated, rather than repeating a room name.
     if (this.touchMode && hint.length > (zh ? 17 : 38)) {
-      hint = this.state.seated ? (zh ? '互动：起身 · 旁侧按钮：车门 / 信号' : 'Use: stand up · Door / Input beside it')
+      hint = this.inElevator() ? (this.state.elevator.phase === 'open' ? (zh ? '上方按钮选层 · 开门后进出' : 'Choose a floor above · Walk out when open')
+        : (zh ? `电梯 → ${this.state.elevator.target + 1}F · 可环顾` : `Elevator → ${this.state.elevator.target + 1}F · Look around`))
+        : this.state.seated ? (zh ? '互动：起身 · 旁侧按钮：车门 / 信号' : 'Use: stand up · Door / Input beside it')
         : hotspot?.id === 'car' ? (zh ? '互动：开门 / 坐入驾驶位' : 'Use: open door / take a seat')
           : hotspot ? (zh ? hotspot.zh : hotspot.name) : (zh ? '不赶时间，慢慢逛' : 'Take your time and explore');
     }
@@ -594,14 +653,18 @@ export class VillaGame extends BaseGame {
     for (let z = -5.5; z < 0.5; z += 0.5) { ctx.beginPath(); ctx.moveTo(mx(2.3), mz(z)); ctx.lineTo(mx(6.1), mz(z)); ctx.stroke(); }
     ctx.fillStyle = '#334339'; ctx.font = `bold 18px ${UI_FONT}`; ctx.fillText('↑ ↓', mx(4.2), mz(-3));
     ctx.font = `12px ${UI_FONT}`; ctx.fillText(zh ? '楼梯' : 'Stairs', mx(4.2), mz(1.8));
+    ctx.fillStyle = dark ? '#c1b38d' : '#b6c6aa';
+    ctx.fillRect(mx(VILLA_ELEVATOR.minX), mz(VILLA_ELEVATOR.minZ), 2.2 * scale, 2.4 * scale);
+    ctx.fillStyle = '#334339'; ctx.font = `bold 14px ${UI_FONT}`;
+    ctx.fillText('↕', mx(0), mz(VILLA_ELEVATOR.centerZ) + 4);
     if (villaFloor(this.position.y) === this.mapFloor) {
       ctx.save(); ctx.translate(mx(this.position.x), mz(this.position.z)); ctx.rotate(-this.yaw);
       ctx.fillStyle = '#d1774d'; ctx.strokeStyle = '#fff8e9'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 6); ctx.lineTo(0, 3); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
     }
     ctx.fillStyle = dark ? '#d1d4c0' : '#5b6654'; ctx.font = `${this.touchMode ? 11 * s : 14}px ${UI_FONT}`; ctx.textAlign = 'left';
-    const legend = this.touchMode ? (zh ? '橙色：你 · ↑↓：楼梯' : 'Orange: you · ↑↓: stairs')
-      : (zh ? '橙色箭头是你 · 沿双跑楼梯上下楼 · 地图不传送位置' : 'Orange arrow: you · Walk both stair flights to change floors · Map tabs do not teleport');
+    const legend = this.touchMode ? (zh ? '橙色：你 · ↑↓楼梯 · ↕电梯' : 'Orange: you · ↑↓ stairs · ↕ lift')
+      : (zh ? '橙色箭头是你 · ↑↓ 楼梯 · ↕ 电梯：E 呼叫，进入后 1 / 2 / 3 选层 · 地图不传送' : 'Orange: you · ↑↓ stairs · ↕ elevator: E to call, 1 / 2 / 3 inside · Map does not teleport');
     ctx.fillText(legend, p.x + 8 * s, p.y + p.h - (this.touchMode ? 8 * s : 21));
   }
 
@@ -609,10 +672,10 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), p = this.panel(ctx, zh ? '慢慢走，像在自己家一样' : 'Make yourself at home');
     const rows = zh ? [
       ['W A S D', '前后左右行走；按住 Shift 跑步'], ['方向键', '↑ ↓ 行走，← → 转向'], ['鼠标移动', '自动环顾，无需按住；Esc 释放光标，点击画面恢复'],
-      ['楼梯', '一楼走廊右侧进入，走到平台转弯，再走完另一跑'], ['E', '靠近家具互动；开车门后再按入座；入座后按 E 起身'], ['Q', '驾驶位开关车门；模拟器切换 PC / PS / Switch 虚拟画面'], ['M / T / H', '查看三层导览图 / 切换日光黄昏 / 回到门口'], ['手机 / 平板', '左侧行走，右侧环顾；互动旁按钮控制车门 / 大屏信号'],
+      ['楼梯 / 电梯', '右侧走楼梯；走廊尽头 E 呼叫电梯，进入后 1 / 2 / 3 选层'], ['E', '靠近家具互动；开车门后再按入座；入座后按 E 起身'], ['Q', '驾驶位开关车门；模拟器切换 PC / PS / Switch 虚拟画面'], ['M / T / H', '查看三层导览图 / 切换日光黄昏 / 回到门口'], ['手机 / 平板', '左侧行走，右侧环顾；互动旁按钮控制车门 / 大屏信号'],
     ] : [
       ['W A S D', 'Walk; hold Shift to run'], ['Arrow keys', 'Up / down to walk, left / right to turn'], ['Mouse move', 'Look without holding. Esc frees cursor; click scene to resume.'],
-      ['Staircase', 'Right of the gallery. Walk to the landing, turn, continue up.'], ['E', 'Interact; open the car door then sit; press again to stand up.'], ['Q', 'Car door; simulator virtual PC / PS / Switch screen input.'], ['M / T / H', 'Floor plan / daylight and sunset / return to the entrance'], ['Touch', 'Left walk, right look; use the Door / Input button when seated'],
+      ['Stairs / Lift', 'Stairs on right; E calls the lift at gallery end. 1 / 2 / 3 inside.'], ['E', 'Interact; open the car door then sit; press again to stand up.'], ['Q', 'Car door; simulator virtual PC / PS / Switch screen input.'], ['M / T / H', 'Floor plan / daylight and sunset / return to the entrance'], ['Touch', 'Left walk, right look; use the Door / Input button when seated'],
     ];
     ctx.textAlign = 'left';
     rows.forEach(([key, description], i) => {
