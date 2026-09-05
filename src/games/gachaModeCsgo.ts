@@ -123,6 +123,7 @@ export class CsgoStripMode implements GachaOpenMode {
     this.startVelocity = this.accel * TIME_TOTAL;
 
     this.sfx.caseOpen();
+    this.sfx.spinStart();
   }
 
   /** The card currently occupying the center highlight window. */
@@ -153,6 +154,9 @@ export class CsgoStripMode implements GachaOpenMode {
 
     if (this.landFlash > 0) this.landFlash = Math.max(0, this.landFlash - dt);
     if (this.markerPulse > 0) this.markerPulse = Math.max(0, this.markerPulse - dt * 3);
+
+    // Friction whoosh breathes with strip speed.
+    this.sfx.spinSet(this.landed ? 0 : this.speedRatio());
 
     // Tick when a card boundary crosses the window center line.
     const cx = this.ctx.width / 2;
