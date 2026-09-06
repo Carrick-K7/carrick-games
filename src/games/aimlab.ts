@@ -75,7 +75,7 @@ export class AimLabGame extends BaseGame {
     const radius = minR + Math.random() * (maxR - minR);
     const x = margin + radius + Math.random() * (W - 2 * margin - 2 * radius);
     const y = margin + radius + Math.random() * (H - 2 * margin - 2 * radius);
-    const target: Target = { x, y, radius, spawnTime: performance.now(), hit: false };
+    const target: Target = { x, y, radius, spawnTime: this.gameNow(), hit: false };
     this.targets.push(target);
     this.currentTarget = target;
     this.targetTween = new Tween({ from: 0.3, to: 1, duration: 0.16, ease: 'outBack' });
@@ -217,7 +217,7 @@ export class AimLabGame extends BaseGame {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist <= this.currentTarget.radius + 4) {
-      const reaction = performance.now() - this.currentTarget.spawnTime;
+      const reaction = this.gameNow() - this.currentTarget.spawnTime;
       this.totalReactionTime += reaction;
       const speedBonus = Math.max(0, Math.round(500 - reaction));
       const sizeBonus = Math.round(30 - this.currentTarget.radius);

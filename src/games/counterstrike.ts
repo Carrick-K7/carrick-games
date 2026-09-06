@@ -25,8 +25,8 @@ import {
   centeredPanelLayout,
   halfFovTanForAspect,
   hudScale,
+  roundHeaderY,
   maxBuyScroll,
-  pauseButtonLayout,
   raycastBufferSize,
   sanitizeInsets,
   touchControlsLayout,
@@ -399,6 +399,11 @@ export class CounterStrikeGame extends BaseGame {
     }
   }
 
+  restorePointerCapture() {
+    if (!this.running || this.presentationPaused || this.paused || this.gameOver || this.buyOpen) return;
+    try { this.canvas.requestPointerLock?.()?.catch?.(() => undefined); } catch { /* drag-to-look fallback */ }
+  }
+
   private safeArea(): ViewportInsets {
     return sanitizeInsets(this.viewport?.safeArea);
   }
@@ -418,16 +423,6 @@ export class CounterStrikeGame extends BaseGame {
 
   private buyLayout(): BuyMenuLayout {
     return buyMenuLayout(this.width, this.height, this.safeArea(), this.touchMode);
-  }
-
-  /** Explicit fullscreen toggle on the pause overlay (host-provided). */
-  private clickPauseMenu(x: number, y: number): boolean {
-    const presentation = this.host.presentation;
-    if (!presentation) return false;
-    const btn = pauseButtonLayout(this.width, this.height, this.safeArea());
-    if (x < btn.x || x > btn.x + btn.w || y < btn.y || y > btn.y + btn.h) return false;
-    presentation.toggleFullscreen();
-    return true;
   }
 
   // ── Setup ──────────────────────────────────────────────────────────────────
@@ -1137,14 +1132,7 @@ export class CounterStrikeGame extends BaseGame {
         if (this.isRestartInput(e)) this.init();
         return;
       }
-      if (this.paused) {
-        // The pause overlay's explicit fullscreen button stays clickable.
-        if (e.type === 'mousedown' && e.button === 0) {
-          const point = this.canvasPoint(e.clientX, e.clientY);
-          this.clickPauseMenu(point.x, point.y);
-        }
-        return;
-      }
+      if (this.paused) return;
 
       if (e.type === 'mousemove') {
         const point = this.canvasPoint(e.clientX, e.clientY);
@@ -1220,16 +1208,11 @@ export class CounterStrikeGame extends BaseGame {
         return;
       }
       if (e.type === 'touchstart' && this.paused) {
-        // The pause overlay's explicit fullscreen button stays tappable.
-        for (const t of e.changedTouches) {
-          const point = this.canvasPoint(t.clientX, t.clientY);
-          if (!this.clickPauseMenu(point.x, point.y)) {
-            this.clearTransientInput();
-            this.paused = false;
-          }
-          e.preventDefault();
-          break; // This gesture only resumes; it must not also move/fire.
+        if (e.changedTouches.length) {
+          this.clearTransientInput();
+          this.paused = false;
         }
+        // This gesture only resumes; it must not also move/fire.
         return;
       }
       if (e.type === 'touchstart' && !this.paused) {
@@ -2493,7 +2476,7 @@ export class CounterStrikeGame extends BaseGame {
     if (this.scoreboardHeld && !this.gameOver) this.drawScoreboard(ctx);
     if (this.touchMode && !this.paused && !this.gameOver && !this.buyOpen) this.drawTouchControls(ctx);
 
-    if (this.paused) {
+    if (this.paused && !this.presentationPaused) {
       const zh = this.isZhLang();
       const s = this.uiScale();
       const pxSize = (n: number) => Math.max(11, Math.round(n * s));
@@ -2510,25 +2493,6 @@ export class CounterStrikeGame extends BaseGame {
       ctx.fillStyle = 'rgba(241,245,249,0.8)';
       ctx.fillText(this.touchMode ? (zh ? '轻触画面继续' : 'TAP TO RESUME') : (zh ? '按 P 继续' : 'PRESS P TO RESUME'), W / 2, H / 2 + 22 * s);
 
-      // Explicit fullscreen toggle — native fullscreen is only ever
-      // requested from this button, never automatically by the game.
-      const presentation = this.host.presentation;
-      if (presentation) {
-        const btn = pauseButtonLayout(W, H, this.safeArea());
-        const fullscreen = presentation.isFullscreen();
-        ctx.fillStyle = 'rgba(57,197,187,0.22)';
-        ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-        ctx.strokeStyle = 'rgba(57,197,187,0.7)';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(btn.x + 0.5, btn.y + 0.5, btn.w - 1, btn.h - 1);
-        ctx.fillStyle = '#d7f5f2';
-        ctx.font = `bold ${pxSize(16)}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
-        ctx.fillText(
-          fullscreen ? (zh ? '退出全屏' : 'EXIT FULLSCREEN') : (zh ? '全屏显示' : 'FULLSCREEN'),
-          btn.x + btn.w / 2,
-          btn.y + btn.h / 2,
-        );
-      }
     }
 
     if (this.gameOver) {
@@ -3274,10 +3238,11 @@ export class CounterStrikeGame extends BaseGame {
         ? `FREEZE ${Math.ceil(this.phaseTimer)}`
         : '';
     ctx.fillStyle = 'rgba(8,16,30,0.58)';
-    ctx.fillRect(cx - 140 * s, insets.top + 14 * s, 280 * s, 46 * s);
-    this.hudText(ctx, `CT ${this.ctWins}`, cx - 126 * s, insets.top + 37 * s, 'left', `bold ${pxSize(19)}px ${font}`, '#7fb2ff');
-    this.hudText(ctx, timerText, cx, insets.top + 37 * s, 'center', `bold ${pxSize(26)}px ${mono}`, '#f5f5f0');
-    this.hudText(ctx, `${this.tWins} T`, cx + 126 * s, insets.top + 37 * s, 'right', `bold ${pxSize(19)}px ${font}`, '#ff9a8a');
+    const headerY = roundHeaderY(W, H, insets);
+    ctx.fillRect(cx - 140 * s, headerY, 280 * s, 46 * s);
+    this.hudText(ctx, `CT ${this.ctWins}`, cx - 126 * s, headerY + 23 * s, 'left', `bold ${pxSize(19)}px ${font}`, '#7fb2ff');
+    this.hudText(ctx, timerText, cx, headerY + 23 * s, 'center', `bold ${pxSize(26)}px ${mono}`, '#f5f5f0');
+    this.hudText(ctx, `${this.tWins} T`, cx + 126 * s, headerY + 23 * s, 'right', `bold ${pxSize(19)}px ${font}`, '#ff9a8a');
 
     // Round / phase label.
     ctx.textAlign = 'center';
@@ -3289,14 +3254,14 @@ export class CounterStrikeGame extends BaseGame {
         : this.phase === 'live'
           ? (zh ? `回合 ${this.round} · 先到 ${ROUND.winScore} 回合获胜` : `ROUND ${this.round} · FIRST TO ${ROUND.winScore}`)
           : '';
-    this.hudText(ctx, label, cx, insets.top + 76 * s, 'center', `${pxSize(15)}px ${font}`, 'rgba(241,245,249,0.92)');
+    this.hudText(ctx, label, cx, headerY + 62 * s, 'center', `${pxSize(15)}px ${font}`, 'rgba(241,245,249,0.92)');
 
     if (this.liveMsg > 0) {
-      this.hudText(ctx, zh ? '冲! 冲! 冲!' : 'GO GO GO!', cx, insets.top + 138 * s, 'center', `bold ${pxSize(32)}px ${font}`, `rgba(255,240,170,${Math.min(1, this.liveMsg)})`);
+      this.hudText(ctx, zh ? '冲! 冲! 冲!' : 'GO GO GO!', cx, headerY + 124 * s, 'center', `bold ${pxSize(32)}px ${font}`, `rgba(255,240,170,${Math.min(1, this.liveMsg)})`);
     }
 
     if (this.buyHintT > 0) {
-      this.hudText(ctx, zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', cx, insets.top + 168 * s, 'center', `bold ${pxSize(17)}px ${font}`, `rgba(255,210,74,${Math.min(1, this.buyHintT)})`);
+      this.hudText(ctx, zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', cx, headerY + 154 * s, 'center', `bold ${pxSize(17)}px ${font}`, `rgba(255,210,74,${Math.min(1, this.buyHintT)})`);
     }
 
     if (this.canBuy() && !this.buyOpen) {

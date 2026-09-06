@@ -179,6 +179,10 @@ export class VillaGame extends BaseGame {
     if (!this.touchMode && navigator.userActivation?.isActive) this.lockPointer();
   }
 
+  restorePointerCapture() {
+    if (this.running && !this.presentationPaused) this.lockPointer();
+  }
+
   private lockPointer() {
     if (this.touchMode || this.mapOpen || this.helpOpen || this.shellOpen()) return;
     this.mouseLookEnabled = true; this.lastMouse = null; this.wantPointerLock = true;
@@ -380,7 +384,6 @@ export class VillaGame extends BaseGame {
       y: +this.state.elevator.y.toFixed(3), phase: this.state.elevator.phase, riding: this.state.elevator.riding });
     data.villaTarget = this.inElevator() ? 'elevator' : this.state.snookerActive ? 'snooker' : this.state.seated ?? this.hotspot()?.id ?? '';
     data.villaVisited = [...this.visited].join(',');
-    data.villaFullscreenState = this.host.presentation?.isFullscreen() ? 'full' : 'window';
     data.villaUseFeedback = this.time < this.toastUntil ? this.toast : '';
   }
 
@@ -406,24 +409,24 @@ export class VillaGame extends BaseGame {
   private buttons(): Button[] {
     const s = this.uiScale(), size = 44 * s, zh = this.isZhLang(), safe = this.safe();
     const compact = this.compactHud(), top = (compact ? 12 : 22) + safe.top;
-    if (this.immersive) return [{ id: 'immersion', x: 16 + safe.left, y: top, w: compact ? (this.state.snookerActive ? 114 : 190) * s : 294, h: size, label: '' }];
+    if (this.immersive) return [{ id: 'immersion', x: 16 + safe.left, y: top, w: Math.min(compact ? (this.state.snookerActive ? 114 : 190) * s : 294, this.width - safe.left - safe.right - 136), h: size, label: '' }];
     const entries: Array<{ id: string; label: string; short: string }> = [
       { id: 'map', label: zh ? 'M  导览图' : 'M  Floor plan', short: zh ? '图' : 'M' },
       { id: 'time', label: this.state.evening ? (zh ? 'T  日光' : 'T  Daylight') : (zh ? 'T  黄昏' : 'T  Sunset'), short: this.state.evening ? '☀' : '☾' },
       { id: 'home', label: zh ? 'H  回门口' : 'H  Entrance', short: '⌂' },
       { id: 'immersion', label: zh ? 'I  沉浸' : 'I  Immersive', short: zh ? '简' : 'I' },
     ];
-    // Guides/fullscreen use the common shell menu (the ? and F aliases remain).
+    // The shared ? guide and game menu sit above the activity row.
     // A narrow HUD puts its activity row below the location and shell trigger.
     const secondRow = this.width - safe.left - safe.right < 500;
     const gap = (compact ? 6 : 9) * s;
     const w = compact ? size : 118;
-    const start = this.width - (secondRow ? 12 : 80) - safe.right - entries.length * w - (entries.length - 1) * gap;
+    const start = this.width - (secondRow ? 12 : 120) - safe.right - entries.length * w - (entries.length - 1) * gap;
     const buttons = entries.map((entry, i) => ({ id: entry.id, x: start + i * (w + gap), y: top + (secondRow ? 56 : 0), w, h: size, label: compact ? entry.short : entry.label }));
     const target = this.hotspot()?.id;
     if (this.touchMode && this.state.snookerActive) {
       const control = (id: string, label: string, x: number, y: number): Button => ({ id, label, x, y, w: 44 * s, h: 44 * s });
-      return [control('immersion', zh ? '简' : 'I', this.width - 112 * s - safe.right, top),
+      return [control('immersion', zh ? '简' : 'I', this.width - 112 * s - safe.right, top + 54 * s),
         control('aim-left', '←', 12 * s + safe.left, top + 54 * s), control('aim-right', '→', 64 * s + safe.left, top + 54 * s),
         control('power-down', '−', 12 * s + safe.left, top + 106 * s), control('power-up', '+', 64 * s + safe.left, top + 106 * s),
         control('reset-activity', zh ? '重摆' : 'Reset', 12 * s + safe.left, this.height - 55 * s - safe.bottom),
@@ -476,7 +479,6 @@ export class VillaGame extends BaseGame {
         this.mapOpen = !this.mapOpen; if (this.mapOpen) this.immersive = false; this.mapFloor = villaFloor(this.position.y); this.clearInput();
         this.mouseLookEnabled = !this.mapOpen; if (this.mapOpen) this.unlock(); else this.lockPointer(); break;
       case 'time': this.state.evening = !this.state.evening; break;
-      case 'fullscreen': this.clearInput(); this.unlock(); this.host.presentation?.toggleFullscreen(); this.mouseLookEnabled = true; break;
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.carDoorOpen = false; this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
@@ -486,8 +488,11 @@ export class VillaGame extends BaseGame {
         this.mapOpen = false; this.clearInput();
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
       case 'help':
-        this.mapOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = false;
-        this.host.presentation?.openControls?.(); break;
+        // Let the shell observe capture before it clears input/unlocks the mouse.
+        if (this.host.presentation?.openControls) {
+          this.mapOpen = false; this.host.presentation.openControls();
+        }
+        break;
       case 'interact': this.interact(); break;
       case 'secondary': this.secondaryInteraction(); break;
       case 'immersion':
@@ -810,7 +815,6 @@ export class VillaGame extends BaseGame {
       else if (key === 'q' && !this.mapOpen && !this.helpOpen) this.secondaryInteraction();
       else if (key === 'l' && !this.mapOpen && !this.helpOpen) this.lockPointer();
       else if (key === 'i') this.activate('immersion');
-      else if (key === 'f') { e.preventDefault(); this.activate('fullscreen'); }
       else if (key === 'c' && !this.mapOpen && !this.helpOpen) this.activate('crouch');
       else if (key === 'r' && !this.mapOpen && !this.helpOpen) this.activate('reset-activity');
       this.publishState();
@@ -863,7 +867,7 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), dark = this.isDarkTheme();
     if (zh !== this.lastLang) {
       this.lastLang = zh;
-      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走或驾驶，Shift 跑步，C 蹲下，空格跳跃、手刹或击球。I 切换仅显示当前位置的沉浸模式，R 重置当前活动。移动鼠标环顾或斯诺克瞄准，Esc 释放光标。沿楼梯上下楼，或在走廊尽头 E 呼叫电梯，进入后按 1、2、3 选层。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口，F 全屏或退出全屏。' : 'Warm Villa. WASD walk or drive, Shift run, C crouch, Space jump, handbrake or shoot. I toggles location-only immersive mode, R resets the current activity. Mouse looks or aims at snooker; Esc releases cursor. Use stairs or press E to call the elevator at the gallery end, then 1, 2, 3 inside. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance, F fullscreen.');
+      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走或驾驶，Shift 跑步，C 蹲下，空格跳跃、手刹或击球。I 切换仅显示当前位置的沉浸模式，R 重置当前活动。移动鼠标环顾或斯诺克瞄准，Esc 释放光标。沿楼梯上下楼，或在走廊尽头 E 呼叫电梯，进入后按 1、2、3 选层。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口，? 操作指南。' : 'Warm Villa. WASD walk or drive, Shift run, C crouch, Space jump, handbrake or shoot. I toggles location-only immersive mode, R resets the current activity. Mouse looks or aims at snooker; Esc releases cursor. Use stairs or press E to call the elevator at the gallery end, then 1, 2, 3 inside. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance, ? controls.');
     }
     ctx.fillStyle = dark ? '#252e2e' : '#d9d4c9'; ctx.fillRect(0, 0, this.width, this.height);
     const rendered = this.scene?.render(ctx, this.width, this.height, this.pixelRatio, this.view(), this.time, this.state);

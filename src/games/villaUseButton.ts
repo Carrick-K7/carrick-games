@@ -18,8 +18,8 @@ export function createVillaUseButton(canvas: HTMLCanvasElement, onUse: () => voi
     if (!state?.visible || !canvas.isConnected || doc.hidden) { button.hidden = true; button.style.display = 'none'; contacts.clear(); return; }
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) { button.hidden = true; button.style.display = 'none'; return; }
-    // The shared app root is the native fullscreen element, so an overlay inside
-    // it stays visible and accessible in fullscreen; never escape to outside nodes.
+    // Keep game-owned DOM affordances inside the persistent viewport root,
+    // sharing the shell's overlay and safe-area boundaries.
     const parent = canvas.closest('#gameApp') ?? doc.body;
     if (button.parentNode !== parent) parent.appendChild(button);
     let zIndex = 30;

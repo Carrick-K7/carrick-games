@@ -3,7 +3,7 @@
 // Pure helpers (no DOM access) so the display rules stay unit-testable:
 // the 1280x720 baseline, aspect-preserving FOV for the software raycaster,
 // the WebGL backing budget, HUD/panel scaling, safe-area-aware touch
-// controls, and the pause-menu fullscreen button. Game state, physics, AI,
+// controls, and space for the shared help/menu utilities. Game state, physics, AI,
 // and weapon simulation never read these values — display only.
 
 export interface ViewportInsets {
@@ -20,10 +20,16 @@ export const CS_BASE_ASPECT = CS_BASE_WIDTH / CS_BASE_HEIGHT;
 export const CS_HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
 /** WebGL backing-store budget in pixels (memory/fill-rate guard). */
 export const SCENE_MAX_BACKING_PIXELS = 4_500_000;
-/** Shared shell chrome: 44px menu button at the top-right + 12px margin. */
+/** Vertical clearance for the top-right 44px help/menu row + 12px margin. */
 export const SHELL_MENU_RESERVE = 44 + 12;
 /** Minimum touch target edge in CSS px. */
 export const MIN_TOUCH_TARGET = 44;
+
+/** On phones, dock round information below the radar and shared utilities. */
+export function roundHeaderY(width: number, height: number, insets?: Partial<ViewportInsets> | null): number {
+  const safe = sanitizeInsets(insets), s = hudScale(width, height);
+  return safe.top + (width - safe.left - safe.right < 500 ? Math.max(88, 10 * s + Math.max(64, 100 * s) + 12) : 14 * s);
+}
 
 const clampNum = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value));
@@ -337,25 +343,4 @@ export function touchControlsLayout(
     buy,
     moveRegionW: w * 0.45,
   };
-}
-
-/**
- * Explicit fullscreen toggle on the pause overlay (native fullscreen is only
- * ever requested from this button, never automatically by the game).
- * Centered below the resume hint and always a ≥44px touch target.
- */
-export function pauseButtonLayout(
-  width: number,
-  height: number,
-  insets?: Partial<ViewportInsets> | null,
-): { x: number; y: number; w: number; h: number } {
-  const safe = sanitizeInsets(insets);
-  const w0 = positive(width, CS_BASE_WIDTH);
-  const h0 = positive(height, CS_BASE_HEIGHT);
-  const s = hudScale(w0, h0);
-  const w = Math.max(200 * s, 160);
-  const h = Math.max(40 * s, MIN_TOUCH_TARGET);
-  const cx = safe.left + (w0 - safe.left - safe.right) / 2;
-  const cy = safe.top + (h0 - safe.top - safe.bottom) / 2;
-  return { x: cx - w / 2, y: cy + 62 * s, w, h };
 }

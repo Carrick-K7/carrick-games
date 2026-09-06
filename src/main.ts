@@ -19,7 +19,6 @@ import {
 import { saveStoredRecord } from './core/storage.js';
 import { isPixelMode } from './core/render.js';
 import { normalizeKey } from './ui/keyboard-input.js';
-import { createGameFullscreen, type GameFullscreen } from './ui/fullscreen.js';
 import { renderVirtualKeyboard } from './ui/virtual-keyboard.js';
 import { renderTouchGuide, renderGuideNotes } from './ui/control-guide.js';
 import { renderGameIcon } from './ui/game-icons.js';
@@ -31,30 +30,20 @@ let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
 const gameClassCache = new Map<string, Promise<GameCtor>>();
-let fullscreen: GameFullscreen | null = null;
 let shellOverlayOpen = false;
 let gameOverlayOpen = false;
-let fullscreenNoticeTimer = 0;
+let overlayCaptureOwner: GameInstance | null = null;
 const guideSheetQuery = '(max-width: 720px), (max-height: 480px), (pointer: coarse)';
 const isHelpOpen = () => document.getElementById('helpOverlay')?.hidden === false;
 const isGuideSheet = () => window.matchMedia(guideSheetQuery).matches;
-const isGuideReadOnly = () => isGuideSheet() || document.getElementById('gameCanvas')?.dataset.viewportMode === 'responsive';
 
 function updatePresentationControls() {
   const zh = isZhLang();
-  const full = document.getElementById('fullscreenBtn') as HTMLButtonElement | null;
-  if (full) {
-    full.textContent = fullscreen?.active ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '浏览器全屏' : 'Enter fullscreen');
-    full.setAttribute('aria-pressed', String(!!fullscreen?.active));
-    full.disabled = !!fullscreen?.pending;
-  }
-  const labels: Record<string, string> = {
-    resumeBtn: zh ? '返回游戏' : 'Return to game',
-    helpBtn: zh ? '操作指南' : 'Controls',
-    helpTitle: zh ? '操作指南' : 'Controls',
-    helpReturnBtn: zh ? '返回游戏' : 'Return to game',
-    guideDismissHint: zh ? 'Esc 关闭' : 'Esc to close',
-  };
+  const helpTrigger = document.getElementById('helpBtn');
+  const helpLabel = isHelpOpen() ? (zh ? '收起操作指南' : 'Close controls') : (zh ? '操作指南' : 'Controls');
+  helpTrigger?.setAttribute('aria-label', helpLabel);
+  helpTrigger?.setAttribute('title', `${helpLabel} (?)`);
+  const labels: Record<string, string> = { helpTitle: zh ? '操作指南' : 'Controls' };
   for (const [id, label] of Object.entries(labels)) {
     const element = document.getElementById(id);
     if (element) element.textContent = label;
@@ -63,33 +52,59 @@ function updatePresentationControls() {
   document.getElementById('shellBackdrop')?.setAttribute('aria-label', zh ? '关闭菜单' : 'Close menu');
   for (const id of ['helpCloseBtn', 'guideBackdrop']) document.getElementById(id)?.setAttribute('aria-label', zh ? '关闭操作指南' : 'Close controls');
   document.getElementById('guideBody')?.setAttribute('aria-label', zh ? '游戏操作指南，可滚动' : 'Game controls, scroll to read');
-  document.getElementById('gameApp')?.setAttribute('data-fullscreen', fullscreen?.active ? 'native' : 'viewport');
+  document.getElementById('helpCloseBtn')?.setAttribute('title', zh ? '关闭 (Esc)' : 'Close (Esc)');
 }
 
 function syncShellOverlayState() {
   const library = !!document.getElementById('gameLibrary')?.classList.contains('open');
   const menu = !!document.getElementById('overflowMenu') && !document.getElementById('overflowMenu')!.hidden;
-  const guide = isHelpOpen(), sheet = guide && isGuideSheet();
-  const open = library || menu || (guide && isGuideReadOnly());
+  const guide = isHelpOpen();
+  const open = library || menu || guide;
+  if (open && !gameOverlayOpen) {
+    overlayCaptureOwner = document.pointerLockElement === document.getElementById('gameCanvas') ? currentGameInstance : null;
+  }
   const stage = document.querySelector('main');
   if (stage) stage.inert = open;
   const help = document.getElementById('helpOverlay');
   if (help) help.inert = library || menu;
   const actions = document.querySelector<HTMLElement>('.header-actions');
-  if (actions) actions.inert = library || (sheet && !menu);
-  if (open && !shellOverlayOpen) releaseHeldInputs();
+  if (actions) actions.inert = library;
+  const helpTrigger = document.getElementById('helpBtn');
+  if (helpTrigger) helpTrigger.inert = menu;
   shellOverlayOpen = open;
-  // Responsive games pause while reading. Desktop board games can retain
-  // their optional live key reference; touch never falls through a sheet.
-  const presentationOpen = open || guide;
-  if (presentationOpen !== gameOverlayOpen) {
-    if (presentationOpen) releaseHeldInputs();
-    gameOverlayOpen = presentationOpen;
-    currentGameInstance?.onShellOverlayChange?.(presentationOpen);
-    if (presentationOpen && document.pointerLockElement === document.getElementById('gameCanvas')) document.exitPointerLock?.();
+  if (open !== gameOverlayOpen) {
+    if (open) releaseHeldInputs(); else overlayCaptureOwner = null;
+    gameOverlayOpen = open;
+    currentGameInstance?.setPresentationPaused?.(open);
+    currentGameInstance?.onShellOverlayChange?.(open);
+    if (open && document.pointerLockElement === document.getElementById('gameCanvas')) document.exitPointerLock?.();
+    // Flush game-owned DOM affordances (for example Villa's Use button) once
+    // before suspending frames, without advancing the simulation.
+    repaintCurrentFrame();
   }
 }
 
+
+function focusGameSurface() {
+  if (gameOverlayOpen) return;
+  const start = document.getElementById('startOverlay');
+  const target = start?.classList.contains('active') ? start : document.getElementById('gameCanvas');
+  target?.focus({ preventScroll: true });
+}
+
+/** Close is the continuation action; no extra Return button or gameplay click. */
+function closeUiFromUser(close: () => void, event?: Event) {
+  const captureOwner = overlayCaptureOwner;
+  close();
+  if (gameOverlayOpen) return;
+  focusGameSurface();
+  // Escape deliberately leaves the cursor free. Only an explicit click/? can
+  // restore a capture that this same game owned before opening the overlay.
+  const canRecapture = event?.isTrusted && (event.type === 'click' || (event instanceof KeyboardEvent && event.key === '?'));
+  if (!canRecapture || !captureOwner || captureOwner !== currentGameInstance || !isRunning) return;
+  // Game-owned capture guards must be re-armed, not bypassed with a raw DOM call.
+  currentGameInstance.restorePointerCapture?.();
+}
 
 function loadGameClass(meta: GameMeta): Promise<GameCtor> {
   const cached = gameClassCache.get(meta.id);
@@ -298,14 +313,13 @@ function renderKeyboard() {
   }
 
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  container.innerHTML = renderVirtualKeyboard(meta.controls, zh, !isGuideReadOnly());
+  container.innerHTML = renderVirtualKeyboard(meta.controls, zh, false);
   const touch = document.getElementById('touchHelp');
   if (touch) touch.innerHTML = renderTouchGuide(meta.controls, zh);
   const notes = document.getElementById('guideNotes');
   if (notes) notes.innerHTML = renderGuideNotes(meta.controls, zh);
   const name = document.getElementById('helpGameName');
   if (name) name.textContent = zh ? meta.nameZh : meta.name;
-  if (!isGuideReadOnly()) bindVirtualKeyboard();
 }
 
 function renderControls() {
@@ -477,69 +491,10 @@ function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement): GameHost {
     reportScore: reportCurrentScore,
     requestShellRender: renderControls,
     presentation: {
-      toggleFullscreen: () => fullscreen?.toggle(),
-      isFullscreen: () => !!fullscreen?.active,
       openControls: () => setHelpOpen(true),
       isControlsOpen: isHelpOpen,
     },
   };
-}
-
-function bindVirtualKeyboard() {
-  const vk = document.getElementById('vkeyboard');
-  if (!vk) return;
-  let activeVirtualKey: string | null = null;
-  const releaseKey = () => {
-    if (!activeVirtualKey) return;
-    const event = new KeyboardEvent('keyup', {
-      key: activeVirtualKey,
-      code: activeVirtualKey === ' ' ? 'Space' : undefined,
-      bubbles: true,
-    });
-    window.dispatchEvent(event);
-    getKeysFromEvent(event).forEach((k) => pressedKeys.delete(k));
-    updateVirtualKeyboardHighlight(pressedKeys);
-    activeVirtualKey = null;
-  };
-
-  vk.addEventListener('mousedown', (e) => {
-    const target = (e.target as HTMLElement).closest('.vkey[data-key]') as HTMLElement | null;
-    const key = target?.getAttribute('data-key');
-    if (!key) return;
-    e.preventDefault();
-    activeVirtualKey = key;
-    const keyboardEvent = new KeyboardEvent('keydown', {
-      key,
-      code: key === ' ' ? 'Space' : undefined,
-      bubbles: true,
-    });
-    window.dispatchEvent(keyboardEvent);
-    getKeysFromEvent(keyboardEvent).forEach((k) => pressedKeys.add(k));
-    updateVirtualKeyboardHighlight(pressedKeys);
-  });
-  vk.addEventListener('mouseup', () => {
-    releaseKey();
-  });
-  vk.addEventListener('mouseleave', () => {
-    releaseKey();
-  });
-  vk.addEventListener('touchstart', (e) => {
-    const target = (e.target as HTMLElement).closest('.vkey[data-key]') as HTMLElement | null;
-    const key = target?.getAttribute('data-key');
-    if (!key) return;
-    e.preventDefault();
-    activeVirtualKey = key;
-    const keyboardEvent = new KeyboardEvent('keydown', {
-      key,
-      code: key === ' ' ? 'Space' : undefined,
-      bubbles: true,
-    });
-    window.dispatchEvent(keyboardEvent);
-    getKeysFromEvent(keyboardEvent).forEach((k) => pressedKeys.add(k));
-    updateVirtualKeyboardHighlight(pressedKeys);
-  });
-  vk.addEventListener('touchend', releaseKey);
-  vk.addEventListener('touchcancel', releaseKey);
 }
 
 export async function prepareGame(name: string) {
@@ -616,6 +571,7 @@ export async function prepareGame(name: string) {
   renderControls();
   setStartOverlay(true);
   lastViewportKey = '';
+  currentGameInstance.setPresentationPaused?.(gameOverlayOpen);
   currentGameInstance.onShellOverlayChange?.(gameOverlayOpen);
   fitGameCanvas();
 }
@@ -627,7 +583,8 @@ function fitGameCanvas() {
   const root = document.getElementById('gameApp');
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
   if (!root || !canvas) return;
-  const visual = fullscreen?.active ? null : window.visualViewport;
+  // Browser chrome fullscreen (F11) is just another viewport resize.
+  const visual = window.visualViewport;
   const width = visual?.width ?? window.innerWidth;
   const height = visual?.height ?? window.innerHeight;
   if (!(width > 0 && height > 0)) return;
@@ -692,7 +649,9 @@ function startDemoForCurrentGame() {
 export async function loadGame(name: string) {
   closeGameLibrary();
   await prepareGame(name);
+  if (currentGameName !== name) return;
   setHashGame(name);
+  if (!isLoadingGame) focusGameSurface();
 }
 
 function setGameLibraryOpen(open: boolean) {
@@ -719,7 +678,7 @@ function setGameLibraryOpen(open: boolean) {
       : document.getElementById('searchInput');
     focusTarget?.focus({ preventScroll: true });
   } else {
-    document.getElementById('overflowBtn')?.focus({ preventScroll: true });
+    focusGameSurface();
     library.setAttribute('aria-hidden', 'true');
   }
   syncShellOverlayState();
@@ -741,8 +700,8 @@ function setOverflowOpen(open: boolean) {
   trigger.setAttribute('aria-expanded', String(open));
   if (open) setHelpOpen(false, false);
   syncShellOverlayState();
-  if (open && !wasOpen) document.getElementById('resumeBtn')?.focus({ preventScroll: true });
-  if (!open && hadFocus && !document.getElementById('gameLibrary')?.classList.contains('open')) trigger.focus({ preventScroll: true });
+  if (open && !wasOpen) document.getElementById('gamePickerBtn')?.focus({ preventScroll: true });
+  if (!open && hadFocus) focusGameSurface();
 }
 
 function updateGuidePresentation() {
@@ -750,10 +709,12 @@ function updateGuidePresentation() {
   if (!help) return;
   const sheet = isGuideSheet();
   help.dataset.presentation = sheet ? 'sheet' : 'reference';
-  help.setAttribute('role', sheet ? 'dialog' : 'region');
-  if (sheet) help.setAttribute('aria-modal', 'true'); else help.removeAttribute('aria-modal');
+  help.setAttribute('role', 'dialog');
+  help.setAttribute('aria-modal', 'true');
+  // Keep the visible toggle in the modal's accessibility and keyboard scope.
+  if (isHelpOpen()) help.setAttribute('aria-owns', 'helpBtn overflowBtn'); else help.removeAttribute('aria-owns');
   const backdrop = document.getElementById('guideBackdrop');
-  if (backdrop) backdrop.hidden = !isHelpOpen() || !sheet;
+  if (backdrop) backdrop.hidden = !isHelpOpen();
   syncShellOverlayState();
 }
 
@@ -773,8 +734,9 @@ function setHelpOpen(open: boolean, restoreFocus = true) {
     if (!wasOpen) document.getElementById('guideBody')?.scrollTo(0, 0);
   }
   updateGuidePresentation();
+  updatePresentationControls();
   if (open) document.getElementById('helpCloseBtn')?.focus({ preventScroll: true });
-  else if (wasOpen && restoreFocus) document.getElementById('overflowBtn')?.focus({ preventScroll: true });
+  else if (wasOpen && restoreFocus) focusGameSurface();
 }
 
 function renderLibraryFilters(zh: boolean) {
@@ -941,22 +903,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
 // Init UI
 (function init() {
   const root = document.getElementById('gameApp');
-  if (root) {
-    canvasFitObserver.observe(root);
-    fullscreen = createGameFullscreen(root, () => {
-      updatePresentationControls();
-      scheduleViewportFit();
-      repaintCurrentFrame();
-    }, () => {
-      const notice = document.getElementById('fullscreenNotice');
-      if (notice) {
-        notice.textContent = isZhLang() ? '浏览器未允许全屏；游戏仍铺满网页。' : 'Fullscreen is unavailable. The game still fills this page.';
-        notice.hidden = false;
-        window.clearTimeout(fullscreenNoticeTimer);
-        fullscreenNoticeTimer = window.setTimeout(() => { notice.hidden = true; }, 5000);
-      }
-    });
-  }
+  if (root) canvasFitObserver.observe(root);
   window.matchMedia(guideSheetQuery).addEventListener('change', () => {
     updateGuidePresentation();
     renderKeyboard();
@@ -981,13 +928,14 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
     const open = !document.getElementById('gameLibrary')?.classList.contains('open');
     setGameLibraryOpen(open);
   });
-  document.getElementById('libraryCloseBtn')?.addEventListener('click', closeGameLibrary);
-  document.querySelector('[data-library-close]')?.addEventListener('click', closeGameLibrary);
+  document.getElementById('libraryCloseBtn')?.addEventListener('click', event => closeUiFromUser(closeGameLibrary, event));
+  document.querySelector('[data-library-close]')?.addEventListener('click', event => closeUiFromUser(closeGameLibrary, event));
   document.getElementById('overflowBtn')?.addEventListener('click', (event) => {
     event.stopPropagation();
     const open = document.getElementById('overflowMenu')?.hidden ?? true;
     closeGameLibrary();
-    setOverflowOpen(open);
+    if (open) setOverflowOpen(true);
+    else closeUiFromUser(() => setOverflowOpen(false), event);
   });
   document.addEventListener('click', (event) => {
     const target = event.target;
@@ -999,7 +947,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
       event.stopPropagation();
-      setGameLibraryOpen(!open);
+      if (open) closeUiFromUser(closeGameLibrary, event); else setGameLibraryOpen(true);
       return;
     }
     if (open && library) {
@@ -1010,7 +958,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
       if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Escape') {
         event.preventDefault();
-        closeGameLibrary();
+        closeUiFromUser(closeGameLibrary, event);
         return;
       }
       const rows = Array.from(library.querySelectorAll<HTMLButtonElement>('.game-list-item'));
@@ -1041,10 +989,18 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
       }
       return;
     }
+    const editing = event.target instanceof Element && event.target.closest('input, textarea, [contenteditable="true"]');
+    if (event.key === '?' && !editing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
+      event.preventDefault(); event.stopPropagation();
+      if (!event.repeat) {
+        if (isHelpOpen()) closeUiFromUser(() => setHelpOpen(false), event); else setHelpOpen(true);
+      }
+      return;
+    }
     const menu = document.getElementById('overflowMenu');
     if (menu && !menu.hidden) {
       event.stopPropagation();
-      if (event.key === 'Escape') { event.preventDefault(); setOverflowOpen(false); }
+      if (event.key === 'Escape') { event.preventDefault(); closeUiFromUser(() => setOverflowOpen(false), event); }
       else if (event.key === 'Tab') {
         const buttons = Array.from(menu.querySelectorAll<HTMLElement>('button:not([disabled]), summary'))
           .filter(el => el.getClientRects().length > 0);
@@ -1054,15 +1010,15 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
         } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
     } else if (isHelpOpen() && event.key === 'Escape') {
-      event.preventDefault(); event.stopPropagation(); setHelpOpen(false);
-    } else if (isHelpOpen() && isGuideReadOnly()) {
+      event.preventDefault(); event.stopPropagation(); closeUiFromUser(() => setHelpOpen(false), event);
+    } else if (isHelpOpen()) {
       event.stopPropagation();
-      if (event.key === 'Tab' && isGuideSheet()) {
+      if (event.key === 'Tab') {
         const help = document.getElementById('helpOverlay')!;
-        const targets = Array.from(help.querySelectorAll<HTMLElement>('button, [tabindex="0"]')).filter(el => el.getClientRects().length > 0);
-        const first = targets[0], last = targets[targets.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        const targets = [...help.querySelectorAll<HTMLElement>('button, [tabindex="0"]'), document.getElementById('helpBtn')!, document.getElementById('overflowBtn')!].filter(el => el.getClientRects().length > 0);
+        const index = targets.indexOf(document.activeElement as HTMLElement);
+        event.preventDefault();
+        targets[(index + (event.shiftKey ? -1 : 1) + targets.length) % targets.length]?.focus({ preventScroll: true });
       }
     } else if (event.target instanceof Element && event.target.closest('.header-actions, .help-overlay')) {
       // Arrow/Space scrolling inside the guide is native, never game input.
@@ -1140,13 +1096,15 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
   }
 
   document.getElementById('startOverlay')?.addEventListener('click', startPreparedGame);
-  document.getElementById('fullscreenBtn')?.addEventListener('click', () => fullscreen?.toggle());
-  for (const id of ['menuCloseBtn', 'resumeBtn', 'shellBackdrop']) {
-    document.getElementById(id)?.addEventListener('click', () => setOverflowOpen(false));
+  for (const id of ['menuCloseBtn', 'shellBackdrop']) {
+    document.getElementById(id)?.addEventListener('click', event => closeUiFromUser(() => setOverflowOpen(false), event));
   }
-  document.getElementById('helpBtn')?.addEventListener('click', () => setHelpOpen(true));
-  for (const id of ['helpCloseBtn', 'helpReturnBtn', 'guideBackdrop']) {
-    document.getElementById(id)?.addEventListener('click', () => setHelpOpen(false));
+  document.getElementById('helpBtn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (isHelpOpen()) closeUiFromUser(() => setHelpOpen(false), event); else setHelpOpen(true);
+  });
+  for (const id of ['helpCloseBtn', 'guideBackdrop']) {
+    document.getElementById(id)?.addEventListener('click', event => closeUiFromUser(() => setHelpOpen(false), event));
   }
   document.getElementById('restartBtn')?.addEventListener('click', () => {
     setOverflowOpen(false);

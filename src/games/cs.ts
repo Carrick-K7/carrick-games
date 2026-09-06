@@ -10,7 +10,7 @@
 // through setViewport(), the engine re-sizes its cameras/renderer first, and
 // only then does resizeLogicalViewport() repaint the 2D canvas so no frame is
 // presented with a stale aspect. Shell overlays release held input and pause
-// the match; native fullscreen stays an explicit HUD button (shell-owned).
+// the match; browser fullscreen stays browser-owned (F11).
 
 import {
   BaseGame,
@@ -119,10 +119,6 @@ export class CsGame extends BaseGame {
       },
     });
     this.hudView = new CsHud(this.engine);
-    this.hudView.shellActions = {
-      fullscreen: this.host.presentation ? () => this.host.presentation!.toggleFullscreen() : undefined,
-      isFullscreen: this.host.presentation ? () => this.host.presentation!.isFullscreen() : undefined,
-    };
 
     // Any path that starts a fresh match (Enter key, HUD replay button, pause
     // menu restart, menu start after a completed match) must re-arm one-shot
@@ -160,8 +156,8 @@ export class CsGame extends BaseGame {
   /**
    * Shell overlay (picker, menu) coordination: released held keys/fire/touch
    * regions, pause the match while the overlay is up, and resume only when
-   * this adapter caused the pause — without re-requesting pointer lock
-   * (overlay close is not a trusted click gesture).
+   * this adapter caused the pause. The shell alone may restore prior pointer
+   * capture on a trusted dismissal; programmatic closes never request it.
    */
   onShellOverlayChange(open: boolean) {
     for (const entry of this.touchRegions.values()) {
@@ -184,6 +180,10 @@ export class CsGame extends BaseGame {
       this.pausedByShellOverlay = false;
       if (this.engine.phase === 'paused') this.engine.resumeGame(false);
     }
+  }
+
+  restorePointerCapture() {
+    if (this.running && !this.presentationPaused && this.engine.matchActive && !this.engine.overlayOpen()) this.engine.requestCapture();
   }
 
   protected override bindInput() {
@@ -243,7 +243,7 @@ export class CsGame extends BaseGame {
       ctx.fillStyle = '#0c141c';
       ctx.fillRect(0, 0, this.width, this.height);
     }
-    this.hudView.draw(ctx, this.width, this.height);
+    this.hudView.draw(ctx, this.width, this.height, this.presentationPaused);
     const end = engine.hud.matchEnd;
     if (end) {
       // The HUD match-end panel is the single visible terminal overlay (it

@@ -4,7 +4,7 @@
 // canvas at the live CSS viewport size delivered through BaseGame.setViewport.
 // This module keeps all viewport-shape decisions in pure functions so the
 // layout can be unit-tested without a DOM: safe-area insets, the reserved
-// top-right shell button (44px + 12px margin), compact/short breakpoints and
+// top-right help/menu buttons (44px each, 8px gap), compact/short breakpoints and
 // internal scroll state for menus that do not fit short screens.
 
 export interface HudSafeArea {
@@ -47,7 +47,7 @@ export interface HudLayout {
   short: boolean;
   /** W >= 1100 && H >= 640: the original two-column 1280x720 menu layout. */
   classicMenu: boolean;
-  /** Rectangle the shell reserves for its own top-right 44px button. */
+  /** Rectangle reserved for the two top-right 44px utility buttons. */
   shellReserve: { x: number; y: number; w: number; h: number };
   /** First y that is guaranteed clear of the shell reserve. */
   contentTop: number;
@@ -65,9 +65,9 @@ export function computeHudLayout(W: number, H: number, safe?: Partial<HudSafeAre
   const right = W - margin - s.right;
   const bottom = H - margin - s.bottom;
   const shellReserve = {
-    x: W - s.right - SHELL_BUTTON_MARGIN - SHELL_BUTTON_SIZE,
+    x: W - s.right - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8),
     y: s.top + SHELL_BUTTON_MARGIN,
-    w: SHELL_BUTTON_SIZE,
+    w: SHELL_BUTTON_SIZE * 2 + 8,
     h: SHELL_BUTTON_SIZE,
   };
   return {

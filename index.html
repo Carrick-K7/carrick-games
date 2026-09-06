@@ -32,6 +32,7 @@
     </main>
 
     <div class="header-actions">
+      <button class="game-menu-trigger game-help-trigger" id="helpBtn" type="button" aria-label="Controls" title="Controls (?)" aria-controls="helpOverlay" aria-expanded="false" aria-keyshortcuts="Shift+/"><span aria-hidden="true">?</span></button>
       <button class="game-menu-trigger" id="overflowBtn" type="button" aria-label="Game menu" aria-haspopup="dialog" aria-controls="overflowMenu" aria-expanded="false">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg>
       </button>
@@ -46,9 +47,6 @@
           <span class="selected-game-label" id="selectedGameLabel">Select a game</span>
           <kbd class="picker-shortcut" id="pickerShortcut" aria-hidden="true">Ctrl K</kbd>
         </button>
-        <button class="menu-action" id="resumeBtn" type="button">Return to game</button>
-        <button class="menu-action" id="fullscreenBtn" type="button" aria-pressed="false">Enter fullscreen</button>
-        <button class="menu-action" id="helpBtn" type="button" aria-controls="helpOverlay" aria-expanded="false">Controls</button>
         <button class="menu-action" id="restartBtn" type="button" hidden>Restart</button>
         <button class="menu-action" id="demoBtn" type="button" hidden>Demo</button>
         <aside class="game-context" id="statsPanel" hidden></aside>
@@ -81,9 +79,7 @@
         <div id="touchHelp"></div>
         <div class="guide-notes" id="guideNotes"></div>
       </div>
-      <footer class="guide-footer"><span id="guideDismissHint">Esc to close</span><button id="helpReturnBtn" type="button">Return to game</button></footer>
     </aside>
-    <div class="fullscreen-notice" id="fullscreenNotice" role="status" hidden></div>
 
     <div class="game-library" id="gameLibrary" aria-hidden="true">
       <button class="library-backdrop" type="button" data-library-close aria-label="Close game library"></button>

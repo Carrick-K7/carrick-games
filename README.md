@@ -46,7 +46,8 @@ Carrick Games currently ships 28 playable games:
 [Play Warm Villa / 暖居别墅](https://games.carrick7.com/#/villa): walk through a realistic, cozy three-story home with continuous stairs, collisions, day/evening lighting, and interactive furnishings. Explore the ground-floor living room, garden, pool, aquarium, gaming room, garage, and kitchen; upstairs bedrooms, bathroom, and library; and the roof terrace.
 
 - **Desktop:** WASD moves; Shift runs, C toggles crouching, and Space jumps with gravity and head clearance. Moving the mouse looks around without holding a button; Esc frees the cursor, and clicking resumes capture. ↑/↓ walks and ←/→ turns. E interacts / sits / stands, Q operates the car door or screen input. M opens the floor plan, T switches day/evening, H returns to the entrance.
-- **Fullscreen:** the villa fills the webpage by default, adapting its camera and HUD to the screen's aspect ratio. The shared game-menu fullscreen button (or Villa's F shortcut) requests browser-native fullscreen; Esc exits back to the full webpage. Menus and game switching remain available inside native fullscreen. If the browser refuses fullscreen, the game stays in the full webpage.
+- **Game window:** the villa fills the webpage by default, adapting its camera and HUD to the screen's aspect ratio. Use the browser's own F11 command for fullscreen; there is no app fullscreen button or F shortcut.
+- **Help:** click the floating `?`, or press `?` even while the mouse is captured. Read at your own pace, then close with `×`, `?`, Esc or the backdrop; no extra Return button is needed. Esc leaves the cursor free.
 - **Quiet view:** I toggles immersive mode: the HUD shows only the current floor and location. Tap that location to restore controls on touchscreens. In normal mode, a small nearby interaction badge fades in on visible objects; it does not show through walls.
 - **Touch:** left joystick walks or drives; drag on the right to look. Context buttons provide crouch/jump, held braking, resets, elevator floors and interactions. The Use/Exit circle has a native accessible touch target for Safari, with one action per press and visible feedback when the target is too far away or an action must wait. Snooker has separate aim, power and shot buttons outside the table view, with its Exit target separated from Shot on narrow phones.
 - **Elevator:** at the north end of the central gallery, press E (or tap Use), walk inside, then press 1 / 2 / 3 or tap a floor button. All three floors are connected by continuous travel, with the original stairs retained. Doors stay open while occupied or the sill is obstructed; an empty car closes after four seconds. Calling it again reopens the doors.
@@ -67,8 +68,9 @@ Carrick Games currently ships 28 playable games:
 - Bilingual interface: English and Chinese.
 - Searchable game list with grouped navigation.
 - Keyboard, mouse, and touch input where appropriate.
-- Full-viewport game windows with a floating menu; browser-native fullscreen is optional and never requested automatically.
-- One Controls guide for every game: a lower-left desktop reference or touch bottom sheet, with consistent key/gesture labels and a scrollable body; never shrinks the game.
+- Full-viewport game windows with two floating controls: `?` for help and a compact game/settings menu. Browser fullscreen stays browser-owned (F11).
+- One-click Controls for every game: a lower-left desktop reference or touch bottom sheet, with readable key/gesture labels and a scrollable body; never shrinks the game.
+- Help pauses play and timers; closing continues without restarting or clearing a manual gameplay pause. Keyboard focus returns directly to play or the startup action.
 - Light, dark, and system theme modes.
 - Responsive 3D cameras and HUDs for CS, CS Kimi and Villa; fixed boards maximize at their original proportions.
 - Bounded HiDPI Canvas rendering and consistent pointer coordinates across resizing and rotation.

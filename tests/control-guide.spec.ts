@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 async function openGuide(page: Page, id: string) {
   await page.goto(`/#/${id}`);
   await expect(page.locator('#startOverlay')).toBeVisible({ timeout: 45_000 });
-  await page.locator('#overflowBtn').click();
   await page.locator('#helpBtn').click();
   await expect(page.locator('#helpOverlay')).toBeVisible();
   await expect(page.locator('#overflowMenu')).toBeHidden();
@@ -26,7 +25,7 @@ test.describe('unified operation guides', () => {
       const bottom = 720 - g.y - g.height;
       expect(bottom).toBe(['cs', 'cs-kimi', 'villa'].includes(id) ? 160 : 12);
       await expect(page.locator('#helpGameName')).toHaveText(await page.locator('#selectedGameLabel').innerText());
-      await expect(guide).toHaveAttribute('role', 'region');
+      await expect(guide).toHaveAttribute('role', 'dialog');
       const style = await guide.evaluate(el => {
         const s = getComputedStyle(el), h = getComputedStyle(el.querySelector('h2')!);
         return { font: s.fontFamily, border: s.borderRadius, color: s.color, background: s.backgroundColor, title: h.fontSize };
@@ -37,7 +36,7 @@ test.describe('unified operation guides', () => {
       const closeBox = await page.locator('#helpCloseBtn').boundingBox();
       await page.locator('#guideBody').evaluate(el => el.scrollTop = el.scrollHeight);
       expect(await page.locator('#helpCloseBtn').boundingBox()).toEqual(closeBox);
-      await expect(page.locator('#helpReturnBtn')).toBeInViewport();
+      await expect(page.locator('#helpBtn')).toBeInViewport();
       expect(await canvas.boundingBox()).toEqual(before);
       // Guide scrolling/activation must not start gameplay or leak to game keys.
       await page.evaluate(() => {
@@ -49,7 +48,7 @@ test.describe('unified operation guides', () => {
       expect(await page.evaluate(() => (window as any).__guideKeyLeaks)).toBe(0);
       await expect(page.locator('#startOverlay')).toBeVisible();
       await page.locator('#helpCloseBtn').focus(); await page.keyboard.press('Escape');
-      await expect(guide).toBeHidden(); await expect(page.locator('#overflowBtn')).toBeFocused();
+      await expect(guide).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
     }
   });
 
@@ -66,20 +65,43 @@ test.describe('unified operation guides', () => {
       await page.locator('#guideBody').evaluate(el => el.scrollTop = el.scrollHeight);
       await expect(page.locator('#guideNotes p').last()).toBeInViewport();
       await expect(page.locator('#helpCloseBtn')).toBeInViewport();
-      await expect(page.locator('#helpReturnBtn')).toBeInViewport();
+      await expect(page.locator('#helpBtn')).toBeInViewport();
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', count!);
-      await page.locator('#helpReturnBtn').focus(); await page.keyboard.press('Tab');
+      await page.locator('#helpBtn').focus(); await page.keyboard.press('Tab');
+      await expect(page.locator('#overflowBtn')).toBeFocused();
+      await page.keyboard.press('Tab');
       await expect(page.locator('#helpCloseBtn')).toBeFocused();
     }
     await page.setViewportSize({ width: 1280, height: 720 });
-    await expect(page.locator('#helpOverlay')).toHaveAttribute('role', 'region');
+    await expect(page.locator('#helpOverlay')).toHaveAttribute('role', 'dialog');
     // 3D reading remains protected from accidental firing/cursor capture.
     await expect(page.locator('main')).toHaveAttribute('inert', '');
-    await page.keyboard.press('Control+k');
+    await page.locator('#overflowBtn').click();
     await expect(page.locator('#helpOverlay')).toBeHidden();
+    await expect(page.locator('#overflowMenu')).toBeVisible();
+    await page.locator('#gamePickerBtn').click();
     await page.locator('.game-list-item[data-id="snake"]').click();
     await expect(page.locator('#helpOverlay')).toBeHidden();
   });
+});
+
+test('read help mid-game without losing a life, then continue immediately from the keyboard', async ({ page }) => {
+  await page.goto('/#/snake');
+  const canvas = page.locator('#gameCanvas');
+  await page.locator('#startOverlay').click();
+  await page.keyboard.press('Shift+Slash');
+  await expect(page.locator('#helpOverlay')).toBeVisible();
+  await expect(canvas).toHaveAttribute('data-game-presentation', 'paused');
+  const image = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  await page.waitForTimeout(2500); // Long enough for an unpaused snake to hit the wall.
+  expect(await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).toBe(image);
+  await expect(canvas).not.toHaveAttribute('data-game-result', /.+/);
+  await page.locator('#helpCloseBtn').click();
+  await expect(canvas).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).not.toBe(image);
+  await expect(page.locator('#helpOverlay')).toBeHidden();
+  await expect(canvas).toHaveAttribute('data-game-prepare-count', '1');
 });
 
 test.describe('touch control guide', () => {
@@ -98,6 +120,11 @@ test.describe('touch control guide', () => {
       await expect(page.locator('#helpOverlay')).toBeHidden();
       await expect(page.locator('#startOverlay')).toBeVisible();
       await expect(page.locator('main')).not.toHaveAttribute('inert', '');
+      await page.locator('#helpBtn').tap();
+      await expect(page.locator('#helpBtn')).toHaveAttribute('aria-expanded', 'true');
+      await page.locator('#helpBtn').tap();
+      await expect(page.locator('#helpOverlay')).toBeHidden();
+      await expect(page.locator('#startOverlay')).toBeFocused();
     }
   });
 });

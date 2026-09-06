@@ -212,7 +212,7 @@ export class SimonGame extends BaseGame {
           this.phase = 'waiting';
           this.inputIndex = 0;
           this.showTimerMs = 0;
-          this.lastInputAt = performance.now();
+          this.lastInputAt = this.gameNow();
         }
       }
     }
@@ -329,7 +329,7 @@ export class SimonGame extends BaseGame {
   private handlePlayerChoice(color: SimonColor) {
     if (this.phase !== 'waiting') return;
 
-    const now = performance.now();
+    const now = this.gameNow();
     const reactionMs = now - this.lastInputAt;
     this.flashPad(color, 220);
 

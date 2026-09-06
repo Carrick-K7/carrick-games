@@ -34,6 +34,12 @@ test.describe('game-window shell design contracts', () => {
         await expect(page.locator('#keyboardPanel')).toBeHidden();
         await expect(page.locator('#overflowBtn')).toHaveAccessibleName(/settings|设置/i);
         await target(page.locator('#overflowBtn'));
+        await target(page.locator('#helpBtn'));
+        await expect(page.locator('#helpBtn')).toHaveAccessibleName(/Controls|操作指南/);
+        await expect(page.locator('#fullscreenBtn, #resumeBtn, #helpReturnBtn')).toHaveCount(0);
+        const help = await bounds(page.locator('#helpBtn')), menuButton = await bounds(page.locator('#overflowBtn'));
+        expect(help.width).toBe(44); expect(help.height).toBe(44);
+        expect(menuButton.x - help.x - help.width).toBe(8);
         const root = await bounds(page.locator('#gameApp')), canvas = await bounds(page.locator('#gameCanvas'));
         expect(root).toEqual({ x: 0, y: 0, ...viewport });
         expect(canvas.width).toBeCloseTo(Math.min(viewport.width, viewport.height), 0);
@@ -65,7 +71,7 @@ test.describe('game-window shell design contracts', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
         if (mobile) expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(2);
         await page.keyboard.press('Escape');
-        await expect(dialog).toBeHidden(); await expect(page.locator('#overflowBtn')).toBeFocused();
+        await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
         await expect(page.locator('main')).not.toHaveAttribute('inert', '');
         await noOverflow(page);
       });
@@ -87,13 +93,13 @@ test.describe('game-window shell design contracts', () => {
       expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
       await page.locator('#libraryCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
       expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
-      await page.keyboard.press('Escape'); await expect(dialog).toBeHidden(); await expect(trigger).toBeFocused();
+      await page.keyboard.press('Escape'); await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
       await expect(page.locator('.header-actions')).not.toHaveAttribute('inert', '');
       await expect(page.locator('main')).not.toHaveAttribute('inert', '');
     }
     await openPicker(page);
     await page.locator('[data-library-close]').click({ position: { x: 4, y: 4 } });
-    await expect(dialog).toBeHidden(); await expect(trigger).toBeFocused();
+    await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
   });
 
   test('game menu traps focus and releases it on dismissal', async ({ page }) => {
@@ -103,7 +109,7 @@ test.describe('game-window shell design contracts', () => {
     expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
     await page.locator('#menuCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
     expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
-    await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(page.locator('#overflowBtn')).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
   });
 
   test('search supports both languages, empty recovery and keyboard switching', async ({ page }) => {
@@ -117,7 +123,7 @@ test.describe('game-window shell design contracts', () => {
     }
     await search.press('ArrowDown'); await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#\/tetris$/); await expect(page.locator('#selectedGameLabel')).toHaveText('Tetris');
-    await expect(page.locator('.library-dialog')).toBeHidden(); await expect(page.locator('#overflowBtn')).toBeFocused();
+    await expect(page.locator('.library-dialog')).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
     await expect(page.locator('#gameCanvas')).toHaveAccessibleName(/Tetris/); await expect(page.locator('#startOverlay')).toBeVisible();
   });
 
@@ -128,7 +134,7 @@ test.describe('game-window shell design contracts', () => {
     await expect(page.locator('#selectedGameLabel')).toHaveText('Snake'); await expect(page.locator('#startOverlay')).toBeVisible();
     await expect(page.locator('.game-list-item')).toHaveCount(1);
     await search.press('Enter'); await expect(page).toHaveURL(/#\/spaceshooter$/);
-    await expect(page.locator('#overflowBtn')).toBeFocused(); await expect(page.locator('#startOverlay')).toBeVisible();
+    await expect(page.locator('#startOverlay')).toBeFocused(); await expect(page.locator('#startOverlay')).toBeVisible();
   });
 
   test('Chinese IME confirmation stays in search until composition is finished', async ({ page }) => {
@@ -161,7 +167,7 @@ test.describe('game-window shell design contracts', () => {
     for (const id of ['wordle', 'sudoku', 'connectfour', 'solitaire']) {
       await page.goto(`/#/${id}`); await expect(page.locator('#startOverlay')).toBeVisible();
       const before = await bounds(page.locator('#gameCanvas'));
-      await openMenu(page); await page.locator('#helpBtn').click();
+      await page.locator('#helpBtn').click();
       const panel = page.locator('#keyboardPanel'); await expect(panel).toBeVisible();
       const box = await bounds(panel), keys = panel.locator('.vkey:visible');
       expect(await keys.count()).toBeGreaterThan(0);

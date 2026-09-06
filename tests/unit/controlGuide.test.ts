@@ -31,7 +31,8 @@ describe('one catalog-driven control guide for every game', () => {
     const villa = GAMES.find(g => g.id === 'villa')!;
     expect(renderGuideNotes(villa.controls, false)).toContain('Snooker:');
     expect(renderGuideNotes(villa.controls, true)).toContain('斯诺克');
-    expect(renderVirtualKeyboard(villa.controls, false)).toContain('Browser fullscreen');
+    expect(renderVirtualKeyboard(villa.controls, false)).toContain('Toggle controls');
+    expect(villa.controls.keyboard?.some(row => row.keys.includes('F'))).toBe(false);
     const cs = GAMES.find(g => g.id === 'cs')!;
     expect(cs.controls.keyboard?.find(row => row.keys.includes('F'))?.action.toLowerCase()).toContain('inspect');
   });

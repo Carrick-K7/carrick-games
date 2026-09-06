@@ -51,12 +51,6 @@ export interface HudRegion {
   scroll?: HudScroll;
 }
 
-/** Shell presentation bridge supplied by the cs.ts adapter. */
-export interface CsHudShellActions {
-  fullscreen?: () => void;
-  isFullscreen?: () => boolean;
-}
-
 type Ctx = CanvasRenderingContext2D;
 
 /** View-model produced by CsEngine.computeHud() and rendered by CsHud. */
@@ -132,8 +126,6 @@ const DIFFICULTIES = ['easy', 'normal', 'hard'] as const;
 
 export class CsHud {
   regions: HudRegion[] = [];
-  /** Wired by the adapter; the fullscreen entry is hidden when absent. */
-  shellActions: CsHudShellActions = {};
 
   private safeArea: HudSafeArea = normalizeSafeArea(null);
   private readonly menuScroll = new HudScroll();
@@ -395,11 +387,6 @@ export class CsHud {
     py += 24;
     this.text(ctx, this.L('设置 · 鼠标与画面', 'Settings · mouse & video'), left + 24, py, 12, C.blue);
     this.push({ x: left + 24, y: py - 12, w: 220, h: 24, down: () => e.openSettings() });
-    if (this.shellActions.fullscreen) {
-      const fsLabel = '⛶ ' + (this.shellActions.isFullscreen?.() ? this.L('退出全屏', 'Exit Fullscreen') : this.L('全屏', 'Fullscreen'));
-      this.text(ctx, fsLabel, left + 254, py, 12, C.blue);
-      this.push({ x: left + 254, y: py - 12, w: 160, h: 24, down: () => this.shellActions.fullscreen!() });
-    }
     this.text(ctx, this.L('音效 ', 'Sound ') + (e.audio.enabled ? this.L('开', 'On') : this.L('关', 'Off')), left + panelW - 24, py, 12, C.blue, 'right');
     this.push({ x: left + panelW - 124, y: py - 12, w: 100, h: 24, down: () => e.toggleSound() });
 
@@ -434,8 +421,10 @@ export class CsHud {
 
     // Brand + status line (clear of the shell's top-right button).
     this.text(ctx, '✣ CS', x, top + 14, 28, C.amber);
-    this.text(ctx, this.L('浏览器战术射击', 'BROWSER TACTICAL FPS'), x + 80, top + 16, 11, C.dim);
-    this.text(ctx, `${e.hud.fps} FPS · 5 VS 5`, Lyt.shellReserve.x - 12, top + 10, 10, C.faint, 'right', false);
+    ctx.font = '11px system-ui, sans-serif';
+    const brandRoom = Math.max(0, Lyt.shellReserve.x - 12 - (x + 80));
+    this.text(ctx, ellipsize(ctx, this.L('浏览器战术射击', 'BROWSER TACTICAL FPS'), Math.min(190, brandRoom)), x + 80, top + 16, 11, C.dim);
+    if (Lyt.availW >= 500) this.text(ctx, `${e.hud.fps} FPS · 5 VS 5`, Lyt.shellReserve.x - 12, top + 10, 10, C.faint, 'right', false);
 
     const panelY = top + 40;
     const panelH = Math.max(160, Lyt.bottom - panelY);
@@ -532,16 +521,10 @@ export class CsHud {
     this.text(ctx, ellipsize(ctx, this.modeNote(), cw), x + pad, cy, 11, C.dim, 'left', false);
     cy += 24;
 
-    // Settings / fullscreen / sound row
+    // Settings / sound row
     const links: { label: string; action: () => void }[] = [
       { label: this.L('设置', 'Settings'), action: () => e.openSettings() },
     ];
-    if (this.shellActions.fullscreen) {
-      links.push({
-        label: '⛶ ' + (this.shellActions.isFullscreen?.() ? this.L('退出全屏', 'Exit FS') : this.L('全屏', 'Fullscreen')),
-        action: () => this.shellActions.fullscreen!(),
-      });
-    }
     links.push({ label: this.L('音效 ', 'Sound ') + (e.audio.enabled ? this.L('开', 'On') : this.L('关', 'Off')), action: () => e.toggleSound() });
     const lw = (cw - (links.length - 1) * 8) / links.length;
     links.forEach((link, i) => {
@@ -944,12 +927,6 @@ export class CsHud {
       { label: this.L('设置', 'Settings'), action: () => e.openSettings() },
       { label: this.L('重新开始', 'Restart match'), action: () => e.startMatch() },
     ];
-    if (this.shellActions.fullscreen) {
-      entries.push({
-        label: '⛶ ' + (this.shellActions.isFullscreen?.() ? this.L('退出全屏', 'Exit Fullscreen') : this.L('全屏', 'Fullscreen')),
-        action: () => this.shellActions.fullscreen!(),
-      });
-    }
     entries.push({ label: this.L('返回主菜单', 'Back to menu'), action: () => e.toMenu() });
 
     const touch = e.touchMode;
@@ -1051,7 +1028,7 @@ export class CsHud {
 
   // ── Entry point ──────────────────────────────────────────────────────────
 
-  draw(ctx: Ctx, W: number, H: number) {
+  draw(ctx: Ctx, W: number, H: number, presentationPaused = false) {
     const e = this.engine;
     const Lyt = computeHudLayout(W, H, this.safeArea);
     this.regions = [];
@@ -1065,7 +1042,7 @@ export class CsHud {
       if (e.buyOpen) this.drawBuyMenu(ctx, Lyt);
       else this.buyScroll.setMax(0);
       if (e.mapOpen) this.drawTacticalMap(ctx, Lyt);
-      if (e.phase === 'paused') this.drawPause(ctx, Lyt);
+      if (e.phase === 'paused' && !presentationPaused) this.drawPause(ctx, Lyt);
       if (e.hud.matchEnd) this.drawMatchEnd(ctx, Lyt);
     }
     if (e.settingsOpen) this.drawSettings(ctx, Lyt);

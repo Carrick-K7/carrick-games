@@ -904,7 +904,6 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('#gameCanvas')).toHaveAttribute('tabindex', '0');
     await expect(page.locator('#keyboardPanel .input-map-row')).toHaveCount(3);
     await expect(page.locator('#keyboardPanel')).toBeHidden();
-    await openOverflow(page);
     await page.locator('#helpBtn').click();
     await expect(page.locator('#keyboardPanel .vkey[data-key="ArrowLeft"]')).toBeVisible();
   });
@@ -1115,13 +1114,11 @@ test.describe('Carrick Games - Lifecycle', () => {
     try {
       await desktop.goto('/#/snake');
       await expect(desktop.locator('#keyboardPanel')).toBeHidden();
-      await openOverflow(desktop);
       await desktop.locator('#helpBtn').click();
       await expect(desktop.locator('#keyboardPanel .input-map-row').first()).toBeVisible();
       await expect(desktop.locator('#keyboardPanel .compact-mouse')).toBeVisible();
 
       await touch.goto('/#/snake');
-      await openOverflow(touch);
       await touch.locator('#helpBtn').click();
       await expect(touch.locator('#keyboardPanel')).toBeHidden();
       await expect(touch.locator('#touchHelp')).toBeVisible();

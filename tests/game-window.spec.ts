@@ -85,37 +85,54 @@ test.describe('edge-to-edge game windows', () => {
     }
   });
 
-  test('manual native fullscreen contains every menu and persists across game switching', async ({ page }) => {
+  test('F11 remains browser-owned in every shell state; resizing and switching stay independent', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as any).__nativeCalls = 0;
+      Element.prototype.requestFullscreen = async () => { (window as any).__nativeCalls++; };
+      document.exitFullscreen = async () => { (window as any).__nativeCalls++; };
+    });
     await page.goto('/#/snake');
     await expect(page.locator('#startOverlay')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
-    await page.locator('#overflowBtn').click();
-    await page.locator('#fullscreenBtn').click();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id)).toBe('gameApp');
-    await expect(page.locator('#overflowMenu')).toBeVisible();
-    await page.locator('#gamePickerBtn').click();
-    await expect(page.locator('#searchInput')).toBeFocused();
+    await expect(page.locator('#fullscreenBtn, #resumeBtn, #helpReturnBtn, #fullscreenNotice')).toHaveCount(0);
+    // Headless DOM keys cannot stand in for browser chrome fullscreen. Check
+    // non-interception explicitly, and exercise the resulting resize separately.
+    const f11 = async () => expect(await page.evaluate(() => (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F11', code: 'F11', bubbles: true, cancelable: true }),
+    ))).toBe(true);
+    await f11();
+    await page.locator('#helpBtn').click(); await f11();
+    for (const size of [{ width: 1920, height: 1080 }, { width: 844, height: 390 }]) {
+      await page.setViewportSize(size);
+      await expect(page.locator('#helpOverlay')).toBeVisible();
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', '1');
+      expect((await metrics(page)).overflow).toBe(false);
+    }
+    await page.locator('#helpCloseBtn').click();
+    await page.locator('#overflowBtn').click(); await f11();
+    await page.locator('#gamePickerBtn').click(); await f11();
     await page.locator('.game-list-item[data-id="tetris"]').click();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', '420');
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id)).toBe('gameApp');
-    await page.locator('#overflowBtn').click();
-    await page.locator('#fullscreenBtn').click();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
-    await page.locator('#resumeBtn').click();
+    await expect(page.locator('#startOverlay')).toBeFocused();
+    expect(await page.evaluate(() => (window as any).__nativeCalls)).toBe(0);
     const m = await metrics(page);
-    expect(m.overflow).toBe(false);
     expect(Math.min(Math.abs(m.canvas.width - m.root.width), Math.abs(m.canvas.height - m.root.height))).toBeLessThan(1);
   });
 
-  test('unsupported native fullscreen does not request on start or resize and keeps a usable game window', async ({ page }) => {
-    await page.addInitScript(() => { Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false }); });
+  test('no fullscreen API is needed for learning, starting and rotating a game', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false });
+      Object.defineProperty(Element.prototype, 'requestFullscreen', { configurable: true, value: undefined });
+    });
     await page.goto('/#/snake');
-    await page.locator('#startOverlay').click();
+    await expect(page.locator('#startOverlay')).toBeVisible();
+    await page.locator('#helpBtn').click();
+    await page.locator('#helpCloseBtn').click();
+    await expect(page.locator('#startOverlay')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#startOverlay')).toBeHidden();
     await page.locator('#overflowBtn').click();
-    await page.locator('#fullscreenBtn').click();
-    await expect(page.locator('#fullscreenNotice')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
-    await page.locator('#resumeBtn').click();
+    await page.locator('#menuCloseBtn').click();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', '1');
     expect((await metrics(page)).overflow).toBe(false);

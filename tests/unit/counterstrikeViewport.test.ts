@@ -11,7 +11,7 @@ import {
   halfFovTanForAspect,
   hudScale,
   maxBuyScroll,
-  pauseButtonLayout,
+  roundHeaderY,
   raycastBufferSize,
   sanitizeInsets,
   sceneBackingRatio,
@@ -278,21 +278,19 @@ describe('counterstrike viewport helpers', () => {
     });
   });
 
-  describe('pauseButtonLayout', () => {
-    it('is a centered ≥44px target on every spec viewport', () => {
-      for (const { width, height } of VIEWPORTS) {
-        const btn = pauseButtonLayout(width, height, null);
-        expect(btn.h).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
-        expect(btn.x + btn.w / 2).toBeCloseTo(width / 2, 6);
-        expect(btn.y + btn.h).toBeLessThanOrEqual(height);
-        expect(btn.x).toBeGreaterThanOrEqual(0);
+  describe('roundHeaderY', () => {
+    it('clears both shared utilities and the radar on narrow phones', () => {
+      for (const { width, height } of VIEWPORTS.filter(v => v.width < 500)) {
+        for (const safe of [sanitizeInsets(null), { top: 47, right: 0, bottom: 34, left: 24 }]) {
+          const y = roundHeaderY(width, height, safe), s = hudScale(width, height);
+          expect(y).toBeGreaterThanOrEqual(safe.top + SHELL_MENU_RESERVE + 8);
+          expect(y).toBeGreaterThan(safe.top + 10 * s + Math.max(64, 100 * s));
+        }
       }
     });
-
-    it('stays inside notched safe areas', () => {
-      const btn = pauseButtonLayout(NOTCHED.width, NOTCHED.height, NOTCHED.insets);
-      expect(btn.x).toBeGreaterThanOrEqual(NOTCHED.insets.left);
-      expect(btn.x + btn.w).toBeLessThanOrEqual(NOTCHED.width - NOTCHED.insets.right);
+    it('keeps the established centered header on desktop and landscape', () => {
+      expect(roundHeaderY(1280, 720)).toBe(14);
+      expect(roundHeaderY(844, 390, NOTCHED.insets)).toBe(14 * hudScale(844, 390));
     });
   });
 

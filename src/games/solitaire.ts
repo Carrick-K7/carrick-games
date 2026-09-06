@@ -161,7 +161,7 @@ export class SolitaireGame extends BaseGame {
     this.particles.update(dt);
     this.floats.update(dt);
     if (this.phase !== 'playing') return;
-    this.elapsed = (performance.now() - this.startTime) / 1000;
+    this.elapsed = (this.gameNow() - this.startTime) / 1000;
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -572,7 +572,7 @@ export class SolitaireGame extends BaseGame {
   private beginGame() {
     this.phase = 'playing';
     this.moves = 0;
-    this.startTime = performance.now();
+    this.startTime = this.gameNow();
     this.selectedSrc = null;
     this.particles.clear();
     this.floats.clear();

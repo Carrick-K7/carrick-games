@@ -157,6 +157,13 @@ export class MinesweeperGame extends BaseGame {
     }
   }
 
+  onShellOverlayChange(open: boolean) {
+    if (!open) return;
+    // A finger held before opening help must not flag a cell after closing it.
+    this.clearManagedTimeout(this.touchTimer);
+    this.touchTimer = null;
+  }
+
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     const isKeyDown = e instanceof KeyboardEvent && e.type === 'keydown';
 

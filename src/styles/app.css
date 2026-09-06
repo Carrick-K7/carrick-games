@@ -585,7 +585,6 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
   isolation: isolate;
   background: var(--page);
 }
-.game-app:fullscreen { background: var(--page); }
 .game-app main, .game-app .game-layout, .game-app .game-center, .game-app .canvas-wrapper {
   position: absolute;
   inset: 0;
@@ -634,8 +633,9 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
 }
 .game-menu-trigger svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .game-menu-trigger:hover, .game-menu-trigger:focus-visible { background: #202b24; }
-.game-app.pointer-locked .game-menu-trigger { visibility: hidden; pointer-events: none; }
-.game-app.pointer-locked .help-overlay { visibility: hidden; pointer-events: none; }
+.game-help-trigger { right: calc(64px + var(--safe-right)); font: 600 21px/1 var(--font-ui); }
+.game-help-trigger[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--page); }
+.game-app.pointer-locked:not(.controls-open) .game-menu-trigger { visibility: hidden; pointer-events: none; }
 .shell-backdrop { position: absolute; inset: 0; z-index: 49; width: 100%; height: 100%; border: 0; background: rgba(4,9,6,.42); }
 .game-app .overflow-menu {
   position: absolute;
@@ -698,10 +698,6 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
 .guide-notes { margin-top: 16px; font-size: 13px; line-height: 1.6; color: var(--muted); }
 .guide-notes p + p { margin-top: 10px; }
 #touchHelp:empty, .guide-notes:empty { display: none; }
-.guide-footer { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); }
-#guideDismissHint { font-size: 12px; color: var(--muted); }
-#helpReturnBtn { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
-#helpReturnBtn:hover { border-color: var(--accent); }
 @media (max-width: 720px), (max-height: 480px), (pointer: coarse) {
   .game-app .help-overlay {
     --guide-bottom: 0px;
@@ -712,13 +708,11 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
     border-radius: 14px 14px 0 0;
     border-bottom: 0;
   }
-  .guide-footer { padding-bottom: calc(10px + var(--safe-bottom)); }
+  .guide-body { padding-bottom: calc(16px + var(--safe-bottom)); }
 }
 @media (pointer: coarse) {
   #touchHelp { margin-top: 0; }
-  #guideDismissHint { visibility: hidden; }
 }
-.fullscreen-notice { position: absolute; z-index: 80; bottom: calc(20px + var(--safe-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text); font-size: 13px; pointer-events: none; }
 .game-app .game-library { position: absolute; }
 /* The visible viewport can shrink independently of dvh when a keyboard opens. */
 .game-app .library-dialog { max-height: 100%; }

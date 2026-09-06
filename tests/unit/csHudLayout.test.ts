@@ -39,12 +39,12 @@ describe('csHudLayout: computeHudLayout', () => {
     }
   });
 
-  it('reserves the top-right shell button (44px + 12px margin)', () => {
+  it('reserves both top-right utilities (44px each, 8px gap, 12px margin)', () => {
     for (const { width, height } of VIEWPORTS) {
       const L = computeHudLayout(width, height);
-      expect(L.shellReserve.w).toBe(SHELL_BUTTON_SIZE);
+      expect(L.shellReserve.w).toBe(SHELL_BUTTON_SIZE * 2 + 8);
       expect(L.shellReserve.h).toBe(SHELL_BUTTON_SIZE);
-      expect(L.shellReserve.x).toBe(width - SHELL_BUTTON_MARGIN - SHELL_BUTTON_SIZE);
+      expect(L.shellReserve.x).toBe(width - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8));
       expect(L.shellReserve.y).toBe(SHELL_BUTTON_MARGIN);
       expect(L.contentTop).toBe(L.shellReserve.y + L.shellReserve.h + 8);
     }
@@ -57,7 +57,7 @@ describe('csHudLayout: computeHudLayout', () => {
     expect(L.left).toBe(L.margin + 48);
     expect(L.right).toBe(390 - L.margin - 12);
     expect(L.bottom).toBe(844 - L.margin - 16);
-    expect(L.shellReserve.x).toBe(390 - 12 - SHELL_BUTTON_MARGIN - SHELL_BUTTON_SIZE);
+    expect(L.shellReserve.x).toBe(390 - 12 - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8));
     expect(L.shellReserve.y).toBe(24 + SHELL_BUTTON_MARGIN);
     expect(L.availW).toBe(L.right - L.left);
     expect(L.availH).toBe(L.bottom - L.top);

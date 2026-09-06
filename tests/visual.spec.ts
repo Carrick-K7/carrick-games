@@ -10,10 +10,26 @@ test.describe('shell visual regression', () => {
       await page.keyboard.press('Control+k');
       await expect(page.locator('#searchInput')).toBeFocused();
       await page.evaluate(() => document.fonts.ready);
+      await page.mouse.move(0, 0); // Menu height must not select an incidental hover row.
       // Capture the dialog only: game animation behind the backdrop is not a
       // shell visual contract and must not destabilize the reference image.
       await expect(page.locator('.library-dialog')).toHaveScreenshot(`picker-${mobile ? 'light-mobile' : 'dark-desktop'}.png`, {
         animations: 'disabled',
+      });
+    });
+  }
+
+  for (const mobile of [false, true]) {
+    test.describe(`direct Controls ${mobile ? 'touch' : 'mouse'}`, () => {
+      test.use({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }, hasTouch: mobile, isMobile: mobile });
+      test(`guide ${mobile ? 'light mobile' : 'dark desktop'}`, async ({ page }) => {
+        await page.goto('/#/snake');
+        await page.locator('#overflowBtn').click();
+        await page.locator(`.theme-btn[data-set="${mobile ? 'light' : 'dark'}"]`).click();
+        await page.locator('#helpBtn').click();
+        await expect(page.locator('#helpBtn')).toHaveAttribute('aria-expanded', 'true');
+        await page.evaluate(() => document.fonts.ready);
+        await expect(page.locator('#helpOverlay')).toHaveScreenshot(`controls-${mobile ? 'light-mobile' : 'dark-desktop'}.png`, { animations: 'disabled' });
       });
     });
   }

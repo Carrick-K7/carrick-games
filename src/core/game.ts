@@ -30,8 +30,6 @@ export interface GameViewport {
 }
 
 export interface GamePresentation {
-  toggleFullscreen(): void;
-  isFullscreen(): boolean;
   /** Games may link to the shared guide; they do not own its layout. */
   openControls?(): void;
   isControlsOpen?(): boolean;
@@ -49,6 +47,10 @@ export interface Game {
   /** Re-fit the canvas to a shell-chosen CSS width (backing store stays sharp). */
   setDisplayScale?(cssWidth: number): void;
   setViewport?(viewport: GameViewport): void;
+  /** Freeze simulation and managed delays while reading shell overlays. */
+  setPresentationPaused?(paused: boolean): void;
+  /** Trusted dismissal only: restore through the game's own capture lifecycle. */
+  restorePointerCapture?(): void;
   onShellOverlayChange?(open: boolean): void;
   getShellSnapshot(): GameShellSnapshot;
   getFrameTelemetry(): GameFrameTelemetry | null;
@@ -135,7 +137,11 @@ export abstract class BaseGame implements Game {
   private inputBound = false;
   private baseScoreAlreadyReported = false;
   private prepared = false;
-  private readonly managedTimeouts = new Set<number>();
+  protected presentationPaused = false;
+  private presentationPausedAt = 0;
+  private presentationPausedMs = 0;
+  private timeoutSequence = 0;
+  private readonly managedTimeouts = new Map<number, { callback: () => void; remaining: number; startedAt: number; nativeId: number | null }>();
   private readonly managedCleanups = new Set<() => void>();
   private lastShellSnapshotKey = '';
 
@@ -150,6 +156,7 @@ export abstract class BaseGame implements Game {
     this.ctx = ctx;
     this.pixelRatio = configureHiDpiCanvas(this.canvas, this.ctx, this.width, this.height);
     this.canvas.dataset.gamePrepareCount = '0';
+    this.canvas.dataset.gamePresentation = 'active';
     this.boundHandleInput = this.handleInput.bind(this);
   }
 
@@ -261,6 +268,32 @@ export abstract class BaseGame implements Game {
     this.prepared = false;
   }
 
+  /** Reading help/settings must not cost a life, reaction time or an AI turn. */
+  setPresentationPaused(paused: boolean) {
+    this.canvas.dataset.gamePresentation = paused ? 'paused' : 'active';
+    if (paused === this.presentationPaused) return;
+    const now = performance.now();
+    this.presentationPaused = paused;
+    this.lastTime = now;
+    if (paused) {
+      this.presentationPausedAt = now;
+      for (const timer of this.managedTimeouts.values()) {
+        if (timer.nativeId === null) continue;
+        clearTimeout(timer.nativeId);
+        timer.nativeId = null;
+        timer.remaining = Math.max(0, timer.remaining - (now - timer.startedAt));
+      }
+    } else {
+      this.presentationPausedMs += now - this.presentationPausedAt;
+      for (const id of this.managedTimeouts.keys()) this.armManagedTimeout(id);
+    }
+  }
+
+  /** Gameplay wall clock excluding time spent reading shell overlays. */
+  protected gameNow(): number {
+    return (this.presentationPaused ? this.presentationPausedAt : performance.now()) - this.presentationPausedMs;
+  }
+
   protected onStart() {}
 
   protected isDarkTheme(): boolean {
@@ -369,17 +402,28 @@ export abstract class BaseGame implements Game {
   }
 
   protected setManagedTimeout(callback: () => void, delay: number): number {
-    const id = window.setTimeout(() => {
-      this.managedTimeouts.delete(id);
-      callback();
-    }, delay);
-    this.managedTimeouts.add(id);
+    const id = ++this.timeoutSequence;
+    this.managedTimeouts.set(id, { callback, remaining: Math.max(0, delay), startedAt: 0, nativeId: null });
+    if (!this.presentationPaused) this.armManagedTimeout(id);
     return id;
+  }
+
+  private armManagedTimeout(id: number) {
+    const timer = this.managedTimeouts.get(id);
+    if (!timer || timer.nativeId !== null) return;
+    timer.startedAt = performance.now();
+    const nativeId = window.setTimeout(() => {
+      if (this.managedTimeouts.get(id)?.nativeId !== nativeId) return;
+      this.managedTimeouts.delete(id);
+      timer.callback();
+    }, timer.remaining);
+    timer.nativeId = nativeId;
   }
 
   protected clearManagedTimeout(id: number | null) {
     if (id == null) return;
-    clearTimeout(id);
+    const timer = this.managedTimeouts.get(id);
+    if (timer?.nativeId != null) clearTimeout(timer.nativeId);
     this.managedTimeouts.delete(id);
   }
 
@@ -389,7 +433,7 @@ export abstract class BaseGame implements Game {
   }
 
   private clearManagedResources() {
-    for (const id of this.managedTimeouts) clearTimeout(id);
+    for (const id of this.managedTimeouts.keys()) this.clearManagedTimeout(id);
     this.managedTimeouts.clear();
     for (const cleanup of this.managedCleanups) cleanup();
     this.managedCleanups.clear();
@@ -399,9 +443,11 @@ export abstract class BaseGame implements Game {
     if (!this.running) return;
     const dt = clampFrameDelta((now - this.lastTime) / 1000);
     this.lastTime = now;
-    this.update(dt);
-    this.syncShellState();
-    this.renderFrame();
+    if (!this.presentationPaused) {
+      this.update(dt);
+      this.syncShellState();
+      this.renderFrame();
+    }
     this.animationId = requestAnimationFrame(this.loop);
   };
 
