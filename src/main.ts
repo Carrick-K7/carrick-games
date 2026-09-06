@@ -234,7 +234,11 @@ function renderKeyboard() {
   }
 
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  container.innerHTML = renderVirtualKeyboard(meta.controls, zh);
+  const open = container.classList.contains('input-map-open');
+  const toggle = wideCanvasMode
+    ? `<button type="button" class="input-map-toggle" id="inputMapToggle" aria-expanded="${open}">${zh ? '按键与鼠标操作' : 'Keyboard & mouse controls'}<span class="input-map-chevron" aria-hidden="true">▾</span></button>`
+    : '';
+  container.innerHTML = toggle + renderVirtualKeyboard(meta.controls, zh);
   bindVirtualKeyboard();
 }
 
@@ -308,6 +312,46 @@ if (typeof window !== 'undefined') {
       if (!g || currentGameName !== 'cs-kimi' || !p || !g.makeWeapon) return;
       p.primary = g.makeWeapon(weaponId);
       p.slot = 'primary';
+    },
+  };
+
+  // Same-purpose debug surface for the migrated `cs` engine. Lets e2e inspect
+  // match state and force terminal transitions without minutes of realtime play.
+  (window as unknown as { __CSX_DEBUG__?: unknown }).__CSX_DEBUG__ = {
+    info() {
+      const g = currentGameInstance as unknown as { engine?: any } | null;
+      const e = g?.engine;
+      if (!e || currentGameName !== 'cs') return null;
+      return {
+        phase: e.phase,
+        mode: e.mode,
+        map: e.selectedMap,
+        ready: e.ready,
+        round: e.round,
+        scores: { ...e.scores },
+        playerAlive: !!e.player?.alive,
+        playerPos: e.player ? { x: e.player.pos.x, y: e.player.pos.y, z: e.player.pos.z } : null,
+        kills: e.player?.kills ?? 0,
+        bots: e.bots?.filter((b: any) => b.alive).length ?? 0,
+        bomb: e.bomb?.status ?? null,
+        matchEnd: !!e.hud.matchEnd,
+      };
+    },
+    /** Force the current match to end (debug/QA only). */
+    forceMatchEnd(won = true) {
+      const g = currentGameInstance as unknown as { engine?: any } | null;
+      const e = g?.engine;
+      if (!e || currentGameName !== 'cs' || !e.matchActive || e.phase === 'match-end') return;
+      e.scores = won ? { ct: 7, t: 3 } : { ct: 3, t: 7 };
+      if (e.player) e.player.kills = Math.max(e.player.kills, 9);
+      e.finishMatch();
+    },
+    /** Skip the freeze phase (debug/QA only). */
+    skipFreeze() {
+      const g = currentGameInstance as unknown as { engine?: any } | null;
+      const e = g?.engine;
+      if (!e || currentGameName !== 'cs') return;
+      if (e.phase === 'freeze') e.freezeTime = Math.min(e.freezeTime, 0.01);
     },
   };
 }
@@ -491,6 +535,7 @@ export async function prepareGame(name: string) {
  * `setDisplayScale`, so the upscaled picture stays sharp.
  */
 let lastFittedCanvasWidth = 0;
+let wideCanvasMode = false;
 
 function fitGameCanvas() {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
@@ -503,16 +548,24 @@ function fitGameCanvas() {
   const stage = wrapper.parentElement;
   if (!stage) return;
   const useSideRails = window.matchMedia('(min-width: 960px) and (pointer: fine)').matches;
+  // Wide 16:9-class canvases cannot honestly share the row with side rails:
+  // hand them the full stage width and fold controls into a strip below.
+  const wideCanvas = useSideRails && lw >= 900;
+  if (wideCanvas !== wideCanvasMode) {
+    wideCanvasMode = wideCanvas;
+    stage.classList.toggle('wide-canvas', wideCanvas);
+    renderKeyboard();
+  }
   const gap = parseFloat(getComputedStyle(stage).columnGap) || 0;
   // Match the CSS's two 180px minimum gutters, rather than estimating a
   // reserve that can overflow near the desktop breakpoint.
-  const colW = useSideRails ? stage.clientWidth - 360 - gap * 2 : wrapper.clientWidth;
+  const colW = useSideRails ? (wideCanvas ? stage.clientWidth : stage.clientWidth - 360 - gap * 2) : wrapper.clientWidth;
   if (colW <= 0) return;
   const main = document.querySelector('main');
   const mainStyle = main ? getComputedStyle(main) : null;
   const headerH = document.querySelector('.app-header')?.getBoundingClientRect().height ?? 64;
   const padding = mainStyle ? parseFloat(mainStyle.paddingTop) + parseFloat(mainStyle.paddingBottom) : 48;
-  const extras = useSideRails ? 0 : Array.from(stage.children)
+  const extras = useSideRails && !wideCanvas ? 0 : Array.from(stage.children)
     .filter((child) => child !== wrapper && child instanceof HTMLElement && child.offsetHeight > 0)
     .reduce((height, child) => height + (child as HTMLElement).offsetHeight + gap, 0);
   // Measure the viewport, not the vertically centered wrapper's top; the
@@ -939,6 +992,16 @@ const canvasFitObserver = new ResizeObserver(() => {
   }
 
   document.getElementById('startOverlay')?.addEventListener('click', startPreparedGame);
+  // Wide-canvas layouts fold the input mapping into a disclosure strip below
+  // the canvas; expanding it must refit the stage so nothing overflows.
+  document.getElementById('keyboardPanel')?.addEventListener('click', (event) => {
+    const toggle = (event.target as HTMLElement).closest('.input-map-toggle');
+    const panel = document.getElementById('keyboardPanel');
+    if (!toggle || !panel) return;
+    panel.classList.toggle('input-map-open');
+    toggle.setAttribute('aria-expanded', String(panel.classList.contains('input-map-open')));
+    requestAnimationFrame(fitGameCanvas);
+  });
   document.getElementById('restartBtn')?.addEventListener('click', () => {
     setOverflowOpen(false);
     startPreparedGame();

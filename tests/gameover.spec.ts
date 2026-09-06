@@ -315,6 +315,32 @@ async function suicideTexashold(page: Page) {
   await page.waitForTimeout(15000);
 }
 
+async function suicideCs(page: Page) {
+  // The migrated engine boots to an in-canvas menu first. Wait for the map to
+  // load, click the canvas "进入战场" button (logical 314,590 in 1280x720),
+  // then force the match to its terminal state through the debug hook so the
+  // shared result overlay and one-shot score reporting are exercised without
+  // playing out seven realtime rounds.
+  await page.waitForFunction(
+    () => (window as unknown as { __CSX_DEBUG__?: { info?: () => { ready: boolean } | null } }).__CSX_DEBUG__?.info?.()?.ready === true,
+    undefined,
+    { timeout: 60000 },
+  );
+  const canvas = page.locator('#gameCanvas');
+  const box = await canvas.boundingBox();
+  if (!box) return;
+  await page.mouse.click(box.x + 314 * (box.width / 1280), box.y + 590 * (box.height / 720));
+  await page.waitForFunction(
+    () => (window as unknown as { __CSX_DEBUG__?: { info?: () => { phase: string } | null } }).__CSX_DEBUG__?.info?.()?.phase === 'freeze',
+    undefined,
+    { timeout: 20000 },
+  );
+  await page.evaluate(() => {
+    (window as unknown as { __CSX_DEBUG__?: { forceMatchEnd?: (won: boolean) => void } }).__CSX_DEBUG__?.forceMatchEnd?.(true);
+  });
+  await page.waitForTimeout(600);
+}
+
 // ─── Game profiles ──────────────────────────────────────────────────────────
 
 interface GameProfile {
@@ -337,6 +363,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
   { id: 'cs-kimi', suicide: suicideCounterstrike, timeout: 230000, expectScore: true },
+  { id: 'cs', suicide: suicideCs, timeout: 90000, expectScore: true },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
@@ -382,9 +409,9 @@ test.describe('Game Over - Arcade', () => {
       }
 
       // Restart should always work.
-      // CS Kimi restarts through its own terminal action (Enter);
-      // the shell restart button's hit-testing is unreliable for this game.
-      if (profile.id === 'cs-kimi') {
+      // CS Kimi and CS restart through their own terminal action (Enter);
+      // the shell restart button's hit-testing is unreliable for these games.
+      if (profile.id === 'cs-kimi' || profile.id === 'cs') {
         await page.keyboard.press('Enter');
       } else {
         await restartGame(page);

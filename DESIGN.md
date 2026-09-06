@@ -64,6 +64,7 @@ The canvas is the only dominant visual object on the page.
 - Center it in the available viewport.
 - Keep its logical dimensions and HiDPI behavior unchanged.
 - Fit it without permanent side panels; on wide desktops, use the natural side gutters for compact contextual controls rather than extending the page vertically.
+- Exception for wide 16:9-class canvases (logical width ≥ 900): when the viewport cannot honestly host both the canvas and side gutters, the canvas takes the full stage width and the input mapping folds into a compact disclosure strip below it. The canvas, not the controls, wins the space.
 - Use only a 1px bezel, small radius, and near-flat shadow in the shell.
 - Keep fullscreen affordance quiet and reveal it on hover/focus; touch may keep it faintly visible.
 - Start through the canvas overlay. Do not duplicate the action with a large external start button.
