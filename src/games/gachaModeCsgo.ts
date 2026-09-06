@@ -379,14 +379,25 @@ export class CsgoStripMode implements GachaOpenMode {
     // card — a soft studio glow behind it lifts the gunmetal off the tint.
     const iconId = card.item.icon ?? card.item.kind;
     const photoW = this.cardW - 18;
-    const photoH = this.cardH - 18;
-    const photoCy = this.cardH / 2;
+    const photoH = this.cardH - 42;
+    const photoCy = 6 + photoH / 2;
     drawGlow(c, this.cardW / 2, photoCy, Math.min(photoW, photoH) * 0.62, dark ? '#e8f1fb' : '#ffffff', dark ? 0.16 : 0.34);
     const photoUsed = drawWeaponPhoto(c, iconId, this.cardW / 2, photoCy, photoW, photoH, {
       fallbackColor: dark ? '#f1f5f9' : '#ffffff',
       alpha: 0.98,
     });
 
+    // One caption beneath each weapon; no duplicate readout outside the reel.
+    c.fillStyle = dark ? 'rgba(9,11,16,0.5)' : 'rgba(17,24,39,0.32)';
+    roundRectPath(c, 6, this.cardH - 30, this.cardW - 12, 24, 8);
+    c.fill();
+    c.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#f6f8fb';
+    const name = this.ctx.zh ? card.item.nameZh : card.item.name;
+    const caption = name.length > 16 ? name.slice(0, 15) + '…' : name;
+    c.fillText(caption, this.cardW / 2, this.cardH - 17, this.cardW - 24);
 
     return photoUsed;
   }
