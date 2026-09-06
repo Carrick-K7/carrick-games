@@ -69,8 +69,9 @@ Carrick Games currently ships 28 playable games:
 - Searchable game list with grouped navigation.
 - Keyboard, mouse, and touch input where appropriate.
 - Full-viewport game windows with two floating controls: `?` for help and a compact game/settings menu. Browser fullscreen stays browser-owned (F11).
-- One-click Controls for every game: a lower-left desktop reference or touch bottom sheet, with readable key/gesture labels and a scrollable body; never shrinks the game.
-- Help pauses play and timers; closing continues without restarting or clearing a manual gameplay pause. Keyboard focus returns directly to play or the startup action.
+- Enter a game and play right away: no start prompt is shown, and pointer capture follows the browser gesture rules (first canvas click).
+- One-click Controls for every game: the panel drops below the `?` button with readable key/gesture labels and a scrollable body; never shrinks the game. The settings menu leads with an explicit Choose a game entry.
+- Help pauses play and timers; closing continues without restarting or clearing a manual gameplay pause. Keyboard focus returns directly to play.
 - Light, dark, and system theme modes.
 - Responsive 3D cameras and HUDs for CS, CS Kimi and Villa; fixed boards maximize at their original proportions.
 - Bounded HiDPI Canvas rendering and consistent pointer coordinates across resizing and rotation.

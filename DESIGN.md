@@ -21,9 +21,9 @@ Do not add a separate visual-style document. Put durable visual decisions here.
 The page is a game window, not a webpage containing a canvas card:
 
 - `#gameApp` and its game stage fill the visible browser viewport by default, including short landscape screens. No header, margins, bezel, corner radius, input strip, or side rail reserves game space.
-- Two 44px utilities float at the top-right safe area: a direct `?` guide followed by the game menu, separated by 8px with a 12px outer margin. Both hide while pointer lock owns the canvas; `?` on the keyboard opens help directly from captured play. Touch keeps both utilities available.
-- The menu contains the wordmark, current-game switcher, restart, settings, and applicable utilities. Do not add browser-fullscreen, Return-to-game, or duplicate Controls entries. The game library is a modal command palette on desktop and a bottom sheet on mobile.
-- Controls open as an optional protected reading overlay. Parking's level selector stays in the menu. Opening either never resizes the game.
+- Two 44px utilities float at the top-right safe area: a direct `?` guide left of the game menu, separated by 8px with a 12px outer margin. Both hide while pointer lock owns the canvas; `?` on the keyboard opens help directly from captured play. Touch keeps both utilities available.
+- The menu opens with an explicit **Choose a game** section (localized label + accent-bordered current-game trigger), then wordmark, restart, settings and applicable utilities. Do not add browser-fullscreen, Return-to-game, or duplicate Controls entries. The game library stays a modal command palette on desktop and a bottom sheet on mobile.
+- Controls open as a protected reading panel that drops down below the utility row. Parking's level selector stays in the menu. Opening either never resizes the game.
 - Every menu, loading state and native game accessibility target lives inside the persistent `#gameApp` root. Descriptions, records, and statistics must not become permanent sidebars.
 
 Browser fullscreen belongs to the browser (F11 or its own command). The app neither intercepts F11 nor uses the Fullscreen API; there are no per-game fullscreen buttons or F aliases. Window and visual-viewport resizing remain fully responsive.
@@ -63,7 +63,7 @@ The canvas is the only dominant visual object on the page.
 - CS, CS Kimi and Villa opt into responsive logical drawing dimensions. Their camera aspect follows the actual viewport, rather than enlarging a fixed 16:9 image. Preserve gameplay coordinates and the baseline vertical field of view.
 - HUD coordinates, rendering resolution and world coordinates are separate. HUD anchors respect safe areas and the complete floating help/menu cluster; narrow/short menus reflow or scroll internally, with readable text and 44px touch actions.
 - Keep HiDPI backing stores sharp but bounded (DPR at most 2, shared canvas at most 8,294,400 pixels). Individual 3D renderers may use a lower quality budget without shrinking their CSS viewport.
-- Start through the stage overlay. Loading, failure/retry and startup occupy the stage; switching games remains reachable above them.
+- Entering a game starts it immediately: there is no start overlay to dismiss. Loading, failure/retry and startup occupy the stage; switching games remains reachable above them. Mouse capture and audio still follow browser gesture rules (pointer lock engages on the first canvas click).
 
 `fitGameCanvas()` provides `GameViewport` width, height, DPR and safe-area insets. `BaseGame.setViewport()` preserves fixed logical coordinates by default; responsive games explicitly use `resizeLogicalViewport()` without reinitializing game state. `canvasPoint()` remains the only game input mapping path. Refits include height-only, DPR, visual viewport and fullscreen changes.
 
@@ -71,12 +71,11 @@ The canvas is the only dominant visual object on the page.
 
 Every game uses the same floating **? / Controls / 操作指南** trigger and shared panel. One click or the `?` key opens it without visiting the menu. It starts closed and never participates in stage sizing. Games supply catalog keyboard/touch entries and optional plain-text notes; existing help shortcuts may call `GameHost.presentation.openControls()`.
 
-- Desktop: lower-left reference panel, 12px inside the safe area, at most 560px wide. Responsive 3D games reserve a 160px bottom HUD dock, so the guide sits above it.
-- Narrow, short-landscape or touch screens: one bottom sheet (at most 720px wide), clear of the top-right utilities.
+- The panel drops from the utility row: top edge 64px inside the safe area (12px margin + 44px button + 8px gap), right-aligned at 12px, at most 560px wide. Narrow or short screens use the same anchored panel at most 720px wide. No frame of the game is reserved: reading is modal with a protective backdrop.
 - One restrained light/dark style: game-name subtitle, 15px title, consistent read-only keycaps/action rows and gesture labels. The 44px `×` stays in the fixed header; only the body scrolls. No Return button or redundant footer.
 - Close with `×`, the same `?` trigger/key, Escape, or the backdrop. The dialog traps focus across its close action, scrollable body and both utility triggers (included with `aria-owns`); the stage is inert. The menu trigger switches directly from help to navigation without an extra close step. On coarse pointers, show touch instructions rather than the physical keyboard.
 - Reading pauses simulation and managed delays for every game, including fixed boards. Gameplay wall clocks exclude reading time. Opening clears held keys/fire/touches; closing resumes only presentation-owned pauses, preserving an intentional gameplay pause.
-- Dismissal focuses the canvas during play or the startup action before play, so the next movement/start key works immediately. A trusted click or `?` dismissal may restore capture previously owned by the same game. Escape leaves the cursor free; internal closes and game switching never recapture it.
+- Dismissal returns focus to the canvas, so the next movement key works immediately. A trusted click or `?` dismissal may restore capture previously owned by the same game. Escape leaves the cursor free; internal closes and game switching never recapture it.
 - Opening another overlay or switching games closes the guide rather than stacking panels. Rotation preserves the game and readable guide; language/theme changes update the shared presentation.
 
 Contextual game feedback (ammo, an interaction prompt, a map legend, or a restart cue) is not a full operation guide and stays with the gameplay HUD. Avoid persistent lists of shortcuts along the game canvas edges.

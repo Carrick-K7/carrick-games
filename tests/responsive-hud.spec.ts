@@ -58,8 +58,7 @@ test.describe('responsive touch HUD interaction', () => {
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     await observeLabels(page);
     await page.goto('/#/cs');
-    await expect(page.locator('#startOverlay')).toBeVisible({ timeout: 45_000 });
-    await page.locator('#startOverlay').tap();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
     const state = () => page.evaluate(() => (window as any).__CSX_DEBUG__.info());
     await expect.poll(async () => (await state()).ready, { timeout: 45_000 }).toBe(true);
     const before = (await state()).map;
@@ -95,8 +94,7 @@ test.describe('responsive touch HUD interaction', () => {
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     await observeLabels(page);
     await page.goto('/#/cs-kimi');
-    await expect(page.locator('#startOverlay')).toBeVisible({ timeout: 45_000 });
-    await page.locator('#startOverlay').tap();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
     // Exercise the real buy-zone rule rather than making buying global.
     await page.evaluate(({ x, y }) => (window as any).__CS_DEBUG__.tp(x, y), {
       x: BUY_ZONE_RECT.x + BUY_ZONE_RECT.w / 2, y: BUY_ZONE_RECT.y + BUY_ZONE_RECT.h / 2,

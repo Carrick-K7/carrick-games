@@ -87,9 +87,8 @@ function syncShellOverlayState() {
 
 function focusGameSurface() {
   if (gameOverlayOpen) return;
-  const start = document.getElementById('startOverlay');
-  const target = start?.classList.contains('active') ? start : document.getElementById('gameCanvas');
-  target?.focus({ preventScroll: true });
+  // Games play immediately on entry, so keyboard focus returns to the canvas.
+  document.getElementById('gameCanvas')?.focus({ preventScroll: true });
 }
 
 /** Close is the continuation action; no extra Return button or gameplay click. */
@@ -263,18 +262,9 @@ function setLoadError(message: string | null) {
   if (retry) retry.textContent = isZhLang() ? '重试' : 'Retry';
 }
 
-function setStartOverlay(active: boolean) {
-  const el = document.getElementById('startOverlay');
-  if (!el) return;
-  el.classList.toggle('active', active);
-  const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  const titleEl = el.querySelector('.start-overlay-title') as HTMLElement | null;
-  const hintEl = el.querySelector('.start-overlay-hint') as HTMLElement | null;
-  if (titleEl) titleEl.textContent = meta ? (zh ? meta.nameZh : meta.name) : '';
-  // Control teaching stays in the compact desktop input strip.
-  const touch = window.matchMedia('(pointer: coarse)').matches;
-  if (hintEl) hintEl.textContent = zh ? '点击开始' : (touch ? 'Tap to start' : 'Click to start');
+/** Live state marker for automated checks; not part of the game API. */
+function setGameRunningFlag(running: boolean) {
+  document.getElementById('gameCanvas')?.setAttribute('data-game-running', String(running));
 }
 
 let scorePollFrame: number | null = null;
@@ -513,7 +503,7 @@ export async function prepareGame(name: string) {
   currentGameName = name;
   updateActionButton();
   setLoadError(null);
-  setStartOverlay(false);
+  setGameRunningFlag(false);
   setLoadingOverlay(true);
   updateGameTitle();
 
@@ -569,11 +559,13 @@ export async function prepareGame(name: string) {
   updateActionButton();
   updateGameTitle();
   renderControls();
-  setStartOverlay(true);
+  // Entering is playing: no start overlay is shown for the loaded game.
+  startPreparedGame();
   lastViewportKey = '';
   currentGameInstance.setPresentationPaused?.(gameOverlayOpen);
   currentGameInstance.onShellOverlayChange?.(gameOverlayOpen);
   fitGameCanvas();
+  focusGameSurface();
 }
 
 /** Viewport ownership belongs to the app; no shell controls reserve game space. */
@@ -615,13 +607,13 @@ function scheduleViewportFit() {
 function startPreparedGame() {
   if (!currentGameInstance || isLoadingGame) return;
   try {
-    setStartOverlay(false);
     if (isRunning) {
       currentGameInstance.restart();
     } else {
       currentGameInstance.start();
     }
     isRunning = true;
+    setGameRunningFlag(true);
     updateActionButton();
     startScorePolling();
   } catch (e) {
@@ -635,9 +627,9 @@ function startDemoForCurrentGame() {
   const demoStarter = currentGameInstance.startDemo;
   if (typeof demoStarter !== 'function') return;
   try {
-    setStartOverlay(false);
     demoStarter.call(currentGameInstance);
     isRunning = true;
+    setGameRunningFlag(true);
     updateActionButton();
     startScorePolling();
   } catch (e) {
@@ -827,9 +819,11 @@ function setLang(lang: 'en' | 'zh') {
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
   const languageLabel = document.getElementById('languageMenuLabel');
   const themeLabel = document.getElementById('themeMenuLabel');
+  const pickerLabel = document.getElementById('pickerMenuLabel');
   const overflowButton = document.getElementById('overflowBtn');
   if (languageLabel) languageLabel.textContent = lang === 'zh' ? '语言' : 'Language';
   if (themeLabel) themeLabel.textContent = lang === 'zh' ? '主题' : 'Theme';
+  if (pickerLabel) pickerLabel.textContent = lang === 'zh' ? '选择游戏' : 'Choose a game';
   if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '游戏菜单与设置' : 'Game menu and settings');
   updatePresentationControls();
   document.getElementById('libraryCloseBtn')?.setAttribute('aria-label', lang === 'zh' ? '关闭' : 'Close');
@@ -844,9 +838,6 @@ function setLang(lang: 'en' | 'zh') {
     b.classList.toggle('active', target === lang);
     b.setAttribute('aria-pressed', String(target === lang));
   });
-  // Refresh the start overlay copy when it is currently displayed.
-  const startOverlay = document.getElementById('startOverlay');
-  if (startOverlay?.classList.contains('active')) setStartOverlay(true);
   repaintCurrentFrame();
 }
 
@@ -1095,7 +1086,10 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
     });
   }
 
-  document.getElementById('startOverlay')?.addEventListener('click', startPreparedGame);
+  document.getElementById('restartBtn')?.addEventListener('click', () => {
+    setOverflowOpen(false);
+    startPreparedGame();
+  });
   for (const id of ['menuCloseBtn', 'shellBackdrop']) {
     document.getElementById(id)?.addEventListener('click', event => closeUiFromUser(() => setOverflowOpen(false), event));
   }
@@ -1106,10 +1100,6 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
   for (const id of ['helpCloseBtn', 'guideBackdrop']) {
     document.getElementById(id)?.addEventListener('click', event => closeUiFromUser(() => setHelpOpen(false), event));
   }
-  document.getElementById('restartBtn')?.addEventListener('click', () => {
-    setOverflowOpen(false);
-    startPreparedGame();
-  });
 
   const demoBtn = document.getElementById('demoBtn') as HTMLButtonElement | null;
   if (demoBtn) {

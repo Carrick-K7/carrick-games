@@ -17,7 +17,7 @@ async function openShell(page: Page) {
   });
   await page.goto('/#/snake');
   await expect(page.locator('#selectedGameLabel')).toHaveText('Snake');
-  await expect(page.locator('#startOverlay')).toBeVisible();
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -135,7 +135,7 @@ for (const viewport of viewports) {
           await expectAllGamesFit(page);
           await page.keyboard.press('Escape');
           await expect(dialog).toBeHidden();
-          await expect(page.locator('#startOverlay')).toBeFocused();
+          await expect(page.locator('#gameCanvas')).toBeFocused();
         });
       }
     });
@@ -168,7 +168,8 @@ test.describe('coarse-pointer picker interaction', () => {
     await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await expect(page.locator('#selectedGameLabel')).toHaveText("Texas Hold'em");
     await expect(dialog).toBeHidden();
-    await expect(page.locator('#startOverlay')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     await openPicker(page);
     await expect(dialog).toBeFocused();
@@ -184,7 +185,7 @@ test.describe('coarse-pointer picker interaction', () => {
     await expect(page.locator('.game-list-item')).toHaveCount(28);
     await page.locator('#libraryCloseBtn').tap();
     await expect(dialog).toBeHidden();
-    await expect(page.locator('#startOverlay')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
     await expect(page.locator('#gamePickerBtn')).toHaveAttribute('aria-expanded', 'false');
   });
 });

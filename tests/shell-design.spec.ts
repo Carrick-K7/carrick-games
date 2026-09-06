@@ -6,7 +6,8 @@ async function openShell(page: Page, lang: Language = 'en', theme: Theme = 'dark
   await page.addInitScript(({ lang, theme }) => { localStorage.setItem('cg-lang', lang); localStorage.setItem('cg-theme', theme); }, { lang, theme });
   await page.goto('/#/snake');
   await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? '贪吃蛇' : 'Snake');
-  await expect(page.locator('#startOverlay')).toBeVisible();
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+  await expect(page.locator('#startOverlay')).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
 }
 async function bounds(locator: Locator) {
@@ -71,7 +72,7 @@ test.describe('game-window shell design contracts', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
         if (mobile) expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(2);
         await page.keyboard.press('Escape');
-        await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
+        await expect(dialog).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
         await expect(page.locator('main')).not.toHaveAttribute('inert', '');
         await noOverflow(page);
       });
@@ -93,13 +94,13 @@ test.describe('game-window shell design contracts', () => {
       expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
       await page.locator('#libraryCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
       expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
-      await page.keyboard.press('Escape'); await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
+      await page.keyboard.press('Escape'); await expect(dialog).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
       await expect(page.locator('.header-actions')).not.toHaveAttribute('inert', '');
       await expect(page.locator('main')).not.toHaveAttribute('inert', '');
     }
     await openPicker(page);
     await page.locator('[data-library-close]').click({ position: { x: 4, y: 4 } });
-    await expect(dialog).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
+    await expect(dialog).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
   });
 
   test('game menu traps focus and releases it on dismissal', async ({ page }) => {
@@ -109,7 +110,7 @@ test.describe('game-window shell design contracts', () => {
     expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
     await page.locator('#menuCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
     expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
-    await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
   });
 
   test('search supports both languages, empty recovery and keyboard switching', async ({ page }) => {
@@ -123,18 +124,20 @@ test.describe('game-window shell design contracts', () => {
     }
     await search.press('ArrowDown'); await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#\/tetris$/); await expect(page.locator('#selectedGameLabel')).toHaveText('Tetris');
-    await expect(page.locator('.library-dialog')).toBeHidden(); await expect(page.locator('#startOverlay')).toBeFocused();
-    await expect(page.locator('#gameCanvas')).toHaveAccessibleName(/Tetris/); await expect(page.locator('#startOverlay')).toBeVisible();
+    await expect(page.locator('.library-dialog')).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toHaveAccessibleName(/Tetris/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });
 
   test('search accepts real spaces without starting the game and Enter selects the first result', async ({ page }) => {
     await openShell(page); await openPicker(page);
     const search = page.locator('#searchInput'); await search.pressSequentially('space shooter');
     await expect(search).toHaveValue('space shooter'); await expect(search).toBeFocused();
-    await expect(page.locator('#selectedGameLabel')).toHaveText('Snake'); await expect(page.locator('#startOverlay')).toBeVisible();
+    await expect(page.locator('#selectedGameLabel')).toHaveText('Snake'); await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('.game-list-item')).toHaveCount(1);
     await search.press('Enter'); await expect(page).toHaveURL(/#\/spaceshooter$/);
-    await expect(page.locator('#startOverlay')).toBeFocused(); await expect(page.locator('#startOverlay')).toBeVisible();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });
 
   test('Chinese IME confirmation stays in search until composition is finished', async ({ page }) => {
@@ -149,7 +152,7 @@ test.describe('game-window shell design contracts', () => {
   });
 
   test('settings and palette release held gameplay keys before isolating input', async ({ page }) => {
-    await openShell(page); await page.locator('#startOverlay').click();
+    await openShell(page);
     await page.evaluate(() => window.addEventListener('keyup', event => { if (event.key === 'ArrowRight') document.documentElement.dataset.testReleasedKey = event.key; }));
     for (const mode of ['menu', 'picker']) {
       await page.evaluate(() => delete document.documentElement.dataset.testReleasedKey);
@@ -165,7 +168,7 @@ test.describe('game-window shell design contracts', () => {
   test('long input mappings are usable in an optional overlay and never resize the game', async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 720 }); await openShell(page);
     for (const id of ['wordle', 'sudoku', 'connectfour', 'solitaire']) {
-      await page.goto(`/#/${id}`); await expect(page.locator('#startOverlay')).toBeVisible();
+      await page.goto(`/#/${id}`); await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       const before = await bounds(page.locator('#gameCanvas'));
       await page.locator('#helpBtn').click();
       const panel = page.locator('#keyboardPanel'); await expect(panel).toBeVisible();
@@ -203,13 +206,14 @@ test.describe('game-window shell design contracts', () => {
   for (const id of ['snake', 'tetris', 'gacha']) {
     test(`narrow landscape fits ${id} after portrait rotation`, async ({ page }) => {
       await page.setViewportSize({ width: 360, height: 800 }); await openShell(page); await page.goto(`/#/${id}`);
-      await expect(page.locator('#startOverlay')).toBeVisible(); await page.setViewportSize({ width: 667, height: 375 });
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      await page.setViewportSize({ width: 667, height: 375 });
       await expect.poll(async () => { const b = await bounds(page.locator('#gameCanvas')); return b.y + b.height; }).toBeLessThanOrEqual(376);
       const b = await bounds(page.locator('#gameCanvas'));
       expect(b.width).toBeGreaterThan(100); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.y).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(668); expect(Math.abs(b.x + b.width / 2 - 667 / 2)).toBeLessThanOrEqual(2);
       expect(Math.min(Math.abs(b.width - 667), Math.abs(b.height - 375))).toBeLessThanOrEqual(1);
-      expect(await bounds(page.locator('#startOverlay'))).toEqual({ x: 0, y: 0, width: 667, height: 375 });
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await noOverflow(page);
     });
   }
@@ -217,13 +221,14 @@ test.describe('game-window shell design contracts', () => {
   test('reduced motion removes shell animation without disabling interactions', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' }); await openShell(page); await openPicker(page);
     await expect(page.locator('#searchInput')).toBeFocused();
-    const motion = await page.locator('.library-dialog, .game-list-item, #gamePickerBtn, #startOverlay').evaluateAll(elements => elements.map(element => {
+    const motion = await page.locator('.library-dialog, .game-list-item, #gamePickerBtn').evaluateAll(elements => elements.map(element => {
       const style = getComputedStyle(element);
       const seconds = (value: string) => value.split(',').map(part => parseFloat(part) * (part.trim().endsWith('ms') ? .001 : 1));
       return { animation: seconds(style.animationDuration), transition: seconds(style.transitionDuration) };
     }));
     for (const item of motion) { expect(Math.max(...item.animation)).toBeLessThanOrEqual(.001); expect(Math.max(...item.transition)).toBeLessThanOrEqual(.001); }
     await page.locator('#searchInput').fill('Snake'); await page.locator('.game-list-item[data-id="snake"]').click();
-    await expect(page.locator('.library-dialog')).toBeHidden(); await page.locator('#startOverlay').click(); await expect(page.locator('#startOverlay')).toBeHidden();
+    await expect(page.locator('.library-dialog')).toBeHidden();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });
 });

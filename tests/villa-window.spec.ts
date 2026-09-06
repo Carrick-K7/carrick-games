@@ -5,7 +5,9 @@ async function startVilla(page: Page, releaseCursor = true) {
   await page.goto('/#/villa');
   const canvas = page.locator(CANVAS);
   await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
-  await page.locator('#startOverlay').click();
+  await expect(canvas).toHaveAttribute('data-game-running', 'true');
+  // Entering plays immediately; the first canvas click grants mouse capture.
+  await canvas.click();
   if (releaseCursor) {
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
@@ -97,7 +99,8 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
     await page.keyboard.press('Control+k');
     await expect(page.locator('#searchInput')).toBeFocused();
     await page.locator('.game-list-item[data-id="snake"]').click();
-    await expect(page.locator('#startOverlay')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
     await expect(canvas).toHaveAttribute('data-logical-width', '400');
     await expect(canvas).toHaveAttribute('data-logical-height', '400');

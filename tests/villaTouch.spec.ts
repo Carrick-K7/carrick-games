@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('villa captures mouse on start without extra keys and releases it for its picker', async ({ page }) => {
+test('villa captures the mouse on the first canvas click and releases it for its picker', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/#/villa');
-  await page.locator('#startOverlay').click();
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('gameCanvas');
   const canvas = page.locator('#gameCanvas');
+  await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+  await expect(canvas).toHaveAttribute('data-game-running', 'true');
+  await canvas.click();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('gameCanvas');
   const before = await canvas.getAttribute('data-villa-look');
   // CDP absolute moves under pointer lock emit equal-and-opposite recenter
   // events. Supply raw relative MouseEvent deltas to the real document listener.
@@ -25,8 +27,9 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('/#/villa');
-  await page.locator('#startOverlay').tap();
   const canvas = page.locator('#gameCanvas');
+  await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+  await expect(canvas).toHaveAttribute('data-game-running', 'true');
   const geometry = await canvas.evaluate((c: HTMLCanvasElement) => {
     const r = c.getBoundingClientRect();
     const w = Number(c.dataset.logicalWidth), h = Number(c.dataset.logicalHeight);
@@ -85,8 +88,9 @@ test('villa hover-look works without dragging when capture is denied, and Escape
     HTMLCanvasElement.prototype.requestPointerLock = () => Promise.reject(new DOMException('Capture disabled by this test', 'NotAllowedError'));
   });
   await page.goto('/#/villa');
-  await page.locator('#startOverlay').click();
   const canvas = page.locator('#gameCanvas');
+  await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+  await expect(canvas).toHaveAttribute('data-game-running', 'true');
   await expect(canvas).toHaveAttribute('data-villa-mouse-look', 'active');
   const box = (await canvas.boundingBox())!;
   const y = box.y + box.height * 0.48;

@@ -17,11 +17,11 @@ async function selectGame(page: Page, gameId: string) {
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
-  await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 }
 
 async function startGame(page: Page) {
-  await page.locator('#startOverlay').click();
+  // Games play immediately on entry; the helper only settles the run loop.
   await page.waitForTimeout(400);
 }
 

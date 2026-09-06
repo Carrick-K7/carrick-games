@@ -84,11 +84,11 @@ async function selectGame(page: Page, gameId: string) {
     }
   }
   await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 }
 
 async function startGame(page: Page) {
-  await page.locator('#startOverlay').click();
+  // Games play immediately on entry; the helper only settles the run loop.
   await page.waitForTimeout(300);
 }
 
@@ -581,7 +581,7 @@ test.describe('Game rules', () => {
 
   test('chess legal moves preserve king safety and castling rules', async ({ page }) => {
     await page.goto('/#/chess');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const result = await page.evaluate(async (moduleUrl) => {
       const { ChessGame } = await import(moduleUrl);
@@ -630,7 +630,7 @@ test.describe('Game rules', () => {
 
   test('checkers enforces mandatory captures and multi-jumps', async ({ page }) => {
     await page.goto('/#/checkers');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const result = await page.evaluate(async (moduleUrl) => {
       const { CheckersGame } = await import(moduleUrl);
@@ -664,7 +664,7 @@ test.describe('Game rules', () => {
 
   test('minesweeper protects the first reveal and keeps a continuous timer', async ({ page }) => {
     await page.goto('/#/minesweeper');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const result = await page.evaluate(async (moduleUrl) => {
       const { MinesweeperGame } = await import(moduleUrl);
@@ -691,7 +691,7 @@ test.describe('Game rules', () => {
 
   test('2048 can continue after reaching the winning tile', async ({ page }) => {
     await page.goto('/#/2048');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const hasWon = await page.evaluate(async (moduleUrl) => {
       const { Game2048 } = await import(moduleUrl);
@@ -722,7 +722,7 @@ test.describe('Game rules', () => {
 
   test('Gacha records deterministic pulls, persists stats, and supports reset', async ({ page }) => {
     await page.goto('/#/gacha');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const result = await page.evaluate(async (moduleUrl) => {
       localStorage.removeItem('gacha-stats');
@@ -788,7 +788,7 @@ test.describe('Game rules', () => {
 
   test('solitaire can select and move a face-up tableau sequence', async ({ page }) => {
     await page.goto('/#/solitaire');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     const result = await page.evaluate(async (moduleUrl) => {
       const { SolitaireGame } = await import(moduleUrl);
@@ -828,7 +828,7 @@ test('failed dynamic game loads show a retry path', async ({ page }) => {
   await expect(page.locator('#retryLoadBtn')).toBeVisible();
   await page.unroute(`**${gachaModule}`);
   await page.locator('#retryLoadBtn').click();
-  await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await expect(page.locator('#loadError')).toBeHidden();
 });
 
@@ -1078,7 +1078,7 @@ test.describe('Carrick Games - Lifecycle', () => {
 
     await page.keyboard.press('Control+k');
     await expect(page.locator('.game-list-item').first()).toBeVisible();
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
 
     expect(filterFavicon(consoleErrors)).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
@@ -1099,7 +1099,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('clicking a game shows its controls and canvas', async ({ page }) => {
     await page.keyboard.press('Control+k');
     await page.locator('.game-list-item').first().click();
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('#gameCanvas')).toBeVisible();
   });
 
@@ -1146,7 +1146,7 @@ test.describe('Carrick Games - Lifecycle', () => {
       await item.click();
       await expect(page.locator('#selectedGameLabel')).toHaveText(idToNameZh[id]);
       await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
-      await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/${id}`);
     }
   });
@@ -1243,7 +1243,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await openOverflow(page);
     await expect(page.locator('#demoBtn')).toBeVisible();
     await page.locator('#demoBtn').click();
-    await expect(page.locator('#startOverlay')).not.toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('canvas')).toBeVisible();
     await expect
       .poll(() => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => canvas.dataset.parkingState), {

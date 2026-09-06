@@ -16,10 +16,10 @@ test.describe('Warm Villa', () => {
     await page.goto('/#/villa');
     const canvas = page.locator('#gameCanvas');
     // Cold software-WebGL setup can outlast the generic 5s locator timeout.
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/, { timeout: 45_000 });
-    await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl');
-    await page.locator('#startOverlay').click();
-    await expect(page.locator('#startOverlay')).not.toHaveClass(/active/);
+    await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+    await expect(canvas).toHaveAttribute('data-game-running', 'true');
+    // Entering plays immediately; the first canvas click grants mouse capture.
+    await canvas.click();
     const colors = await canvas.evaluate((c: HTMLCanvasElement) => {
       const ctx = c.getContext('2d')!;
       const values = new Set<string>();
@@ -62,7 +62,7 @@ test.describe('Warm Villa', () => {
     await page.keyboard.press('Control+k');
     await page.locator('.game-list-item[data-id="snake"]').click();
     await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     expect(errors).toEqual([]);
   });
 

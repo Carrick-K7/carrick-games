@@ -126,7 +126,9 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/#/villa'); const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 30_000 });
-  await page.locator('#startOverlay').click();
+  await expect(canvas).toHaveAttribute('data-game-running', 'true');
+  // Entering plays immediately; the first canvas click grants mouse capture.
+  await canvas.click();
   await page.waitForFunction(() => document.pointerLockElement === document.getElementById('gameCanvas'));
   await page.keyboard.press('h');
   await page.keyboard.down('Shift'); await page.keyboard.down('w');

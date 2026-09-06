@@ -26,9 +26,10 @@ test.describe('edge-to-edge game windows', () => {
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(`/${id === 'cs-kimi' ? '?cs3d=force' : ''}#/${id}`);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive', { timeout: 45_000 });
-      if (id === 'cs') await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__?.info()?.ready), { timeout: 30_000 }).toBe(true);
-      await page.locator('#startOverlay').click();
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       if (id === 'cs') {
+        await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__?.info()?.ready), { timeout: 30_000 }).toBe(true);
+        // CS keeps its own in-canvas arena menu; entering it starts the match.
         await page.locator('#gameCanvas').click({ position: { x: 314, y: 590 } });
         await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().playerAlive)).toBe(true);
       }
@@ -68,8 +69,7 @@ test.describe('edge-to-edge game windows', () => {
   test('CS Kimi software renderer follows the viewport without stretching its buffer', async ({ page }, testInfo) => {
     test.setTimeout(60_000);
     await page.goto('/?cs3d=off#/cs-kimi');
-    await expect(page.locator('#startOverlay')).toBeVisible({ timeout: 45_000 });
-    await page.locator('#startOverlay').click();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
     await page.keyboard.press('Escape');
     const initial = await page.evaluate(() => (window as any).__CS_DEBUG__.info());
     for (const size of [sizes[2], sizes[3], sizes[4], sizes[5]]) {
@@ -92,8 +92,8 @@ test.describe('edge-to-edge game windows', () => {
       document.exitFullscreen = async () => { (window as any).__nativeCalls++; };
     });
     await page.goto('/#/snake');
-    await expect(page.locator('#startOverlay')).toBeVisible();
-    await expect(page.locator('#fullscreenBtn, #resumeBtn, #helpReturnBtn, #fullscreenNotice')).toHaveCount(0);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+    await expect(page.locator('#startOverlay, #fullscreenBtn, #resumeBtn, #helpReturnBtn, #fullscreenNotice')).toHaveCount(0);
     // Headless DOM keys cannot stand in for browser chrome fullscreen. Check
     // non-interception explicitly, and exercise the resulting resize separately.
     const f11 = async () => expect(await page.evaluate(() => (document.activeElement ?? document.body).dispatchEvent(
@@ -112,24 +112,23 @@ test.describe('edge-to-edge game windows', () => {
     await page.locator('#gamePickerBtn').click(); await f11();
     await page.locator('.game-list-item[data-id="tetris"]').click();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', '420');
-    await expect(page.locator('#startOverlay')).toBeFocused();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+    await expect(page.locator('#gameCanvas')).toBeFocused();
     expect(await page.evaluate(() => (window as any).__nativeCalls)).toBe(0);
     const m = await metrics(page);
     expect(Math.min(Math.abs(m.canvas.width - m.root.width), Math.abs(m.canvas.height - m.root.height))).toBeLessThan(1);
   });
 
-  test('no fullscreen API is needed for learning, starting and rotating a game', async ({ page }) => {
+  test('no fullscreen API is needed for entering, learning and rotating a game', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false });
       Object.defineProperty(Element.prototype, 'requestFullscreen', { configurable: true, value: undefined });
     });
     await page.goto('/#/snake');
-    await expect(page.locator('#startOverlay')).toBeVisible();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await page.locator('#helpBtn').click();
     await page.locator('#helpCloseBtn').click();
-    await expect(page.locator('#startOverlay')).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#startOverlay')).toBeHidden();
+    await expect(page.locator('#gameCanvas')).toBeFocused();
     await page.locator('#overflowBtn').click();
     await page.locator('#menuCloseBtn').click();
     await expect(page.locator('#gameCanvas')).toBeFocused();
@@ -145,7 +144,7 @@ test.describe('bounded high-density game windows', () => {
     test.setTimeout(180_000);
     for (const id of ['cs', 'cs-kimi', 'villa']) {
       await page.goto(`/${id === 'cs-kimi' ? '?cs3d=force' : ''}#/${id}`);
-      await expect(page.locator('#startOverlay')).toBeVisible({ timeout: 45_000 });
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
       await expect.poll(async () => {
         const m = await metrics(page);
         return m.info.width === 3840 && m.info.renderWidth > 0;
