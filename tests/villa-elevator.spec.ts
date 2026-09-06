@@ -119,7 +119,10 @@ test('villa elevator floor buttons accept real coarse-pointer taps', async ({ br
 });
 
 test('villa shell supports a real keyboard elevator trip and walking out', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
+  // Test live keyboard travel, not oversized software-renderer throughput.
+  // Full viewport/DPR coverage lives in game-window.spec.ts.
+  await page.setViewportSize({ width: 960, height: 540 });
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/#/villa'); const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 30_000 });
@@ -133,6 +136,9 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   await page.keyboard.down('w');
   await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPosition!).z < -5.75);
   await page.keyboard.up('w'); await page.keyboard.press('2');
+  await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-elevator'))!), {
+    message: 'The real floor-selection key must begin a passenger trip',
+  }).toMatchObject({ target: 2, riding: true });
   await page.waitForFunction(() => { const e = JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!); return e.floor === 2 && e.phase === 'open'; }, null, { timeout: 60_000 });
   await expect(canvas).toHaveAttribute('data-villa-floor', '2');
   await page.keyboard.down('s');

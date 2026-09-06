@@ -9,13 +9,14 @@ function villaModule(): string {
 
 test.describe('Warm Villa', () => {
   test('real shell renders the home, supports walking and map, and cleans up on switch', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
     await page.goto('/#/villa');
     const canvas = page.locator('#gameCanvas');
-    await expect(page.locator('#startOverlay')).toHaveClass(/active/);
+    // Cold software-WebGL setup can outlast the generic 5s locator timeout.
+    await expect(page.locator('#startOverlay')).toHaveClass(/active/, { timeout: 45_000 });
     await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl');
     await page.locator('#startOverlay').click();
     await expect(page.locator('#startOverlay')).not.toHaveClass(/active/);

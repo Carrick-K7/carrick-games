@@ -9,6 +9,10 @@ import { furnishVilla } from '../../src/games/villaFurnishings';
 import { createVillaPetModel } from '../../src/games/villaPetModel';
 import { VILLA_WALL_COLLIDERS, type VillaCollider } from '../../src/games/villaWorld';
 
+// Fixed 10–15 minute simulations check correctness, not a 5s wall-clock budget.
+// Shared CI runners need headroom without reducing steps or collision assertions.
+const LONG_SIMULATION_TIMEOUT = 15_000;
+
 const box = (minX: number, maxX: number, minZ: number, maxZ: number, maxY = 1): VillaCollider => ({ minX, maxX, minZ, maxZ, minY: 0, maxY });
 const vegetables = box(-11.6, -4.1, 17, 22, 0.42);
 const actualBeds = [[-10, 18], [-5.8, 18], [-10, 21], [-5.8, 21]].map(([x, z]) => box(x - 1.3, x + 1.3, z - 0.775, z + 0.775, 0.42));
@@ -105,7 +109,7 @@ describe('peaceful villa lawn pets', () => {
     expect(birdHigh && birdLanded && rabbitHop).toBe(true);
     expect(a.pets.every(p => !('health' in p) && !('attack' in p) && !('damage' in p))).toBe(true);
     expect(a.pets.some((p, i) => Math.hypot(p.x - starts[i].x, p.z - starts[i].z) > 2)).toBe(true);
-  });
+  }, LONG_SIMULATION_TIMEOUT);
 
   it('eases takeoff and landing with bounded vertical acceleration, curved heading and gradual wing folding', () => {
     const state = createVillaPets(), bird = state.pets[2]; state.pets = [bird];
@@ -193,7 +197,7 @@ describe('peaceful villa lawn pets', () => {
     }
     expect([...visits].sort()).toEqual(['cat', 'dog']); expect([...returns].sort()).toEqual(['cat', 'dog']);
     scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose(); } });
-  });
+  }, LONG_SIMULATION_TIMEOUT);
 
   it('waits at a newly closed front door and resumes its route only after reopening', () => {
     const state = createVillaPets(); state.pets = [state.pets[0]];

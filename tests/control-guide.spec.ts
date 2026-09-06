@@ -59,9 +59,13 @@ test.describe('unified operation guides', () => {
       await page.setViewportSize(size);
       await expect(page.locator('#helpOverlay')).toHaveAttribute('role', 'dialog');
       await expect(page.locator('main')).toHaveAttribute('inert', '');
-      const b = (await page.locator('#helpOverlay').boundingBox())!;
-      expect(b.x).toBe(Math.max(0, (size.width - 720) / 2)); expect(b.width).toBe(Math.min(720, size.width));
-      expect(b.y).toBeGreaterThanOrEqual(75); expect(b.y + b.height).toBe(size.height);
+      // The shell coalesces VisualViewport refits onto the next animation frame.
+      // A dialog role is already present before rotation, so it is not a resize signal.
+      await expect.poll(async () => {
+        const b = (await page.locator('#helpOverlay').boundingBox())!;
+        return { x: b.x, width: b.width, bottom: b.y + b.height };
+      }).toEqual({ x: Math.max(0, (size.width - 720) / 2), width: Math.min(720, size.width), bottom: size.height });
+      expect((await page.locator('#helpOverlay').boundingBox())!.y).toBeGreaterThanOrEqual(75);
       await page.locator('#guideBody').evaluate(el => el.scrollTop = el.scrollHeight);
       await expect(page.locator('#guideNotes p').last()).toBeInViewport();
       await expect(page.locator('#helpCloseBtn')).toBeInViewport();
