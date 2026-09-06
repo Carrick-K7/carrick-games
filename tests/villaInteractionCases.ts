@@ -1,0 +1,130 @@
+import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const moduleUrl = () => process.env.VILLA_MODULE_URL || '/' + JSON.parse(readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'))['src/games/villa.ts'].file;
+
+export async function mount(page: Page) {
+  await page.goto('/#/snake');
+  await page.evaluate(async url => {
+    const { VillaGame } = await import(url), canvas = document.createElement('canvas');
+    canvas.id = 'villa-native-input'; Object.assign(canvas.style, { position: 'fixed', top: '20px', left: '10px', zIndex: '10000' }); document.body.append(canvas);
+    const f: any = { zh: true, words: [], calls: 0, use: null, trusted: [] };
+    const g = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => f.zh,
+      isPixelMode: () => false, getRecord: () => null, reportScore: () => { throw new Error('Villa cannot score'); }, requestShellRender: () => {} }) as any;
+    g.prepare(); g.start(); cancelAnimationFrame(g.animationId); g.setDisplayScale(Math.min(370, innerWidth - 20)); f.g = g;
+    const interact = g.interact.bind(g); g.interact = () => { f.calls++; interact(); };
+    const ctx = canvas.getContext('2d')!, fill = ctx.fillText;
+    ctx.fillText = (text: string, x: number, y: number, maxWidth?: number) => {
+      f.words.push(text);
+      if (['互动', '离开', 'Use', 'Exit'].includes(text)) {
+        // Measure the PAINTED label through the current context transform, not hit-test internals.
+        const m = ctx.getTransform(), r = canvas.getBoundingClientRect();
+        f.use = { x: r.x + (m.a * x + m.c * y + m.e) * r.width / canvas.width,
+          y: r.y + (m.b * x + m.d * y + m.f) * r.height / canvas.height };
+      }
+      if (maxWidth === undefined) fill.call(ctx, text, x, y); else fill.call(ctx, text, x, y, maxWidth);
+    };
+    document.addEventListener('touchstart', e => { if ((e.target as Element)?.closest?.('[data-villa-use]')) f.trusted.push(e.isTrusted); }, { capture: true });
+    f.tick = (n = 1) => { for (let i = 0; i < n; i++) g.update(.05); };
+    f.render = () => { f.words = []; g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.renderFrame(); };
+    f.pose = (x: number, z: number) => { g.init(); g.position = { x, y: 0, z }; g.eyeY = 0; g.yaw = 0; g.pitch = -.2; f.tick(2); f.render(); };
+    f.pose(-5.67, -7.2); (window as any).villaInput = f;
+  }, moduleUrl());
+}
+export async function tapPaintedUse(page: Page, offsetY = 0, compatibilityClick = false) {
+  const point = await page.evaluate(offsetY => {
+    const f = (window as any).villaInput, p = { x: f.use.x, y: f.use.y + offsetY };
+    if (!document.elementFromPoint(p.x, p.y)?.closest('[data-villa-use]')) throw new Error('Painted interaction is not covered by its native button');
+    return p;
+  }, offsetY);
+  await page.touchscreen.tap(point.x, point.y);
+  await page.evaluate(compatibilityClick => {
+    if (compatibilityClick) document.querySelector('[data-villa-use]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+    const f = (window as any).villaInput; f.tick(); f.render();
+  }, compatibilityClick);
+}
+export async function dispose(page: Page) {
+  await page.evaluate(() => { const f = (window as any).villaInput; if (f) { f.g.destroy(); f.g.canvas.remove(); } });
+  await expect(page.locator('[data-villa-use]')).toHaveCount(0);
+}
+
+export function registerVillaInteractionTests() {
+  test('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
+    test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await page.goto('/#/villa'); await page.locator('#startOverlay').tap();
+    await page.waitForFunction(() => document.getElementById('gameCanvas')?.dataset.villaTarget === 'pet-dog');
+    const button = page.locator('button[data-villa-use]'); await expect(button).toBeVisible(); await button.tap();
+    await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPets!).find((p: any) => p.kind === 'dog').feedCount === 1);
+    await button.tap();
+    await page.waitForFunction(() => /吃饱|full/.test(document.getElementById('gameCanvas')!.dataset.villaUseFeedback!));
+    expect(await page.locator('#gameCanvas').evaluate(c => JSON.parse(c.dataset.villaPets!).find((p: any) => p.kind === 'dog').feedCount)).toBe(1);
+    await page.goto('/#/snake'); await expect(page.locator('[data-villa-use]')).toHaveCount(0); expect(errors).toEqual([]);
+  });
+
+  test('painted button activates every fixture family once, including Safari tap and native keyboard activation', async ({ page }) => {
+    test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
+    try {
+      await tapPaintedUse(page, 0, true);
+      expect(await page.evaluate(() => { const f = (window as any).villaInput; return { on: f.g.state.faucetOn, calls: f.calls, trusted: f.trusted }; })).toEqual({ on: true, calls: 1, trusted: [true] });
+      await tapPaintedUse(page); expect(await page.evaluate(() => (window as any).villaInput.g.state.faucetOn)).toBe(false);
+      // Native keyboard/assistive button activation must not become Space/jump.
+      await page.locator('[data-villa-use]').focus(); await page.keyboard.press('Space');
+      expect(await page.evaluate(() => { const f = (window as any).villaInput; return [f.calls, f.g.state.faucetOn, f.g.motion.velocity]; })).toEqual([3, true, 0]);
+      const cases: Array<[number, number, string, string]> = [
+        [-6.7, -1.65, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
+        [0, -4.38, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'], [8.15, 6.2, 'racing', 'race'],
+      ];
+      for (const [x, z, target, action] of cases) {
+        await page.evaluate(({ x, z }) => (window as any).villaInput.pose(x, z), { x, z });
+        expect(await page.evaluate(() => (window as any).villaInput.g.hotspot()?.id), action).toBe(target);
+        const before = await page.evaluate(() => (window as any).villaInput.calls); await tapPaintedUse(page);
+        const result = await page.evaluate(action => {
+          const f = (window as any).villaInput, g = f.g;
+          const changed = action === 'tea' ? g.state.teaUntil > g.time : action === 'fire' ? !g.state.fireplace : action === 'pc' ? !g.state.gaming
+            : action === 'lift' ? g.state.elevator.phase !== 'closed' : action === 'door' ? g.state.carDoorOpen : g.state.seated === 'racing';
+          return { calls: f.calls, changed };
+        }, action);
+        expect(result, action).toEqual({ calls: before + 1, changed: true });
+      }
+      // A key held before focus enters the native control must still be released.
+      await page.evaluate(() => { const f = (window as any).villaInput; f.tick(16); f.g.canvas.tabIndex = 0; f.render(); });
+      await page.locator('#villa-native-input').focus(); await page.keyboard.down('Space');
+      expect(await page.evaluate(() => (window as any).villaInput.g.keys.has(' '))).toBe(true);
+      await page.locator('[data-villa-use]').focus(); await page.keyboard.up('Space');
+      expect(await page.evaluate(() => (window as any).villaInput.g.keys.has(' '))).toBe(false);
+      expect(errors).toEqual([]);
+    } finally { await dispose(page); }
+  });
+
+  test('failed actions remain readable and narrow Exit, rotation, cancellation and quiet-mode recovery remain usable', async ({ page }) => {
+    test.setTimeout(120_000); await page.setViewportSize({ width: 360, height: 780 }); await mount(page);
+    try {
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.activate('home'); f.tick(); f.render(); }); await tapPaintedUse(page);
+      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请靠近');
+      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.motion.offset = .04; f.g.position.y = .04; f.render(); }); await tapPaintedUse(page);
+      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请先落地');
+      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(17.7, -2.45); }); await tapPaintedUse(page);
+      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('稍微后退');
+      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.activate('immersion'); f.render(); });
+      await expect(page.locator('[data-villa-use]')).toBeHidden();
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.activate('immersion'); f.render(); });
+      // A cancelled contact can arrive with an empty changedTouches list on focus loss.
+      await page.evaluate(() => {
+        const button = document.querySelector('[data-villa-use]')!, start = new Event('touchstart', { bubbles: true, cancelable: true });
+        Object.defineProperty(start, 'changedTouches', { value: [{ identifier: 91 }] }); button.dispatchEvent(start);
+        const cancel = new Event('touchcancel', { bubbles: true, cancelable: true }); Object.defineProperty(cancel, 'changedTouches', { value: [] }); button.dispatchEvent(cancel);
+      });
+      const before = await page.evaluate(() => (window as any).villaInput.calls); await tapPaintedUse(page);
+      expect(await page.evaluate(() => (window as any).villaInput.calls)).toBe(before + 1);
+      await page.setViewportSize({ width: 844, height: 390 });
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.setDisplayScale(550); f.render(); }); await tapPaintedUse(page);
+      await page.setViewportSize({ width: 360, height: 780 });
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.setDisplayScale(340); f.pose(9.15, -.95); }); await tapPaintedUse(page);
+      await page.evaluate(() => { const f = (window as any).villaInput; f.tick(12); f.g.activate('shoot'); f.tick(); f.render(); });
+      expect(await page.evaluate(() => (window as any).villaInput.g.state.snooker.moving)).toBe(true);
+      await tapPaintedUse(page, -20); // Previously this visible upper cap hit Shot on narrow phones.
+      expect(await page.evaluate(() => (window as any).villaInput.g.state.snookerActive)).toBe(false);
+    } finally { await dispose(page); }
+  });
+}

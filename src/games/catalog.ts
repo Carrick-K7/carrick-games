@@ -514,6 +514,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Esc'], action: 'Free cursor', actionZh: '释放光标' },
         { keys: ['E'], action: 'Interact / feed / sit', actionZh: '互动 / 投喂 / 入座' },
         { keys: ['Q'], action: 'Door / screen input', actionZh: '车门 / 大屏信号' },
+        { keys: ['F'], action: 'Villa fullscreen', actionZh: '别墅全屏' },
         { keys: ['1', '2', '3'], action: 'Elevator floor', actionZh: '电梯选层' },
         { keys: ['I', 'M'], action: 'Immersive / floor plan', actionZh: '沉浸 / 导览图' },
         { keys: ['T'], action: 'Day / evening', actionZh: '白天 / 傍晚' },
