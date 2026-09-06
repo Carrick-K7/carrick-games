@@ -336,7 +336,7 @@ const GAMEOVER_PROFILES: GameProfile[] = [
   { id: 'galaga', suicide: suicideGalaga, timeout: 15000 },
   { id: 'stacker', suicide: suicideStacker, timeout: 15000 },
   { id: 'iwanna', suicide: suicideIwanna, timeout: 15000 },
-  { id: 'counterstrike', suicide: suicideCounterstrike, timeout: 230000, expectScore: true },
+  { id: 'cs-kimi', suicide: suicideCounterstrike, timeout: 230000, expectScore: true },
   { id: 'parking', suicide: suicideParking, timeout: 15000 },
   { id: 'aimlab', suicide: suicideAimlab, timeout: 20000, expectScore: true },
   { id: 'bubbleshooter', suicide: suicideBubbleshooter, timeout: 20000 },
@@ -382,9 +382,9 @@ test.describe('Game Over - Arcade', () => {
       }
 
       // Restart should always work.
-      // Counter-Strike restarts through its own terminal action (Enter);
+      // CS Kimi restarts through its own terminal action (Enter);
       // the shell restart button's hit-testing is unreliable for this game.
-      if (profile.id === 'counterstrike') {
+      if (profile.id === 'cs-kimi') {
         await page.keyboard.press('Enter');
       } else {
         await restartGame(page);

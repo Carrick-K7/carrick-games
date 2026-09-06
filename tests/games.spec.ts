@@ -171,7 +171,7 @@ const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'stacker', keys: ['Space'], delayMs: 1500 },
 
   { id: 'iwanna', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
-  { id: 'counterstrike', keys: ['w', 'a', 's', 'd', 'r', 'b', 'q', '1', '2', '3', '4', 'g', ' '], delayMs: 2500 },
+  { id: 'cs-kimi', keys: ['w', 'a', 's', 'd', 'r', 'b', 'q', '1', '2', '3', '4', 'g', ' '], delayMs: 2500 },
   { id: 'aimlab', keys: [], delayMs: 1500 },
   { id: 'parking', keys: ['ArrowUp', 'ArrowLeft', 'ArrowRight'], delayMs: 2000 },
   { id: 'villa', keys: ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift+w', 'e', 'm', 'm', 't', 'h'], delayMs: 2000 },

@@ -1,0 +1,416 @@
+[
+  {
+    "asset": "ak47-1.wav",
+    "source": "Prepared SFX Library/AK-47/C_28P.wav",
+    "mark_seconds": 0.61,
+    "length_seconds": 0.78,
+    "peak": 0.88,
+    "rms_100ms": 0.1316,
+    "sha256": "49d5079b35987cf04c6dc8adaff6d4877f7b2003b0d1a20443dfce72ab850cad"
+  },
+  {
+    "asset": "ak47-2.wav",
+    "source": "Prepared SFX Library/AK-47/C_28P.wav",
+    "mark_seconds": 3.25,
+    "length_seconds": 0.78,
+    "peak": 0.88,
+    "rms_100ms": 0.1197,
+    "sha256": "494fc582cbe9b747324ae12df061d2184efe617ca4521fcfe3fd76aed51c5a25"
+  },
+  {
+    "asset": "ak47-3.wav",
+    "source": "Prepared SFX Library/AK-47/C_28P.wav",
+    "mark_seconds": 6.02,
+    "length_seconds": 0.78,
+    "peak": 0.88,
+    "rms_100ms": 0.1137,
+    "sha256": "0d19c73d5212cb6c0c0b2a8f2d891641871847cb7adfe65495d0ddf52f2ace1d"
+  },
+  {
+    "asset": "m4a1-1.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 0.7,
+    "length_seconds": 0.68,
+    "peak": 0.88,
+    "rms_100ms": 0.1022,
+    "sha256": "6e7a4902c4325a0d26a1a6bfdb0b4a561a3e4c275cc3c228ed9bb1e4c0591cf3"
+  },
+  {
+    "asset": "m4a1-2.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 5.64,
+    "length_seconds": 0.68,
+    "peak": 0.88,
+    "rms_100ms": 0.0974,
+    "sha256": "009de622660cb7367ceb09635bfbb5a3dd46df4f6c87ad3de268dbc25de8ce1c"
+  },
+  {
+    "asset": "m4a1-suppressed-1.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 0.7,
+    "length_seconds": 0.68,
+    "peak": 0.546,
+    "rms_100ms": 0.0818,
+    "sha256": "d650fbc8419ab84fa7b26924c416811983b3956d82d894c27323aaf83011037b"
+  },
+  {
+    "asset": "m4a1-suppressed-2.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 5.64,
+    "length_seconds": 0.68,
+    "peak": 0.521,
+    "rms_100ms": 0.0779,
+    "sha256": "05546c2c4e0d16319e46da345c06131a903ca78138ba6069d98d848c2f173172"
+  },
+  {
+    "asset": "awp-1.wav",
+    "source": "Prepared SFX Library/Tikka/W_29P.wav",
+    "mark_seconds": 0.57,
+    "length_seconds": 1.2366,
+    "peak": 0.88,
+    "rms_100ms": 0.1197,
+    "sha256": "2dca77762b0f44d27d3dafece44891624d023d894287c299962128ae92f081e0"
+  },
+  {
+    "asset": "awp-2.wav",
+    "source": "Prepared SFX Library/Tikka/W_29P.wav",
+    "mark_seconds": 5.66,
+    "length_seconds": 1.2366,
+    "peak": 0.88,
+    "rms_100ms": 0.1283,
+    "sha256": "9dd9a7bb7de65c1dd4fa40bf3dde956f258f35067d2a1adc01d664788429a660"
+  },
+  {
+    "asset": "deagle-1.wav",
+    "source": "deagle.wav",
+    "mark_seconds": 0,
+    "length_seconds": 1.6,
+    "peak": 0.528,
+    "rms_100ms": 0.17,
+    "sha256": "3f7433b3387b133074120a42d12258f1625a6eb58383cdbf41010a03ada505fa"
+  },
+  {
+    "asset": "mp5-1.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.15,
+    "length_seconds": 0.19,
+    "peak": 0.88,
+    "rms_100ms": 0.1957,
+    "sha256": "062633efe06437711f0104072d519e0b5875424cb9a82fe49e5c4f589dd896cb"
+  },
+  {
+    "asset": "mp5-2.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.38,
+    "length_seconds": 0.19,
+    "peak": 0.88,
+    "rms_100ms": 0.1736,
+    "sha256": "68ba48184bb17debcee1d9778521f1d0e79fd965b8487926a57b6a39d0995b64"
+  },
+  {
+    "asset": "mp5-3.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.66,
+    "length_seconds": 0.19,
+    "peak": 0.88,
+    "rms_100ms": 0.2017,
+    "sha256": "893dffcba468f24a457b8e6778b07696aa9fdb097ef6602b2e395cab560e2dcd"
+  },
+  {
+    "asset": "mp5-suppressed-1.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.15,
+    "length_seconds": 0.19,
+    "peak": 0.608,
+    "rms_100ms": 0.1,
+    "sha256": "8e3abdea311884d13a1121caaa1cad9f73e4939b729d3a0ead8ec326260a7763"
+  },
+  {
+    "asset": "mp5-suppressed-2.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.38,
+    "length_seconds": 0.19,
+    "peak": 0.541,
+    "rms_100ms": 0.1,
+    "sha256": "897f35d1fd89947dfaa3f17963a8f275051d2cd4f909764e94113e8c326067e0"
+  },
+  {
+    "asset": "mp5-suppressed-3.wav",
+    "source": "mp5.wav",
+    "mark_seconds": 0.66,
+    "length_seconds": 0.19,
+    "peak": 0.465,
+    "rms_100ms": 0.1,
+    "sha256": "0faa64acb3b4fe0966305d97fc616a305a048c1c99e7360bfc34aac29a1d2ca4"
+  },
+  {
+    "asset": "glock-1.wav",
+    "source": "glock.wav",
+    "mark_seconds": 1.33,
+    "length_seconds": 0.55,
+    "peak": 0.88,
+    "rms_100ms": 0.0677,
+    "sha256": "4cbb0cf902ddc6bc7deb2171650a5beb295363a9efb29f9dfec6de2a8b906a7b"
+  },
+  {
+    "asset": "glock-2.wav",
+    "source": "glock.wav",
+    "mark_seconds": 3.89,
+    "length_seconds": 0.55,
+    "peak": 0.88,
+    "rms_100ms": 0.0708,
+    "sha256": "9fe6c189b13d1ed58885b1d9f01209fe9fcceef9b2760c49cf69787a70d4ee82"
+  },
+  {
+    "asset": "glock-3.wav",
+    "source": "glock.wav",
+    "mark_seconds": 7.26,
+    "length_seconds": 0.55,
+    "peak": 0.59,
+    "rms_100ms": 0.22,
+    "sha256": "299406fafba6ad5fe2e3e1208688c65cb4754dc985ccb8b27a1f82c214102fe0"
+  },
+  {
+    "asset": "usp-1.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 0.94,
+    "length_seconds": 0.55,
+    "peak": 0.88,
+    "rms_100ms": 0.1149,
+    "sha256": "b5f6dec6f1fb032553b22ff75c973f89a0caabe5904269241894436417a46236"
+  },
+  {
+    "asset": "usp-2.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 5.0,
+    "length_seconds": 0.55,
+    "peak": 0.88,
+    "rms_100ms": 0.108,
+    "sha256": "349f89269d8b6eaaaecc01b5c66411fae60bcbe73398e62408b6aef08de89876"
+  },
+  {
+    "asset": "usp-suppressed-1.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 0.94,
+    "length_seconds": 0.55,
+    "peak": 0.715,
+    "rms_100ms": 0.092,
+    "sha256": "6e9f368f5eae039b91c1be426ad12941dd81b29df0961cb8cd1aa0757b99cc06"
+  },
+  {
+    "asset": "usp-suppressed-2.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 5.0,
+    "length_seconds": 0.55,
+    "peak": 0.689,
+    "rms_100ms": 0.0864,
+    "sha256": "e9934322badab25d0dd4805dec369c9f7ed388e95d4665e3ee27e769373cd8d1"
+  },
+  {
+    "asset": "m3-1.wav",
+    "source": "Prepared SFX Library/Nova/O_21P.wav",
+    "mark_seconds": 0.43,
+    "length_seconds": 0.82,
+    "peak": 0.88,
+    "rms_100ms": 0.111,
+    "sha256": "f4a3fa572161c2a36634078ed7091a3f69b95f11f802e7b6b65bd8cd0c707d16"
+  },
+  {
+    "asset": "m3-2.wav",
+    "source": "Prepared SFX Library/Nova/O_21P.wav",
+    "mark_seconds": 3.46,
+    "length_seconds": 0.82,
+    "peak": 0.88,
+    "rms_100ms": 0.1081,
+    "sha256": "929c63920cfc01e0aaef7f3fa276efaedd9aa5d2f1655b6460e277c72558df73"
+  },
+  {
+    "asset": "xm1014-1.wav",
+    "source": "Prepared SFX Library/CD/H_21P.wav",
+    "mark_seconds": 0.46,
+    "length_seconds": 0.6863,
+    "peak": 0.88,
+    "rms_100ms": 0.1106,
+    "sha256": "1de228e862e1ce8afef90fe12ed2d93bb461d0311b72cda361850a231127dc92"
+  },
+  {
+    "asset": "xm1014-2.wav",
+    "source": "Prepared SFX Library/CD/H_21P.wav",
+    "mark_seconds": 3.0700000000000003,
+    "length_seconds": 0.6863,
+    "peak": 0.88,
+    "rms_100ms": 0.1127,
+    "sha256": "66fae30eb0d7de9d6ce01467e65e35e4b0fe677e89f5f3184f9e66d3a69368d5"
+  },
+  {
+    "asset": "scout-1.wav",
+    "source": "Prepared SFX Library/Savage 10 .300 Blackout/T_27P.wav",
+    "mark_seconds": 0.95,
+    "length_seconds": 0.9,
+    "peak": 0.88,
+    "rms_100ms": 0.1168,
+    "sha256": "d53514bb8a8713c6f548a6709e098f4a4f9c55b0b8492524657ef0546717cc04"
+  },
+  {
+    "asset": "scout-2.wav",
+    "source": "Prepared SFX Library/Savage 10 .300 Blackout/T_27P.wav",
+    "mark_seconds": 4.96,
+    "length_seconds": 0.9,
+    "peak": 0.88,
+    "rms_100ms": 0.0986,
+    "sha256": "b7169ce2e6e4ac47fb93bb1bee1e4ecff83515dcb01c6736da3462fecf53410d"
+  },
+  {
+    "asset": "g3sg1-1.wav",
+    "source": "Prepared SFX Library/SKS/U_14P.wav",
+    "mark_seconds": 3.5700000000000003,
+    "length_seconds": 0.7959,
+    "peak": 0.88,
+    "rms_100ms": 0.1086,
+    "sha256": "632559394969dc86f08d4224c73be7f54ffc536a72691a93b031f3833668f20e"
+  },
+  {
+    "asset": "g3sg1-2.wav",
+    "source": "Prepared SFX Library/SKS/U_14P.wav",
+    "mark_seconds": 6.75,
+    "length_seconds": 0.7959,
+    "peak": 0.88,
+    "rms_100ms": 0.1119,
+    "sha256": "4a9d33248ccaf0c7a6372aca55a4a428f3eff0867cb5cfcd03b2062a095ad2c8"
+  },
+  {
+    "asset": "g3sg1-3.wav",
+    "source": "Prepared SFX Library/SKS/U_14P.wav",
+    "mark_seconds": 10.21,
+    "length_seconds": 0.7959,
+    "peak": 0.88,
+    "rms_100ms": 0.1121,
+    "sha256": "bbfbd571e813e7e1768196838638ffc6f265cd4ddc7b4c443343d3c7a7c1d5c8"
+  },
+  {
+    "asset": "aug-1.wav",
+    "source": "Prepared SFX Library/AR-15/D_24P.wav",
+    "mark_seconds": 0.54,
+    "length_seconds": 0.5769,
+    "peak": 0.88,
+    "rms_100ms": 0.0986,
+    "sha256": "fcd5a51f828550ac0966878cc5289a5b7b90f531791078d919964a3facafc3db"
+  },
+  {
+    "asset": "aug-2.wav",
+    "source": "Prepared SFX Library/AR-15/D_24P.wav",
+    "mark_seconds": 3.93,
+    "length_seconds": 0.5769,
+    "peak": 0.88,
+    "rms_100ms": 0.0917,
+    "sha256": "05b8aaeb80cde60d7524081d1f827fa5e1b7e6410eba2f9a1b257a027b8af5f2"
+  },
+  {
+    "asset": "sg552-1.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 0.7,
+    "length_seconds": 0.6495,
+    "peak": 0.88,
+    "rms_100ms": 0.1049,
+    "sha256": "694fe471e0cc213c2c71869680475e1ad47b885c88ec8c0f59038139fccf3245"
+  },
+  {
+    "asset": "sg552-2.wav",
+    "source": "Prepared SFX Library/AR-15/D_32P.wav",
+    "mark_seconds": 5.64,
+    "length_seconds": 0.6495,
+    "peak": 0.88,
+    "rms_100ms": 0.0943,
+    "sha256": "f13e5653fb8fb0ff2688bce004901df2d7f4329e62962d27a4f520c81eef2384"
+  },
+  {
+    "asset": "m249-1.wav",
+    "source": "Prepared SFX Library/AR-15/D_24P.wav",
+    "mark_seconds": 0.54,
+    "length_seconds": 0.6458,
+    "peak": 0.88,
+    "rms_100ms": 0.1032,
+    "sha256": "fba29b750ff9a8524349a4378d4f6f0cc806dc6e8272b278f6ceee61d89f5a94"
+  },
+  {
+    "asset": "m249-2.wav",
+    "source": "Prepared SFX Library/AR-15/D_24P.wav",
+    "mark_seconds": 3.93,
+    "length_seconds": 0.6458,
+    "peak": 0.88,
+    "rms_100ms": 0.0959,
+    "sha256": "7ac38f5fd7f7db5bb6e37e8a50a0a5f7336dc073c6efca7aadb26738d04959c6"
+  },
+  {
+    "asset": "mac10-1.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 0.94,
+    "length_seconds": 0.3846,
+    "peak": 0.88,
+    "rms_100ms": 0.1128,
+    "sha256": "67fdda5c541ceb5f53219945368eae4ad61c156d9a91e2e29b003306c01d5573"
+  },
+  {
+    "asset": "mac10-2.wav",
+    "source": "Prepared SFX Library/1911/A_42P.wav",
+    "mark_seconds": 5.0,
+    "length_seconds": 0.3846,
+    "peak": 0.88,
+    "rms_100ms": 0.1059,
+    "sha256": "8896a51f96fe009b439cc1e6f952de02121eee37c65ac2a9e5b75213d86cac48"
+  },
+  {
+    "asset": "p90-1.wav",
+    "source": "Prepared SFX Library/PPSh/P_30P.wav",
+    "mark_seconds": 0.96,
+    "length_seconds": 0.3846,
+    "peak": 0.88,
+    "rms_100ms": 0.1096,
+    "sha256": "66fc44c9da9e4c70f87b6adeef4b8c066f59c9d99ac70cd2437981f2a14c2bb2"
+  },
+  {
+    "asset": "p90-2.wav",
+    "source": "Prepared SFX Library/PPSh/P_30P.wav",
+    "mark_seconds": 4.38,
+    "length_seconds": 0.3846,
+    "peak": 0.88,
+    "rms_100ms": 0.1086,
+    "sha256": "e8d411fda425f0966041783aac6bf155c44ffdc1f2a25c6252e6bbd137e0b3f3"
+  },
+  {
+    "asset": "p90-3.wav",
+    "source": "Prepared SFX Library/PPSh/P_30P.wav",
+    "mark_seconds": 8.24,
+    "length_seconds": 0.3846,
+    "peak": 0.88,
+    "rms_100ms": 0.1068,
+    "sha256": "61dbc716ec5fe8a141d1574b0e557673f643d47d7020b12ae59e866648b9bb37"
+  },
+  {
+    "asset": "tmp-1.wav",
+    "source": "Prepared SFX Library/Carl Gustav M45/G_31P.wav",
+    "mark_seconds": 0.31,
+    "length_seconds": 0.3726,
+    "peak": 0.88,
+    "rms_100ms": 0.1035,
+    "sha256": "8e4788513ca25a49efb6d20a867b10c7399309e5879a6b93779501918b9ac335"
+  },
+  {
+    "asset": "tmp-2.wav",
+    "source": "Prepared SFX Library/Carl Gustav M45/G_31P.wav",
+    "mark_seconds": 3.5,
+    "length_seconds": 0.3726,
+    "peak": 0.88,
+    "rms_100ms": 0.0988,
+    "sha256": "07844b9fe251064be04736ce9450ae2a7c7cb808f4bc7653ea93352aa3cee854"
+  },
+  {
+    "asset": "tmp-3.wav",
+    "source": "Prepared SFX Library/Carl Gustav M45/G_31P.wav",
+    "mark_seconds": 6.72,
+    "length_seconds": 0.3726,
+    "peak": 0.88,
+    "rms_100ms": 0.103,
+    "sha256": "2c351f8a81ebf95666c5e4681a9d7cdf6cd6705f45d4cbc47e702043a2b1003a"
+  }
+]

@@ -249,7 +249,7 @@ if (typeof window !== 'undefined') {
   (window as unknown as { __CS_DEBUG__?: unknown }).__CS_DEBUG__ = {
     look(angle: number, pitch = 0) {
       const g = currentGameInstance as unknown as { angle: number; pitch: number } | null;
-      if (!g || currentGameName !== 'counterstrike') return;
+      if (!g || currentGameName !== 'cs-kimi') return;
       g.angle = angle;
       g.pitch = pitch;
     },
@@ -259,7 +259,7 @@ if (typeof window !== 'undefined') {
         py: number;
         fighters?: { x: number; y: number }[];
       } | null;
-      if (!g || currentGameName !== 'counterstrike') return;
+      if (!g || currentGameName !== 'cs-kimi') return;
       // The fighter body is authoritative (shots, collision); px/py is the
       // camera synced from it — move both.
       const p = g.fighters?.[0];
@@ -277,7 +277,7 @@ if (typeof window !== 'undefined') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         activeWeapon?: (f: any) => { def: { id: string }; mag: number } | null;
       } | null;
-      if (!g || currentGameName !== 'counterstrike' || !g.fighters || !g.activeWeapon) return null;
+      if (!g || currentGameName !== 'cs-kimi' || !g.fighters || !g.activeWeapon) return null;
       const p = g.fighters[0];
       const w = g.activeWeapon(p);
       return { weapon: w?.def.id ?? null, mag: w?.mag ?? -1, slot: p.slot, phase: g.phase, x: p.x, y: p.y };
@@ -292,7 +292,7 @@ if (typeof window !== 'undefined') {
         fireShot?: (f: any, angle: number) => void;
         angle: number;
       } | null;
-      if (!g || currentGameName !== 'counterstrike' || !g.fighters || !g.fireShot) return;
+      if (!g || currentGameName !== 'cs-kimi' || !g.fighters || !g.fireShot) return;
       const p = g.fighters[0];
       if (!p?.alive) return;
       g.fireShot(p, g.angle);
@@ -305,7 +305,7 @@ if (typeof window !== 'undefined') {
         makeWeapon?: (id: any) => unknown;
       } | null;
       const p = g?.fighters?.[0];
-      if (!g || currentGameName !== 'counterstrike' || !p || !g.makeWeapon) return;
+      if (!g || currentGameName !== 'cs-kimi' || !p || !g.makeWeapon) return;
       p.primary = g.makeWeapon(weaponId);
       p.slot = 'primary';
     },
