@@ -1757,7 +1757,7 @@ export class CsEngine {
     }
   }
 
-  onMouseDown(button) {
+  onMouseDown(button, clientX = 0, clientY = 0) {
     if (!this.gameInputActive() || ![0, 2].includes(button)) return;
     if (button === 2) this.focusGuard.secondary();
     if (!this.mouseLocked) this.requestCapture();
@@ -1767,7 +1767,7 @@ export class CsEngine {
       if (this.primeGrenade(1)) return;
       this.fireHeld = true;
       this.shotPressed = this.phase === 'active';
-      if (!this.mouseLocked) { this.dragLook = true; this.dragX = this._lastClientX ?? 0; this.dragY = this._lastClientY ?? 0; }
+      if (!this.mouseLocked) { this.dragLook = true; this.dragX = clientX; this.dragY = clientY; }
     }
     if (button === 2 && !this.primeGrenade(2)) this.secondaryAttack();
   }

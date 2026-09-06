@@ -454,7 +454,6 @@ export class CsHud {
   }
 
   private toast(ctx: Ctx, text: string, W: number, y: number, color: string) {
-    const w = Math.min(620, ctx.measureText(text).width + 48);
     ctx.font = '12px "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif';
     const tw = Math.min(620, ctx.measureText(text).width + 48);
     this.panel(ctx, W / 2 - tw / 2, y, tw, 30, true);

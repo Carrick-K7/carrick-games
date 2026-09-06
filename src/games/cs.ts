@@ -195,7 +195,7 @@ export class CsGame extends BaseGame {
           region.down(point.x, point.y);
           return;
         }
-        this.engine.onMouseDown(e.button);
+        this.engine.onMouseDown(e.button, e.clientX, e.clientY);
         return;
       }
       if (e.type === 'mousemove') {
