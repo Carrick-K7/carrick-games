@@ -18,10 +18,12 @@ export function createVillaUseButton(canvas: HTMLCanvasElement, onUse: () => voi
     if (!state?.visible || !canvas.isConnected || doc.hidden) { button.hidden = true; button.style.display = 'none'; contacts.clear(); return; }
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) { button.hidden = true; button.style.display = 'none'; return; }
-    const parent = canvas.closest('[data-villa-fullscreen]') ?? doc.body;
+    // The shared app root is the native fullscreen element, so an overlay inside
+    // it stays visible and accessible in fullscreen; never escape to outside nodes.
+    const parent = canvas.closest('#gameApp') ?? doc.body;
     if (button.parentNode !== parent) parent.appendChild(button);
     let zIndex = 30;
-    if (parent === doc.body) for (let node: HTMLElement | null = canvas; node && node !== doc.body; node = node.parentElement)
+    for (let node: HTMLElement | null = canvas; node && node !== parent && node !== doc.body; node = node.parentElement)
       zIndex = Math.max(zIndex, Number.parseInt(view?.getComputedStyle(node).zIndex ?? '0') || 0);
     button.style.zIndex = String(Math.min(2147483647, zIndex + 1));
     button.hidden = false; button.style.display = 'block'; button.setAttribute('aria-label', state.label);

@@ -22,6 +22,7 @@ async function openShell(page: Page) {
 }
 
 async function openPicker(page: Page) {
+  if (!await page.locator('#overflowMenu').isVisible()) await page.locator('#overflowBtn').click();
   await page.locator('#gamePickerBtn').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
@@ -41,7 +42,7 @@ async function expectAllGamesFit(page: Page) {
     const errors: string[] = [];
     const tolerance = 1;
     const list = document.querySelector<HTMLElement>('#gameList')!;
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const dialog = document.querySelector<HTMLElement>('.library-dialog')!;
     const listBox = list.getBoundingClientRect();
     const clientBox = {
       left: listBox.left + list.clientLeft,
@@ -103,12 +104,14 @@ for (const viewport of viewports) {
     test('all 28 complete labels fit in English and Chinese with text-only branding', async ({ page }) => {
       await openShell(page);
       expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(mobile);
+      await page.locator('#overflowBtn').click();
       const wordmark = page.locator('.wordmark');
       await expect(wordmark.locator('svg, .brand-mark')).toHaveCount(0);
       await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', /viewBox='0 0 24 24'.*%230d9488/);
       await expect(wordmark).toHaveText('Carrick Games');
       const visibleBrand = (await wordmark.innerText()).replace(/\s+/g, ' ').trim();
       expect(visibleBrand).toBe(mobile ? 'Carrick' : 'Carrick Games');
+      await page.locator('#menuCloseBtn').click();
 
       for (const lang of ['en', 'zh'] as const) {
         await test.step(lang, async () => {
@@ -132,7 +135,7 @@ for (const viewport of viewports) {
           await expectAllGamesFit(page);
           await page.keyboard.press('Escape');
           await expect(dialog).toBeHidden();
-          await expect(page.locator('#gamePickerBtn')).toBeFocused();
+          await expect(page.locator('#overflowBtn')).toBeFocused();
         });
       }
     });
@@ -165,7 +168,7 @@ test.describe('coarse-pointer picker interaction', () => {
     await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await expect(page.locator('#selectedGameLabel')).toHaveText("Texas Hold'em");
     await expect(dialog).toBeHidden();
-    await expect(page.locator('#gamePickerBtn')).toBeFocused();
+    await expect(page.locator('#overflowBtn')).toBeFocused();
 
     await openPicker(page);
     await expect(dialog).toBeFocused();
@@ -181,7 +184,7 @@ test.describe('coarse-pointer picker interaction', () => {
     await expect(page.locator('.game-list-item')).toHaveCount(28);
     await page.locator('#libraryCloseBtn').tap();
     await expect(dialog).toBeHidden();
-    await expect(page.locator('#gamePickerBtn')).toBeFocused();
+    await expect(page.locator('#overflowBtn')).toBeFocused();
     await expect(page.locator('#gamePickerBtn')).toHaveAttribute('aria-expanded', 'false');
   });
 });

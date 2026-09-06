@@ -40,6 +40,9 @@ Do not add separate deployment, heartbeat, memory, or visual-style documents unl
 - Keep changes scoped. Do not reformat unrelated files or rewrite established game logic as part of a narrow fix.
 - Use `this.isDarkTheme()` and `this.isZhLang()` for theme and language branching inside games.
 - Use `this.canvasPoint(clientX, clientY)` for mouse and touch coordinates. Do not compute from `canvas.width / rect.width`; canvases use HiDPI backing stores.
+- The shell supplies `GameViewport` (CSS width/height, DPR, safe area) through `setViewport()`. `BaseGame` maximizes fixed layouts without changing logical coordinates; only opt-in responsive games call protected `resizeLogicalViewport()` and update their camera/HUD first. Never reinitialize game state during resize. `setDisplayScale()` remains the fixed-layout compatibility hook, including Gacha.
+- All shell and game DOM overlays belong inside `#gameApp`; native fullscreen targets that persistent root and is requested only by a user action through `GameHost.presentation`. Do not reparent individual canvases or exit native fullscreen on game switches. Game-specific `onShellOverlayChange(open)` callbacks may coordinate held input and pause state; shell interactions must not leak into gameplay.
+- Operation guides share one shell component and placement (desktop lower-left / mobile bottom sheet). Supply `controls.keyboard`, `controls.touch` and optional localized `controls.notes` in the catalog; use `presentation.openControls()` for existing help shortcuts. Do not add per-game full guide panels or duplicate persistent shortcut lists. Contextual gameplay feedback remains in the game HUD.
 - The shell uses one restrained visual style with light, dark, and system themes. Individual games may remain pixel-styled inside their canvas, but do not add a shell-wide style-mode switch or permanent dashboard chrome. See `DESIGN.md` for the shell rules.
 - Follow `DESIGN.md` for visual choices. If `AGENTS.md` and `DESIGN.md` appear to conflict on design, update the docs instead of inventing a third rule.
 
@@ -158,6 +161,8 @@ this.submitScoreOnce(this.score);
 ```
 
 Use `this.submitScore(score)` only if a single session intentionally reports more than once.
+
+Use `drawResultOverlay()` for the standard result panel. A retained interactive terminal HUD (currently CS) uses `publishResult()` for the same result metadata instead of drawing a second panel; shared restart and one-shot scoring rules still apply.
 
 ## Local Verification
 

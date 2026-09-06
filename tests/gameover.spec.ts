@@ -13,7 +13,7 @@ async function collectErrors(page: Page) {
 }
 
 async function selectGame(page: Page, gameId: string) {
-  await page.locator('#gamePickerBtn').click();
+  await page.keyboard.press('Control+k');
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
@@ -317,19 +317,19 @@ async function suicideTexashold(page: Page) {
 
 async function suicideCs(page: Page) {
   // The migrated engine boots to an in-canvas menu first. Wait for the map to
-  // load, click the canvas "进入战场" button (logical 314,590 in 1280x720),
-  // then force the match to its terminal state through the debug hook so the
-  // shared result overlay and one-shot score reporting are exercised without
-  // playing out seven realtime rounds.
+  // load, click the "进入战场" button at the baseline viewport, then force
+  // the terminal state so the single CS result panel and one-shot score
+  // reporting are exercised without seven realtime rounds. Responsive menu
+  // layouts and scrolling are covered separately by game-window tests.
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForFunction(
     () => (window as unknown as { __CSX_DEBUG__?: { info?: () => { ready: boolean } | null } }).__CSX_DEBUG__?.info?.()?.ready === true,
     undefined,
     { timeout: 60000 },
   );
   const canvas = page.locator('#gameCanvas');
-  const box = await canvas.boundingBox();
-  if (!box) return;
-  await page.mouse.click(box.x + 314 * (box.width / 1280), box.y + 590 * (box.height / 720));
+  await expect(canvas).toHaveCSS('width', '1280px');
+  await canvas.click({ position: { x: 314, y: 590 } });
   await page.waitForFunction(
     () => (window as unknown as { __CSX_DEBUG__?: { info?: () => { phase: string } | null } }).__CSX_DEBUG__?.info?.()?.phase === 'freeze',
     undefined,

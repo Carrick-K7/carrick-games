@@ -378,7 +378,6 @@ main { width: 100%; min-width: 0; padding: 24px; }
 #gameCanvas {
   display: block;
   max-width: 100%;
-  height: auto !important;
   background: #111512;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -493,75 +492,6 @@ main { width: 100%; min-width: 0; padding: 24px; }
 .lc-lock svg { width: 9px; height: 9px; }
 .lc-check { position: absolute; top: 2px; right: 3px; color: var(--accent); font-size: 9px; }
 
-/* Natural desktop gutters accommodate context without permanent rails. */
-@media (min-width: 960px) and (pointer: fine) {
-  html, body { height: 100%; overflow: hidden; }
-  main { height: calc(100dvh - var(--header-height)); padding: 24px; }
-  .game-layout, .game-center { height: 100%; }
-  .game-center {
-    display: grid;
-    grid-template-areas: "context canvas inputs";
-    grid-template-columns: minmax(180px, 1fr) var(--canvas-css-width, 400px) minmax(180px, 1fr);
-    gap: clamp(24px, 3vw, 48px);
-    align-items: center;
-  }
-  .canvas-wrapper { grid-area: canvas; width: var(--canvas-css-width, 400px); max-width: 100%; justify-self: center; }
-  .input-map { grid-area: inputs; width: min(100%, 250px); justify-self: start; }
-  .compact-inputs, .input-map-rows { flex-direction: column; align-items: flex-start; justify-content: center; }
-  .compact-inputs { gap: 20px; }
-  .input-map-rows { width: 100%; gap: 12px; }
-  .input-map-row { white-space: normal; }
-  .game-context { grid-area: context; width: min(100%, 280px); max-height: 100%; align-self: start; justify-self: end; }
-  .level-picker { border-top: 0; }
-  .level-picker summary { justify-content: flex-end; }
-  .level-picker-grid { max-height: calc(100dvh - var(--header-height) - 96px); overflow-y: auto; padding: 10px 2px 4px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-
-  /* Wide 16:9-class canvases leave no honest gutter: give the stage to the
-     canvas and fold the input mapping into a compact disclosure below it. */
-  .game-layout:has(> .game-center.wide-canvas) { max-width: none; }
-  .game-center.wide-canvas {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-  }
-  .game-center.wide-canvas .canvas-wrapper { width: min(100%, var(--canvas-css-width, 100%)); }
-  .game-center.wide-canvas .input-map {
-    width: min(100%, var(--canvas-css-width, 1080px));
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-  }
-  .game-center.wide-canvas .input-map-toggle {
-    display: flex;
-    width: 100%;
-    min-height: 34px;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 4px 12px;
-    background: transparent;
-    border: 0;
-    color: var(--muted);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .game-center.wide-canvas .input-map-toggle:hover { color: var(--text); }
-  .game-center.wide-canvas .input-map-toggle .input-map-chevron { transition: transform 140ms ease; }
-  .game-center.wide-canvas .input-map.input-map-open .input-map-toggle .input-map-chevron { transform: rotate(180deg); }
-  .game-center.wide-canvas .input-map:not(.input-map-open) > :not(.input-map-toggle) { display: none; }
-  .game-center.wide-canvas .input-map.input-map-open { padding: 4px 12px 10px; }
-  .game-center.wide-canvas .compact-inputs, .game-center.wide-canvas .input-map-rows {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 8px 16px;
-  }
-  .game-center.wide-canvas .game-context { width: min(100%, var(--canvas-css-width, 1080px)); max-height: 30vh; align-self: center; justify-self: center; overflow-y: auto; }
-  .game-center.wide-canvas .game-context[hidden] { display: none; }
-}
 
 /* Mobile retains the same hierarchy, not a separate visual mode. */
 @media (max-width: 720px) {
@@ -639,6 +569,161 @@ main { width: 100%; min-width: 0; padding: 24px; }
   .game-list-icon { display: none; }
   .game-list-status { position: absolute; top: 2px; right: 3px; font-size: 10px; }
   .game-list-item:not(.active) .game-list-status, .library-footer { display: none; }
+}
+/* Game-window presentation. Menus are layers, never layout reservations. */
+html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscroll-behavior: none; }
+.game-app {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--page);
+}
+.game-app:fullscreen { background: var(--page); }
+.game-app main, .game-app .game-layout, .game-app .game-center, .game-app .canvas-wrapper {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  gap: 0;
+}
+.game-app #gameCanvas {
+  position: absolute;
+  display: block;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  touch-action: none;
+}
+.game-app .loading-overlay, .game-app .start-overlay {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  border-radius: 0;
+  padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left));
+}
+.game-app .header-actions { position: static; }
+.game-menu-trigger {
+  position: absolute;
+  z-index: 45;
+  top: calc(12px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255,255,255,.23);
+  border-radius: 8px;
+  background: rgba(13,20,17,.7);
+  color: #fff;
+  cursor: pointer;
+}
+.game-menu-trigger svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.game-menu-trigger:hover, .game-menu-trigger:focus-visible { background: #202b24; }
+.game-app.pointer-locked .game-menu-trigger { visibility: hidden; pointer-events: none; }
+.game-app.pointer-locked .help-overlay { visibility: hidden; pointer-events: none; }
+.shell-backdrop { position: absolute; inset: 0; z-index: 49; width: 100%; height: 100%; border: 0; background: rgba(4,9,6,.42); }
+.game-app .overflow-menu {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  z-index: 50;
+  width: 340px;
+  max-width: calc(100% - 24px - var(--safe-left) - var(--safe-right));
+  max-height: calc(100% - 24px - var(--safe-top) - var(--safe-bottom));
+  padding: 12px;
+  overscroll-behavior: contain;
+}
+.game-app .app-header { position: static; display: flex; align-items: center; justify-content: space-between; height: auto; gap: 8px; padding: 0 0 8px; margin-bottom: 8px; background: transparent; }
+.game-app .app-header .dialog-close { width: 44px; height: 44px; }
+.game-app .overflow-menu .game-picker-trigger { display: flex; width: 100%; min-height: 44px; justify-content: flex-start; }
+.game-app .selected-game-label { flex: 1; max-width: none; white-space: normal; text-align: left; }
+.game-app .menu-action { min-height: 44px; padding: 10px; text-align: left; font-size: 13px; }
+.game-app .menu-options button { min-height: 44px; }
+.game-app .menu-action:hover { background: var(--surface); }
+.game-app .menu-action:disabled { opacity: .55; cursor: progress; }
+.game-app .game-context { width: 100%; max-width: none; }
+.game-app .level-picker-grid { max-height: 35dvh; overflow-y: auto; padding: 8px 0; }
+.guide-backdrop { position: absolute; inset: 0; z-index: 34; border: 0; background: rgba(4,9,6,.42); }
+.help-overlay {
+  --guide-bottom: 12px;
+  position: absolute;
+  z-index: 35;
+  bottom: calc(var(--guide-bottom) + var(--safe-bottom));
+  left: calc(12px + var(--safe-left));
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100% - 24px - var(--safe-left) - var(--safe-right)));
+  max-height: min(560px, calc(100% - var(--guide-bottom) - 76px - var(--safe-top) - var(--safe-bottom)));
+  overflow: hidden;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-dialog);
+}
+/* Responsive HUDs own the bottom dock. The reference stays above that dock. */
+.game-app:has(#gameCanvas[data-viewport-mode="responsive"]) .help-overlay { --guide-bottom: 160px; }
+.help-heading { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.help-heading h2 { margin: 0; font-size: 15px; font-weight: 600; }
+#helpGameName { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.help-heading .dialog-close { flex: 0 0 44px; width: 44px; height: 44px; font-size: 24px; }
+.guide-body { min-height: 0; padding: 16px; overflow: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.guide-body:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.game-app .help-overlay .input-map { display: block; width: 100%; }
+.help-overlay .compact-inputs { align-items: flex-start; justify-content: flex-start; }
+.help-overlay .input-map-rows { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; width: 100%; min-width: 0; gap: 12px; }
+.help-overlay .input-map-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, .75fr); gap: 12px; white-space: normal; }
+.help-overlay .input-map-action { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.help-overlay .vkey { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; height: auto; margin: 0; font-family: inherit; font-size: 12px; }
+.help-overlay kbd.vkey { cursor: default; }
+.guide-section-title { margin: 0 0 12px; font-size: 12px; color: var(--muted); font-weight: 600; }
+#touchHelp { margin-top: 20px; font-size: 13px; }
+.guide-touch-rows { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.guide-touch-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 12px; line-height: 1.6; }
+.guide-gesture { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); font-size: 12px; }
+.guide-notes { margin-top: 16px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.guide-notes p + p { margin-top: 10px; }
+#touchHelp:empty, .guide-notes:empty { display: none; }
+.guide-footer { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); }
+#guideDismissHint { font-size: 12px; color: var(--muted); }
+#helpReturnBtn { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+#helpReturnBtn:hover { border-color: var(--accent); }
+@media (max-width: 720px), (max-height: 480px), (pointer: coarse) {
+  .game-app .help-overlay {
+    --guide-bottom: 0px;
+    left: max(var(--safe-left), calc((100% - 720px) / 2));
+    bottom: 0;
+    width: min(720px, calc(100% - var(--safe-left) - var(--safe-right)));
+    max-height: min(620px, calc(100% - 76px - var(--safe-top)));
+    border-radius: 14px 14px 0 0;
+    border-bottom: 0;
+  }
+  .guide-footer { padding-bottom: calc(10px + var(--safe-bottom)); }
+}
+@media (pointer: coarse) {
+  #touchHelp { margin-top: 0; }
+  #guideDismissHint { visibility: hidden; }
+}
+.fullscreen-notice { position: absolute; z-index: 80; bottom: calc(20px + var(--safe-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text); font-size: 13px; pointer-events: none; }
+.game-app .game-library { position: absolute; }
+/* The visible viewport can shrink independently of dvh when a keyboard opens. */
+.game-app .library-dialog { max-height: 100%; }
+@media (pointer: coarse) {
+  .game-app .help-overlay .input-map { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }

@@ -196,6 +196,24 @@ export class CsEngine {
   setQuality(q) { this.quality = q === 'low' ? 'low' : 'high'; this.applyQuality(); }
   toggleSound() { this.audio.enabled = !this.audio.enabled; this.audio.init(); }
 
+  /**
+   * Resize the 3D viewport to the shell's CSS viewport. World and gun cameras
+   * keep their vertical FOV (and zoom state) — only the aspect ratio follows
+   * the new shape; the renderer is re-sized and the pixel-ratio cap (4.5M
+   * pixels, DPR ≤ 2, `low` quality path) is recomputed by applyQuality().
+   * Safe before init (renderer not yet created — init() reads this.width /
+   * this.height) and while a late init() map load is still in flight.
+   */
+  resize(width, height) {
+    const w = Math.max(1, Math.round(width || 0)), h = Math.max(1, Math.round(height || 0));
+    if (w === this.width && h === this.height) return;
+    this.width = w; this.height = h;
+    const aspect = w / h;
+    this.camera.aspect = aspect; this.camera.updateProjectionMatrix();
+    this.gunCamera.aspect = aspect; this.gunCamera.updateProjectionMatrix();
+    if (this.renderer) { this.renderer.setSize(w, h, false); this.applyQuality(); }
+  }
+
   // ── Map loading ──────────────────────────────────────────────────────────
 
   async loadMap(id) {
@@ -983,10 +1001,11 @@ export class CsEngine {
     this.keys.clear(); this.touchMove.x = this.touchMove.y = 0;
     this.releaseCapture();
   }
-  resumeGame() {
+  resumeGame(capture = true) {
     if (this.phase !== 'paused') return;
     this.phase = this.phaseBeforePause || 'active';
-    this.requestCapture();
+    // Pointer lock needs a trusted user gesture; shell-overlay resumes skip it.
+    if (capture) this.requestCapture();
   }
 
   toMenu() {

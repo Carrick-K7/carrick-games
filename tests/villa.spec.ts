@@ -58,7 +58,7 @@ test.describe('Warm Villa', () => {
     // Mouse movement alone changes view; no held button or drag gesture.
     await page.mouse.move(box!.x + box!.width * 0.66, box!.y + box!.height * 0.53, { steps: 4 });
     await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(lookBefore);
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await page.locator('.game-list-item[data-id="snake"]').click();
     await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
     await expect(page.locator('#startOverlay')).toHaveClass(/active/);

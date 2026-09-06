@@ -67,7 +67,7 @@ async function selectGame(page: Page, gameId: string) {
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
   }
-  await page.locator('#gamePickerBtn').click();
+  await page.keyboard.press('Control+k');
   const item = page.locator(`.game-list-item[data-id="${gameId}"]`);
   await item.scrollIntoViewIfNeeded();
   await item.click();
@@ -75,9 +75,13 @@ async function selectGame(page: Page, gameId: string) {
   const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
   if (meta) {
     await expect(page.locator('#selectedGameLabel')).toHaveText(zh ? meta.nameZh : meta.name);
-    // Cold software WebGL compilation of the furnished villa can exceed 5s.
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width), { timeout: gameId === 'villa' ? 30_000 : 5_000 });
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(meta.canvasSize.height));
+    // Responsive 3D and Gacha own logical dimensions; boards retain theirs.
+    if (['cs', 'cs-kimi', 'villa'].includes(gameId)) {
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive', { timeout: gameId === 'villa' ? 30_000 : 5_000 });
+    } else if (gameId !== 'gacha') {
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width));
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(meta.canvasSize.height));
+    }
   }
   await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
   await expect(page.locator('#startOverlay')).toHaveClass(/active/);
@@ -89,7 +93,7 @@ async function startGame(page: Page) {
 }
 
 async function openOverflow(page: Page) {
-  await page.locator('#overflowBtn').click();
+  if (!(await page.locator('#overflowMenu').isVisible())) await page.locator('#overflowBtn').click();
   await expect(page.locator('#overflowMenu')).toBeVisible();
 }
 
@@ -306,7 +310,13 @@ test.describe('Game rules', () => {
     expect(bypasses).toEqual([]);
     for (const file of terminalGameFiles) {
       const source = readFileSync(join(gamesDir, file), 'utf8');
-      expect(source, `${file} should use the shared result overlay`).toContain('this.drawResultOverlay(');
+      if (file === 'cs.ts') {
+        // The port's interactive result HUD is retained, not painted twice.
+        expect(source).toContain('this.publishResult(');
+        expect(source).not.toContain('this.drawResultOverlay(');
+      } else {
+        expect(source, `${file} should use the shared result overlay`).toContain('this.drawResultOverlay(');
+      }
       expect(source, `${file} should use the shared restart action`).toContain('this.isRestartInput(');
       expect(source, `${file} should reset one-shot score reporting on restart`).toContain('this.resetScoreReport(');
     }
@@ -830,7 +840,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('index page loads with an on-demand game picker', async ({ page }) => {
     await expect(page).toHaveTitle(/Carrick Games/i);
     await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     const gameItems = page.locator('.game-list-item');
     await expect(gameItems.first()).toBeVisible();
     await expect(gameItems).toHaveCount(28);
@@ -866,7 +876,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   });
 
   test('game picker search narrows the on-demand library', async ({ page }) => {
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await page.locator('#searchInput').fill('I Wanna');
     await expect(page.locator('.game-list-item')).toHaveCount(1);
     await expect(page.locator('.game-list-item[data-id="iwanna"]')).toBeVisible();
@@ -883,7 +893,8 @@ test.describe('Carrick Games - Lifecycle', () => {
     });
     await page.reload();
     await expect(page.locator('.main-sidebar')).toHaveCount(0);
-    await expect(page.locator('#gamePickerBtn')).toBeVisible();
+    await expect(page.locator('#overflowBtn')).toBeVisible();
+    await expect(page.locator('#gamePickerBtn')).toBeHidden();
     await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
   });
 
@@ -892,6 +903,9 @@ test.describe('Carrick Games - Lifecycle', () => {
     await expect(page.locator('#gameCanvas')).toHaveAttribute('aria-label', '贪吃蛇游戏画布');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('tabindex', '0');
     await expect(page.locator('#keyboardPanel .input-map-row')).toHaveCount(3);
+    await expect(page.locator('#keyboardPanel')).toBeHidden();
+    await openOverflow(page);
+    await page.locator('#helpBtn').click();
     await expect(page.locator('#keyboardPanel .vkey[data-key="ArrowLeft"]')).toBeVisible();
   });
 
@@ -903,7 +917,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     });
 
     await page.goto('/');
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
 
@@ -912,7 +926,7 @@ test.describe('Carrick Games - Lifecycle', () => {
 
   test('gacha is the first game and default entry is playable', async ({ page }) => {
     await expect(page.locator('#selectedGameLabel')).toHaveText('抽卡');
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await expect(page.locator('.game-list-item').first()).toHaveAttribute('data-id', 'gacha');
     await page.locator('#libraryCloseBtn').click();
 
@@ -928,21 +942,17 @@ test.describe('Carrick Games - Lifecycle', () => {
       .toMatch(/unlock|opening|result/);
   });
 
-  test('wide desktop uses side gutters without page scrolling', async ({ page }) => {
+  test('wide desktop maximizes the game and context never reserves side gutters', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    // Parking owns the level-picker context panel the gutter layout needs.
     await selectGame(page, 'parking');
-    await expect.poll(async () => (await page.locator('#gameCanvas').boundingBox())?.width ?? 0).toBeGreaterThan(550);
-    const canvas = await page.locator('#gameCanvas').boundingBox();
-    const inputs = await page.locator('#keyboardPanel').boundingBox();
-    const context = await page.locator('#statsPanel').boundingBox();
-    expect(canvas).not.toBeNull();
-    expect(inputs).not.toBeNull();
-    expect(context).not.toBeNull();
-    if (!canvas || !inputs || !context) return;
-    expect(context.x + context.width).toBeLessThan(canvas.x);
-    expect(inputs.x).toBeGreaterThan(canvas.x + canvas.width);
+    const canvas = (await page.locator('#gameCanvas').boundingBox())!;
+    expect(Math.abs(canvas.height - 900)).toBeLessThanOrEqual(1);
+    await expect(page.locator('#keyboardPanel')).toBeHidden();
+    await expect(page.locator('#statsPanel')).toBeHidden();
+    await openOverflow(page);
+    await expect(page.locator('#statsPanel')).toBeVisible();
+    expect(await page.locator('#gameCanvas').boundingBox()).toEqual(canvas);
     const viewport = await page.evaluate(() => ({
       clientHeight: document.documentElement.clientHeight,
       scrollHeight: document.documentElement.scrollHeight,
@@ -1067,7 +1077,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await page.evaluate(() => localStorage.setItem('cg-records', '{bad json'));
     await page.reload();
 
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await expect(page.locator('.game-list-item').first()).toBeVisible();
     await expect(page.locator('#startOverlay')).toHaveClass(/active/);
 
@@ -1076,7 +1086,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   });
 
   test('all 28 games are registered in the list', async ({ page }) => {
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     for (const id of ALL_GAME_IDS) {
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await expect(item).toBeVisible();
@@ -1088,7 +1098,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   });
 
   test('clicking a game shows its controls and canvas', async ({ page }) => {
-    await page.locator('#gamePickerBtn').click();
+    await page.keyboard.press('Control+k');
     await page.locator('.game-list-item').first().click();
     await expect(page.locator('#startOverlay')).toHaveClass(/active/);
     await expect(page.locator('#gameCanvas')).toBeVisible();
@@ -1104,11 +1114,17 @@ test.describe('Carrick Games - Lifecycle', () => {
     const touch = await touchContext.newPage();
     try {
       await desktop.goto('/#/snake');
+      await expect(desktop.locator('#keyboardPanel')).toBeHidden();
+      await openOverflow(desktop);
+      await desktop.locator('#helpBtn').click();
       await expect(desktop.locator('#keyboardPanel .input-map-row').first()).toBeVisible();
       await expect(desktop.locator('#keyboardPanel .compact-mouse')).toBeVisible();
 
       await touch.goto('/#/snake');
+      await openOverflow(touch);
+      await touch.locator('#helpBtn').click();
       await expect(touch.locator('#keyboardPanel')).toBeHidden();
+      await expect(touch.locator('#touchHelp')).toBeVisible();
       await expect(touch.locator('.input-map-row')).toHaveCount(3);
     } finally {
       await desktop.close();
@@ -1127,7 +1143,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     };
 
     for (const id of ['breakout', 'pong', 'snake', 'flappybird']) {
-      await page.locator('#gamePickerBtn').click();
+      await page.keyboard.press('Control+k');
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await item.scrollIntoViewIfNeeded();
       await item.click();
@@ -1173,6 +1189,8 @@ test.describe('Carrick Games - Lifecycle', () => {
     await startGame(page);
     await expect(page.locator('#ds-speed-val')).toHaveCount(0);
     await expect(page.locator('.ds-time')).toHaveCount(0);
+    await expect(page.locator('.level-picker > summary')).toBeHidden();
+    await openOverflow(page);
     await expect(page.locator('.level-picker > summary')).toBeVisible();
   });
 
@@ -1246,6 +1264,7 @@ test.describe('Carrick Games - Lifecycle', () => {
     await page.reload();
 
     await selectGame(page, 'parking');
+    await openOverflow(page);
     await page.locator('.level-picker > summary').click();
     await page.locator('.level-cell[data-level="10"]').click();
 

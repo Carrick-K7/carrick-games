@@ -14,11 +14,14 @@ import {
   isDarkTheme,
   isZhLang,
   type GameHost,
+  type GameViewport,
 } from './core/game.js';
 import { saveStoredRecord } from './core/storage.js';
 import { isPixelMode } from './core/render.js';
 import { normalizeKey } from './ui/keyboard-input.js';
+import { createGameFullscreen, type GameFullscreen } from './ui/fullscreen.js';
 import { renderVirtualKeyboard } from './ui/virtual-keyboard.js';
+import { renderTouchGuide, renderGuideNotes } from './ui/control-guide.js';
 import { renderGameIcon } from './ui/game-icons.js';
 import { renderLevelGridHTML, type LevelSelectState } from './core/levelselect.js';
 
@@ -28,6 +31,65 @@ let isRunning = false;
 let isLoadingGame = false;
 let prepareGameToken = 0;
 const gameClassCache = new Map<string, Promise<GameCtor>>();
+let fullscreen: GameFullscreen | null = null;
+let shellOverlayOpen = false;
+let gameOverlayOpen = false;
+let fullscreenNoticeTimer = 0;
+const guideSheetQuery = '(max-width: 720px), (max-height: 480px), (pointer: coarse)';
+const isHelpOpen = () => document.getElementById('helpOverlay')?.hidden === false;
+const isGuideSheet = () => window.matchMedia(guideSheetQuery).matches;
+const isGuideReadOnly = () => isGuideSheet() || document.getElementById('gameCanvas')?.dataset.viewportMode === 'responsive';
+
+function updatePresentationControls() {
+  const zh = isZhLang();
+  const full = document.getElementById('fullscreenBtn') as HTMLButtonElement | null;
+  if (full) {
+    full.textContent = fullscreen?.active ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '浏览器全屏' : 'Enter fullscreen');
+    full.setAttribute('aria-pressed', String(!!fullscreen?.active));
+    full.disabled = !!fullscreen?.pending;
+  }
+  const labels: Record<string, string> = {
+    resumeBtn: zh ? '返回游戏' : 'Return to game',
+    helpBtn: zh ? '操作指南' : 'Controls',
+    helpTitle: zh ? '操作指南' : 'Controls',
+    helpReturnBtn: zh ? '返回游戏' : 'Return to game',
+    guideDismissHint: zh ? 'Esc 关闭' : 'Esc to close',
+  };
+  for (const [id, label] of Object.entries(labels)) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = label;
+  }
+  document.getElementById('menuCloseBtn')?.setAttribute('aria-label', zh ? '关闭菜单' : 'Close menu');
+  document.getElementById('shellBackdrop')?.setAttribute('aria-label', zh ? '关闭菜单' : 'Close menu');
+  for (const id of ['helpCloseBtn', 'guideBackdrop']) document.getElementById(id)?.setAttribute('aria-label', zh ? '关闭操作指南' : 'Close controls');
+  document.getElementById('guideBody')?.setAttribute('aria-label', zh ? '游戏操作指南，可滚动' : 'Game controls, scroll to read');
+  document.getElementById('gameApp')?.setAttribute('data-fullscreen', fullscreen?.active ? 'native' : 'viewport');
+}
+
+function syncShellOverlayState() {
+  const library = !!document.getElementById('gameLibrary')?.classList.contains('open');
+  const menu = !!document.getElementById('overflowMenu') && !document.getElementById('overflowMenu')!.hidden;
+  const guide = isHelpOpen(), sheet = guide && isGuideSheet();
+  const open = library || menu || (guide && isGuideReadOnly());
+  const stage = document.querySelector('main');
+  if (stage) stage.inert = open;
+  const help = document.getElementById('helpOverlay');
+  if (help) help.inert = library || menu;
+  const actions = document.querySelector<HTMLElement>('.header-actions');
+  if (actions) actions.inert = library || (sheet && !menu);
+  if (open && !shellOverlayOpen) releaseHeldInputs();
+  shellOverlayOpen = open;
+  // Responsive games pause while reading. Desktop board games can retain
+  // their optional live key reference; touch never falls through a sheet.
+  const presentationOpen = open || guide;
+  if (presentationOpen !== gameOverlayOpen) {
+    if (presentationOpen) releaseHeldInputs();
+    gameOverlayOpen = presentationOpen;
+    currentGameInstance?.onShellOverlayChange?.(presentationOpen);
+    if (presentationOpen && document.pointerLockElement === document.getElementById('gameCanvas')) document.exitPointerLock?.();
+  }
+}
+
 
 function loadGameClass(meta: GameMeta): Promise<GameCtor> {
   const cached = gameClassCache.get(meta.id);
@@ -112,6 +174,8 @@ function updateVirtualKeyboardHighlight(pressedSet: Set<string>) {
 function releaseHeldInputs() {
   for (const key of [...pressedKeys]) window.dispatchEvent(new KeyboardEvent('keyup', { key }));
   pressedKeys.clear();
+  for (const button of [0, 1, 2]) window.dispatchEvent(new MouseEvent('mouseup', { button }));
+  if (typeof TouchEvent !== 'undefined') document.getElementById('gameCanvas')?.dispatchEvent(new TouchEvent('touchcancel', { changedTouches: [] }));
   updateVirtualKeyboardHighlight(pressedKeys);
 }
 
@@ -234,12 +298,14 @@ function renderKeyboard() {
   }
 
   const zh = document.documentElement.getAttribute('data-lang') === 'zh';
-  const open = container.classList.contains('input-map-open');
-  const toggle = wideCanvasMode
-    ? `<button type="button" class="input-map-toggle" id="inputMapToggle" aria-expanded="${open}">${zh ? '按键与鼠标操作' : 'Keyboard & mouse controls'}<span class="input-map-chevron" aria-hidden="true">▾</span></button>`
-    : '';
-  container.innerHTML = toggle + renderVirtualKeyboard(meta.controls, zh);
-  bindVirtualKeyboard();
+  container.innerHTML = renderVirtualKeyboard(meta.controls, zh, !isGuideReadOnly());
+  const touch = document.getElementById('touchHelp');
+  if (touch) touch.innerHTML = renderTouchGuide(meta.controls, zh);
+  const notes = document.getElementById('guideNotes');
+  if (notes) notes.innerHTML = renderGuideNotes(meta.controls, zh);
+  const name = document.getElementById('helpGameName');
+  if (name) name.textContent = zh ? meta.nameZh : meta.name;
+  if (!isGuideReadOnly()) bindVirtualKeyboard();
 }
 
 function renderControls() {
@@ -250,6 +316,20 @@ function renderControls() {
 // Debug hook for automated visual checks (?cs3d=force is separate). E2E and
 // humans alike should never rely on this — it is not part of the game API.
 if (typeof window !== 'undefined') {
+  (window as unknown as { __GAME_VIEWPORT_DEBUG__?: unknown }).__GAME_VIEWPORT_DEBUG__ = {
+    info() {
+      const g = currentGameInstance as any;
+      const camera = g?.engine?.camera ?? g?.scene3d?.camera ?? g?.scene?.camera;
+      const gl = g?.engine?.canvas3d ?? g?.scene3d?.canvas ?? g?.scene?.renderer?.domElement;
+      return { id: currentGameName, width: g?.width, height: g?.height, cameraAspect: camera?.aspect,
+        gunCameraAspect: g?.engine?.gunCamera?.aspect,
+        renderWidth: gl?.width, renderHeight: gl?.height, shellOverlayOpen,
+        buyOpen: !!(g?.engine?.buyOpen ?? g?.buyOpen),
+        paused: !!(g?.paused ?? (g?.engine?.phase === 'paused')),
+        raycastWidth: g?.rw, raycastHeight: g?.rh,
+        projectionHalfFov: typeof g?.halfFovTan === 'function' ? g.halfFovTan() : undefined };
+    },
+  };
   (window as unknown as { __CS_DEBUG__?: unknown }).__CS_DEBUG__ = {
     look(angle: number, pitch = 0) {
       const g = currentGameInstance as unknown as { angle: number; pitch: number } | null;
@@ -332,6 +412,9 @@ if (typeof window !== 'undefined') {
         playerAlive: !!e.player?.alive,
         playerPos: e.player ? { x: e.player.pos.x, y: e.player.pos.y, z: e.player.pos.z } : null,
         kills: e.player?.kills ?? 0,
+        weapon: e.player?.inventory?.[e.player.slot]?.id ?? null,
+        mag: e.player?.inventory?.[e.player.slot]?.ammo ?? null,
+        reserve: e.player?.inventory?.[e.player.slot]?.reserve ?? null,
         bots: e.bots?.filter((b: any) => b.alive).length ?? 0,
         bomb: e.bomb?.status ?? null,
         matchEnd: !!e.hud.matchEnd,
@@ -393,6 +476,12 @@ function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement): GameHost {
     getRecord: getStoredRecord,
     reportScore: reportCurrentScore,
     requestShellRender: renderControls,
+    presentation: {
+      toggleFullscreen: () => fullscreen?.toggle(),
+      isFullscreen: () => !!fullscreen?.active,
+      openControls: () => setHelpOpen(true),
+      isControlsOpen: isHelpOpen,
+    },
   };
 }
 
@@ -457,6 +546,7 @@ export async function prepareGame(name: string) {
   const meta = GAMES.find((g) => g.id === name);
   if (!meta) return;
   const token = ++prepareGameToken;
+  setHelpOpen(false, false);
 
   stopScorePolling();
   if (currentGameInstance) {
@@ -525,61 +615,44 @@ export async function prepareGame(name: string) {
   updateGameTitle();
   renderControls();
   setStartOverlay(true);
-  lastFittedCanvasWidth = 0;
-  requestAnimationFrame(fitGameCanvas);
+  lastViewportKey = '';
+  currentGameInstance.onShellOverlayChange?.(gameOverlayOpen);
+  fitGameCanvas();
 }
 
-/** Fit the game canvas to the available stage space. Wide fine-pointer layouts
- * reserve quiet side rails for contextual controls; compact layouts keep the
- * controls below. Height remains inside the first viewport. The backing store is re-sized by
- * `setDisplayScale`, so the upscaled picture stays sharp.
- */
-let lastFittedCanvasWidth = 0;
-let wideCanvasMode = false;
+/** Viewport ownership belongs to the app; no shell controls reserve game space. */
+let lastViewportKey = '';
 
 function fitGameCanvas() {
+  const root = document.getElementById('gameApp');
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
-  const wrapper = document.getElementById('canvasWrapper');
-  if (!canvas || !wrapper || !currentGameInstance) return;
-  const meta = GAMES.find((g) => g.id === currentGameName);
-  if (!meta) return;
-  const { width: lw, height: lh } = meta.canvasSize;
-  const aspect = lh / lw;
-  const stage = wrapper.parentElement;
-  if (!stage) return;
-  const useSideRails = window.matchMedia('(min-width: 960px) and (pointer: fine)').matches;
-  // Wide 16:9-class canvases cannot honestly share the row with side rails:
-  // hand them the full stage width and fold controls into a strip below.
-  const wideCanvas = useSideRails && lw >= 900;
-  if (wideCanvas !== wideCanvasMode) {
-    wideCanvasMode = wideCanvas;
-    stage.classList.toggle('wide-canvas', wideCanvas);
-    renderKeyboard();
-  }
-  const gap = parseFloat(getComputedStyle(stage).columnGap) || 0;
-  // Match the CSS's two 180px minimum gutters, rather than estimating a
-  // reserve that can overflow near the desktop breakpoint.
-  const colW = useSideRails ? (wideCanvas ? stage.clientWidth : stage.clientWidth - 360 - gap * 2) : wrapper.clientWidth;
-  if (colW <= 0) return;
-  const main = document.querySelector('main');
-  const mainStyle = main ? getComputedStyle(main) : null;
-  const headerH = document.querySelector('.app-header')?.getBoundingClientRect().height ?? 64;
-  const padding = mainStyle ? parseFloat(mainStyle.paddingTop) + parseFloat(mainStyle.paddingBottom) : 48;
-  const extras = useSideRails && !wideCanvas ? 0 : Array.from(stage.children)
-    .filter((child) => child !== wrapper && child instanceof HTMLElement && child.offsetHeight > 0)
-    .reduce((height, child) => height + (child as HTMLElement).offsetHeight + gap, 0);
-  // Measure the viewport, not the vertically centered wrapper's top; the
-  // latter creates a resize feedback loop on phones and short windows.
-  const availH = window.innerHeight - headerH - padding - extras - 2;
-  const cssW = Math.floor(Math.max(1, Math.min(colW, availH / aspect, lw * 2.5)));
-  const cssWidth = `${cssW}px`;
-  stage.style.setProperty('--canvas-css-width', cssWidth);
-  wrapper.style.setProperty('--canvas-css-width', cssWidth);
-  if (cssW !== lastFittedCanvasWidth) {
-    lastFittedCanvasWidth = cssW;
-    currentGameInstance.setDisplayScale?.(cssW);
-  }
-  wrapper.style.setProperty('--canvas-css-height', `${canvas.getBoundingClientRect().height}px`);
+  if (!root || !canvas) return;
+  const visual = fullscreen?.active ? null : window.visualViewport;
+  const width = visual?.width ?? window.innerWidth;
+  const height = visual?.height ?? window.innerHeight;
+  if (!(width > 0 && height > 0)) return;
+  root.style.width = `${width}px`;
+  root.style.height = `${height}px`;
+  root.style.left = `${visual?.offsetLeft ?? 0}px`;
+  root.style.top = `${visual?.offsetTop ?? 0}px`;
+  const style = getComputedStyle(root);
+  const inset = (edge: string) => Math.max(0, parseFloat(style.getPropertyValue(`--safe-${edge}`)) || 0);
+  const viewport: GameViewport = {
+    width, height, dpr: window.devicePixelRatio || 1,
+    safeArea: { top: inset('top'), right: inset('right'), bottom: inset('bottom'), left: inset('left') },
+  };
+  const meta = GAMES.find(g => g.id === currentGameName);
+  const key = JSON.stringify([currentGameName, viewport, meta?.canvasSize]);
+  if (key === lastViewportKey || !currentGameInstance || !meta) return;
+  lastViewportKey = key;
+  if (currentGameInstance.setViewport) currentGameInstance.setViewport(viewport);
+  else currentGameInstance.setDisplayScale?.(Math.min(width, height * meta.canvasSize.width / meta.canvasSize.height));
+}
+
+function scheduleViewportFit() {
+  if (fitCanvasScheduled) return;
+  fitCanvasScheduled = true;
+  requestAnimationFrame(() => { fitCanvasScheduled = false; fitGameCanvas(); });
 }
 
 function startPreparedGame() {
@@ -631,8 +704,9 @@ function setGameLibraryOpen(open: boolean) {
   library.classList.toggle('open', open);
   trigger.setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('library-open', open);
-  document.querySelectorAll<HTMLElement>('.app-header, main').forEach((el) => { el.inert = open; });
+  syncShellOverlayState();
   if (open) {
+    setHelpOpen(false, false);
     setOverflowOpen(false);
     library.setAttribute('aria-hidden', 'false');
     // Release held movement keys before modal input is isolated.
@@ -645,9 +719,10 @@ function setGameLibraryOpen(open: boolean) {
       : document.getElementById('searchInput');
     focusTarget?.focus({ preventScroll: true });
   } else {
-    trigger.focus({ preventScroll: true });
+    document.getElementById('overflowBtn')?.focus({ preventScroll: true });
     library.setAttribute('aria-hidden', 'true');
   }
+  syncShellOverlayState();
 }
 
 function closeGameLibrary() {
@@ -658,11 +733,48 @@ function setOverflowOpen(open: boolean) {
   const menu = document.getElementById('overflowMenu');
   const trigger = document.getElementById('overflowBtn');
   if (!menu || !trigger) return;
+  const wasOpen = !menu.hidden;
   const hadFocus = menu.contains(document.activeElement);
-  if (open && menu.hidden) releaseHeldInputs();
   menu.hidden = !open;
+  const backdrop = document.getElementById('shellBackdrop');
+  if (backdrop) backdrop.hidden = !open;
   trigger.setAttribute('aria-expanded', String(open));
-  if (!open && hadFocus) trigger.focus({ preventScroll: true });
+  if (open) setHelpOpen(false, false);
+  syncShellOverlayState();
+  if (open && !wasOpen) document.getElementById('resumeBtn')?.focus({ preventScroll: true });
+  if (!open && hadFocus && !document.getElementById('gameLibrary')?.classList.contains('open')) trigger.focus({ preventScroll: true });
+}
+
+function updateGuidePresentation() {
+  const help = document.getElementById('helpOverlay');
+  if (!help) return;
+  const sheet = isGuideSheet();
+  help.dataset.presentation = sheet ? 'sheet' : 'reference';
+  help.setAttribute('role', sheet ? 'dialog' : 'region');
+  if (sheet) help.setAttribute('aria-modal', 'true'); else help.removeAttribute('aria-modal');
+  const backdrop = document.getElementById('guideBackdrop');
+  if (backdrop) backdrop.hidden = !isHelpOpen() || !sheet;
+  syncShellOverlayState();
+}
+
+function setHelpOpen(open: boolean, restoreFocus = true) {
+  const help = document.getElementById('helpOverlay');
+  if (!help) return;
+  const wasOpen = !help.hidden;
+  if (wasOpen && !open) releaseHeldInputs();
+  help.hidden = !open;
+  document.getElementById('helpBtn')?.setAttribute('aria-expanded', String(open));
+  document.getElementById('gameApp')?.classList.toggle('controls-open', open);
+  if (open) {
+    // Set the guide state first: swapping menu → guide must not briefly resume
+    // the game or reacquire the pointer between the two overlays.
+    setOverflowOpen(false);
+    renderKeyboard();
+    if (!wasOpen) document.getElementById('guideBody')?.scrollTo(0, 0);
+  }
+  updateGuidePresentation();
+  if (open) document.getElementById('helpCloseBtn')?.focus({ preventScroll: true });
+  else if (wasOpen && restoreFocus) document.getElementById('overflowBtn')?.focus({ preventScroll: true });
 }
 
 function renderLibraryFilters(zh: boolean) {
@@ -756,7 +868,8 @@ function setLang(lang: 'en' | 'zh') {
   const overflowButton = document.getElementById('overflowBtn');
   if (languageLabel) languageLabel.textContent = lang === 'zh' ? '语言' : 'Language';
   if (themeLabel) themeLabel.textContent = lang === 'zh' ? '主题' : 'Theme';
-  if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '更多设置' : 'More settings');
+  if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '游戏菜单与设置' : 'Game menu and settings');
+  updatePresentationControls();
   document.getElementById('libraryCloseBtn')?.setAttribute('aria-label', lang === 'zh' ? '关闭' : 'Close');
   document.querySelector('[data-library-close]')?.setAttribute('aria-label', lang === 'zh' ? '关闭游戏库' : 'Close game library');
   document.getElementById('keyboardPanel')?.setAttribute('aria-label', lang === 'zh' ? '键盘与鼠标操作' : 'Keyboard and mouse mapping');
@@ -822,34 +935,50 @@ window.addEventListener('blur', () => {
   updateVirtualKeyboardHighlight(pressedKeys);
 });
 
-// Refit the canvas whenever the centered stage changes size (window resize or
-// responsive breakpoint switches). Debounced via rAF.
 let fitCanvasScheduled = false;
-const canvasFitObserver = new ResizeObserver(() => {
-  if (fitCanvasScheduled) return;
-  fitCanvasScheduled = true;
-  requestAnimationFrame(() => {
-    fitCanvasScheduled = false;
-    fitGameCanvas();
-  });
-});
+const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
 
 // Init UI
 (function init() {
-  const canvasWrapperEl = document.getElementById('canvasWrapper');
-  if (canvasWrapperEl) canvasFitObserver.observe(canvasWrapperEl);
-  window.addEventListener('resize', () => {
-    if (fitCanvasScheduled) return;
-    fitCanvasScheduled = true;
-    requestAnimationFrame(() => {
-      fitCanvasScheduled = false;
-      fitGameCanvas();
+  const root = document.getElementById('gameApp');
+  if (root) {
+    canvasFitObserver.observe(root);
+    fullscreen = createGameFullscreen(root, () => {
+      updatePresentationControls();
+      scheduleViewportFit();
+      repaintCurrentFrame();
+    }, () => {
+      const notice = document.getElementById('fullscreenNotice');
+      if (notice) {
+        notice.textContent = isZhLang() ? '浏览器未允许全屏；游戏仍铺满网页。' : 'Fullscreen is unavailable. The game still fills this page.';
+        notice.hidden = false;
+        window.clearTimeout(fullscreenNoticeTimer);
+        fullscreenNoticeTimer = window.setTimeout(() => { notice.hidden = true; }, 5000);
+      }
     });
+  }
+  window.matchMedia(guideSheetQuery).addEventListener('change', () => {
+    updateGuidePresentation();
+    renderKeyboard();
   });
+  window.addEventListener('resize', scheduleViewportFit);
+  window.visualViewport?.addEventListener('resize', scheduleViewportFit);
+  window.visualViewport?.addEventListener('scroll', scheduleViewportFit);
+  const watchDensity = () => {
+    const query = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    query.addEventListener('change', () => { scheduleViewportFit(); watchDensity(); }, { once: true });
+  };
+  watchDensity();
+  document.addEventListener('pointerlockchange', () => {
+    const locked = document.pointerLockElement === document.getElementById('gameCanvas');
+    // A pending game capture must not steal the cursor after a menu opened.
+    if (locked && gameOverlayOpen) { document.exitPointerLock?.(); return; }
+    root?.classList.toggle('pointer-locked', locked);
+  });
+  fitGameCanvas();
 
   document.getElementById('gamePickerBtn')?.addEventListener('click', () => {
     const open = !document.getElementById('gameLibrary')?.classList.contains('open');
-    setOverflowOpen(false);
     setGameLibraryOpen(open);
   });
   document.getElementById('libraryCloseBtn')?.addEventListener('click', closeGameLibrary);
@@ -912,17 +1041,36 @@ const canvasFitObserver = new ResizeObserver(() => {
       }
       return;
     }
-    const menuOpen = !document.getElementById('overflowMenu')?.hidden;
-    if (event.key === 'Escape' && menuOpen) {
+    const menu = document.getElementById('overflowMenu');
+    if (menu && !menu.hidden) {
       event.stopPropagation();
-      setOverflowOpen(false);
-      document.getElementById('overflowBtn')?.focus();
-    } else if ((event.target instanceof Element && event.target.closest('.header-actions'))) {
+      if (event.key === 'Escape') { event.preventDefault(); setOverflowOpen(false); }
+      else if (event.key === 'Tab') {
+        const buttons = Array.from(menu.querySelectorAll<HTMLElement>('button:not([disabled]), summary'))
+          .filter(el => el.getClientRects().length > 0);
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === menu)) {
+          event.preventDefault(); last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    } else if (isHelpOpen() && event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation(); setHelpOpen(false);
+    } else if (isHelpOpen() && isGuideReadOnly()) {
+      event.stopPropagation();
+      if (event.key === 'Tab' && isGuideSheet()) {
+        const help = document.getElementById('helpOverlay')!;
+        const targets = Array.from(help.querySelectorAll<HTMLElement>('button, [tabindex="0"]')).filter(el => el.getClientRects().length > 0);
+        const first = targets[0], last = targets[targets.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    } else if (event.target instanceof Element && event.target.closest('.header-actions, .help-overlay')) {
+      // Arrow/Space scrolling inside the guide is native, never game input.
       event.stopPropagation();
     }
   });
   document.addEventListener('keyup', (event) => {
-    if (document.body.classList.contains('library-open') || (event.target instanceof Element && event.target.closest('.header-actions'))) {
+    if (shellOverlayOpen || (event.target instanceof Element && event.target.closest('.header-actions, .help-overlay'))) {
       event.stopPropagation();
     }
   });
@@ -992,16 +1140,14 @@ const canvasFitObserver = new ResizeObserver(() => {
   }
 
   document.getElementById('startOverlay')?.addEventListener('click', startPreparedGame);
-  // Wide-canvas layouts fold the input mapping into a disclosure strip below
-  // the canvas; expanding it must refit the stage so nothing overflows.
-  document.getElementById('keyboardPanel')?.addEventListener('click', (event) => {
-    const toggle = (event.target as HTMLElement).closest('.input-map-toggle');
-    const panel = document.getElementById('keyboardPanel');
-    if (!toggle || !panel) return;
-    panel.classList.toggle('input-map-open');
-    toggle.setAttribute('aria-expanded', String(panel.classList.contains('input-map-open')));
-    requestAnimationFrame(fitGameCanvas);
-  });
+  document.getElementById('fullscreenBtn')?.addEventListener('click', () => fullscreen?.toggle());
+  for (const id of ['menuCloseBtn', 'resumeBtn', 'shellBackdrop']) {
+    document.getElementById(id)?.addEventListener('click', () => setOverflowOpen(false));
+  }
+  document.getElementById('helpBtn')?.addEventListener('click', () => setHelpOpen(true));
+  for (const id of ['helpCloseBtn', 'helpReturnBtn', 'guideBackdrop']) {
+    document.getElementById(id)?.addEventListener('click', () => setHelpOpen(false));
+  }
   document.getElementById('restartBtn')?.addEventListener('click', () => {
     setOverflowOpen(false);
     startPreparedGame();

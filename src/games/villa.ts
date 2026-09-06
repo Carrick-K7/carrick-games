@@ -1,4 +1,4 @@
-import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameViewport } from '../core/game.js';
 import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.js';
 import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen } from './villaActivities.js';
 import {
@@ -20,7 +20,6 @@ import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, VILLA
 import { VILLA_FAUCET } from './villaFaucet.js';
 import { VILLA_TEA_BAR } from './villaTeaBar.js';
 import { VILLA_VEGETABLE_BEDS } from './villaGarden.js';
-import { createVillaFullscreen, type VillaFullscreen } from './villaFullscreen.js';
 import { createVillaUseButton } from './villaUseButton.js';
 import { villaUseCircle, wrapVillaTouchHint } from './villaTouchUi.js';
 
@@ -65,35 +64,36 @@ export class VillaGame extends BaseGame {
   private touchMode = false;
   private mapOpen = false;
   private mapFloor = 0;
-  private helpOpen = false;
+  private get helpOpen() { return !!this.host.presentation?.isControlsOpen?.(); }
   private toast = '';
   private toastUntil = 0;
   private visited = new Set<string>();
   private lastLang: boolean | null = null;
   private oldAriaLabel: string | null = null;
-  private fullscreen: VillaFullscreen | null = null;
   private useButton: ReturnType<typeof createVillaUseButton> | null = null;
-  private shellWidth = 0;
   private usePressedUntil = 0;
   private touchHintLayout: { key: string; lines: string[] } | null = null;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', 1120, 700));
     this.oldAriaLabel = this.canvas.getAttribute('aria-label');
-    this.fullscreen = createVillaFullscreen(this.canvas, width => super.setDisplayScale(width), active => {
-      this.clearInput(); this.unlock(); this.mouseLookEnabled = !this.shellOpen();
-      if (!active && this.shellWidth > 0) super.setDisplayScale(this.shellWidth);
-      this.publishState(); this.syncUseButton();
-    });
     this.useButton = createVillaUseButton(this.canvas, () => this.use());
   }
 
-  setDisplayScale(cssWidth: number) {
-    if (!Number.isFinite(cssWidth) || cssWidth <= 0) return;
-    this.shellWidth = cssWidth;
-    if (this.fullscreen?.resize()) return;
-    super.setDisplayScale(cssWidth);
+  /** Responsive viewport: logical drawing units become CSS pixels. Game state
+   * (position, activities, panels) is never reset by a resize. */
+  setViewport(viewport: GameViewport) {
+    this.resizeLogicalViewport(viewport);
+    this.touchHintLayout = null;
     this.syncUseButton();
+  }
+
+  /** Shell menus pause world input immediately instead of waiting for update(). */
+  onShellOverlayChange(open: boolean) {
+    if (open) { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
+    else this.mouseLookEnabled = !this.mapOpen && !this.helpOpen;
+    this.syncUseButton();
+    this.publishState();
   }
 
   stop() {
@@ -101,7 +101,6 @@ export class VillaGame extends BaseGame {
     this.state.driving.speed = 0; this.state.driving.handbrake = false;
     this.state.scooter.speed = 0; this.state.scooter.handbrake = false;
     super.stop();
-    if (this.fullscreen?.active) this.fullscreen.toggle();
     this.useButton?.hide();
   }
 
@@ -112,7 +111,7 @@ export class VillaGame extends BaseGame {
   }
 
   private syncUseButton() {
-    const circle = villaUseCircle(this.width, this.height, this.uiScale(), this.state.snookerActive);
+    const circle = villaUseCircle(this.width, this.height, this.uiScale(), this.state.snookerActive, this.safe());
     const target = this.hotspot(), zh = this.isZhLang();
     const label = this.state.seated || this.state.snookerActive ? (zh ? '离开' : 'Exit')
       : target ? `${zh ? '互动' : 'Use'}: ${zh ? target.zh : target.name}` : (zh ? '互动：靠近可互动的物品' : 'Use: move closer to an interactive object');
@@ -123,7 +122,7 @@ export class VillaGame extends BaseGame {
   init() {
     this.clearInput();
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;
-    this.time = 0; this.mapOpen = false; this.helpOpen = false; this.mapFloor = 0;
+    this.time = 0; this.mapOpen = false; this.mapFloor = 0;
     this.state = initialVillaState(); this.motion = createVillaMotion(); this.immersive = false; this.promptAlpha = 0;
     this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
     this.toast = ''; this.toastUntil = 0; this.usePressedUntil = 0; this.touchHintLayout = null; this.visited = new Set(['garden']);
@@ -381,72 +380,92 @@ export class VillaGame extends BaseGame {
       y: +this.state.elevator.y.toFixed(3), phase: this.state.elevator.phase, riding: this.state.elevator.riding });
     data.villaTarget = this.inElevator() ? 'elevator' : this.state.snookerActive ? 'snooker' : this.state.seated ?? this.hotspot()?.id ?? '';
     data.villaVisited = [...this.visited].join(',');
-    data.villaFullscreenState = this.fullscreen?.active ? 'full' : 'window';
+    data.villaFullscreenState = this.host.presentation?.isFullscreen() ? 'full' : 'window';
     data.villaUseFeedback = this.time < this.toastUntil ? this.toast : '';
   }
 
+  /** Logical units are CSS pixels under the edge-to-edge viewport, so authored
+   * sizes (44px buttons, 56px joystick radius) are already physical sizes. */
   private uiScale() {
-    if (!this.touchMode) return 1;
-    const cssWidth = this.canvas.clientWidth;
-    return Math.min(3.5, Math.max(1.2, this.width / (cssWidth || this.width)));
+    if (this.viewport || !this.touchMode) return 1;
+    // Isolated legacy hosts can still contain a fixed logical canvas.
+    return Math.min(3.5, Math.max(1.2, this.width / (this.canvas.clientWidth || this.width)));
+  }
+
+  /** Display safe-area insets (notch / system bars), zero before the first viewport. */
+  private safe() {
+    return this.viewport?.safeArea ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+
+  /** Narrow or coarse-pointer HUD switches to icon buttons so the row always fits. */
+  private compactHud() {
+    const safe = this.safe();
+    return this.touchMode || this.width - safe.left - safe.right < 960 || this.height - safe.top - safe.bottom < 600;
   }
 
   private buttons(): Button[] {
-    const s = this.uiScale(), size = 44 * s, gap = (this.touchMode ? 7 : 9) * s, zh = this.isZhLang();
-    if (this.immersive) return [{ id: 'immersion', x: 24, y: 22, w: this.touchMode ? (this.state.snookerActive ? 114 : 190) * s : 294, h: 44 * s, label: '' }];
-    const labels = zh
-      ? (this.touchMode ? ['图', this.state.evening ? '☀' : '☾', '⌂', '简'] : ['M  导览图', this.state.evening ? 'T  日光' : 'T  黄昏', 'H  回门口', 'I  沉浸', '?  操作', this.fullscreen?.active ? 'F  退出全屏' : 'F  全屏'])
-      : (this.touchMode ? ['M', this.state.evening ? '☀' : '☾', '⌂', 'I'] : ['M  Floor plan', this.state.evening ? 'T  Daylight' : 'T  Sunset', 'H  Entrance', 'I  Immersive', '?  Controls', this.fullscreen?.active ? 'F  Exit full' : 'F  Fullscreen']);
-    const ids = ['map', 'time', 'home', 'immersion', 'help', 'fullscreen'];
-    const w = this.touchMode ? size : 118;
-    const start = this.width - 24 - labels.length * w - (labels.length - 1) * gap;
-    const buttons = labels.map((label, i) => ({ id: ids[i], x: start + i * (w + gap), y: 22, w, h: size, label }));
+    const s = this.uiScale(), size = 44 * s, zh = this.isZhLang(), safe = this.safe();
+    const compact = this.compactHud(), top = (compact ? 12 : 22) + safe.top;
+    if (this.immersive) return [{ id: 'immersion', x: 16 + safe.left, y: top, w: compact ? (this.state.snookerActive ? 114 : 190) * s : 294, h: size, label: '' }];
+    const entries: Array<{ id: string; label: string; short: string }> = [
+      { id: 'map', label: zh ? 'M  导览图' : 'M  Floor plan', short: zh ? '图' : 'M' },
+      { id: 'time', label: this.state.evening ? (zh ? 'T  日光' : 'T  Daylight') : (zh ? 'T  黄昏' : 'T  Sunset'), short: this.state.evening ? '☀' : '☾' },
+      { id: 'home', label: zh ? 'H  回门口' : 'H  Entrance', short: '⌂' },
+      { id: 'immersion', label: zh ? 'I  沉浸' : 'I  Immersive', short: zh ? '简' : 'I' },
+    ];
+    // Guides/fullscreen use the common shell menu (the ? and F aliases remain).
+    // A narrow HUD puts its activity row below the location and shell trigger.
+    const secondRow = this.width - safe.left - safe.right < 500;
+    const gap = (compact ? 6 : 9) * s;
+    const w = compact ? size : 118;
+    const start = this.width - (secondRow ? 12 : 80) - safe.right - entries.length * w - (entries.length - 1) * gap;
+    const buttons = entries.map((entry, i) => ({ id: entry.id, x: start + i * (w + gap), y: top + (secondRow ? 56 : 0), w, h: size, label: compact ? entry.short : entry.label }));
     const target = this.hotspot()?.id;
     if (this.touchMode && this.state.snookerActive) {
       const control = (id: string, label: string, x: number, y: number): Button => ({ id, label, x, y, w: 44 * s, h: 44 * s });
-      return [control('immersion', zh ? '简' : 'I', this.width - 60 * s, 22),
-        control('aim-left', '←', 12 * s, 76 * s), control('aim-right', '→', 64 * s, 76 * s),
-        control('power-down', '−', 12 * s, 128 * s), control('power-up', '+', 64 * s, 128 * s),
-        control('reset-activity', zh ? '重摆' : 'Reset', 12 * s, this.height - 55 * s),
-        control('shoot', zh ? '击球' : 'Shot', this.width - 64 * s, 76 * s)];
+      return [control('immersion', zh ? '简' : 'I', this.width - 112 * s - safe.right, top),
+        control('aim-left', '←', 12 * s + safe.left, top + 54 * s), control('aim-right', '→', 64 * s + safe.left, top + 54 * s),
+        control('power-down', '−', 12 * s + safe.left, top + 106 * s), control('power-up', '+', 64 * s + safe.left, top + 106 * s),
+        control('reset-activity', zh ? '重摆' : 'Reset', 12 * s + safe.left, this.height - 55 * s - safe.bottom),
+        control('shoot', zh ? '击球' : 'Shot', this.width - 64 * s - safe.right, top + 54 * s)];
     }
     if (this.touchMode && !this.inElevator()) {
       const actions = this.drivingSeat() ? [['brake', zh ? '手刹' : 'HB'], ['reset-activity', zh ? '复位' : 'Reset']]
         : this.state.seated ? [] : [['crouch', zh ? '蹲' : 'C'], ['jump', zh ? '跳' : 'Jump']];
-      actions.forEach(([id, label], i) => buttons.push({ id, label, x: this.width - (this.state.seated ? 168 - i * 54 : 170 - i * 52) * s, y: this.height - (this.state.seated ? 151 : 93) * s, w: 44 * s, h: 44 * s }));
+      actions.forEach(([id, label], i) => buttons.push({ id, label, x: this.width - (this.state.seated ? 168 - i * 54 : 170 - i * 52) * s - safe.right, y: this.height - (this.state.seated ? 151 : 93) * s - safe.bottom, w: 44 * s, h: 44 * s }));
     }
     if (this.touchMode && (this.state.seated === 'car' || this.state.seated === 'racing' || (!this.state.seated && (target === 'car' || target === 'media')))) {
       const door = this.state.seated === 'car' || target === 'car';
-      buttons.push({ id: 'secondary', x: this.width - 60 * s, y: this.height - 151 * s, w: 44 * s, h: 44 * s, label: this.isZhLang() ? (door ? '车门' : '信号') : (door ? 'Door' : 'Input') });
+      buttons.push({ id: 'secondary', x: this.width - 60 * s - safe.right, y: this.height - 151 * s - safe.bottom, w: 44 * s, h: 44 * s, label: this.isZhLang() ? (door ? '车门' : '信号') : (door ? 'Door' : 'Input') });
     }
     if (this.inElevator()) {
       const w = (this.touchMode ? 46 : 64) * s, gap = 8 * s;
       for (let floor = 0; floor < 3; floor++) buttons.push({ id: `elevator-${floor}`, label: `${floor + 1}F`,
         x: (this.width - 3 * w - 2 * gap) / 2 + floor * (w + gap),
-        y: this.touchMode ? 22 + 52 * s : this.height - 124, w, h: 44 * s });
+        y: this.touchMode ? top + (secondRow ? 108 : 52) * s : this.height - 124 - safe.bottom, w, h: 44 * s });
     }
     return buttons;
   }
 
   private panelRect() {
-    const s = this.uiScale();
-    return this.touchMode ? { x: 12 * s, y: 10 * s, w: this.width - 24 * s, h: this.height - 20 * s }
-      : { x: 88, y: 74, w: this.width - 176, h: this.height - 148 };
+    const s = this.uiScale(), safe = this.safe();
+    return this.compactHud() ? { x: 12 * s + safe.left, y: 68 + safe.top, w: this.width - 24 * s - safe.left - safe.right, h: this.height - 80 - safe.top - safe.bottom }
+      : { x: 88 + safe.left, y: 74 + safe.top, w: this.width - 176 - safe.left - safe.right, h: this.height - 148 - safe.top - safe.bottom };
   }
 
   private closeButton() {
     const p = this.panelRect(), s = this.uiScale();
-    return this.touchMode ? { x: p.x + p.w - 46 * s, y: p.y + 6 * s, w: 40 * s, h: 44 * s }
+    return this.compactHud() ? { x: p.x + p.w - 50 * s, y: p.y + 6 * s, w: 44 * s, h: 44 * s }
       : { x: p.x + p.w - 70, y: p.y + 12, w: 56, h: 50 };
   }
 
   private mapTabs(): Button[] {
     const p = this.panelRect(), s = this.uiScale();
     const labels = this.isZhLang() ? ['1F  生活与花园', '2F  卧室与阅读', '3F  天台花园'] : ['1F  Living', '2F  Bedrooms', '3F  Rooftop'];
-    const w = this.touchMode ? (p.w - 64 * s) / 3 - 4 * s : 146;
-    return labels.map((label, f) => ({ id: String(f), label: this.touchMode ? `${f + 1}F` : label,
-      x: p.x + (this.touchMode ? 8 * s + f * (w + 4 * s) : 28 + f * 156),
-      y: p.y + (this.touchMode ? 6 * s : 65), w, h: this.touchMode ? 44 * s : 48,
+    const compact = this.compactHud(), w = compact ? (p.w - 64 * s) / 3 - 4 * s : 146;
+    return labels.map((label, f) => ({ id: String(f), label: compact ? `${f + 1}F` : label,
+      x: p.x + (compact ? 8 * s + f * (w + 4 * s) : 28 + f * 156),
+      y: p.y + (compact ? 6 * s : 65), w, h: compact ? 44 * s : 48,
     }));
   }
 
@@ -454,25 +473,25 @@ export class VillaGame extends BaseGame {
     if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
     switch (id) {
       case 'map':
-        this.mapOpen = !this.mapOpen; this.helpOpen = false; if (this.mapOpen) this.immersive = false; this.mapFloor = villaFloor(this.position.y); this.clearInput();
+        this.mapOpen = !this.mapOpen; if (this.mapOpen) this.immersive = false; this.mapFloor = villaFloor(this.position.y); this.clearInput();
         this.mouseLookEnabled = !this.mapOpen; if (this.mapOpen) this.unlock(); else this.lockPointer(); break;
       case 'time': this.state.evening = !this.state.evening; break;
-      case 'fullscreen': this.clearInput(); this.unlock(); this.fullscreen?.toggle(); this.mouseLookEnabled = true; break;
+      case 'fullscreen': this.clearInput(); this.unlock(); this.host.presentation?.toggleFullscreen(); this.mouseLookEnabled = true; break;
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.carDoorOpen = false; this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
         this.motion = createVillaMotion(); this.state.snookerActive = false; this.state.driving.speed = 0; this.state.driving.steering = 0; this.state.driving.handbrake = false;
         this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false;
         this.state.elevator = createVillaElevator(); this.scene?.updateActivities(this.time, this.state);
-        this.mapOpen = false; this.helpOpen = false; this.clearInput();
+        this.mapOpen = false; this.clearInput();
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
       case 'help':
-        this.helpOpen = !this.helpOpen; this.mapOpen = false; if (this.helpOpen) this.immersive = false; this.clearInput(); this.mouseLookEnabled = !this.helpOpen;
-        if (this.helpOpen) this.unlock(); else this.lockPointer(); break;
+        this.mapOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = false;
+        this.host.presentation?.openControls?.(); break;
       case 'interact': this.interact(); break;
       case 'secondary': this.secondaryInteraction(); break;
       case 'immersion':
-        this.immersive = !this.immersive; this.mapOpen = false; this.helpOpen = false; this.clearInput();
+        this.immersive = !this.immersive; this.mapOpen = false; this.clearInput();
         this.mouseLookEnabled = true; if (this.immersive) this.lockPointer(); break;
       case 'crouch':
         if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !toggleVillaCrouch(this.motion, h => this.canFit(h)))
@@ -740,7 +759,7 @@ export class VillaGame extends BaseGame {
     if (this.mapOpen || this.helpOpen) {
       const p = this.panelRect();
       if (!this.hit(point, p) || this.hit(point, this.closeButton())) {
-        this.mapOpen = false; this.helpOpen = false; this.clearInput(); this.mouseLookEnabled = true; this.lockPointer(); this.publishState(); return true;
+        this.mapOpen = false; this.clearInput(); this.mouseLookEnabled = true; this.lockPointer(); this.publishState(); return true;
       }
       if (this.mapOpen) {
         const tab = this.mapTabs().find(tab => this.hit(point, tab));
@@ -751,7 +770,7 @@ export class VillaGame extends BaseGame {
     const button = this.buttons().find(b => this.hit(point, b));
     if (button) { this.activate(button.id); return true; }
     if (this.touchMode && !this.immersive) {
-      const s = this.uiScale(), circle = villaUseCircle(this.width, this.height, s, this.state.snookerActive);
+      const s = this.uiScale(), circle = villaUseCircle(this.width, this.height, s, this.state.snookerActive, this.safe());
       if (Math.hypot(point.x - circle.x, point.y - circle.y) < circle.radius + 2 * s) { this.use(); return true; }
     }
     return false;
@@ -779,7 +798,7 @@ export class VillaGame extends BaseGame {
       if (e.repeat) return;
       if (key === 'escape') {
         const wasPanel = this.mapOpen || this.helpOpen;
-        this.mapOpen = false; this.helpOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = wasPanel;
+        this.mapOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = wasPanel;
       }
       else if (this.mapOpen && ['1', '2', '3'].includes(key)) this.mapFloor = Number(key) - 1;
       else if (!this.helpOpen && ['1', '2', '3'].includes(key) && this.inElevator()) this.selectElevatorFloor(Number(key) - 1);
@@ -862,39 +881,39 @@ export class VillaGame extends BaseGame {
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, this.width, this.height);
     this.drawHud(ctx);
     if (this.mapOpen) this.drawMap(ctx);
-    if (this.helpOpen) this.drawHelp(ctx);
   }
 
   private drawHud(ctx: CanvasRenderingContext2D) {
     this.canvas.dataset.villaPrompt = '';
-    const zh = this.isZhLang(), s = this.uiScale();
+    const zh = this.isZhLang(), s = this.uiScale(), safe = this.safe(), compact = this.compactHud();
+    const hudTop = (compact ? 12 : 22) + safe.top;
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(33,35,31,.72)';
     if (this.immersive) {
       const p = this.groundPosition(), room = villaRoomAt(p), location = this.state.snookerActive ? (zh ? '斯诺克厅' : 'Snooker') : (zh ? room.zh : room.name);
       const label = `${villaFloor(p.y) + 1}F · ${location}`;
       const b = this.buttons()[0]; this.rounded(ctx, b.x, b.y, b.w, b.h);
-      ctx.fillStyle = '#fff7e9'; ctx.font = `500 ${this.touchMode ? 13 * s : 16}px ${UI_FONT}`;
+      ctx.fillStyle = '#fff7e9'; ctx.font = `500 ${compact ? 13 * s : 16}px ${UI_FONT}`;
       ctx.fillText(label, b.x + 14 * s, b.y + b.h / 2, b.w - 28 * s);
       ctx.textBaseline = 'alphabetic'; return;
     }
-    this.rounded(ctx, 24, 22, this.touchMode ? 78 * s : 294, this.touchMode ? 42 * s : 68);
-    ctx.fillStyle = '#fff7e9'; ctx.font = `500 ${this.touchMode ? 19 * s : 19}px ${UI_FONT}`;
-    ctx.fillText(this.touchMode ? `${villaFloor(this.position.y) + 1}F` : (zh ? '暖居 · 一个温暖的家' : 'Warm Villa · Feel at home'), 40, this.touchMode ? 22 + 21 * s : 46);
-    if (!this.touchMode) {
+    this.rounded(ctx, (compact ? 12 : 24) + safe.left, hudTop, compact ? 56 * s : 294, compact ? 42 * s : 68);
+    ctx.fillStyle = '#fff7e9'; ctx.font = `500 ${compact ? 17 * s : 19}px ${UI_FONT}`;
+    ctx.fillText(compact ? `${villaFloor(this.position.y) + 1}F` : (zh ? '暖居 · 一个温暖的家' : 'Warm Villa · Feel at home'), (compact ? 26 : 40) + safe.left, compact ? hudTop + 21 * s : 46 + safe.top);
+    if (!compact) {
       ctx.fillStyle = '#d9d9c9'; ctx.font = `13px ${UI_FONT}`;
-      ctx.fillText(`${villaFloor(this.position.y) + 1}F  /  ${zh ? '自在漫游' : 'Take your time'}`, 40, 73);
+      ctx.fillText(`${villaFloor(this.position.y) + 1}F  /  ${zh ? '自在漫游' : 'Take your time'}`, 40 + safe.left, 73 + safe.top);
     }
     for (const b of this.buttons()) {
       ctx.fillStyle = b.id === `elevator-${this.state.elevator.target}` ? 'rgba(79,103,69,.92)' : 'rgba(33,35,31,.72)';
       this.rounded(ctx, b.x, b.y, b.w, b.h);
-      ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.font = `500 ${this.touchMode ? 17 * s : 13}px ${UI_FONT}`;
+      ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.font = `500 ${compact ? 17 * s : 13}px ${UI_FONT}`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2, b.w - 6 * s);
     }
     ctx.textAlign = 'center';
     if (this.touchMode) {
       if (!this.state.snookerActive && (!this.state.seated || this.drivingSeat())) {
-      const origin = this.joystick?.origin ?? { x: 78 * s, y: this.height - 78 * s };
+      const origin = this.joystick?.origin ?? { x: 78 * s + safe.left, y: this.height - 78 * s - safe.bottom };
       ctx.strokeStyle = 'rgba(255,251,236,.45)'; ctx.lineWidth = 1.5 * s; ctx.fillStyle = 'rgba(29,35,31,.20)';
       ctx.beginPath(); ctx.arc(origin.x, origin.y, 51 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       let dx = (this.joystick?.point.x ?? origin.x) - origin.x, dy = (this.joystick?.point.y ?? origin.y) - origin.y;
@@ -902,7 +921,7 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = 'rgba(255,251,236,.45)'; ctx.beginPath(); ctx.arc(origin.x + dx, origin.y + dy, 20 * s, 0, Math.PI * 2); ctx.fill();
       ctx.font = `${12 * s}px ${UI_FONT}`; ctx.fillStyle = '#fffaee'; ctx.fillText(this.state.seated ? (zh ? '驾驶' : 'Drive') : (zh ? '行走' : 'Walk'), origin.x, origin.y + 68 * s);
       }
-      const use = villaUseCircle(this.width, this.height, s, this.state.snookerActive);
+      const use = villaUseCircle(this.width, this.height, s, this.state.snookerActive, safe);
       ctx.fillStyle = this.time < this.usePressedUntil ? 'rgba(88,129,72,.95)' : 'rgba(33,35,31,.60)';
       ctx.beginPath(); ctx.arc(use.x, use.y, use.radius, 0, Math.PI * 2); ctx.fill();
       ctx.font = `500 ${15 * s}px ${UI_FONT}`; ctx.fillStyle = '#fff7e9'; ctx.fillText(this.state.seated || this.state.snookerActive ? (zh ? '离开' : 'Exit') : (zh ? '互动' : 'Use'), use.x, use.y);
@@ -932,12 +951,12 @@ export class VillaGame extends BaseGame {
     let lines = [hint];
     if (this.touchMode) {
       const key = `${s}/${this.width}/${hint}`;
-      if (this.touchHintLayout?.key !== key) this.touchHintLayout = { key, lines: wrapVillaTouchHint(hint, this.width - 74, text => ctx.measureText(text).width) };
+      if (this.touchHintLayout?.key !== key) this.touchHintLayout = { key, lines: wrapVillaTouchHint(hint, this.width - 74 - safe.left - safe.right, text => ctx.measureText(text).width) };
       lines = this.touchHintLayout.lines;
     }
-    const tw = Math.min(this.width - 44, Math.max(...lines.map(line => ctx.measureText(line).width)) + 30);
+    const tw = Math.min(this.width - 44 - safe.left - safe.right, Math.max(...lines.map(line => ctx.measureText(line).width)) + 30);
     const th = this.touchMode ? (lines.length === 1 ? 22 : 38) * s : 32;
-    const top = this.height - (this.touchMode ? th + 6 * s : 54);
+    const top = this.height - (this.touchMode ? th + 6 * s : 54) - safe.bottom;
     ctx.fillStyle = 'rgba(33,35,31,.72)'; this.rounded(ctx, (this.width - tw) / 2, top, tw, th);
     ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     lines.forEach((line, i) => ctx.fillText(line, this.width / 2, top + th / 2 + (i - (lines.length - 1) / 2) * 15 * s));
@@ -945,14 +964,15 @@ export class VillaGame extends BaseGame {
   }
 
   private drawActivityHud(ctx: CanvasRenderingContext2D) {
-    const zh = this.isZhLang(), s = this.uiScale(), lines: string[] = [];
+    const zh = this.isZhLang(), s = this.uiScale(), safe = this.safe(), lines: string[] = [];
+    const hudTop = (this.compactHud() ? 12 : 22) + safe.top;
     if (this.state.snookerActive) {
       const table = this.state.snooker;
       const names: Record<string, string> = { red: '红球', color: '任意彩球', yellow: '黄球', green: '绿球', brown: '棕球', blue: '蓝球', pink: '粉球', black: '黑球' };
       const target = zh ? names[table.target] : table.target;
       const fouls: Record<string, string> = { 'Cue ball potted': '白球落袋', 'No object ball hit': '未碰到目标球', 'Wrong first ball': '首碰球不符', 'Wrong ball potted': '落袋球不符' };
       if (this.touchMode) {
-        ctx.fillStyle = 'rgba(33,35,31,.76)'; this.rounded(ctx, 8 * s, 51 * s, 106 * s, 23 * s);
+        ctx.fillStyle = 'rgba(33,35,31,.76)'; this.rounded(ctx, 8 * s + safe.left, hudTop + 45 * s, 106 * s, 23 * s);
         ctx.textAlign = 'left'; ctx.fillStyle = '#fff7e9'; ctx.font = `${10 * s}px ${UI_FONT}`;
         const complete = table.phase === 'complete', power = `${Math.round(table.power * 100)}%`;
         const status = complete ? (zh ? '清台' : 'Cleared') : table.foul ? (zh ? '犯规' : 'Foul') : target;
@@ -960,8 +980,8 @@ export class VillaGame extends BaseGame {
         const detail = complete ? (zh ? '点重摆再开一局' : 'Tap Reset to restart')
           : table.foul ? `${zh ? fouls[table.foul] : shortFouls[table.foul]} · ${power}`
             : `${table.moving ? (zh ? '滚动中' : 'Rolling') : (zh ? '力度' : 'Power')} ${power}`;
-        ctx.fillText(`${zh ? '得分' : 'Score'} ${table.score} · ${status}`, 12 * s, 58 * s, 105 * s);
-        ctx.fillText(detail, 12 * s, 69 * s, 105 * s);
+        ctx.fillText(`${zh ? '得分' : 'Score'} ${table.score} · ${status}`, 12 * s + safe.left, hudTop + 52 * s, 105 * s);
+        ctx.fillText(detail, 12 * s + safe.left, hudTop + 63 * s, 105 * s);
         ctx.textAlign = 'center'; return;
       }
       lines.push(zh ? '斯诺克 · 单人练习' : 'Snooker · Solo practice', `${zh ? '得分' : 'Score'} ${table.score} · ${zh ? '出杆' : 'Shots'} ${table.shots}`,
@@ -975,7 +995,7 @@ export class VillaGame extends BaseGame {
       else if (vehicle.contact) lines.push(zh ? '前方有障碍，请减速调整' : 'Obstacle ahead — stop and adjust');
     }
     if (!lines.length) return;
-    const x = 24, y = this.touchMode ? 22 + 47 * s : 108, w = this.touchMode ? 168 * s : 294;
+    const x = (this.touchMode ? 12 : 24) + safe.left, y = this.touchMode ? hudTop + 47 * s : 108 + safe.top, w = this.touchMode ? 168 * s : 294;
     const lineHeight = this.touchMode ? 13 * s : 22, pad = this.touchMode ? 6 * s : 14;
     ctx.fillStyle = 'rgba(33,35,31,.76)'; this.rounded(ctx, x, y, w, pad * 2 + lines.length * lineHeight);
     ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'left'; ctx.font = `${this.touchMode ? 11 * s : 14}px ${UI_FONT}`;
@@ -1003,12 +1023,12 @@ export class VillaGame extends BaseGame {
     anchor.y = Math.min(anchor.y, target.y + villaEyeHeight(this.motion) + .2);
     const point = this.scene.projectInteraction(anchor, this.width, this.height);
     if (!point) { this.canvas.dataset.villaPrompt = ''; return; }
-    const zh = this.isZhLang(), s = this.touchMode ? this.uiScale() * .85 : 1;
+    const zh = this.isZhLang(), s = this.touchMode ? this.uiScale() * .85 : 1, safe = this.safe();
     const labels: Record<string, [string, string]> = { car: ['开门并入座', 'Open & sit'], racing: ['开始拉力赛', 'Rally'], scooter: ['骑电动车', 'Ride scooter'], snooker: ['打斯诺克', 'Play snooker'], elevator: ['呼叫电梯', 'Call lift'], figures: ['开关柜灯', 'Display lights'], replicas: ['开关柜灯', 'Display lights'], fireplace: ['开关壁炉', 'Fireplace'], aquarium: ['喂鱼', 'Feed fish'], gaming: ['开关电脑', 'PC power'], media: ['切换信号', 'Screen input'], tea: ['喝茶', 'Have tea'], roof: ['赏景', 'Enjoy the view'] };
     const label = labels[target.id]?.[zh ? 0 : 1] ?? (zh ? target.zh : target.name);
     this.canvas.dataset.villaPrompt = target.id;
     ctx.save(); ctx.globalAlpha = Math.min(1, this.promptAlpha) * .94; ctx.font = `500 ${13 * s}px ${UI_FONT}`;
-    const width = ctx.measureText(label).width + 54 * s, x = Math.max(16, Math.min(this.width - width - 16, point.x - width / 2)), y = point.y - 17 * s;
+    const width = ctx.measureText(label).width + 54 * s, x = Math.max(16 + safe.left, Math.min(this.width - width - 16 - safe.right, point.x - width / 2)), y = point.y - 17 * s;
     ctx.fillStyle = 'rgba(32,39,33,.82)'; this.rounded(ctx, x, y, width, 34 * s, 7 * s);
     ctx.strokeStyle = 'rgba(241,239,215,.62)'; ctx.lineWidth = s; ctx.beginPath(); ctx.roundRect(x + 6 * s, y + 6 * s, 22 * s, 22 * s, 4 * s); ctx.stroke();
     ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.fillText(this.touchMode ? '·' : 'E', x + 17 * s, y + 17 * s);
@@ -1030,7 +1050,8 @@ export class VillaGame extends BaseGame {
 
   private drawMap(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang(), dark = this.isDarkTheme(), s = this.uiScale();
-    const p = this.panel(ctx, zh ? '家的导览图' : 'Find your way home', this.touchMode);
+    const compact = this.compactHud();
+    const p = this.panel(ctx, zh ? '家的导览图' : 'Find your way home', compact);
     for (const tab of this.mapTabs()) {
       const selected = Number(tab.id) === this.mapFloor;
       ctx.fillStyle = selected ? (dark ? '#b9c9ad' : '#46614e') : (dark ? '#344039' : '#e2dfd2');
@@ -1042,8 +1063,8 @@ export class VillaGame extends BaseGame {
     ctx.textBaseline = 'alphabetic';
     const grounds = this.mapFloor === 0 && this.position.z >= 24;
     const range = this.mapFloor === 0 ? { x: -25, z: -17, w: grounds ? 53 : 50, d: grounds ? 74 : 41 } : { x: -13, z: -10, w: 26, d: 23 };
-    const scale = Math.min((p.w - 50) / range.w, (p.h - (this.touchMode ? 80 * s : 185)) / range.d);
-    const left = p.x + (p.w - range.w * scale) / 2, top = p.y + (this.touchMode ? 57 * s : 133);
+    const scale = Math.min((p.w - 50) / range.w, (p.h - (compact ? 80 * s : 185)) / range.d);
+    const left = p.x + (p.w - range.w * scale) / 2, top = p.y + (compact ? 57 * s : 133);
     const mx = (x: number) => left + (x - range.x) * scale;
     const mz = (z: number) => top + (z - range.z) * scale;
     ctx.fillStyle = dark ? '#344736' : '#dce4ca';
@@ -1097,41 +1118,14 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = '#d1774d'; ctx.strokeStyle = '#fff8e9'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 6); ctx.lineTo(0, 3); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
     }
-    ctx.fillStyle = dark ? '#d1d4c0' : '#5b6654'; ctx.font = `${this.touchMode ? 11 * s : 14}px ${UI_FONT}`; ctx.textAlign = 'left';
-    const legend = this.touchMode ? (zh ? '橙色：你 · ↑↓楼梯 · ↕电梯' : 'Orange: you · ↑↓ stairs · ↕ lift')
+    ctx.fillStyle = dark ? '#d1d4c0' : '#5b6654'; ctx.font = `${compact ? 11 * s : 14}px ${UI_FONT}`; ctx.textAlign = 'left';
+    const legend = compact ? (zh ? '橙色：你 · ↑↓楼梯 · ↕电梯' : 'Orange: you · ↑↓ stairs · ↕ lift')
       : (zh ? '橙色箭头是你 · ↑↓ 楼梯 · ↕ 电梯：E 呼叫，进入后 1 / 2 / 3 选层 · 地图不传送' : 'Orange: you · ↑↓ stairs · ↕ elevator: E to call, 1 / 2 / 3 inside · Map does not teleport');
-    ctx.fillText(legend, p.x + 8 * s, p.y + p.h - (this.touchMode ? 8 * s : 21));
-  }
-
-  private drawHelp(ctx: CanvasRenderingContext2D) {
-    const zh = this.isZhLang(), p = this.panel(ctx, zh ? '慢慢走，像在自己家一样' : 'Make yourself at home');
-    const rows = zh ? [
-      ['W A S D', '行走；Shift 跑步；↑↓ 行走，←→ 转向'], ['鼠标 / Esc', '移动自动环顾；Esc 释放光标，点击画面恢复'],
-      ['C / 空格', '蹲下或站起 / 跳跃；头顶空间不足时不会强行站起'], ['E / Q', '互动、投喂、坐卧 / 开门自动进出、屏幕信号'],
-      ['驾驶 / 骑行', 'W/S 行驶或刹车，A/D 转向，空格手刹；R 复位'], ['斯诺克', '鼠标或←→瞄准，↑↓力度，空格击球，R重摆，E离开'],
-      ['楼梯 / 电梯', 'E 呼叫电梯，进入后 1/2/3 选层；无人四秒后关门'], ['I 沉浸', '仅保留当前位置；手机点左上位置信息恢复按钮'],
-      ['M / T / H', '导览图 / 日光黄昏 / 回到门口并停住车辆'], ['F / Esc', '进入 / 退出全屏；只放大别墅，不改变其他游戏'],
-      ['手机 / 平板', '左杆移动，右侧环顾；互动按钮会提示操作结果或原因'],
-    ] : [
-      ['W A S D', 'Walk; Shift runs. Up/down walks, left/right turns.'], ['Mouse / Esc', 'Move to look. Esc frees cursor; click scene to resume.'],
-      ['C / Space', 'Crouch or stand / jump, subject to head clearance.'], ['E / Q', 'Interact, feed, sit / auto car entry and exit, screen input.'],
-      ['Drive / ride', 'W/S throttle/reverse or brake; A/D steer; Space handbrake; R reset.'], ['Snooker', 'Mouse/←→ aim; ↑↓ power; Space shoot; R rack; E leave.'],
-      ['Stairs / Lift', 'E calls lift; 1/2/3 inside. Empty doors close after four seconds.'], ['I immersive', 'Location-only HUD; touch the location to restore controls.'],
-      ['M / T / H', 'Floor plan / daylight or sunset / return home and stop car.'], ['F / Esc', 'Enter / leave villa fullscreen without changing other games.'],
-      ['Touch', 'Left stick moves; right looks; Use explains success or rejection.'],
-    ];
-    ctx.textAlign = 'left';
-    rows.forEach(([key, description], i) => {
-      const y = p.y + 94 + i * 39;
-      ctx.fillStyle = this.isDarkTheme() ? '#bccbb0' : '#507050'; ctx.font = `500 17px ${UI_FONT}`; ctx.fillText(key, p.x + 32, y);
-      ctx.fillStyle = this.isDarkTheme() ? '#e2e3d5' : '#4b5347'; ctx.font = `16px ${UI_FONT}`; ctx.fillText(description, p.x + 186, y);
-    });
-    ctx.fillStyle = this.isDarkTheme() ? '#c4c9b8' : '#747965'; ctx.font = `14px ${UI_FONT}`;
-    ctx.fillText(zh ? '自由漫游；练习成绩只留在当前游戏，不上传排行榜。' : 'Explore freely. Practice scores stay local, off the leaderboard.', p.x + 32, p.y + p.h - 30);
+    ctx.fillText(legend, p.x + 8 * s, p.y + p.h - (compact ? 8 * s : 21));
   }
 
   destroy() {
-    this.useButton?.destroy(); this.fullscreen?.destroy();
+    this.useButton?.destroy();
     super.destroy(); this.scene?.dispose(); this.scene = null; this.unlock();
     for (const key of Object.keys(this.canvas.dataset)) if (key.startsWith('villa')) delete this.canvas.dataset[key];
     if (this.oldAriaLabel == null) this.canvas.removeAttribute('aria-label'); else this.canvas.setAttribute('aria-label', this.oldAriaLabel);

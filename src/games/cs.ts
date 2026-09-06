@@ -5,12 +5,19 @@
 // WebGL canvas that is blitted into the shell's 2D canvas each frame, and all
 // HUD/menus are canvas-drawn by CsHud. Pointer lock, focus events and score
 // reporting are bridged through engine hooks.
+//
+// The game is viewport-responsive: the shell delivers GameViewport updates
+// through setViewport(), the engine re-sizes its cameras/renderer first, and
+// only then does resizeLogicalViewport() repaint the 2D canvas so no frame is
+// presented with a stale aspect. Shell overlays release held input and pause
+// the match; native fullscreen stays an explicit HUD button (shell-owned).
 
 import {
   BaseGame,
   createDefaultGameHost,
   type GameHost,
   type GameShellSnapshot,
+  type GameViewport,
 } from '../core/game.js';
 import { CsEngine } from './csEngine.js';
 import { CsHud, type HudRegion } from './csHud.js';
@@ -46,18 +53,31 @@ interface MatchEndResult {
 }
 
 export class CsGame extends BaseGame {
+  /** Vertical finger travel (px) that turns a deferred tap into a scroll. */
+  private static readonly TAP_SCROLL_THRESHOLD = 10;
   private readonly engine: CsEngine;
   private readonly hudView: CsHud;
   private booted = false;
   private activeRegion: HudRegion | null = null;
   private lastMatchEnd: MatchEndResult | null = null;
+  private pausedByShellOverlay = false;
   private readonly touchLook = new Map<number, { x: number; y: number }>();
-  private readonly touchRegions = new Map<number, HudRegion>();
+  private readonly touchRegions = new Map<number, { region: HudRegion; sy: number; scrolling: boolean }>();
 
   private readonly onPointerLockChange = () => {
     this.engine.onPointerLockChange(document.pointerLockElement === this.canvas);
   };
   private readonly onPointerLockError = () => this.engine.onPointerLockError();
+  private readonly onTouchCancel = (event: TouchEvent) => {
+    event.preventDefault();
+    for (const entry of this.touchRegions.values()) {
+      if (entry.scrolling) entry.region.scroll?.endDrag();
+      else if (!entry.region.deferTap) entry.region.up?.();
+    }
+    this.touchRegions.clear();
+    this.touchLook.clear();
+    this.engine.clearHeldInput();
+  };
   private readonly onWindowBlur = () => this.engine.onWindowBlur();
   private readonly onWindowFocus = () => this.engine.onWindowFocus();
   private readonly onVisibility = () => this.engine.onVisibilityChange();
@@ -69,6 +89,12 @@ export class CsGame extends BaseGame {
     const me = e as MouseEvent;
     if (!this.engine.matchActive) return;
     if (me.button === 1 || me.button === 2) me.preventDefault();
+  };
+  /** Wheel: scrollable HUD panels consume it; otherwise it switches weapons. */
+  private readonly onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    if (this.hudView.wantsWheel()) { this.hudView.onWheel(e.deltaY); return; }
+    this.engine.onWheel(e.deltaY);
   };
 
   constructor(host?: GameHost) {
@@ -93,6 +119,20 @@ export class CsGame extends BaseGame {
       },
     });
     this.hudView = new CsHud(this.engine);
+    this.hudView.shellActions = {
+      fullscreen: this.host.presentation ? () => this.host.presentation!.toggleFullscreen() : undefined,
+      isFullscreen: this.host.presentation ? () => this.host.presentation!.isFullscreen() : undefined,
+    };
+
+    // Any path that starts a fresh match (Enter key, HUD replay button, pause
+    // menu restart, menu start after a completed match) must re-arm one-shot
+    // score reporting — the engine alone cannot see BaseGame's guard.
+    const engineStartMatch = this.engine.startMatch.bind(this.engine);
+    this.engine.startMatch = () => {
+      this.resetScoreReport();
+      this.lastMatchEnd = null;
+      engineStartMatch();
+    };
 
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     document.addEventListener('pointerlockerror', this.onPointerLockError);
@@ -104,6 +144,58 @@ export class CsGame extends BaseGame {
       window.addEventListener(type, this.onSecondaryButton, { capture: true });
     }
     this.engine.canvas3d?.addEventListener('webglcontextlost', this.onContextLost);
+  }
+
+  /**
+   * Edge-to-edge viewport from the shell: the engine re-sizes its world/gun
+   * camera aspect and WebGL renderer BEFORE the base class repaints the 2D
+   * canvas, so the first presented frame already matches the new shape.
+   */
+  override setViewport(viewport: GameViewport) {
+    this.engine.resize(viewport.width, viewport.height);
+    this.hudView.setSafeArea(viewport.safeArea);
+    this.resizeLogicalViewport(viewport);
+  }
+
+  /**
+   * Shell overlay (picker, menu) coordination: released held keys/fire/touch
+   * regions, pause the match while the overlay is up, and resume only when
+   * this adapter caused the pause — without re-requesting pointer lock
+   * (overlay close is not a trusted click gesture).
+   */
+  onShellOverlayChange(open: boolean) {
+    for (const entry of this.touchRegions.values()) {
+      if (entry.scrolling) entry.region.scroll?.endDrag();
+      else if (!entry.region.deferTap) entry.region.up?.();
+    }
+    this.touchRegions.clear();
+    this.touchLook.clear();
+    this.activeRegion?.up?.();
+    this.activeRegion = null;
+    if (open) {
+      this.engine.clearHeldInput();
+      if (!this.pausedByShellOverlay
+        && this.engine.matchActive
+        && ['active', 'freeze', 'round-end', 'spectate'].includes(this.engine.phase)) {
+        this.engine.pauseGame();
+        this.pausedByShellOverlay = true;
+      }
+    } else if (this.pausedByShellOverlay) {
+      this.pausedByShellOverlay = false;
+      if (this.engine.phase === 'paused') this.engine.resumeGame(false);
+    }
+  }
+
+  protected override bindInput() {
+    super.bindInput();
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    this.canvas.addEventListener('touchcancel', this.onTouchCancel, { passive: false });
+  }
+
+  protected override unbindInput() {
+    super.unbindInput();
+    this.canvas.removeEventListener('wheel', this.onWheel);
+    this.canvas.removeEventListener('touchcancel', this.onTouchCancel);
   }
 
   override getShellSnapshot(): GameShellSnapshot {
@@ -124,6 +216,7 @@ export class CsGame extends BaseGame {
   init() {
     this.resetScoreReport();
     this.lastMatchEnd = null;
+    this.pausedByShellOverlay = false;
     this.activeRegion = null;
     this.touchLook.clear();
     this.touchRegions.clear();
@@ -153,23 +246,16 @@ export class CsGame extends BaseGame {
     this.hudView.draw(ctx, this.width, this.height);
     const end = engine.hud.matchEnd;
     if (end) {
-      this.drawResultOverlay(ctx, {
-        tone: end.won ? 'success' : 'danger',
-        title: end.title,
-        details: [
-          this.isZhLang() ? `比分 ${end.score}` : `Score ${end.score}`,
-          end.stats,
-        ],
-        hint: this.isZhLang() ? 'Enter 再来一局 · 点击按钮返回主菜单' : 'Enter to play again · use the button for the menu',
-      });
+      // The HUD match-end panel is the single visible terminal overlay (it
+      // owns the replay/menu buttons); the adapter only mirrors the shared
+      // result marker the shell and tests read. No duplicate overlay here.
+      this.publishResult({ title: end.title, tone: end.won ? 'success' : 'danger' });
     }
   }
 
   private engineFromMatchEndRestart(): boolean {
     if (this.engine.hud.matchEnd) {
-      this.resetScoreReport();
-      this.lastMatchEnd = null;
-      this.engine.startMatch();
+      this.engine.startMatch(); // wrapped in the constructor: resets one-shot scoring
       return true;
     }
     return false;
@@ -226,15 +312,29 @@ export class CsGame extends BaseGame {
             if (region.id === 'look') {
               this.touchLook.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
             } else {
-              this.touchRegions.set(touch.identifier, region);
-              region.down?.(point.x, point.y);
+              this.touchRegions.set(touch.identifier, { region, sy: point.y, scrolling: false });
+              // Scrollable-panel rows defer activation to touchend so a
+              // swipe gesture can become a scroll instead of a mis-tap.
+              if (!region.deferTap) region.down?.(point.x, point.y);
             }
           }
           continue;
         }
         if (e.type === 'touchmove') {
-          const region = this.touchRegions.get(touch.identifier);
-          if (region?.drag) region.drag(point.x, point.y);
+          const entry = this.touchRegions.get(touch.identifier);
+          if (entry) {
+            if (entry.scrolling) {
+              entry.region.scroll?.drag(point.y);
+            } else if (entry.region.deferTap) {
+              if (Math.abs(point.y - entry.sy) > CsGame.TAP_SCROLL_THRESHOLD) {
+                entry.scrolling = true;
+                const scroll = entry.region.scroll;
+                if (scroll) { scroll.beginDrag(); scroll.drag(entry.sy); scroll.drag(point.y); }
+              }
+            } else if (entry.region.drag) {
+              entry.region.drag(point.x, point.y);
+            }
+          }
           const look = this.touchLook.get(touch.identifier);
           if (look) {
             this.engine.touchLook(touch.clientX - look.x, touch.clientY - look.y);
@@ -244,8 +344,18 @@ export class CsGame extends BaseGame {
           continue;
         }
         // touchend / touchcancel
-        const region = this.touchRegions.get(touch.identifier);
-        region?.up?.();
+        const entry = this.touchRegions.get(touch.identifier);
+        if (entry) {
+          if (entry.scrolling) {
+            entry.region.scroll?.endDrag();
+          } else if (entry.region.deferTap) {
+            // A held-still finger is a tap: activate on release (never on cancel).
+            if (e.type === 'touchend') entry.region.down?.(point.x, point.y);
+            entry.region.up?.();
+          } else {
+            entry.region.up?.();
+          }
+        }
         this.touchRegions.delete(touch.identifier);
         this.touchLook.delete(touch.identifier);
       }

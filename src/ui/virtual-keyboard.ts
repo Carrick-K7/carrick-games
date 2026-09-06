@@ -1,9 +1,12 @@
 import type { GameMeta } from '../games/catalog.js';
 import { normalizeKey } from './keyboard-input.js';
+import { escapeGuideText } from './control-guide.js';
 
-function keycap(label: string): string {
-  const key = normalizeKey(label);
-  return `<button class="vkey" type="button" data-key="${key}" aria-label="${label}">${label}</button>`;
+function keycap(label: string, interactive: boolean): string {
+  const key = escapeGuideText(normalizeKey(label)), text = escapeGuideText(label);
+  return interactive
+    ? `<button class="vkey" type="button" data-key="${key}" aria-label="${text}">${text}</button>`
+    : `<kbd class="vkey" data-key="${key}">${text}</kbd>`;
 }
 
 /**
@@ -11,11 +14,11 @@ function keycap(label: string): string {
  * interactive and mirrors real keyboard/mouse presses without drawing an
  * entire inactive keyboard.
  */
-export function renderVirtualKeyboard(controls: GameMeta['controls'], zh: boolean): string {
+export function renderVirtualKeyboard(controls: GameMeta['controls'], zh: boolean, interactive = true): string {
   const rows = (controls.keyboard ?? []).map((entry) => `
     <div class="input-map-row">
-      <span class="input-map-keys">${entry.keys.map(keycap).join('')}</span>
-      <span class="input-map-action">${zh ? entry.actionZh : entry.action}</span>
+      <span class="input-map-keys">${entry.keys.map(key => keycap(key, interactive)).join('')}</span>
+      <span class="input-map-action">${escapeGuideText(zh ? entry.actionZh : entry.action)}</span>
     </div>
   `).join('');
 

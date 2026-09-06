@@ -21,6 +21,22 @@ export interface GameFrameTelemetry {
   levelSelect?: LevelSelectState;
 }
 
+/** Display pixels, independent of a game's world/board coordinate system. */
+export interface GameViewport {
+  width: number;
+  height: number;
+  dpr: number;
+  safeArea: { top: number; right: number; bottom: number; left: number };
+}
+
+export interface GamePresentation {
+  toggleFullscreen(): void;
+  isFullscreen(): boolean;
+  /** Games may link to the shared guide; they do not own its layout. */
+  openControls?(): void;
+  isControlsOpen?(): boolean;
+}
+
 export interface Game {
   init(): void;
   update(dt: number): void;
@@ -32,6 +48,8 @@ export interface Game {
   renderFrame(): void;
   /** Re-fit the canvas to a shell-chosen CSS width (backing store stays sharp). */
   setDisplayScale?(cssWidth: number): void;
+  setViewport?(viewport: GameViewport): void;
+  onShellOverlayChange?(open: boolean): void;
   getShellSnapshot(): GameShellSnapshot;
   getFrameTelemetry(): GameFrameTelemetry | null;
   startDemo?(): void;
@@ -50,6 +68,7 @@ export interface GameHost {
   getRecord(gameId: string): number | null;
   reportScore(score: number): void;
   requestShellRender(): void;
+  presentation?: GamePresentation;
 }
 
 export const MAX_FRAME_DELTA_SECONDS = 0.05;
@@ -136,6 +155,39 @@ export abstract class BaseGame implements Game {
 
   protected width: number;
   protected height: number;
+  protected viewport: GameViewport | null = null;
+
+  /** Fixed-layout games contain their complete board in the visible viewport. */
+  setViewport(viewport: GameViewport) {
+    if (![viewport.width, viewport.height].every(n => Number.isFinite(n) && n > 0)) return;
+    this.viewport = viewport;
+    const { top, right, bottom, left } = viewport.safeArea;
+    const width = Math.max(1, viewport.width - left - right);
+    const height = Math.max(1, viewport.height - top - bottom);
+    this.setDisplayScale(Math.min(width, height * this.width / this.height));
+    // Responsive fixed-layout adapters (Gacha) may have changed their aspect.
+    const cssWidth = parseFloat(this.canvas.style.width);
+    const cssHeight = parseFloat(this.canvas.style.height);
+    this.canvas.style.left = `${left + (width - cssWidth) / 2}px`;
+    this.canvas.style.top = `${top + (height - cssHeight) / 2}px`;
+    this.canvas.dataset.viewportMode = 'contain';
+  }
+
+  /** Opt-in for 3D/UI games: resize drawing coordinates, never reset game state. */
+  protected resizeLogicalViewport(viewport: GameViewport) {
+    if (![viewport.width, viewport.height].every(n => Number.isFinite(n) && n > 0)) return;
+    this.viewport = viewport;
+    this.width = viewport.width;
+    this.height = viewport.height;
+    this.canvas.dataset.logicalWidth = String(this.width);
+    this.canvas.dataset.logicalHeight = String(this.height);
+    this.canvas.dataset.viewportMode = 'responsive';
+    this.canvas.style.left = '0px';
+    this.canvas.style.top = '0px';
+    this.pixelRatio = setCanvasDisplaySize(this.canvas, this.ctx, this.width, this.height, this.width, viewport.dpr);
+    // Height-only and logical-size changes clear the buffer even at identical DPR.
+    this.renderFrame();
+  }
 
   protected bindInput() {
     if (this.inputBound) return;
@@ -252,7 +304,7 @@ export abstract class BaseGame implements Game {
    */
   setDisplayScale(cssWidth: number) {
     if (!Number.isFinite(cssWidth) || cssWidth <= 0) return;
-    const next = setCanvasDisplaySize(this.canvas, this.ctx, this.width, this.height, cssWidth);
+    const next = setCanvasDisplaySize(this.canvas, this.ctx, this.width, this.height, cssWidth, this.viewport?.dpr);
     if (Math.abs(next - this.pixelRatio) > 0.001) {
       this.pixelRatio = next;
       this.renderFrame();
@@ -262,12 +314,17 @@ export abstract class BaseGame implements Game {
     }
   }
 
+  /** Publish the shared result contract without imposing a second visual panel. */
+  protected publishResult(options: Pick<GameResultOverlayOptions, 'tone' | 'title'>) {
+    this.canvas.dataset.gameResult = options.tone || 'neutral';
+    this.canvas.dataset.gameResultTitle = options.title;
+  }
+
   protected drawResultOverlay(
     ctx: CanvasRenderingContext2D,
     options: GameResultOverlayOptions
   ) {
-    this.canvas.dataset.gameResult = options.tone || 'neutral';
-    this.canvas.dataset.gameResultTitle = options.title;
+    this.publishResult(options);
     drawGameResultOverlay(
       ctx,
       this.width,

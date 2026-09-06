@@ -25,6 +25,8 @@ export interface GameMeta {
   controls: {
     keyboard?: { keys: string[]; action: string; actionZh: string }[];
     keyboardPanel?: VirtualKeySpec[];
+    /** Optional plain-text guidance rendered by the shared shell panel. */
+    notes?: { text: string; textZh: string }[];
     touch?: { icon: 'tap' | 'swipe' | 'swipe-up' | 'swipe-down' | 'swipe-left' | 'swipe-right' | 'hold'; action: string; actionZh: string }[];
   };
   canvasSize: { width: number; height: number };
@@ -514,7 +516,9 @@ export const GAMES: GameMeta[] = [
         { keys: ['Esc'], action: 'Free cursor', actionZh: '释放光标' },
         { keys: ['E'], action: 'Interact / feed / sit', actionZh: '互动 / 投喂 / 入座' },
         { keys: ['Q'], action: 'Door / screen input', actionZh: '车门 / 大屏信号' },
-        { keys: ['F'], action: 'Villa fullscreen', actionZh: '别墅全屏' },
+        { keys: ['F'], action: 'Browser fullscreen', actionZh: '浏览器全屏' },
+        { keys: ['?'], action: 'Open this guide', actionZh: '打开操作指南' },
+        { keys: ['↑', '↓', '←', '→'], action: 'Walk / turn; snooker power / aim', actionZh: '行走 / 转向；台球力度 / 瞄准' },
         { keys: ['1', '2', '3'], action: 'Elevator floor', actionZh: '电梯选层' },
         { keys: ['I', 'M'], action: 'Immersive / floor plan', actionZh: '沉浸 / 导览图' },
         { keys: ['T'], action: 'Day / evening', actionZh: '白天 / 傍晚' },
@@ -523,6 +527,13 @@ export const GAMES: GameMeta[] = [
       touch: [
         { icon: 'swipe', action: 'Left stick: walk/drive; right drag: look/aim', actionZh: '左杆行走/驾驶,右侧环顾/瞄准' },
         { icon: 'tap', action: 'Context actions; tap location to leave immersive mode', actionZh: '点按钮操作;沉浸时点位置信息退出' },
+      ],
+      notes: [
+        { text: 'Click the scene to capture the mouse; Esc releases it. Crouching and jumping respect head clearance.', textZh: '点击画面捕获鼠标，Esc 释放。蹲起和跳跃会检查头顶空间。' },
+        { text: 'Drive or ride: W/S throttle, reverse or brake; A/D steer; Space handbrake; R reset. Q operates the car door or screen input.', textZh: '驾驶或骑行：W/S 前进、倒车或刹车，A/D 转向，空格手刹，R 复位。Q 操作车门或屏幕信号。' },
+        { text: 'Snooker: mouse or ←/→ aim, ↑/↓ power, Space shoots, R racks and E leaves. Touch has separate aim, power, Shot and Exit targets.', textZh: '斯诺克：鼠标或 ←/→ 瞄准，↑/↓ 调力度，空格击球，R 重摆，E 离开。触屏有独立的瞄准、力度、击球和离开按钮。' },
+        { text: 'E calls the elevator; 1/2/3 select a floor inside. An empty car closes its doors after four seconds. H returns to the entrance and stops the vehicle.', textZh: 'E 呼叫电梯，进入后按 1/2/3 选层；空轿厢四秒后关门。H 返回门口并停住车辆。' },
+        { text: 'Practice scores stay in this game and are not uploaded to a leaderboard.', textZh: '练习成绩只留在当前游戏，不上传排行榜。' },
       ],
     },
   },

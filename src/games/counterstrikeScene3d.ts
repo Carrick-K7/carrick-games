@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { getCanvasPixelRatio } from '../core/render.js';
 import { getGrenadeSprite, getWallTexture, getWeaponSprite } from './counterstrikeAssets.js';
+import { sceneBackingRatio } from './counterstrikeViewport.js';
 import {
   BUY_ZONE_RECT,
   ICEBERG_MAP,
@@ -555,6 +556,9 @@ export class CounterStrikeScene3D {
       renderer.toneMappingExposure = 1.06;
     }
 
+    // The vertical FOV is derived from the 16:9 baseline (66° horizontal);
+    // resize() retargets the camera at the actual viewport aspect, so wider
+    // windows simply see more — the image is never stretched.
     const aspect = 1280 / 720;
     const vFov = (2 * Math.atan(Math.tan((66 * Math.PI) / 360) / aspect) * 180) / Math.PI;
     this.camera = new THREE.PerspectiveCamera(vFov, aspect, 2, 4200);
@@ -723,9 +727,16 @@ export class CounterStrikeScene3D {
     return this.renderer ? this.renderer.domElement : null;
   }
 
+  /**
+   * Retarget the renderer at the actual viewport extent and aspect. The
+   * backing store stays within SCENE_MAX_BACKING_PIXELS even on very large
+   * fullscreen windows (memory + fill-rate guard).
+   */
   resize(w: number, h: number, backingRatio?: number): void {
     if (!this.renderer) return;
-    const ratio = this.lowSpec ? 0.75 : (backingRatio ?? getCanvasPixelRatio());
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+    const base = this.lowSpec ? 0.75 : (backingRatio ?? getCanvasPixelRatio());
+    const ratio = sceneBackingRatio(w, h, base);
     if (w === this.lastW && h === this.lastH && ratio === this.lastRatio) return;
     this.lastW = w;
     this.lastH = h;

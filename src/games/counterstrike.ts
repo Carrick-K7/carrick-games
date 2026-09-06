@@ -13,10 +13,27 @@ import {
   createDefaultGameHost,
   type GameHost,
   type GameShellSnapshot,
+  type GameViewport,
 } from '../core/game.js';
 import { Sfx } from './counterstrikeAudio.js';
 import { getGrenadeSprite, getSoldierFrames, getWallTexture, getWeaponSprite } from './counterstrikeAssets.js';
 import { CounterStrikeScene3D } from './counterstrikeScene3d.js';
+import {
+  SHELL_MENU_RESERVE,
+  buyFooterButtons,
+  buyMenuLayout,
+  centeredPanelLayout,
+  halfFovTanForAspect,
+  hudScale,
+  maxBuyScroll,
+  pauseButtonLayout,
+  raycastBufferSize,
+  sanitizeInsets,
+  touchControlsLayout,
+  type BuyMenuLayout,
+  type TouchControlsLayout,
+  type ViewportInsets,
+} from './counterstrikeViewport.js';
 import {
   BUY_ZONE_RECT,
   CT_SPAWNS,
@@ -61,9 +78,11 @@ import {
   type WeaponId,
 } from './counterstrikeRules.js';
 
+// Baseline logical size: the constructor starts here and setViewport() then
+// tracks the real CSS extent (fluid rendering). The 66° horizontal FOV below
+// is the 16:9 baseline; halfFovTanForAspect() derives the actual one.
 const W = 1280;
 const H = 720;
-const HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
 const MAX_DIST = 3200;
 const FOG_START = 900;
 /** Bullets travel until a wall; falloff handles the rest (CS 1.6 behavior). */
@@ -286,6 +305,8 @@ export class CounterStrikeGame extends BaseGame {
   private buyHintT = 0;
   private gameOver = false;
   private paused = false;
+  /** Pause initiated by a shell overlay — only that pause auto-restores. */
+  private shellPaused = false;
 
   private keys = new Set<string>();
   private firing = false;
@@ -298,6 +319,9 @@ export class CounterStrikeGame extends BaseGame {
   private buyCat = -1;
   private hoverCat = -1;
   private hoverItem = -1;
+  /** Touch buy-menu item-list scroll (px) and tap-vs-drag tracking. */
+  private buyScroll = 0;
+  private buyListTouch: { id: number; lastY: number; moved: number } | null = null;
 
   private hitmarker = 0;
   private hitmarkerKill = false;
@@ -315,6 +339,7 @@ export class CounterStrikeGame extends BaseGame {
   private boundBlur: (() => void) | null = null;
   private boundContextMenu: ((e: Event) => void) | null = null;
   private boundPointerLockChange: (() => void) | null = null;
+  private boundWheel: ((e: WheelEvent) => void) | null = null;
 
   private readonly renderCanvas = document.createElement('canvas');
   private readonly renderCtx = this.renderCanvas.getContext('2d');
@@ -333,6 +358,76 @@ export class CounterStrikeGame extends BaseGame {
 
   override getShellSnapshot(): GameShellSnapshot {
     return { score: this.playerScore() };
+  }
+
+  // ── Viewport (responsive fullscreen-window display) ────────────────────────
+
+  /**
+   * Fluid rendering: the logical canvas tracks the real CSS extent handed
+   * down by the shell instead of a contained 1280x720 box. draw() re-derives
+   * the projection FOV, raycast buffer, 3D backing size, and HUD layout from
+   * this.width/this.height every frame, so physics, AI, and the weapon sim
+   * stay resolution-independent. Game state is never reinitialized here.
+   */
+  override setViewport(viewport: GameViewport) {
+    this.resizeLogicalViewport(viewport);
+  }
+
+  /**
+   * Shell overlays (menus/dialogs) steal input focus: drop every held key,
+   * pointer, and touch, and pause while the overlay owns the screen. Closing
+   * restores only the pause the shell itself caused — a pause the player
+   * chose (P / ESC) stays paused.
+   */
+  onShellOverlayChange(open: boolean) {
+    this.clearTransientInput();
+    if (open) {
+      try {
+        if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+      } catch {
+        // best-effort
+      }
+      if (this.running && !this.gameOver && !this.paused) {
+        this.paused = true;
+        this.shellPaused = true;
+      }
+      return;
+    }
+    if (this.shellPaused) {
+      this.shellPaused = false;
+      this.paused = false;
+    }
+  }
+
+  private safeArea(): ViewportInsets {
+    return sanitizeInsets(this.viewport?.safeArea);
+  }
+
+  private uiScale(): number {
+    return hudScale(this.width, this.height);
+  }
+
+  /** Aspect-aware horizontal half-FOV tangent; vertical FOV pinned to 16:9. */
+  private halfFovTan(): number {
+    return halfFovTanForAspect(this.width / Math.max(1, this.height));
+  }
+
+  private touchLayout(): TouchControlsLayout {
+    return touchControlsLayout(this.width, this.height, this.safeArea());
+  }
+
+  private buyLayout(): BuyMenuLayout {
+    return buyMenuLayout(this.width, this.height, this.safeArea(), this.touchMode);
+  }
+
+  /** Explicit fullscreen toggle on the pause overlay (host-provided). */
+  private clickPauseMenu(x: number, y: number): boolean {
+    const presentation = this.host.presentation;
+    if (!presentation) return false;
+    const btn = pauseButtonLayout(this.width, this.height, this.safeArea());
+    if (x < btn.x || x > btn.x + btn.w || y < btn.y || y > btn.y + btn.h) return false;
+    presentation.toggleFullscreen();
+    return true;
   }
 
   // ── Setup ──────────────────────────────────────────────────────────────────
@@ -431,11 +526,14 @@ export class CounterStrikeGame extends BaseGame {
     this.tLossStreak = 0;
     this.gameOver = false;
     this.paused = false;
+    this.shellPaused = false;
     this.keys.clear();
     this.firing = false;
     this.triggerPulse = false;
     this.buyOpen = false;
     this.buyCat = -1;
+    this.buyScroll = 0;
+    this.buyListTouch = null;
     this.scoreboardHeld = false;
     this.hitmarker = 0;
     this.hitmarkerKill = false;
@@ -481,6 +579,24 @@ export class CounterStrikeGame extends BaseGame {
         this.boundPointerLockChange = null;
       });
     }
+    if (!this.boundWheel) {
+      // Internal wheel scroll for the touch-layout buy menu's item list.
+      this.boundWheel = (e: WheelEvent) => {
+        if (!this.buyOpen || this.paused || this.gameOver) return;
+        const layout = this.buyLayout();
+        if (!layout.touch || this.buyCat < 0) return;
+        const point = this.canvasPoint(e.clientX, e.clientY);
+        if (point.x < layout.x || point.x > layout.x + layout.w) return;
+        if (point.y < layout.bodyY || point.y > layout.bodyY + layout.bodyH) return;
+        e.preventDefault();
+        this.buyScroll = this.clampBuyScroll(this.buyScroll + e.deltaY);
+      };
+      this.canvas.addEventListener('wheel', this.boundWheel, { passive: false });
+      this.registerCleanup(() => {
+        if (this.boundWheel) this.canvas.removeEventListener('wheel', this.boundWheel);
+        this.boundWheel = null;
+      });
+    }
   }
 
   private clearTransientInput() {
@@ -497,6 +613,7 @@ export class CounterStrikeGame extends BaseGame {
     this.lookTouch = null;
     this.fireTouch = null;
     this.reloadTouch = null;
+    this.buyListTouch = null;
   }
 
   destroy() {
@@ -723,6 +840,8 @@ export class CounterStrikeGame extends BaseGame {
     if (this.buyOpen) {
       this.buyOpen = false;
       this.buyCat = -1;
+      this.buyScroll = 0;
+      this.buyListTouch = null;
       return;
     }
     if (!this.canBuy()) {
@@ -730,10 +849,77 @@ export class CounterStrikeGame extends BaseGame {
       this.buyHintT = 1.6;
       return;
     }
+    this.clearTransientInput();
     this.buyOpen = true;
     this.buyCat = -1;
     this.hoverCat = 0;
     this.hoverItem = -1;
+    this.buyScroll = 0;
+    this.buyListTouch = null;
+  }
+
+  /** Touch footer Back: step out of the item list, else close the menu. */
+  private buyBack() {
+    this.buyListTouch = null;
+    if (this.buyCat === -1) {
+      this.buyOpen = false;
+      this.buyScroll = 0;
+      return;
+    }
+    this.buyCat = -1;
+    this.hoverItem = -1;
+    this.buyScroll = 0;
+  }
+
+  /** Touch footer Close: dismiss the menu outright. */
+  private buyClose() {
+    this.buyOpen = false;
+    this.buyCat = -1;
+    this.buyScroll = 0;
+    this.buyListTouch = null;
+  }
+
+  /** Select a category and reset the item-list scroll. */
+  private buySelectCategory(index: number) {
+    this.buyCat = index;
+    this.hoverCat = index;
+    this.hoverItem = -1;
+    this.buyScroll = 0;
+    this.buyListTouch = null;
+  }
+
+  /** Clamp the item-list scroll offset against the current list length. */
+  private clampBuyScroll(offset: number): number {
+    const layout = this.buyLayout();
+    const count = this.buyCat >= 0
+      ? buyItemsForTeam(BUY_CATEGORIES[this.buyCat], this.player().team).length
+      : 0;
+    return clamp(offset, 0, maxBuyScroll(count, layout));
+  }
+
+  /** Category index at a point, matching the mode's draw geometry. */
+  private buyCategoryAt(layout: BuyMenuLayout, x: number, y: number): number {
+    if (!layout.touch) {
+      // Desktop: single-column list on the panel's left half.
+      if (x >= layout.x + layout.w / 2) return -1;
+      const row = Math.floor((y - layout.bodyY) / layout.rowH);
+      return row >= 0 && row < BUY_CATEGORIES.length ? row : -1;
+    }
+    // Touch: 2-column × 4-row grid over the body.
+    const col = Math.floor((x - layout.x) / layout.cellW);
+    const row = Math.floor((y - layout.bodyY) / layout.cellH);
+    if (col < 0 || col >= layout.catCols || row < 0 || row >= layout.catRows) return -1;
+    const index = row * layout.catCols + col;
+    return index < BUY_CATEGORIES.length ? index : -1;
+  }
+
+  /** Item index at a point in the touch item list (scroll-aware). */
+  private buyItemRowAt(layout: BuyMenuLayout, x: number, y: number): number {
+    if (x < layout.x || x > layout.x + layout.w) return -1;
+    if (y < layout.bodyY || y > layout.bodyY + layout.bodyH) return -1;
+    const index = Math.floor((y - layout.bodyY + this.buyScroll) / layout.itemRowH);
+    const items = buyItemsForTeam(BUY_CATEGORIES[this.buyCat], this.player().team);
+    return index >= 0 && index < items.length ? index : -1;
   }
 
   private buyItemAt(catIndex: number, itemIndex: number) {
@@ -744,6 +930,16 @@ export class CounterStrikeGame extends BaseGame {
     const item = items[itemIndex];
     if (!item) return;
     this.purchaseItem(p, item);
+  }
+
+  /** Buy the item and drop back to the category level (matches key flow). */
+  private buyItemAndBack(itemIndex: number) {
+    if (this.buyCat < 0) return;
+    this.buyItemAt(this.buyCat, itemIndex);
+    this.buyCat = -1;
+    this.hoverItem = -1;
+    this.buyScroll = 0;
+    this.buyListTouch = null;
   }
 
   private purchaseItem(f: Fighter, item: BuyMenuItem) {
@@ -862,10 +1058,13 @@ export class CounterStrikeGame extends BaseGame {
           if (key === 'b' || key === 'escape') {
             this.buyOpen = false;
             this.buyCat = -1;
+            this.buyScroll = 0;
+            this.buyListTouch = null;
             return;
           }
           if (key === '0') {
             this.buyCat = -1;
+            this.buyScroll = 0;
             return;
           }
           const digit = Number(key);
@@ -874,9 +1073,11 @@ export class CounterStrikeGame extends BaseGame {
               this.buyCat = digit - 1;
               this.hoverCat = digit - 1;
               this.hoverItem = 0;
+              this.buyScroll = 0;
             } else {
               this.buyItemAt(this.buyCat, digit - 1);
               this.buyCat = -1;
+              this.buyScroll = 0;
             }
             return;
           }
@@ -936,7 +1137,14 @@ export class CounterStrikeGame extends BaseGame {
         if (this.isRestartInput(e)) this.init();
         return;
       }
-      if (this.paused) return;
+      if (this.paused) {
+        // The pause overlay's explicit fullscreen button stays clickable.
+        if (e.type === 'mousedown' && e.button === 0) {
+          const point = this.canvasPoint(e.clientX, e.clientY);
+          this.clickPauseMenu(point.x, point.y);
+        }
+        return;
+      }
 
       if (e.type === 'mousemove') {
         const point = this.canvasPoint(e.clientX, e.clientY);
@@ -1004,20 +1212,39 @@ export class CounterStrikeGame extends BaseGame {
     }
 
     if (e instanceof TouchEvent) {
+      // Suppress compatibility mouse events: a category tap must not also
+      // click an item at the same coordinates in the newly opened list.
+      e.preventDefault();
       if (this.gameOver) {
         if (this.isRestartInput(e)) this.init();
         return;
       }
+      if (e.type === 'touchstart' && this.paused) {
+        // The pause overlay's explicit fullscreen button stays tappable.
+        for (const t of e.changedTouches) {
+          const point = this.canvasPoint(t.clientX, t.clientY);
+          if (!this.clickPauseMenu(point.x, point.y)) {
+            this.clearTransientInput();
+            this.paused = false;
+          }
+          e.preventDefault();
+          break; // This gesture only resumes; it must not also move/fire.
+        }
+        return;
+      }
       if (e.type === 'touchstart' && !this.paused) {
+        const layout = this.touchLayout();
         for (const t of e.changedTouches) {
           const point = this.canvasPoint(t.clientX, t.clientY);
           if (this.buyOpen) {
-            this.clickBuyMenu(point.x, point.y);
+            this.buyTouchStart(point, t.identifier);
             continue;
           }
-          const fireHit = Math.hypot(point.x - (this.width - 104), point.y - (this.height - 100)) <= 58;
-          const reloadHit = Math.hypot(point.x - (this.width - 104), point.y - (this.height - 196)) <= 44;
-          if (point.x < this.width * 0.45 && !fireHit && !reloadHit) {
+          const fireHit = Math.hypot(point.x - layout.fire.x, point.y - layout.fire.y) <= layout.fire.hitR;
+          const reloadHit = Math.hypot(point.x - layout.reload.x, point.y - layout.reload.y) <= layout.reload.hitR;
+          const buyHit = this.canBuy()
+            && Math.hypot(point.x - layout.buy.x, point.y - layout.buy.y) <= layout.buy.hitR;
+          if (point.x < layout.moveRegionW && !fireHit && !reloadHit && !buyHit) {
             if (!this.moveTouch) {
               this.moveTouch = { id: t.identifier, ax: point.x, ay: point.y, dx: 0, dy: 0 };
             }
@@ -1030,18 +1257,32 @@ export class CounterStrikeGame extends BaseGame {
           } else if (reloadHit) {
             this.reloadTouch = { id: t.identifier };
             this.startReload(this.player());
+          } else if (buyHit) {
+            this.toggleBuy();
           } else if (!this.lookTouch) {
             this.lookTouch = { id: t.identifier, lastX: point.x, lastY: point.y };
           }
         }
       } else if (e.type === 'touchmove' && !this.paused) {
+        if (this.buyListTouch) {
+          // Item-list drag scroll (release without dragging = tap-to-buy).
+          for (const t of e.changedTouches) {
+            if (t.identifier !== this.buyListTouch.id) continue;
+            const point = this.canvasPoint(t.clientX, t.clientY);
+            const dy = this.buyListTouch.lastY - point.y;
+            this.buyListTouch.lastY = point.y;
+            this.buyListTouch.moved += Math.abs(dy);
+            this.buyScroll = this.clampBuyScroll(this.buyScroll + dy);
+          }
+          return;
+        }
+        const maxR = this.touchLayout().stickR;
         for (const t of e.changedTouches) {
           const point = this.canvasPoint(t.clientX, t.clientY);
           if (this.moveTouch && t.identifier === this.moveTouch.id) {
             const dx = point.x - this.moveTouch.ax;
             const dy = point.y - this.moveTouch.ay;
             const len = Math.hypot(dx, dy);
-            const maxR = 66;
             if (len > maxR) {
               this.moveTouch.dx = (dx / len) * maxR;
               this.moveTouch.dy = (dy / len) * maxR;
@@ -1058,6 +1299,16 @@ export class CounterStrikeGame extends BaseGame {
         }
       } else if (e.type === 'touchend' || e.type === 'touchcancel') {
         for (const t of e.changedTouches) {
+          if (this.buyListTouch && t.identifier === this.buyListTouch.id) {
+            const ended = this.buyListTouch;
+            this.buyListTouch = null;
+            if (e.type === 'touchend' && ended.moved < 8 && this.buyOpen && this.buyCat >= 0) {
+              const point = this.canvasPoint(t.clientX, t.clientY);
+              const row = this.buyItemRowAt(this.buyLayout(), point.x, point.y);
+              if (row >= 0) this.buyItemAndBack(row);
+            }
+            continue;
+          }
           if (this.moveTouch && t.identifier === this.moveTouch.id) this.moveTouch = null;
           if (this.lookTouch && t.identifier === this.lookTouch.id) this.lookTouch = null;
           if (this.fireTouch && t.identifier === this.fireTouch.id) {
@@ -1070,28 +1321,45 @@ export class CounterStrikeGame extends BaseGame {
     }
   }
 
+  private static inRect(x: number, y: number, r: { x: number; y: number; w: number; h: number }): boolean {
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
   private clickBuyMenu(x: number, y: number) {
-    const rect = this.buyMenuRect();
-    if (x < rect.x || x > rect.x + rect.w || y < rect.y || y > rect.y + rect.h) return;
-    const rowY = rect.y + 64;
-    const rowH = 25;
-    const catRows = 8;
-    if (this.buyCat === -1) {
-      if (x < rect.x + rect.w / 2) {
-        const row = Math.floor((y - rowY) / rowH);
-        if (row >= 0 && row < catRows) {
-          this.buyCat = row;
-          this.hoverCat = row;
-          this.hoverItem = 0;
-        }
+    const layout = this.buyLayout();
+    if (!CounterStrikeGame.inRect(x, y, layout)) return;
+    if (layout.touch) {
+      const { back, close } = buyFooterButtons(layout);
+      if (CounterStrikeGame.inRect(x, y, back)) {
+        this.buyBack();
         return;
+      }
+      if (CounterStrikeGame.inRect(x, y, close)) {
+        this.buyClose();
+        return;
+      }
+      if (this.buyCat === -1) {
+        const cat = this.buyCategoryAt(layout, x, y);
+        if (cat >= 0) this.buySelectCategory(cat);
+        return;
+      }
+      const row = this.buyItemRowAt(layout, x, y);
+      if (row >= 0) this.buyItemAndBack(row);
+      return;
+    }
+    if (this.buyCat === -1) {
+      const cat = this.buyCategoryAt(layout, x, y);
+      if (cat >= 0) {
+        this.buyCat = cat;
+        this.hoverCat = cat;
+        this.hoverItem = 0;
       }
       return;
     }
-    if (x >= rect.x + rect.w / 2) {
+    if (x >= layout.x + layout.w / 2) {
       const category = BUY_CATEGORIES[this.buyCat];
       const items = buyItemsForTeam(category, this.player().team);
-      const row = Math.floor((y - rowY) / rowH);
+      const row = Math.floor((y - layout.bodyY) / layout.rowH);
       if (row >= 0 && row < items.length) {
         this.buyItemAt(this.buyCat, row);
         this.buyCat = -1;
@@ -1102,28 +1370,60 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   private updateBuyHover(x: number, y: number) {
-    const rect = this.buyMenuRect();
-    const rowY = rect.y + 64;
-    const rowH = 25;
-    if (x < rect.x || x > rect.x + rect.w || y < rowY || y > rect.y + rect.h) {
+    const layout = this.buyLayout();
+    if (!CounterStrikeGame.inRect(x, y, layout) || y < layout.bodyY) {
       this.hoverCat = -1;
       this.hoverItem = -1;
       return;
     }
-    const row = Math.floor((y - rowY) / rowH);
+    if (layout.touch) {
+      if (this.buyCat === -1) {
+        this.hoverCat = this.buyCategoryAt(layout, x, y);
+        this.hoverItem = -1;
+      } else {
+        this.hoverCat = this.buyCat;
+        this.hoverItem = this.buyItemRowAt(layout, x, y);
+      }
+      return;
+    }
+    const row = Math.floor((y - layout.bodyY) / layout.rowH);
     if (this.buyCat === -1) {
-      this.hoverCat = x < rect.x + rect.w / 2 && row >= 0 && row < 8 ? row : -1;
+      this.hoverCat = x < layout.x + layout.w / 2 && row >= 0 && row < 8 ? row : -1;
       this.hoverItem = -1;
     } else {
       this.hoverCat = this.buyCat;
-      this.hoverItem = x >= rect.x + rect.w / 2 && row >= 0 ? row : -1;
+      this.hoverItem = x >= layout.x + layout.w / 2 && row >= 0 ? row : -1;
     }
   }
 
-  private buyMenuRect() {
-    const w = 480;
-    const h = 292;
-    return { x: (W - w) / 2, y: (H - h) / 2 - 14, w, h };
+  /**
+   * Buy-menu touch entry: persistent footer buttons, category grid cells, or
+   * the start of an item-list tap/drag (drag scrolls, release buys).
+   */
+  private buyTouchStart(point: { x: number; y: number }, id: number) {
+    const layout = this.buyLayout();
+    if (layout.touch) {
+      const { back, close } = buyFooterButtons(layout);
+      if (CounterStrikeGame.inRect(point.x, point.y, back)) {
+        this.buyBack();
+        return;
+      }
+      if (CounterStrikeGame.inRect(point.x, point.y, close)) {
+        this.buyClose();
+        return;
+      }
+      if (this.buyCat === -1) {
+        const cat = this.buyCategoryAt(layout, point.x, point.y);
+        if (cat >= 0) this.buySelectCategory(cat);
+        return;
+      }
+      const body = { x: layout.x, y: layout.bodyY, w: layout.w, h: layout.bodyH };
+      if (CounterStrikeGame.inRect(point.x, point.y, body)) {
+        this.buyListTouch = { id, lastY: point.y, moved: 0 };
+      }
+      return;
+    }
+    this.clickBuyMenu(point.x, point.y);
   }
 
   // ── Weapons ────────────────────────────────────────────────────────────────
@@ -1699,8 +1999,9 @@ export class CounterStrikeGame extends BaseGame {
     if (this.keys.has('a') || this.keys.has('arrowleft')) fx -= 1;
     if (this.keys.has('d') || this.keys.has('arrowright')) fx += 1;
     if (this.moveTouch) {
-      fx = this.moveTouch.dx / 66;
-      fy = -this.moveTouch.dy / 66;
+      const stickR = this.touchLayout().stickR;
+      fx = this.moveTouch.dx / stickR;
+      fy = -this.moveTouch.dy / stickR;
     }
     p.walk = this.keys.has('shift');
     p.crouch = this.keys.has('control') || this.keys.has('ctrl');
@@ -2135,8 +2436,9 @@ export class CounterStrikeGame extends BaseGame {
   private project(wx: number, wy: number, h: number): { x: number; y: number; depth: number } | null {
     const dirX = Math.cos(this.angle);
     const dirY = Math.sin(this.angle);
-    const planeX = -dirY * HALF_FOV_TAN;
-    const planeY = dirX * HALF_FOV_TAN;
+    const fovTan = this.halfFovTan();
+    const planeX = -dirY * fovTan;
+    const planeY = dirX * fovTan;
     const dx = wx - this.px;
     const dy = wy - this.py;
     const invDet = 1 / (planeX * dirY - dirX * planeY);
@@ -2175,6 +2477,9 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    // resizeLogicalViewport() repaints immediately, which can land before
+    // prepare()/init() has populated the roster — nothing to draw yet.
+    if (this.fighters.length === 0) return;
     const use3d = !this.isPixelMode() && this.ensureScene3D();
     if (use3d) {
       this.drawWorld3D(ctx);
@@ -2186,20 +2491,44 @@ export class CounterStrikeGame extends BaseGame {
     this.drawHud(ctx);
     if (this.buyOpen) this.drawBuyMenu(ctx);
     if (this.scoreboardHeld && !this.gameOver) this.drawScoreboard(ctx);
-    if (this.touchMode && !this.paused && !this.gameOver) this.drawTouchControls(ctx);
+    if (this.touchMode && !this.paused && !this.gameOver && !this.buyOpen) this.drawTouchControls(ctx);
 
     if (this.paused) {
       const zh = this.isZhLang();
+      const s = this.uiScale();
+      const pxSize = (n: number) => Math.max(11, Math.round(n * s));
+      const W = this.width;
+      const H = this.height;
       ctx.fillStyle = 'rgba(6,12,24,0.55)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#f1f5f9';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = 'bold 34px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(zh ? '已暂停' : 'PAUSED', W / 2, H / 2 - 22);
-      ctx.font = '17px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.font = `bold ${pxSize(34)}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.fillText(zh ? '已暂停' : 'PAUSED', W / 2, H / 2 - 22 * s);
+      ctx.font = `${pxSize(17)}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
       ctx.fillStyle = 'rgba(241,245,249,0.8)';
-      ctx.fillText(zh ? '按 P 继续' : 'PRESS P TO RESUME', W / 2, H / 2 + 22);
+      ctx.fillText(this.touchMode ? (zh ? '轻触画面继续' : 'TAP TO RESUME') : (zh ? '按 P 继续' : 'PRESS P TO RESUME'), W / 2, H / 2 + 22 * s);
+
+      // Explicit fullscreen toggle — native fullscreen is only ever
+      // requested from this button, never automatically by the game.
+      const presentation = this.host.presentation;
+      if (presentation) {
+        const btn = pauseButtonLayout(W, H, this.safeArea());
+        const fullscreen = presentation.isFullscreen();
+        ctx.fillStyle = 'rgba(57,197,187,0.22)';
+        ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+        ctx.strokeStyle = 'rgba(57,197,187,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(btn.x + 0.5, btn.y + 0.5, btn.w - 1, btn.h - 1);
+        ctx.fillStyle = '#d7f5f2';
+        ctx.font = `bold ${pxSize(16)}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+        ctx.fillText(
+          fullscreen ? (zh ? '退出全屏' : 'EXIT FULLSCREEN') : (zh ? '全屏显示' : 'FULLSCREEN'),
+          btn.x + btn.w / 2,
+          btn.y + btn.h / 2,
+        );
+      }
     }
 
     if (this.gameOver) {
@@ -2241,7 +2570,8 @@ export class CounterStrikeGame extends BaseGame {
   private drawWorld3D(ctx: CanvasRenderingContext2D) {
     const scene = this.scene3d;
     if (!scene) return;
-    scene.resize(W, H, this.canvas.width / W);
+    // Actual viewport aspect; the scene caps its own backing store budget.
+    scene.resize(this.width, this.height);
     const p = this.player();
     scene.sync({
       camX: this.px,
@@ -2287,17 +2617,21 @@ export class CounterStrikeGame extends BaseGame {
       shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
       shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
     }
-    ctx.drawImage(glCanvas, shakeX, shakeY, W, H);
+    ctx.drawImage(glCanvas, shakeX, shakeY, this.width, this.height);
   }
 
   /** Pixel mode / no-WebGL fallback: the original raycaster. */
   private drawWorldLegacy(ctx: CanvasRenderingContext2D) {
     const pixel = this.isPixelMode();
-    this.rw = pixel ? 320 : 640;
-    this.rh = pixel ? 180 : 360;
-    if (this.renderCanvas.width !== this.rw) {
+    // The buffer follows the real viewport aspect (16:9 baseline FOV kept via
+    // halfFovTan), so the blit below preserves proportions on any screen.
+    const size = raycastBufferSize(this.width, this.height, pixel);
+    if (size.rw !== this.rw || size.rh !== this.rh) {
+      this.rw = size.rw;
+      this.rh = size.rh;
       this.renderCanvas.width = this.rw;
       this.renderCanvas.height = this.rh;
+      if (this.zBuffer.length < this.rw) this.zBuffer = new Float32Array(this.rw);
     }
     const rctx = this.renderCtx;
     if (!rctx) return;
@@ -2312,7 +2646,7 @@ export class CounterStrikeGame extends BaseGame {
       shakeX = (Math.random() - 0.5) * 2 * this.shakeMag * k;
       shakeY = (Math.random() - 0.5) * 2 * this.shakeMag * k;
     }
-    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, shakeX, shakeY, W, H);
+    ctx.drawImage(this.renderCanvas, 0, 0, this.rw, this.rh, shakeX, shakeY, this.width, this.height);
   }
 
   private drawWorld(rctx: CanvasRenderingContext2D) {
@@ -2329,8 +2663,9 @@ export class CounterStrikeGame extends BaseGame {
 
     const dirX = Math.cos(this.angle);
     const dirY = Math.sin(this.angle);
-    const planeX = -dirY * HALF_FOV_TAN;
-    const planeY = dirX * HALF_FOV_TAN;
+    const fovTan = this.halfFovTan();
+    const planeX = -dirY * fovTan;
+    const planeY = dirX * fovTan;
     const shift = Math.sin(this.pitch) * rh * 0.9;
 
     for (let col = 0; col < rw; col++) {
@@ -2380,8 +2715,9 @@ export class CounterStrikeGame extends BaseGame {
     const rh = this.rh;
     const dirX = Math.cos(this.angle);
     const dirY = Math.sin(this.angle);
-    const planeX = -dirY * HALF_FOV_TAN;
-    const planeY = dirX * HALF_FOV_TAN;
+    const fovTan = this.halfFovTan();
+    const planeX = -dirY * fovTan;
+    const planeY = dirX * fovTan;
 
     interface SpriteItem {
       depth: number;
@@ -2517,8 +2853,10 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   private drawProjectedFx(ctx: CanvasRenderingContext2D) {
-    const sx = W / this.rw;
-    const sy = H / this.rh;
+    // Same projection as the world pass, mapped from raycast-buffer space
+    // onto the current canvas extent.
+    const sx = this.width / this.rw;
+    const sy = this.height / this.rh;
     for (const tr of this.tracers) {
       const a = this.project(tr.x1, tr.y1, tr.z1);
       const b = this.project(tr.x2, tr.y2, tr.z2);
@@ -2555,21 +2893,25 @@ export class CounterStrikeGame extends BaseGame {
     if (this.gameOver || !p.alive || this.phase !== 'live') return;
     const w = this.activeWeapon(p);
     if (!w) return;
+    const s = this.uiScale();
+    const insets = this.safeArea();
+    const W = this.width;
+    const H = this.height;
     const bobY = p.moving ? Math.sin(p.walkPhase * 2.4) * 4 : 0;
-    const swayX = p.moving ? Math.cos(p.walkPhase * 1.2) * 5 : 0;
+    const swayX = (p.moving ? Math.cos(p.walkPhase * 1.2) * 5 : 0) * s;
     const reloadDip = p.reloading ? Math.sin((1 - p.reloadT / w.def.reload) * Math.PI) * 0.5 : 0;
 
     const id = w.def.id;
     if (id === 'elite') {
       // Dual Berettas: one at each lower corner, angled inward.
-      this.vmWithTransform(ctx, W - 150 + swayX, H - 34, -1.3, -0.30 - p.recoil * 1.4 + reloadDip, () => this.vmEliteSide(ctx, false));
-      this.vmWithTransform(ctx, 150 + swayX * 0.6, H - 34, 1.3, -(-0.30 - p.recoil * 1.4 + reloadDip), () => this.vmEliteSide(ctx, true));
+      this.vmWithTransform(ctx, W - insets.right - 150 * s + swayX, H - insets.bottom - 34 * s, -1.3 * s, -0.30 - p.recoil * 1.4 + reloadDip, () => this.vmEliteSide(ctx, false));
+      this.vmWithTransform(ctx, insets.left + 150 * s + swayX * 0.6, H - insets.bottom - 34 * s, 1.3 * s, -(-0.30 - p.recoil * 1.4 + reloadDip), () => this.vmEliteSide(ctx, true));
       return;
     }
 
     ctx.save();
-    ctx.translate(W - 186 + swayX, H - 50);
-    ctx.scale(-1.5, 1.5);
+    ctx.translate(W - insets.right - 186 * s + swayX, H - insets.bottom - 50 * s);
+    ctx.scale(-1.5 * s, 1.5 * s);
     ctx.rotate(-0.235 - p.recoil * 1.35 + reloadDip);
     ctx.translate(-p.recoil * 110, -bobY * 0.6);
 
@@ -2915,6 +3257,14 @@ export class CounterStrikeGame extends BaseGame {
     const zh = this.isZhLang();
     const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const mono = 'ui-monospace, SFMono-Regular, monospace';
+    const W = this.width;
+    const H = this.height;
+    const s = this.uiScale();
+    const insets = this.safeArea();
+    const pxSize = (n: number) => Math.max(11, Math.round(n * s));
+    // Safe-area content center (full-bleed world renders behind the HUD).
+    const cx = insets.left + (W - insets.left - insets.right) / 2;
+    const cy = insets.top + (H - insets.top - insets.bottom) / 2;
     ctx.textBaseline = 'middle';
 
     // ── Top center: round timer + team scores.
@@ -2924,14 +3274,14 @@ export class CounterStrikeGame extends BaseGame {
         ? `FREEZE ${Math.ceil(this.phaseTimer)}`
         : '';
     ctx.fillStyle = 'rgba(8,16,30,0.58)';
-    ctx.fillRect(W / 2 - 140, 14, 280, 46);
-    this.hudText(ctx, `CT ${this.ctWins}`, W / 2 - 126, 37, 'left', `bold 19px ${font}`, '#7fb2ff');
-    this.hudText(ctx, timerText, W / 2, 37, 'center', `bold 26px ${mono}`, '#f5f5f0');
-    this.hudText(ctx, `${this.tWins} T`, W / 2 + 126, 37, 'right', `bold 19px ${font}`, '#ff9a8a');
+    ctx.fillRect(cx - 140 * s, insets.top + 14 * s, 280 * s, 46 * s);
+    this.hudText(ctx, `CT ${this.ctWins}`, cx - 126 * s, insets.top + 37 * s, 'left', `bold ${pxSize(19)}px ${font}`, '#7fb2ff');
+    this.hudText(ctx, timerText, cx, insets.top + 37 * s, 'center', `bold ${pxSize(26)}px ${mono}`, '#f5f5f0');
+    this.hudText(ctx, `${this.tWins} T`, cx + 126 * s, insets.top + 37 * s, 'right', `bold ${pxSize(19)}px ${font}`, '#ff9a8a');
 
     // Round / phase label.
     ctx.textAlign = 'center';
-    ctx.font = `15px ${font}`;
+    ctx.font = `${pxSize(15)}px ${font}`;
     const label = this.phase === 'freeze'
       ? (zh ? '冻结时间 · 购买区在地图中央' : 'FREEZE · BUYZONE IS IN THE CENTER')
       : this.phase === 'live' && this.liveT <= ROUND.buyTime
@@ -2939,29 +3289,31 @@ export class CounterStrikeGame extends BaseGame {
         : this.phase === 'live'
           ? (zh ? `回合 ${this.round} · 先到 ${ROUND.winScore} 回合获胜` : `ROUND ${this.round} · FIRST TO ${ROUND.winScore}`)
           : '';
-    this.hudText(ctx, label, W / 2, 76, 'center', `15px ${font}`, 'rgba(241,245,249,0.92)');
+    this.hudText(ctx, label, cx, insets.top + 76 * s, 'center', `${pxSize(15)}px ${font}`, 'rgba(241,245,249,0.92)');
 
     if (this.liveMsg > 0) {
-      this.hudText(ctx, zh ? '冲! 冲! 冲!' : 'GO GO GO!', W / 2, 138, 'center', `bold 32px ${font}`, `rgba(255,240,170,${Math.min(1, this.liveMsg)})`);
+      this.hudText(ctx, zh ? '冲! 冲! 冲!' : 'GO GO GO!', cx, insets.top + 138 * s, 'center', `bold ${pxSize(32)}px ${font}`, `rgba(255,240,170,${Math.min(1, this.liveMsg)})`);
     }
 
     if (this.buyHintT > 0) {
-      this.hudText(ctx, zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', W / 2, 168, 'center', `bold 17px ${font}`, `rgba(255,210,74,${Math.min(1, this.buyHintT)})`);
+      this.hudText(ctx, zh ? '购买区在地图中央!' : 'BUYZONE IS IN THE CENTER!', cx, insets.top + 168 * s, 'center', `bold ${pxSize(17)}px ${font}`, `rgba(255,210,74,${Math.min(1, this.buyHintT)})`);
     }
 
     if (this.canBuy() && !this.buyOpen) {
-      this.hudText(ctx, zh ? '按 B 购买 (购买区内)' : 'PRESS B TO BUY (IN BUYZONE)', W / 2, H / 2 + 120, 'center', `bold 16px ${font}`, 'rgba(255,210,74,0.95)');
+      this.hudText(ctx, zh ? '按 B 购买 (购买区内)' : 'PRESS B TO BUY (IN BUYZONE)', cx, cy + 120 * s, 'center', `bold ${pxSize(16)}px ${font}`, 'rgba(255,210,74,0.95)');
     }
 
-    // ── Kill feed (top right).
+    // ── Kill feed (top right, below the shared shell menu button).
+    const feedRight = W - insets.right - 8;
+    const feedTop = insets.top + SHELL_MENU_RESERVE + 6;
     ctx.textAlign = 'right';
     this.feed.forEach((entry, i) => {
       ctx.globalAlpha = Math.min(1, entry.life);
-      ctx.font = `bold 14px ${font}`;
+      ctx.font = `bold ${pxSize(14)}px ${font}`;
       ctx.fillStyle = 'rgba(8,16,30,0.52)';
-      const width = ctx.measureText(entry.text).width + 18;
-      ctx.fillRect(W - width - 12, 12 + i * 23, width, 21);
-      this.hudText(ctx, entry.text, W - 20, 23 + i * 23, 'right', `bold 14px ${font}`, entry.color, false);
+      const width = ctx.measureText(entry.text).width + 18 * s;
+      ctx.fillRect(feedRight - width, feedTop + i * 23 * s, width, 21 * s);
+      this.hudText(ctx, entry.text, feedRight - 8 * s, feedTop + 11 * s + i * 23 * s, 'right', `bold ${pxSize(14)}px ${font}`, entry.color, false);
       ctx.globalAlpha = 1;
     });
 
@@ -2970,70 +3322,79 @@ export class CounterStrikeGame extends BaseGame {
 
     // ── Bottom-left: health + armor.
     const p = this.player();
-    const hpY = H - 32;
+    const hpX = insets.left + 18 * s;
+    const hpY = H - insets.bottom - 32 * s;
     ctx.fillStyle = '#e23b3b';
-    ctx.fillRect(18, hpY - 12, 20, 20);
+    ctx.fillRect(hpX, hpY - 12 * s, 20 * s, 20 * s);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(23, hpY - 6, 10, 10);
-    ctx.fillRect(21, hpY - 2, 14, 2);
-    this.hudText(ctx, String(p.hp), 48, hpY, 'left', `bold 32px ${mono}`, p.hp > 60 ? '#e8f4ff' : p.hp > 30 ? '#ffd24a' : '#ff6a5e');
+    ctx.fillRect(hpX + 5 * s, hpY - 6 * s, 10 * s, 10 * s);
+    ctx.fillRect(hpX + 3 * s, hpY - 2 * s, 14 * s, 2 * s);
+    this.hudText(ctx, String(p.hp), hpX + 30 * s, hpY, 'left', `bold ${pxSize(32)}px ${mono}`, p.hp > 60 ? '#e8f4ff' : p.hp > 30 ? '#ffd24a' : '#ff6a5e');
     ctx.fillStyle = '#7fa8d4';
-    ctx.fillRect(104, hpY - 11, 17, 17);
+    ctx.fillRect(hpX + 86 * s, hpY - 11 * s, 17 * s, 17 * s);
     ctx.fillStyle = '#dbe9f7';
-    ctx.fillRect(110, hpY - 6, 5, 8);
-    this.hudText(ctx, String(p.armor), 128, hpY, 'left', `bold 22px ${mono}`, '#bcd4ec');
-    this.hudText(ctx, zh ? '护甲' : 'ARMOR', 128, hpY + 20, 'left', `13px ${font}`, 'rgba(241,245,249,0.8)');
+    ctx.fillRect(hpX + 92 * s, hpY - 6 * s, 5 * s, 8 * s);
+    this.hudText(ctx, String(p.armor), hpX + 110 * s, hpY, 'left', `bold ${pxSize(22)}px ${mono}`, '#bcd4ec');
+    this.hudText(ctx, zh ? '护甲' : 'ARMOR', hpX + 110 * s, hpY + 20 * s, 'left', `${pxSize(13)}px ${font}`, 'rgba(241,245,249,0.8)');
 
     // ── Bottom-right: weapon name, ammo, money.
     const w = this.activeWeapon(p);
+    // Keep the readouts clear of the touch button column (fire/reload/buy).
+    const showTouch = this.touchMode && !this.paused && !this.gameOver;
+    const touchReserve = showTouch
+      ? W - (this.touchLayout().fire.x - this.touchLayout().fire.r) + 8 * s
+      : 0;
+    const right = W - insets.right - 22 * s - touchReserve;
     if (w) {
-      this.hudText(ctx, p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, W - 22, H - 62, 'right', `bold 17px ${font}`, '#ffd24a');
+      this.hudText(ctx, p.slot === 'nade' ? `${p.nadeSel.toUpperCase()} × ${p.nades[p.nadeSel]}` : w.def.name, right, H - insets.bottom - 62 * s, 'right', `bold ${pxSize(17)}px ${font}`, '#ffd24a');
     }
     if (w && w.def.slot !== 'knife' && p.slot !== 'nade') {
-      this.hudText(ctx, `${w.mag} / ${w.reserve}`, W - 22, H - 32, 'right', `bold 28px ${mono}`, w.mag === 0 ? '#ff6a5e' : '#f5f5f0');
+      this.hudText(ctx, `${w.mag} / ${w.reserve}`, right, H - insets.bottom - 32 * s, 'right', `bold ${pxSize(28)}px ${mono}`, w.mag === 0 ? '#ff6a5e' : '#f5f5f0');
     }
-    this.hudText(ctx, `$${p.money}`, W - 22, H - 12, 'right', `bold 22px ${mono}`, '#8ee04d');
+    this.hudText(ctx, `$${p.money}`, right, H - insets.bottom - 12 * s, 'right', `bold ${pxSize(22)}px ${mono}`, '#8ee04d');
 
     if (p.reloading && w) {
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(W - 190, H - 50, 168, 6);
+      ctx.fillRect(W - insets.right - 190 * s - touchReserve, H - insets.bottom - 50 * s, 168 * s, 6 * s);
       ctx.fillStyle = '#ffd24a';
-      ctx.fillRect(W - 190, H - 50, 168 * Math.min(1, 1 - p.reloadT / w.def.reload), 6);
+      ctx.fillRect(W - insets.right - 190 * s - touchReserve, H - insets.bottom - 50 * s, 168 * s * Math.min(1, 1 - p.reloadT / w.def.reload), 6 * s);
     }
 
     if (!this.sfx.enabled) {
-      this.hudText(ctx, zh ? '静音' : 'MUTED', 20, 130, 'left', `14px ${font}`, 'rgba(241,245,249,0.85)');
+      this.hudText(ctx, zh ? '静音' : 'MUTED', insets.left + 20 * s, insets.top + 130 * s, 'left', `${pxSize(14)}px ${font}`, 'rgba(241,245,249,0.85)');
     }
 
-    // ── Crosshair (only while alive).
+    // ── Crosshair (only while alive). Center of the current projection.
     if (p.alive) {
       const spreadPx = this.crosshairGap();
-      const cx = W / 2;
-      const cy = H / 2;
+      const arm = 10 * s;
+      const chx = W / 2;
+      const chy = H / 2;
       ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(2, 3 * s);
       ctx.beginPath();
-      ctx.moveTo(cx, cy - spreadPx - 10); ctx.lineTo(cx, cy - spreadPx - 1);
-      ctx.moveTo(cx, cy + spreadPx + 1); ctx.lineTo(cx, cy + spreadPx + 10);
-      ctx.moveTo(cx - spreadPx - 10, cy); ctx.lineTo(cx - spreadPx - 1, cy);
-      ctx.moveTo(cx + spreadPx + 1, cy); ctx.lineTo(cx + spreadPx + 10, cy);
+      ctx.moveTo(chx, chy - spreadPx - arm); ctx.lineTo(chx, chy - spreadPx - 1);
+      ctx.moveTo(chx, chy + spreadPx + 1); ctx.lineTo(chx, chy + spreadPx + arm);
+      ctx.moveTo(chx - spreadPx - arm, chy); ctx.lineTo(chx - spreadPx - 1, chy);
+      ctx.moveTo(chx + spreadPx + 1, chy); ctx.lineTo(chx + spreadPx + arm, chy);
       ctx.stroke();
       ctx.strokeStyle = '#00e05a';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = Math.max(1, 1.5 * s);
       ctx.stroke();
       ctx.fillStyle = '#00e05a';
-      ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+      ctx.fillRect(chx - 1.5, chy - 1.5, 3, 3);
 
       if (this.hitmarker > 0) {
         const a = this.hitmarker / 0.14;
         ctx.strokeStyle = this.hitmarkerKill ? `rgba(255,90,80,${a})` : `rgba(255,255,255,${a})`;
-        ctx.lineWidth = 2.5;
-        const r = 12;
+        ctx.lineWidth = Math.max(1.5, 2.5 * s);
+        const r = 12 * s;
+        const notch = 6 * s;
         ctx.beginPath();
-        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r + 6, cy - r + 6);
-        ctx.moveTo(cx - r, cy + r); ctx.lineTo(cx - r + 6, cy + r - 6);
-        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx + r - 6, cy - r + 6);
-        ctx.moveTo(cx + r, cy + r); ctx.lineTo(cx + r - 6, cy + r - 6);
+        ctx.moveTo(chx - r, chy - r); ctx.lineTo(chx - r + notch, chy - r + notch);
+        ctx.moveTo(chx - r, chy + r); ctx.lineTo(chx - r + notch, chy + r - notch);
+        ctx.moveTo(chx + r, chy - r); ctx.lineTo(chx + r - notch, chy - r + notch);
+        ctx.moveTo(chx + r, chy + r); ctx.lineTo(chx + r - notch, chy + r - notch);
         ctx.stroke();
       }
     }
@@ -3043,7 +3404,8 @@ export class CounterStrikeGame extends BaseGame {
       const pulse = p.hp < 35 && p.alive ? 0.12 + Math.sin(performance.now() / 300) * 0.07 : 0;
       const alpha = Math.max(this.damageFlash * 0.8, pulse);
       if (alpha > 0.01) {
-        const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.7);
+        const m = Math.min(W, H);
+        const grad = ctx.createRadialGradient(W / 2, H / 2, m * 0.3, W / 2, H / 2, m * 0.75);
         grad.addColorStop(0, 'rgba(220,50,50,0)');
         grad.addColorStop(1, `rgba(220,50,50,${Math.min(0.6, alpha)})`);
         ctx.fillStyle = grad;
@@ -3060,14 +3422,14 @@ export class CounterStrikeGame extends BaseGame {
     // ── Spectate banner.
     if (!p.alive && !this.gameOver) {
       ctx.fillStyle = 'rgba(8,16,30,0.62)';
-      ctx.fillRect(0, H / 2 - 46, W, 92);
+      ctx.fillRect(0, cy - 46 * s, W, 92 * s);
       ctx.textAlign = 'center';
-      ctx.font = `bold 28px ${font}`;
+      ctx.font = `bold ${pxSize(28)}px ${font}`;
       ctx.fillStyle = '#ff9a8a';
-      ctx.fillText(zh ? '你阵亡了' : 'YOU WERE KILLED', W / 2, H / 2 - 16);
-      ctx.font = `16px ${font}`;
+      ctx.fillText(zh ? '你阵亡了' : 'YOU WERE KILLED', cx, cy - 16 * s);
+      ctx.font = `${pxSize(16)}px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.88)';
-      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', W / 2, H / 2 + 18);
+      ctx.fillText(zh ? '观战中 — 回合结束时自动进入下一回合' : 'SPECTATING — NEXT ROUND STARTS AUTOMATICALLY', cx, cy + 18 * s);
     }
 
     // ── Round result banner.
@@ -3078,15 +3440,16 @@ export class CounterStrikeGame extends BaseGame {
           ? (zh ? '反恐精英获胜!' : 'Counter-Terrorists Win!')
           : (zh ? '恐怖分子获胜!' : 'Terrorists Win!');
       const color = this.roundDraw ? '#ffd24a' : this.roundWinner === 'CT' ? '#7fb2ff' : '#ff9a8a';
+      const bannerY = insets.top + 160 * s;
       ctx.fillStyle = 'rgba(8,16,30,0.62)';
-      ctx.fillRect(0, 160, W, 84);
+      ctx.fillRect(0, bannerY, W, 84 * s);
       ctx.textAlign = 'center';
-      ctx.font = `bold 32px ${font}`;
+      ctx.font = `bold ${pxSize(32)}px ${font}`;
       ctx.fillStyle = color;
-      ctx.fillText(text, W / 2, 190);
-      ctx.font = `16px ${font}`;
+      ctx.fillText(text, cx, bannerY + 30 * s);
+      ctx.font = `${pxSize(16)}px ${font}`;
       ctx.fillStyle = 'rgba(241,245,249,0.88)';
-      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, W / 2, 222);
+      ctx.fillText(zh ? `下一回合 ${Math.ceil(this.postTimer)}` : `NEXT ROUND ${Math.ceil(this.postTimer)}`, cx, bannerY + 62 * s);
     }
   }
 
@@ -3096,18 +3459,23 @@ export class CounterStrikeGame extends BaseGame {
     if (!w) return 8;
     const moveMul = p.moving ? (p.walk ? 1.35 : 1.9) : p.crouch ? 0.55 : 1;
     const angular = w.def.spread * moveMul + p.recoil * 0.55;
-    // rw/2 (640) over tan(half FOV 33°) → screen pixels per radian ≈ 985
-    return 4 + angular * 985 + (p.moving ? 2 : 0);
+    // Screen px per radian at the current projection: (width/2)/tan(half FOV).
+    // At the 1280x720 baseline this is ~985, matching the original constant.
+    const pxPerRad = this.width / 2 / this.halfFovTan();
+    return 4 + angular * pxPerRad + (p.moving ? 2 : 0);
   }
 
   private drawRadar(ctx: CanvasRenderingContext2D) {
-    const size = 100;
-    const mx = 10;
-    const my = 10;
+    const s = this.uiScale();
+    const insets = this.safeArea();
+    const size = Math.max(64, 100 * s);
+    const k = size / 100;
+    const mx = insets.left + 10 * s;
+    const my = insets.top + 10 * s;
     const sx = size / MAP_PIXEL_X;
     const sy = size / MAP_PIXEL_Y;
     ctx.fillStyle = 'rgba(16,38,22,0.75)';
-    ctx.fillRect(mx - 3, my - 3, size + 6, size + 6);
+    ctx.fillRect(mx - 3 * k, my - 3 * k, size + 6 * k, size + 6 * k);
     ctx.fillStyle = 'rgba(160,200,170,0.35)';
     for (let r = 0; r < MAP_ROWS; r++) {
       for (let c = 0; c < MAP_COLS; c++) {
@@ -3125,19 +3493,21 @@ export class CounterStrikeGame extends BaseGame {
 
     const player = this.player();
     const spectator = !player.alive;
+    const dot = 4 * k;
     for (const f of this.fighters) {
       if (!f.alive) continue;
       if (f.team === 'CT') {
         ctx.fillStyle = f === player ? '#ffffff' : '#6fa4f0';
-        ctx.fillRect(mx + f.x * sx - 2, my + f.y * sy - 2, 4, 4);
+        ctx.fillRect(mx + f.x * sx - dot / 2, my + f.y * sy - dot / 2, dot, dot);
       } else if (spectator || this.seenByTeam(f, 'CT')) {
         ctx.fillStyle = '#ff7a66';
-        ctx.fillRect(mx + f.x * sx - 2, my + f.y * sy - 2, 4, 4);
+        ctx.fillRect(mx + f.x * sx - dot / 2, my + f.y * sy - dot / 2, dot, dot);
       }
     }
     ctx.save();
     ctx.translate(mx + this.px * sx, my + this.py * sy);
     ctx.rotate(this.angle);
+    ctx.scale(k, k);
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.moveTo(5.5, 0);
@@ -3150,10 +3520,16 @@ export class CounterStrikeGame extends BaseGame {
   }
 
   private drawBuyMenu(ctx: CanvasRenderingContext2D) {
+    const rect = this.buyLayout();
+    if (rect.touch) {
+      this.drawBuyMenuTouch(ctx, rect);
+      return;
+    }
     const zh = this.isZhLang();
     const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const mono = 'ui-monospace, SFMono-Regular, monospace';
-    const rect = this.buyMenuRect();
+    const s = rect.scale;
+    const pxSize = (n: number) => Math.max(8, Math.round(n * s));
     const p = this.player();
 
     ctx.fillStyle = 'rgba(10,18,32,0.9)';
@@ -3164,34 +3540,34 @@ export class CounterStrikeGame extends BaseGame {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold 21px ${font}`;
+    ctx.font = `bold ${pxSize(21)}px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(zh ? '购买装备 (BUY EQUIPMENT)' : 'BUY EQUIPMENT', rect.x + rect.w / 2, rect.y + 24);
-    ctx.font = `bold 15px ${mono}`;
+    ctx.fillText(zh ? '购买装备 (BUY EQUIPMENT)' : 'BUY EQUIPMENT', rect.x + rect.w / 2, rect.y + 24 * s);
+    ctx.font = `bold ${pxSize(15)}px ${mono}`;
     ctx.fillStyle = '#8ee04d';
-    ctx.fillText(`$${p.money}`, rect.x + rect.w / 2, rect.y + 46);
+    ctx.fillText(`$${p.money}`, rect.x + rect.w / 2, rect.y + 46 * s);
 
-    const rowY = rect.y + 64;
-    const rowH = 25;
-    const leftX = rect.x + 10;
-    const rightX = rect.x + rect.w / 2 + 8;
+    const rowY = rect.y + rect.headerH;
+    const rowH = rect.rowH;
+    const leftX = rect.x + 10 * s;
+    const rightX = rect.x + rect.w / 2 + 8 * s;
 
     BUY_CATEGORIES.forEach((category, i) => {
       const y = rowY + i * rowH;
       const hover = this.buyCat === -1 && this.hoverCat === i;
       const active = this.buyCat === i;
       ctx.fillStyle = active ? 'rgba(255,210,74,0.28)' : hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
-      ctx.fillRect(leftX - 2, y - 11, rect.w / 2 - 12, rowH);
+      ctx.fillRect(leftX - 2 * s, y - rowH / 2, rect.w / 2 - 12 * s, rowH);
       ctx.textAlign = 'left';
-      ctx.font = `15px ${font}`;
+      ctx.font = `${pxSize(15)}px ${font}`;
       ctx.fillStyle = active ? '#ffd24a' : '#e8eef5';
-      ctx.fillText(`${i + 1}  ${zh ? category.labelZh : category.label}`, leftX + 8, y);
+      ctx.fillText(`${i + 1}  ${zh ? category.labelZh : category.label}`, leftX + 8 * s, y);
     });
 
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath();
-    ctx.moveTo(rect.x + rect.w / 2, rect.y + 56);
-    ctx.lineTo(rect.x + rect.w / 2, rect.y + rect.h - 10);
+    ctx.moveTo(rect.x + rect.w / 2, rect.y + 56 * s);
+    ctx.lineTo(rect.x + rect.w / 2, rect.y + rect.h - 10 * s);
     ctx.stroke();
 
     if (this.buyCat >= 0) {
@@ -3202,57 +3578,182 @@ export class CounterStrikeGame extends BaseGame {
         const hover = this.hoverItem === i;
         const affordable = p.money >= item.price;
         ctx.fillStyle = hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
-        ctx.fillRect(rightX - 2, y - 11, rect.w / 2 - 12, rowH);
+        ctx.fillRect(rightX - 2 * s, y - rowH / 2, rect.w / 2 - 12 * s, rowH);
         ctx.textAlign = 'left';
-        ctx.font = `14px ${font}`;
+        ctx.font = `${pxSize(14)}px ${font}`;
         ctx.fillStyle = affordable ? '#e8eef5' : 'rgba(232,238,245,0.4)';
-        ctx.fillText(`${i + 1}  ${item.name}`, rightX + 8, y);
+        ctx.fillText(`${i + 1}  ${item.name}`, rightX + 8 * s, y);
         ctx.textAlign = 'right';
-        ctx.font = `13px ${mono}`;
+        ctx.font = `${pxSize(13)}px ${mono}`;
         ctx.fillStyle = affordable ? '#8ee04d' : 'rgba(142,224,77,0.4)';
-        ctx.fillText(`$${item.price}`, rect.x + rect.w - 14, y);
+        ctx.fillText(`$${item.price}`, rect.x + rect.w - 14 * s, y);
       });
     }
 
     ctx.textAlign = 'center';
-    ctx.font = `12px ${font}`;
+    ctx.font = `${pxSize(12)}px ${font}`;
     ctx.fillStyle = 'rgba(232,238,245,0.7)';
     ctx.fillText(
       zh ? '数字键选择 · B/ESC 关闭 · 0 返回' : 'NUMBER KEYS · B/ESC CLOSE · 0 BACK',
       rect.x + rect.w / 2,
-      rect.y + rect.h - 16,
+      rect.y + rect.h - 16 * s,
     );
+  }
+
+  /**
+   * Touch buy menu: 2-column category grid, then a full-width 44px item list
+   * with internal drag/wheel scroll, and persistent 44px Back/Close buttons.
+   * Geometry comes from buyMenuLayout() — hit tests use the same fields.
+   */
+  private drawBuyMenuTouch(ctx: CanvasRenderingContext2D, rect: BuyMenuLayout) {
+    const zh = this.isZhLang();
+    const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    const mono = 'ui-monospace, SFMono-Regular, monospace';
+    const s = rect.scale;
+    const pxSize = (n: number) => Math.max(13, Math.round(n * s));
+    const p = this.player();
+
+    ctx.fillStyle = 'rgba(10,18,32,0.92)';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeStyle = 'rgba(255,210,74,0.55)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+
+    // Header: title left, money right (single compact row).
+    const headerY = rect.y + rect.headerH / 2;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = `bold ${pxSize(18)}px ${font}`;
+    ctx.fillStyle = '#ffd24a';
+    ctx.fillText(zh ? '购买装备' : 'BUY EQUIPMENT', rect.x + 12 * s, headerY);
+    ctx.textAlign = 'right';
+    ctx.font = `bold ${pxSize(16)}px ${mono}`;
+    ctx.fillStyle = '#8ee04d';
+    ctx.fillText(`$${p.money}`, rect.x + rect.w - 12 * s, headerY);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(rect.x, rect.bodyY);
+    ctx.lineTo(rect.x + rect.w, rect.bodyY);
+    ctx.stroke();
+
+    if (this.buyCat === -1) {
+      // Category grid: 2 columns × 4 rows of ≥44px cells.
+      BUY_CATEGORIES.forEach((category, i) => {
+        const col = i % rect.catCols;
+        const row = Math.floor(i / rect.catCols);
+        const cx = rect.x + col * rect.cellW;
+        const cy = rect.bodyY + row * rect.cellH;
+        const hover = this.hoverCat === i;
+        ctx.fillStyle = hover ? 'rgba(255,210,74,0.22)' : 'rgba(255,255,255,0.04)';
+        ctx.fillRect(cx + 3, cy + 3, rect.cellW - 6, rect.cellH - 6);
+        ctx.textAlign = 'left';
+        ctx.font = `${pxSize(15)}px ${font}`;
+        ctx.fillStyle = hover ? '#ffd24a' : '#e8eef5';
+        ctx.fillText(
+          `${i + 1}  ${zh ? category.labelZh : category.label}`,
+          cx + 12 * s,
+          cy + rect.cellH / 2,
+          rect.cellW - 20 * s,
+        );
+      });
+    } else {
+      // Full-width item list, 44px rows, scrollable inside the body region.
+      const items = buyItemsForTeam(BUY_CATEGORIES[this.buyCat], p.team);
+      // Viewport changes can invalidate a stale offset; keep draw and hit
+      // math on the same clamped value.
+      this.buyScroll = this.clampBuyScroll(this.buyScroll);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rect.x, rect.bodyY, rect.w, rect.bodyH);
+      ctx.clip();
+      items.forEach((item, i) => {
+        const rowTop = rect.bodyY + i * rect.itemRowH - this.buyScroll;
+        if (rowTop + rect.itemRowH < rect.bodyY || rowTop > rect.bodyY + rect.bodyH) return;
+        const hover = this.hoverItem === i;
+        const affordable = p.money >= item.price;
+        ctx.fillStyle = hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
+        ctx.fillRect(rect.x + 3, rowTop + 2, rect.w - 6, rect.itemRowH - 4);
+        ctx.textAlign = 'left';
+        ctx.font = `${pxSize(15)}px ${font}`;
+        ctx.fillStyle = affordable ? '#e8eef5' : 'rgba(232,238,245,0.4)';
+        ctx.fillText(
+          `${i + 1}  ${item.name}`,
+          rect.x + 12 * s,
+          rowTop + rect.itemRowH / 2,
+          rect.w - 90 * s,
+        );
+        ctx.textAlign = 'right';
+        ctx.font = `${pxSize(14)}px ${mono}`;
+        ctx.fillStyle = affordable ? '#8ee04d' : 'rgba(142,224,77,0.4)';
+        ctx.fillText(`$${item.price}`, rect.x + rect.w - 14 * s, rowTop + rect.itemRowH / 2);
+      });
+      ctx.restore();
+
+      // Scrollbar thumb when the list overflows the body.
+      const maxScroll = maxBuyScroll(items.length, rect);
+      if (maxScroll > 0) {
+        const trackH = rect.bodyH;
+        const thumbH = Math.max(24, trackH * (rect.visibleItemRows / items.length));
+        const thumbY = rect.bodyY + (this.buyScroll / maxScroll) * (trackH - thumbH);
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.fillRect(rect.x + rect.w - 5, rect.bodyY, 3, trackH);
+        ctx.fillStyle = 'rgba(255,210,74,0.6)';
+        ctx.fillRect(rect.x + rect.w - 5, thumbY, 3, thumbH);
+      }
+    }
+
+    // Persistent footer: Back (one level out, then close) and Close.
+    const { back, close } = buyFooterButtons(rect);
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${pxSize(15)}px ${font}`;
+    ctx.fillStyle = 'rgba(57,197,187,0.22)';
+    ctx.fillRect(back.x, back.y, back.w, back.h);
+    ctx.strokeStyle = 'rgba(57,197,187,0.6)';
+    ctx.strokeRect(back.x + 0.5, back.y + 0.5, back.w - 1, back.h - 1);
+    ctx.fillStyle = '#d7f5f2';
+    ctx.fillText(zh ? '‹ 返回' : '‹ BACK', back.x + back.w / 2, back.y + back.h / 2);
+    ctx.fillStyle = 'rgba(240,90,80,0.22)';
+    ctx.fillRect(close.x, close.y, close.w, close.h);
+    ctx.strokeStyle = 'rgba(240,90,80,0.6)';
+    ctx.strokeRect(close.x + 0.5, close.y + 0.5, close.w - 1, close.h - 1);
+    ctx.fillStyle = '#f8d7d4';
+    ctx.fillText(zh ? '关闭 ✕' : 'CLOSE ✕', close.x + close.w / 2, close.y + close.h / 2);
   }
 
   private drawScoreboard(ctx: CanvasRenderingContext2D) {
     const font = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     const mono = 'ui-monospace, SFMono-Regular, monospace';
+    // Fit the 440x320 base panel into the safe area; contents draw in base
+    // coordinates under a uniform scale.
+    const panel = centeredPanelLayout(this.width, this.height, this.safeArea(), 440, 320);
+    ctx.save();
+    ctx.translate(panel.x, panel.y);
+    ctx.scale(panel.scale, panel.scale);
     const bw = 440;
-    const bx = (W - bw) / 2;
-    const by = 92;
     const bh = 320;
     ctx.fillStyle = 'rgba(8,16,30,0.92)';
-    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillRect(0, 0, bw, bh);
     ctx.strokeStyle = 'rgba(255,210,74,0.5)';
-    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.strokeRect(0.5, 0.5, bw - 1, bh - 1);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `bold 21px ${font}`;
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bx + bw / 2, by + 26);
+    ctx.fillText(`CT ${this.ctWins} : ${this.tWins} T`, bw / 2, 26);
 
     const cols: { team: Team; title: string; color: string; x: number }[] = [
-      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: bx + 24 },
-      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bx + bw / 2 + 16 },
+      { team: 'CT', title: 'COUNTER-TERRORISTS', color: '#7fb2ff', x: 24 },
+      { team: 'T', title: 'TERRORISTS', color: '#ff9a8a', x: bw / 2 + 16 },
     ];
     for (const col of cols) {
       ctx.textAlign = 'left';
       ctx.font = `bold 14px ${font}`;
       ctx.fillStyle = col.color;
-      ctx.fillText(col.title, col.x, by + 52);
+      ctx.fillText(col.title, col.x, 52);
       const members = this.fighters.filter((f) => f.team === col.team);
       members.forEach((f, i) => {
-        const y = by + 78 + i * 32;
+        const y = 78 + i * 32;
         const dead = !f.alive;
         ctx.fillStyle = dead ? 'rgba(232,238,245,0.4)' : '#e8eef5';
         ctx.font = `14px ${font}`;
@@ -3265,47 +3766,64 @@ export class CounterStrikeGame extends BaseGame {
         ctx.textAlign = 'left';
       });
     }
+    ctx.restore();
   }
 
   private drawTouchControls(ctx: CanvasRenderingContext2D) {
     const zh = this.isZhLang();
+    const layout = this.touchLayout();
+    const s = layout.scale;
+    const insets = this.safeArea();
     if (this.moveTouch) {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, 66, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax, this.moveTouch.ay, layout.stickR, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.beginPath();
-      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, 30, 0, Math.PI * 2);
+      ctx.arc(this.moveTouch.ax + this.moveTouch.dx, this.moveTouch.ay + this.moveTouch.dy, Math.max(18, 30 * s), 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.28)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(104, H - 104, 66, 0, Math.PI * 2);
+      ctx.arc(layout.stickHint.x, layout.stickHint.y, layout.stickR, 0, Math.PI * 2);
       ctx.stroke();
     }
     const fireActive = !!this.fireTouch;
     ctx.fillStyle = fireActive ? 'rgba(240,90,80,0.75)' : 'rgba(240,90,80,0.4)';
     ctx.beginPath();
-    ctx.arc(W - 104, H - 100, 52, 0, Math.PI * 2);
+    ctx.arc(layout.fire.x, layout.fire.y, layout.fire.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '开火' : 'FIRE', W - 104, H - 100);
+    ctx.font = `bold ${Math.max(9, Math.round(16 * s))}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillText(zh ? '开火' : 'FIRE', layout.fire.x, layout.fire.y);
     const reloadActive = !!this.reloadTouch;
     ctx.fillStyle = reloadActive ? 'rgba(57,197,187,0.75)' : 'rgba(57,197,187,0.4)';
     ctx.beginPath();
-    ctx.arc(W - 104, H - 196, 36, 0, Math.PI * 2);
+    ctx.arc(layout.reload.x, layout.reload.y, layout.reload.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(zh ? '换弹' : 'R', W - 104, H - 196);
-    ctx.font = '13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = `bold ${Math.max(9, Math.round(14 * s))}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillText(zh ? '换弹' : 'R', layout.reload.x, layout.reload.y);
+    if (this.canBuy() && !this.buyOpen) {
+      ctx.fillStyle = 'rgba(255,210,74,0.45)';
+      ctx.beginPath();
+      ctx.arc(layout.buy.x, layout.buy.y, layout.buy.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.max(9, Math.round(14 * s))}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.fillText(zh ? '购买' : 'BUY', layout.buy.x, layout.buy.y);
+    }
+    ctx.font = `${Math.max(8, Math.round(13 * s))}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText(zh ? '左:移动  右:视角' : 'LEFT: MOVE  RIGHT: LOOK', W / 2, H - 16);
+    ctx.fillText(
+      zh ? '左:移动  右:视角' : 'LEFT: MOVE  RIGHT: LOOK',
+      insets.left + (this.width - insets.left - insets.right) / 2,
+      this.height - insets.bottom - Math.max(10, 16 * s),
+    );
   }
 }

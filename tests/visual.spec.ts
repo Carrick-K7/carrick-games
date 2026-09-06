@@ -7,7 +7,7 @@ test.describe('shell visual regression', () => {
       await page.goto('/#/snake');
       await page.locator('#overflowBtn').click();
       await page.locator(`.theme-btn[data-set="${mobile ? 'light' : 'dark'}"]`).click();
-      await page.locator('#gamePickerBtn').click();
+      await page.keyboard.press('Control+k');
       await expect(page.locator('#searchInput')).toBeFocused();
       await page.evaluate(() => document.fonts.ready);
       // Capture the dialog only: game animation behind the backdrop is not a

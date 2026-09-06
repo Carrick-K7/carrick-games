@@ -29,23 +29,24 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   const canvas = page.locator('#gameCanvas');
   const geometry = await canvas.evaluate((c: HTMLCanvasElement) => {
     const r = c.getBoundingClientRect();
-    const s = Math.min(3.5, Math.max(1.2, 1120 / c.clientWidth));
-    const p = { x: 12 * s, y: 10 * s, w: 1120 - 24 * s, h: 700 - 20 * s };
-    const tabW = (p.w - 64 * s) / 3 - 4 * s;
-    const client = (x: number, y: number) => ({ x: r.x + x * r.width / 1120, y: r.y + y * r.height / 700 });
+    const w = Number(c.dataset.logicalWidth), h = Number(c.dataset.logicalHeight);
+    const p = { x: 12, y: 68, w: w - 24, h: h - 80 };
+    const tabW = (p.w - 64) / 3 - 4;
+    const client = (x: number, y: number) => ({ x: r.x + x * r.width / w, y: r.y + y * r.height / h });
+    const start = w - 12 - 4 * 44 - 3 * 6;
     return {
-      // Map, time, home, immersive: four equally spaced top buttons.
-      map: client(1120 - 24 - 175 * s, 22 + 22 * s),
-      home: client(1120 - 24 - 73 * s, 22 + 22 * s),
-      thirdFloor: client(p.x + 8 * s + 2 * (tabW + 4 * s) + tabW / 2, p.y + 28 * s),
-      close: client(p.x + p.w - 26 * s, p.y + 28 * s),
-      tabHeight: 44 * s * r.height / 700,
-      closeWidth: 40 * s * r.width / 1120,
-      left: client(280, 410), right: client(750, 390),
+      // The activity row is below the location badge and shell menu on phones.
+      map: client(start + 22, 90),
+      home: client(start + 2 * 50 + 22, 90),
+      thirdFloor: client(p.x + 8 + 2 * (tabW + 4) + tabW / 2, p.y + 28),
+      close: client(p.x + p.w - 28, p.y + 28),
+      tabHeight: 44 * r.height / h,
+      closeWidth: 44 * r.width / w,
+      left: client(w * .22, h * .70), right: client(w * .68, h * .70),
     };
   });
-  expect(geometry.tabHeight).toBeGreaterThanOrEqual(40);
-  expect(geometry.closeWidth).toBeGreaterThanOrEqual(39.5);
+  expect(geometry.tabHeight).toBeGreaterThanOrEqual(44);
+  expect(geometry.closeWidth).toBeGreaterThanOrEqual(44);
   const beforeMap = await canvas.getAttribute('data-villa-position');
   await page.touchscreen.tap(geometry.map.x, geometry.map.y);
   await expect(canvas).toHaveAttribute('data-villa-map', 'true');
@@ -63,7 +64,8 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [left, right] });
   const moving = { ...left, y: left.y - 28 }, looking = { ...right, x: right.x + 25 };
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [moving, looking] });
-  await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-look'))!).yaw).toBeLessThan(-0.1);
+  // Responsive logical units are CSS pixels: 25px × .0036 rad/px.
+  await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-look'))!).yaw).toBeCloseTo(-25 * .0036, 2);
   await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-position'))!).z).toBeLessThan(11.4);
   // CDP touchEnd lists the released points, not the points that remain down.
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [looking] });

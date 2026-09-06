@@ -32,6 +32,14 @@ export interface GameResultOverlayOptions {
 }
 
 const MAX_CANVAS_PIXEL_RATIO = 2;
+export const MAX_CANVAS_BACKING_PIXELS = 8_294_400;
+
+/** One uniform scale: bounded memory without stretching display geometry. */
+export function canvasBackingScale(logicalWidth: number, logicalHeight: number, cssWidth: number, dpr = 1): number {
+  if (![logicalWidth, logicalHeight, cssWidth].every(n => Number.isFinite(n) && n > 0)) return 1;
+  const density = Number.isFinite(dpr) ? Math.max(1, Math.min(MAX_CANVAS_PIXEL_RATIO, dpr)) : 1;
+  return Math.min(cssWidth / logicalWidth * density, Math.sqrt(MAX_CANVAS_BACKING_PIXELS / (logicalWidth * logicalHeight)));
+}
 
 export function isPixelMode(): boolean {
   if (typeof document === 'undefined') return false;
@@ -78,15 +86,20 @@ export function setCanvasDisplaySize(
   ctx: CanvasRenderingContext2D,
   logicalWidth: number,
   logicalHeight: number,
-  cssWidth: number
+  cssWidth: number,
+  dpr = getCanvasPixelRatio(),
 ): number {
-  const displayScale = Math.max(0.2, cssWidth / logicalWidth);
-  const backingScale = Math.min(displayScale * getCanvasPixelRatio(), 6);
+  const backingScale = canvasBackingScale(logicalWidth, logicalHeight, cssWidth, dpr);
+  canvas.dataset.logicalWidth = String(logicalWidth);
+  canvas.dataset.logicalHeight = String(logicalHeight);
   canvas.dataset.pixelRatio = String(backingScale);
-  canvas.width = Math.round(logicalWidth * backingScale);
-  canvas.height = Math.round(logicalHeight * backingScale);
-  canvas.style.width = `${Math.round(cssWidth)}px`;
-  canvas.style.height = `${Math.round((cssWidth * logicalHeight) / logicalWidth)}px`;
+  const width = Math.max(1, Math.floor(logicalWidth * backingScale));
+  const height = Math.max(1, Math.floor(logicalHeight * backingScale));
+  // Identical notifications must not clear a static game's current frame.
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${(cssWidth * logicalHeight) / logicalWidth}px`;
   ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
   ctx.imageSmoothingEnabled = true;
   return backingScale;

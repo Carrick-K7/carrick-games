@@ -95,6 +95,18 @@ function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile')
   return t;
 }
 
+/** WebGL target size: actual viewport aspect, capped so fullscreen stays in budget. */
+export function villaRendererSize(width: number, height: number, pixelRatio: number, lowSpec: boolean) {
+  const scale = lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
+  let w = Math.round(width * scale), h = Math.round(height * scale);
+  const MAX_RENDER_PIXELS = 4_200_000;
+  if (w * h > MAX_RENDER_PIXELS) {
+    const shrink = Math.sqrt(MAX_RENDER_PIXELS / (w * h));
+    w = Math.max(2, Math.floor(w * shrink)); h = Math.max(2, Math.floor(h * shrink));
+  }
+  return { w, h };
+}
+
 export class VillaScene {
   readonly renderer: THREE.WebGLRenderer;
   readonly colliders: VillaCollider[];
@@ -460,8 +472,7 @@ export class VillaScene {
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
     if (this.disposed || this.contextLost) return false;
-    const scale = this.lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
-    const w = Math.round(width * scale), h = Math.round(height * scale);
+    const { w, h } = villaRendererSize(width, height, pixelRatio, this.lowSpec);
     const now = performance.now();
     const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}`;
     this.updateActivities(time, state);

@@ -18,29 +18,26 @@ Do not add a separate visual-style document. Put durable visual decisions here.
 
 ## Shell Information Architecture
 
-The persistent shell has exactly three layers:
+The page is a game window, not a webpage containing a canvas card:
 
-- A thin header with the wordmark, current-game switcher, and one overflow menu.
-- A centered game canvas.
-- A compact desktop input strip containing only controls used by the current game.
+- `#gameApp` and its game stage fill the visible browser viewport by default, including short landscape screens. No header, margins, bezel, corner radius, input strip, or side rail reserves game space.
+- One 44px menu affordance floats at the top-right safe area. It is hidden and non-interactive while pointer lock owns the canvas, and reappears after release. Touch keeps this exit/navigation affordance available.
+- The menu contains the wordmark, current-game switcher, native fullscreen, return/restart, controls, settings, and applicable utilities. The game library is a modal command palette on desktop and a bottom sheet on mobile.
+- Controls open as an optional nonmodal overlay with live input cues. Parking's level selector stays in the menu. Opening either never resizes the game.
+- Every menu, loading state and native game accessibility target lives inside the fullscreen root. Descriptions, records, and statistics must not become permanent sidebars.
 
-The following are not persistent page regions:
-
-- The game library opens as a modal command palette on desktop and a bottom sheet on mobile.
-- Theme, language, demo, and other low-frequency actions live in the overflow menu.
-- Game-specific utilities such as Parking's level selector appear as a compact disclosure below the canvas.
-- Descriptions, records, and statistics must not become permanent sidebars.
+Browser-native fullscreen is explicitly requested by a button (Villa also retains its F alias), never on page load, starting, or switching games. Denial/unsupported browsers retain the already-filled webpage and show a quiet explanation. Opening the picker or switching games preserves native fullscreen; leaving native fullscreen returns to the filled webpage, not the old card layout.
 
 Do not reintroduce permanent left/right rails, nested cards, category dashboards, or a full inactive keyboard.
 
 ## Game Switching
 
-The current game name is always visible in the header and is the game-switch trigger.
+The current game name is visible in the startup state and game menu, where it is the game-switch trigger. Command/Ctrl+K opens the library directly during play.
 
 The picker:
 
 - opens only on demand from the current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop trigger;
-- shows all 27 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
+- shows all 28 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
 - uses a desktop dialog up to 1040px wide, with the heading, search, and close action in one compact toolbar;
 - matches both English and Chinese names and descriptions; descriptions remain available to assistive technology and search but do not occupy visible rows;
 - lays out four category columns on desktop, with simple 12px group headings and subdued counts, rather than colored category pills;
@@ -61,34 +58,33 @@ Game names and grouping come from `src/games/catalog.ts`. Do not maintain a seco
 
 The canvas is the only dominant visual object on the page.
 
-- Center it in the available viewport.
-- Keep its logical dimensions and HiDPI behavior unchanged.
-- Fit it without permanent side panels; on wide desktops, use the natural side gutters for compact contextual controls rather than extending the page vertically.
-- Exception for wide 16:9-class canvases (logical width ≥ 900): when the viewport cannot honestly host both the canvas and side gutters, the canvas takes the full stage width and the input mapping folds into a compact disclosure strip below it. The canvas, not the controls, wins the space.
-- Use only a 1px bezel, small radius, and near-flat shadow in the shell.
-- Keep fullscreen affordance quiet and reveal it on hover/focus; touch may keep it faintly visible.
-- Start through the canvas overlay. Do not duplicate the action with a large external start button.
-- Keep loading and error states aligned to the displayed canvas bounds.
+- The game stage fills the visible viewport edge to edge; canvas has no page-level frame, shadow or rounded corners.
+- Fixed-layout games use the largest complete, uniformly scaled board within the safe area. Necessary aspect-ratio margins use the quiet stage background; never stretch, crop, change board dimensions, or invent extra panels to fill them.
+- CS, CS Kimi and Villa opt into responsive logical drawing dimensions. Their camera aspect follows the actual viewport, rather than enlarging a fixed 16:9 image. Preserve gameplay coordinates and the baseline vertical field of view.
+- HUD coordinates, rendering resolution and world coordinates are separate. HUD anchors respect safe areas and the floating menu affordance; narrow/short menus reflow or scroll internally, with readable text and 44px touch actions.
+- Keep HiDPI backing stores sharp but bounded (DPR at most 2, shared canvas at most 8,294,400 pixels). Individual 3D renderers may use a lower quality budget without shrinking their CSS viewport.
+- Start through the stage overlay. Loading, failure/retry and startup occupy the stage; switching games remains reachable above them.
 
-`fitGameCanvas()` in `src/main.ts` and `setCanvasDisplaySize()` in `src/core/render.ts` own display scaling. Never change logical coordinates or pointer mapping to fit the shell.
+`fitGameCanvas()` provides `GameViewport` width, height, DPR and safe-area insets. `BaseGame.setViewport()` preserves fixed logical coordinates by default; responsive games explicitly use `resizeLogicalViewport()` without reinitializing game state. `canvasPoint()` remains the only game input mapping path. Refits include height-only, DPR, visual viewport and fullscreen changes.
 
-## Input Mapping
+## Unified Operation Guide
 
-Fine-pointer desktops show a compact mapping beside the canvas when side space permits, and below it only on narrower layouts.
+Every game uses the same **Controls / 操作指南** menu entry and shared panel. It starts closed and never participates in stage sizing. Games supply catalog keyboard/touch entries and optional plain-text notes; they do not draw separate full operation-guide panels. Existing game help shortcuts may call `GameHost.presentation.openControls()` (Villa retains `?`).
 
-- Render only controls the current game uses.
-- Group keycaps with their action label.
-- Keep real keyboard presses visibly synchronized.
-- Keep a small live mouse indicator; do not draw a full decorative keyboard or mouse.
-- Do not put controls in a separate card.
+- Desktop: lower-left reference panel, 12px inside the safe area, at most 560px wide. Responsive 3D games reserve a 160px bottom HUD dock, so the guide sits above it.
+- Narrow, short-landscape or touch screens: one bottom sheet (at most 720px wide), clear of the top-right menu position. A backdrop and inert game stage prevent taps leaking to the joystick/fire controls while reading; close, Escape or the backdrop returns to play. The sheet traps focus.
+- One restrained light/dark style: game-name subtitle, 15px title, consistent keycaps/action rows and gesture labels, 44px close/return targets. The header and footer stay visible; only the body scrolls on short screens and for long mappings.
+- Physical keys and the small mouse indicator remain synchronized; desktop board-game references retain interactive keycaps. 3D and narrow-screen guides use read-only keycaps, release held input and let games suspend safely without untrusted pointer recapture.
+- On coarse pointers, show touch instructions instead of the physical keyboard. Native fullscreen uses exactly the same guide inside `#gameApp`.
+- Opening menus or switching games closes the guide rather than stacking panels. Rotation preserves the current game; language/theme changes update the same shared presentation.
 
-Hide the entire mapping on `pointer: coarse` and narrow mobile layouts. Touch games express their controls through the canvas and catalog guidance, not permanent page chrome.
+Contextual game feedback (ammo, an interaction prompt, a map legend, or a restart cue) is not a full operation guide and stays with the gameplay HUD. Avoid persistent lists of shortcuts along the game canvas edges.
 
 ## Contextual Game Utilities
 
 A game-specific shell utility is allowed only when removing it would block gameplay.
 
-- Parking keeps level selection as a compact `Level N` disclosure in the left desktop gutter or below the canvas on compact layouts.
+- Parking keeps level selection as a compact `Level N` disclosure inside the game menu, never beside or below the stage.
 - Demo actions live in the overflow menu and appear only for games that support them.
 - Scores and moment-to-moment telemetry belong in the game canvas whenever possible.
 - Large steering instruments, records cards, game descriptions, and progress dashboards are not persistent shell UI.

@@ -1,6 +1,7 @@
-/** Shared drawing/hit geometry keeps the compact snooker Exit clear of Shot. */
-export function villaUseCircle(width: number, height: number, scale: number, snooker: boolean) {
-  return { x: width - 38 * scale, y: height - (snooker ? 38 : 75) * scale, radius: 29 * scale };
+/** Shared drawing/hit geometry keeps the compact snooker Exit clear of Shot.
+ * Display safe-area insets (notch/system bars) push the circle inward. */
+export function villaUseCircle(width: number, height: number, scale: number, snooker: boolean, safe?: { right: number; bottom: number }) {
+  return { x: width - 38 * scale - (safe?.right ?? 0), y: height - (snooker ? 38 : 75) * scale - (safe?.bottom ?? 0), radius: 29 * scale };
 }
 
 /** Two readable lines, preserving feedback rather than replacing it with an unrelated hint. */
