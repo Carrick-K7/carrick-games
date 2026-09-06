@@ -69,7 +69,6 @@ export class CsgoStripMode implements GachaOpenMode {
   private readonly cardH: number;
   private readonly pitch: number;
   private readonly reelY: number;
-  private readonly readoutY: number;
 
   // Pre-rendered card faces: index → sprite (winner has a lit variant)
   private readonly cardSprites = new Map<number, HTMLCanvasElement>();
@@ -89,7 +88,6 @@ export class CsgoStripMode implements GachaOpenMode {
     this.cardW = Math.round(this.cardH * 1.42);
     this.pitch = this.cardW + Math.round(clamp(this.cardH * 0.07, 8, 14));
     this.reelY = Math.round(ctx.height * 0.47 - this.cardH / 2);
-    this.readoutY = this.reelY + this.cardH + Math.round(clamp(ctx.height * 0.05, 18, 30));
   }
 
   start() {
@@ -124,14 +122,6 @@ export class CsgoStripMode implements GachaOpenMode {
 
     this.sfx.caseOpen();
     this.sfx.spinStart();
-  }
-
-  /** The card currently occupying the center highlight window. */
-  private centerCard(): StripCard {
-    const cx = this.ctx.width / 2;
-    const centerAt = this.traveled + (cx - this.viewportLeft);
-    const index = Math.max(0, Math.min(this.cards.length - 1, Math.floor(centerAt / this.pitch)));
-    return this.cards[index];
   }
 
   /** Current speed expressed as a fraction of the start velocity (0..1). */
@@ -314,17 +304,7 @@ export class CsgoStripMode implements GachaOpenMode {
     ctx.lineTo(cx, trackTop + 13);
     ctx.stroke();
 
-    // Current-cell readout: what the winning slot holds right now. Tier is
-    // carried by color alone — no rarity text during the spin.
-    const current = this.centerCard();
-    const tier = current.tier;
-    const name = this.ctx.zh ? current.item.nameZh : current.item.name;
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = tier.color;
-    ctx.fillText(name, cx, this.readoutY + 8);
+    // Names are revealed on the result screen, never beneath the moving strip.
   }
 
   /* ─── Card face sprites ─── */
@@ -399,28 +379,14 @@ export class CsgoStripMode implements GachaOpenMode {
     // card — a soft studio glow behind it lifts the gunmetal off the tint.
     const iconId = card.item.icon ?? card.item.kind;
     const photoW = this.cardW - 18;
-    const photoH = this.cardH - 42;
-    const photoCy = 6 + photoH / 2;
+    const photoH = this.cardH - 18;
+    const photoCy = this.cardH / 2;
     drawGlow(c, this.cardW / 2, photoCy, Math.min(photoW, photoH) * 0.62, dark ? '#e8f1fb' : '#ffffff', dark ? 0.16 : 0.34);
     const photoUsed = drawWeaponPhoto(c, iconId, this.cardW / 2, photoCy, photoW, photoH, {
       fallbackColor: dark ? '#f1f5f9' : '#ffffff',
       alpha: 0.98,
     });
 
-    // Caption strip: item name, with a rarity dot.
-    c.fillStyle = dark ? 'rgba(9,11,16,0.5)' : 'rgba(17,24,39,0.32)';
-    roundRectPath(c, 6, this.cardH - 30, this.cardW - 12, 24, 8);
-    c.fill();
-    c.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillStyle = '#f6f8fb';
-    const name = truncate(this.ctx.zh ? card.item.nameZh : card.item.name, 16);
-    c.fillText(name, this.cardW / 2 + 5, this.cardH - 17);
-    c.fillStyle = tier.color;
-    c.beginPath();
-    c.arc(this.cardW / 2 - c.measureText(name).width / 2 - 4, this.cardH - 17, 3, 0, Math.PI * 2);
-    c.fill();
 
     return photoUsed;
   }
@@ -440,10 +406,6 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
-}
-
-function truncate(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
 }
 
 export const createCsgoStripMode: GachaOpenModeFactory = {
