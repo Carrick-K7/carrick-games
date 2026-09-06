@@ -1,6 +1,6 @@
 import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
 import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.js';
-import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen, type VillaSeat } from './villaActivities.js';
+import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen } from './villaActivities.js';
 import {
   advanceVillaElevator, createVillaElevator, idleVillaElevator, requestVillaElevator, VILLA_ELEVATOR,
   villaElevatorCabinContains, villaElevatorDoorwayObstructed, villaElevatorShaftContains, villaElevatorSupportAt,
@@ -11,7 +11,9 @@ import {
   EYE_HEIGHT, type VillaPosition, type VillaHotspot,
 } from './villaWorld.js';
 import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrouch, villaBodyHeight, villaEyeHeight } from './villaMotion.js';
-import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarExitClear } from './villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarExitClear, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from './villaDriving.js';
+import { advanceVillaScooter, createVillaScooter, villaScooterAnchors, villaScooterSafeExit, villaScooterExitClear, villaScooterPoseBlocked, VILLA_SCOOTER } from './villaScooter.js';
+import { VILLA_AQUARIUM, villaRelaxSeat } from './villaSeating.js';
 import { advanceVillaRace, createVillaRace } from './villaRacing.js';
 import { advanceVillaSnooker, createVillaSnooker, shootVillaSnooker } from './villaSnooker.js';
 import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, VILLA_PET_LABELS } from './villaPets.js';
@@ -27,7 +29,7 @@ interface Button { id: string; x: number; y: number; w: number; h: number; label
 const UI_FONT = 'system-ui, -apple-system, sans-serif';
 const initialVillaState = (): VillaSceneState => ({
   evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(),
-  elevator: createVillaElevator(), driving: createVillaDriving(), race: createVillaRace(),
+  elevator: createVillaElevator(), driving: createVillaDriving(), scooter: createVillaScooter(), race: createVillaRace(),
   snooker: createVillaSnooker(), snookerActive: false, pets: createVillaPets(), faucetOn: false, teaUntil: 0,
 });
 
@@ -56,6 +58,7 @@ export class VillaGame extends BaseGame {
   private transition: { from: VillaView; at: number } | null = null;
   private doorReadyAt = 0;
   private closeCarAt = Infinity;
+  private enterCarAt = Infinity;
   private exitCarAt = Infinity;
   private joystick: { id: number; origin: Point; point: Point } | null = null;
   private lookTouch: { id: number; point: Point } | null = null;
@@ -94,6 +97,9 @@ export class VillaGame extends BaseGame {
   }
 
   stop() {
+    this.cancelCarAccess();
+    this.state.driving.speed = 0; this.state.driving.handbrake = false;
+    this.state.scooter.speed = 0; this.state.scooter.handbrake = false;
     super.stop();
     if (this.fullscreen?.active) this.fullscreen.toggle();
     this.useButton?.hide();
@@ -119,7 +125,7 @@ export class VillaGame extends BaseGame {
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;
     this.time = 0; this.mapOpen = false; this.helpOpen = false; this.mapFloor = 0;
     this.state = initialVillaState(); this.motion = createVillaMotion(); this.immersive = false; this.promptAlpha = 0;
-    this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.exitCarAt = Infinity;
+    this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
     this.toast = ''; this.toastUntil = 0; this.usePressedUntil = 0; this.touchHintLayout = null; this.visited = new Set(['garden']);
     this.touchMode = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     if (!this.scene) {
@@ -134,7 +140,7 @@ export class VillaGame extends BaseGame {
     this.mouseLookEnabled = true;
     if (!this.listenersBound) {
       this.listenersBound = true;
-      const blur = () => { this.clearInput(); this.mouseLookEnabled = false; this.unlock(); };
+      const blur = () => { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); };
       const cancelTouch = () => this.clearInput();
       const visibility = () => { if (document.hidden) blur(); };
       const leave = () => { this.lastMouse = null; };
@@ -196,6 +202,13 @@ export class VillaGame extends BaseGame {
       || document.getElementById('overflowMenu')?.hidden === false;
   }
 
+  private drivingSeat(): boolean { return this.state.seated === 'car' || this.state.seated === 'racing' || this.state.seated === 'scooter'; }
+
+  private cancelCarAccess() {
+    if (this.enterCarAt !== Infinity || this.exitCarAt !== Infinity || this.closeCarAt !== Infinity) this.state.carDoorOpen = false;
+    this.enterCarAt = this.exitCarAt = this.closeCarAt = Infinity;
+  }
+
   private clearInput() {
     this.keys.clear(); this.touchActions.clear(); this.safetyBrake = true; this.lastMouse = null; this.joystick = null; this.lookTouch = null;
     this.canvas.style.cursor = '';
@@ -222,10 +235,16 @@ export class VillaGame extends BaseGame {
   update(dt: number) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 0;
     this.time += dt;
-    if (this.shellOpen() || document.hidden) { this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
+    if (this.shellOpen() || document.hidden) { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
+    if (this.mapOpen || this.helpOpen) this.cancelCarAccess();
     if (this.transition && this.time - this.transition.at >= 0.45) this.transition = null;
     if (this.time >= this.closeCarAt) { this.state.carDoorOpen = false; this.closeCarAt = Infinity; }
-    if (this.time >= this.exitCarAt) { this.exitCarAt = Infinity; this.leaveSeat(); }
+    if (this.time >= this.enterCarAt && this.scene?.carDoorProgress === 1) {
+      this.enterCarAt = Infinity;
+      if (!this.state.seated && this.atDriverDoor() && villaCarExitClear(this.state.driving, this.scene.drivingObstacles)) this.takeSeat('car');
+      else { this.state.carDoorOpen = false; this.message(this.isZhLang() ? '上车通道被挡住了，请重新靠近驾驶位。' : 'The entry is obstructed. Approach the driver door again.'); }
+    }
+    if (this.time >= this.exitCarAt && this.scene?.carDoorProgress === 1) { this.exitCarAt = Infinity; this.leaveSeat(); }
     const ground = this.groundPosition(), lift = this.state.elevator;
     const obstruction = villaElevatorDoorwayObstructed(ground, lift);
     idleVillaElevator(lift, dt, !this.state.seated && villaElevatorCabinContains(ground, lift), obstruction);
@@ -236,20 +255,26 @@ export class VillaGame extends BaseGame {
       if (!lift.riding) { this.clearInput(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
     }
     this.scene?.updateActivities(this.time, this.state);
-    const enabled = !this.mapOpen && !this.helpOpen && !this.shellOpen() && !document.hidden && !this.unavailable && !this.transition;
-    if (enabled && !this.state.seated && !this.state.snookerActive) this.yaw += (Number(this.keys.has('arrowleft')) - Number(this.keys.has('arrowright'))) * dt * 1.5;
+    const enabled = !this.mapOpen && !this.helpOpen && !this.shellOpen() && !document.hidden && !this.unavailable && !this.transition
+      && this.enterCarAt === Infinity && this.exitCarAt === Infinity;
+    if (enabled && !this.drivingSeat() && !this.state.snookerActive) this.yaw += (Number(this.keys.has('arrowleft')) - Number(this.keys.has('arrowright'))) * dt * 1.5;
     let { forward, side } = enabled ? this.axes() : { forward: 0, side: 0 };
     const held = (id: string) => [...this.touchActions.values()].includes(id);
     if (enabled && Math.abs(forward) > .01) this.safetyBrake = false;
-    const brake = !enabled || this.safetyBrake || this.keys.has(' ') || held('brake');
+    const brake = !enabled || this.safetyBrake;
+    const handbrake = enabled && (this.keys.has(' ') || held('brake'));
     if (this.state.seated === 'car') {
       const car = this.state.driving, oldYaw = car.yaw;
       advanceVillaDriving(car, { throttle: this.scene?.carDoorProgress === 0 && this.exitCarAt === Infinity ? forward : 0,
-        steer: side, brake: brake || this.state.carDoorOpen || this.exitCarAt !== Infinity }, dt, this.scene?.drivingObstacles ?? []);
+        steer: side, brake: brake || this.state.carDoorOpen || this.exitCarAt !== Infinity, handbrake }, dt, this.scene?.drivingObstacles ?? []);
       this.yaw += car.yaw - oldYaw;
       this.position = { ...villaCarAnchors(car).seat }; this.eyeY = 0;
+    } else if (this.state.seated === 'scooter') {
+      const scooter = this.state.scooter, oldYaw = scooter.yaw;
+      advanceVillaScooter(scooter, { throttle: forward, steer: side, brake, handbrake }, dt, this.scene?.scooterObstacles ?? []);
+      this.yaw += scooter.yaw - oldYaw; this.position = { ...villaScooterAnchors(scooter).seat }; this.eyeY = 0;
     } else if (this.state.seated === 'racing' && enabled && this.state.screenSource === 'pc') {
-      advanceVillaRace(this.state.race, { throttle: forward, steer: side, brake }, dt);
+      advanceVillaRace(this.state.race, { throttle: forward, steer: side, brake: brake || handbrake }, dt);
     } else if (this.state.snookerActive) {
       if (enabled && !this.state.snooker.moving) {
         this.state.snooker.aim += (side * .6 + (Number(held('aim-right')) - Number(held('aim-left'))) * .25) * dt;
@@ -293,7 +318,7 @@ export class VillaGame extends BaseGame {
   private axes() {
     let forward = Number(this.keys.has('w') || this.keys.has('arrowup')) - Number(this.keys.has('s') || this.keys.has('arrowdown'));
     let side = Number(this.keys.has('d')) - Number(this.keys.has('a'));
-    if (this.state.seated || this.state.snookerActive) side += Number(this.keys.has('arrowright')) - Number(this.keys.has('arrowleft'));
+    if (this.drivingSeat() || this.state.snookerActive) side += Number(this.keys.has('arrowright')) - Number(this.keys.has('arrowleft'));
     if (this.joystick) {
       const radius = 56 * this.uiScale();
       side += (this.joystick.point.x - this.joystick.origin.x) / radius;
@@ -304,11 +329,13 @@ export class VillaGame extends BaseGame {
   private hotspot(): VillaHotspot | null {
     const car = this.state.driving, p = this.groundPosition();
     const localX = (p.x - car.x) * Math.cos(car.yaw) - (p.z - car.z) * Math.sin(car.yaw);
-    const fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 });
+    const scooter = villaScooterAnchors(this.state.scooter);
+    const approach = scooter.exits.reduce((a, b) => Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b);
+    const fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 }, approach);
     const pet = nearestVillaPet(this.state.pets, p, this.scene?.colliders ?? []);
     if (pet && (!fixture || Math.hypot(pet.x - p.x, pet.z - p.z) < Math.hypot(fixture.x - p.x, fixture.z - p.z))) {
       const { zh, en: name } = VILLA_PET_LABELS[pet.kind];
-      return { id: `pet-${pet.kind}`, x: pet.x, y: 0, z: pet.z, radius: 2.2,
+      return { id: `pet-${pet.id}`, x: pet.x, y: 0, z: pet.z, radius: 2.2,
         zh: pet.cooldown > 0 ? `${zh}吃饱啦` : `投喂${zh}`, name: pet.cooldown > 0 ? `${name} is full` : `Feed ${name.toLowerCase()}` };
     }
     if (fixture?.id === 'faucet') return { ...fixture, zh: this.state.faucetOn ? '关闭水龙头' : '打开水龙头', name: this.state.faucetOn ? 'Turn tap off' : 'Turn tap on' };
@@ -332,11 +359,13 @@ export class VillaGame extends BaseGame {
     data.villaFed = String(this.time < this.state.fedUntil);
     data.villaFaucet = this.state.faucetOn ? 'on' : 'off';
     data.villaTea = this.time < (this.state.teaUntil ?? 0) ? 'brewing' : this.state.teaUntil ? 'ready' : 'idle';
-    data.villaPets = JSON.stringify(this.state.pets.pets.map(({ kind, x, y, z, mode, feedCount, cooldown }) => ({
-      kind, x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3), mode, feedCount, cooldown: +cooldown.toFixed(2),
+    data.villaPets = JSON.stringify(this.state.pets.pets.map(({ id, kind, x, y, z, mode, visit, feedCount, cooldown }) => ({
+      id, kind, x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3), mode, visit, feedCount, cooldown: +cooldown.toFixed(2),
     })));
     data.villaSeat = this.state.seated ?? 'none';
+    data.villaRelaxSeat = this.state.relaxSeatId ?? '';
     data.villaCarDoor = this.state.carDoorOpen ? 'open' : 'closed';
+    data.villaCarAccess = this.enterCarAt !== Infinity ? 'entering' : this.exitCarAt !== Infinity ? 'exiting' : this.closeCarAt !== Infinity ? 'closing' : 'idle';
     data.villaScreenSource = this.state.screenSource;
     data.villaDisplayLights = String(this.state.displayLights);
     data.villaPointerLocked = String(document.pointerLockElement === this.canvas);
@@ -344,7 +373,8 @@ export class VillaGame extends BaseGame {
     data.villaRunning = String(this.keys.has('shift') && !this.motion.crouched && !this.state.seated && !this.state.snookerActive && !this.mapOpen && !this.helpOpen && !this.state.elevator.riding);
     data.villaImmersive = String(this.immersive);
     data.villaMotion = JSON.stringify({ ...this.motion, eyeHeight: villaEyeHeight(this.motion) });
-    data.villaDriving = JSON.stringify({ x: this.state.driving.x, z: this.state.driving.z, yaw: this.state.driving.yaw, speed: this.state.driving.speed, contact: this.state.driving.contact, progress: this.state.driving.progress });
+    data.villaDriving = JSON.stringify(this.state.driving);
+    data.villaScooter = JSON.stringify(this.state.scooter);
     data.villaRace = JSON.stringify({ speed: this.state.race.speed, distance: this.state.race.distance, lane: this.state.race.lane, laps: this.state.race.laps, crashes: this.state.race.crashes });
     data.villaSnooker = JSON.stringify({ active: this.state.snookerActive, moving: this.state.snooker.moving, shots: this.state.snooker.shots, score: this.state.snooker.score, target: this.state.snooker.target, aim: this.state.snooker.aim, power: this.state.snooker.power });
     data.villaElevator = JSON.stringify({ floor: this.state.elevator.floor + 1, target: this.state.elevator.target + 1,
@@ -381,11 +411,11 @@ export class VillaGame extends BaseGame {
         control('shoot', zh ? '击球' : 'Shot', this.width - 64 * s, 76 * s)];
     }
     if (this.touchMode && !this.inElevator()) {
-      const actions = this.state.seated ? [['brake', zh ? '刹车' : 'Brake'], ['reset-activity', zh ? '复位' : 'Reset']]
-        : [['crouch', zh ? '蹲' : 'C'], ['jump', zh ? '跳' : 'Jump']];
+      const actions = this.drivingSeat() ? [['brake', zh ? '手刹' : 'HB'], ['reset-activity', zh ? '复位' : 'Reset']]
+        : this.state.seated ? [] : [['crouch', zh ? '蹲' : 'C'], ['jump', zh ? '跳' : 'Jump']];
       actions.forEach(([id, label], i) => buttons.push({ id, label, x: this.width - (this.state.seated ? 168 - i * 54 : 170 - i * 52) * s, y: this.height - (this.state.seated ? 151 : 93) * s, w: 44 * s, h: 44 * s }));
     }
-    if (this.touchMode && (this.state.seated || target === 'car' || target === 'media')) {
+    if (this.touchMode && (this.state.seated === 'car' || this.state.seated === 'racing' || (!this.state.seated && (target === 'car' || target === 'media')))) {
       const door = this.state.seated === 'car' || target === 'car';
       buttons.push({ id: 'secondary', x: this.width - 60 * s, y: this.height - 151 * s, w: 44 * s, h: 44 * s, label: this.isZhLang() ? (door ? '车门' : '信号') : (door ? 'Door' : 'Input') });
     }
@@ -430,8 +460,9 @@ export class VillaGame extends BaseGame {
       case 'fullscreen': this.clearInput(); this.unlock(); this.fullscreen?.toggle(); this.mouseLookEnabled = true; break;
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
-        this.state.seated = null; this.state.carDoorOpen = false; this.transition = null; this.closeCarAt = this.exitCarAt = Infinity;
-        this.motion = createVillaMotion(); this.state.snookerActive = false; this.state.driving.speed = 0; this.state.driving.steering = 0;
+        this.state.seated = null; this.state.relaxSeatId = null; this.state.carDoorOpen = false; this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
+        this.motion = createVillaMotion(); this.state.snookerActive = false; this.state.driving.speed = 0; this.state.driving.steering = 0; this.state.driving.handbrake = false;
+        this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false;
         this.state.elevator = createVillaElevator(); this.scene?.updateActivities(this.time, this.state);
         this.mapOpen = false; this.helpOpen = false; this.clearInput();
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
@@ -447,16 +478,23 @@ export class VillaGame extends BaseGame {
         if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !toggleVillaCrouch(this.motion, h => this.canFit(h)))
           this.message(this.isZhLang() ? '上方空间不足，暂时不能站起。' : 'Not enough headroom to stand.');
         break;
-      case 'jump': if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition) jumpVillaMotion(this.motion); break;
+      case 'jump': if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition && this.enterCarAt === Infinity) jumpVillaMotion(this.motion); break;
       case 'shoot': if (this.state.snookerActive && !this.transition) shootVillaSnooker(this.state.snooker); break;
       case 'reset-activity':
         this.clearInput();
         if (this.state.snookerActive) this.state.snooker = createVillaSnooker();
         else if (this.state.seated === 'racing') this.state.race = createVillaRace();
         else if (this.state.seated === 'car') {
-          this.state.driving = createVillaDriving(); this.position = { ...villaCarAnchors(this.state.driving).seat };
-          this.yaw = Math.PI; this.pitch = -.035; this.state.carDoorOpen = false; this.closeCarAt = this.exitCarAt = Infinity;
+          const parked = createVillaDriving();
+          if (villaDrivingPoseBlocked(parked, this.scene?.drivingObstacles ?? [])) { this.message(this.isZhLang() ? '车库原位被占用了，请先移开障碍。' : 'The garage space is occupied. Clear it before resetting.'); break; }
+          this.state.driving = parked; this.position = { ...villaCarAnchors(parked).seat };
+          this.yaw = Math.PI; this.pitch = -.035; this.transition = null; this.state.carDoorOpen = false; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
           this.scene?.updateActivities(this.time, this.state);
+        } else if (this.state.seated === 'scooter') {
+          const parked = createVillaScooter();
+          if (villaScooterPoseBlocked(parked, this.scene?.scooterObstacles ?? [])) { this.message(this.isZhLang() ? '电动车原位被占用了，请先移开障碍。' : 'The scooter space is occupied. Clear it before resetting.'); break; }
+          this.state.scooter = parked; this.position = { ...villaScooterAnchors(parked).seat };
+          this.yaw = Math.PI; this.pitch = -.12; this.transition = null; this.scene?.updateActivities(this.time, this.state);
         }
         break;
     }
@@ -466,7 +504,9 @@ export class VillaGame extends BaseGame {
   private message(text: string) { this.toast = text; this.toastUntil = this.time + 4.5; }
 
   private view(): VillaView {
-    const eyeHeight = this.state.seated === 'car' ? VILLA_CAR.eyeHeight : this.state.seated === 'racing' ? VILLA_RACING.eyeHeight : villaEyeHeight(this.motion);
+    const rest = villaRelaxSeat(this.state.relaxSeatId);
+    const eyeHeight = this.state.seated === 'car' ? VILLA_CAR.eyeHeight : this.state.seated === 'racing' ? VILLA_RACING.eyeHeight
+      : this.state.seated === 'scooter' ? VILLA_SCOOTER.eyeHeight : this.state.seated && rest ? rest.eyeHeight : villaEyeHeight(this.motion);
     // Stay below the 3.4m ceiling. A wider top-down view fits the complete table.
     const target: VillaView = this.state.snookerActive
       ? { x: VILLA_SNOOKER.center.x, y: 3.15, z: VILLA_SNOOKER.center.z, yaw: 0, pitch: -Math.PI / 2, eyeHeight: 0, fov: 96 }
@@ -479,29 +519,48 @@ export class VillaGame extends BaseGame {
       pitch: mix(from.pitch, target.pitch), eyeHeight: mix(from.eyeHeight ?? EYE_HEIGHT, target.eyeHeight ?? EYE_HEIGHT), fov: mix(from.fov ?? 64, target.fov ?? 64) };
   }
 
-  private takeSeat(seat: Exclude<VillaSeat, null>) {
-    const from = this.view(), layout = seat === 'car' ? VILLA_CAR : VILLA_RACING;
-    this.state.seated = seat; this.position = { ...(seat === 'car' ? villaCarAnchors(this.state.driving).seat : layout.seat) }; this.eyeY = 0;
-    this.motion = createVillaMotion();
-    this.yaw = layout.yaw + (seat === 'car' ? this.state.driving.yaw : 0); this.pitch = seat === 'car' ? -0.035 : 0.225;
+  private takeSeat(seat: 'car' | 'racing' | 'scooter') {
+    const from = this.view();
+    this.state.seated = seat; this.state.relaxSeatId = null;
+    this.position = { ...(seat === 'car' ? villaCarAnchors(this.state.driving).seat : seat === 'scooter' ? villaScooterAnchors(this.state.scooter).seat : VILLA_RACING.seat) };
+    this.eyeY = 0; this.motion = createVillaMotion();
+    this.yaw = Math.PI + (seat === 'car' ? this.state.driving.yaw : seat === 'scooter' ? this.state.scooter.yaw : 0);
+    this.pitch = seat === 'car' ? -.035 : seat === 'scooter' ? -.12 : .225;
     if (seat === 'racing') this.state.screenSource = 'pc';
     this.transition = { from, at: this.time }; this.clearInput();
-    if (seat === 'car') this.closeCarAt = this.time + 0.5;
-    this.message(this.isZhLang() ? (seat === 'car' ? 'W/S 前进倒车 · A/D 转向 · 空格刹车 · 室外沿车道进入考场' : 'W/S 油门刹车 · A/D 转向 · 空格制动 · R 重开 · E 起身')
-      : (seat === 'car' ? 'W/S drive/reverse · A/D steer · Space brake · Follow the driveway to the course' : 'W/S throttle/brake · A/D steer · Space brake · R restart · E stand up'));
+    if (seat === 'car') this.closeCarAt = this.time + .5;
+    this.message(this.isZhLang() ? (seat === 'car' ? '车门会自动关好。W/S 前进倒车 · A/D 转向 · 空格手刹 · E 下车'
+      : seat === 'scooter' ? 'W 加速 · S 刹车 · A/D 转向 · 空格手刹 · 停稳后 E 下车' : '林间拉力赛 · W 油门 · S 刹车 · A/D 转向 · 空格手刹 · E 起身')
+      : (seat === 'car' ? 'Door closes automatically. W/S drive/reverse · A/D steer · Space handbrake · E exit'
+        : seat === 'scooter' ? 'W accelerate · S brake · A/D steer · Space handbrake · E dismount when stopped' : 'Forest rally · W throttle · S brake · A/D steer · Space handbrake · E stand up'));
+  }
+
+  private takeRelaxSeat(id: string) {
+    const seat = villaRelaxSeat(id); if (!seat) return;
+    const from = this.view(); this.state.seated = seat.kind; this.state.relaxSeatId = seat.id;
+    this.position = { ...seat.seat }; this.eyeY = seat.seat.y; this.yaw = seat.yaw; this.pitch = seat.pitch;
+    this.motion = createVillaMotion(); this.transition = { from, at: this.time }; this.clearInput();
+    this.message(this.isZhLang() ? '坐下来歇一会儿。自由环顾，按 E 或点离开起身。' : 'Take a quiet seat. Look around; E or Exit to stand up.');
   }
 
   private leaveSeat() {
-    if (!this.state.seated) return;
-    const car = this.state.seated === 'car', from = this.view();
-    const exit = car ? villaCarAnchors(this.state.driving).exit : VILLA_RACING.exit;
-    if (car && (!this.scene || !villaCarExitClear(this.state.driving, this.scene.drivingObstacles) || villaCollides(exit, this.scene.colliders, 1.75))) {
-      this.message(this.isZhLang() ? '车门外没有站立空间，请移到空旷处再下车。' : 'No safe space outside the door. Move to a clear area first.'); return;
+    const seat = this.state.seated; if (!seat) return;
+    const car = seat === 'car', scooter = seat === 'scooter', from = this.view(), rest = villaRelaxSeat(this.state.relaxSeatId);
+    if ((car && Math.abs(this.state.driving.speed) > .12) || (scooter && this.state.scooter.speed > .12)) {
+      this.message(this.isZhLang() ? '请先停稳，再下车。' : 'Stop completely before getting off.'); return;
     }
-    this.position = { ...exit }; this.state.seated = null; this.eyeY = 0; this.motion = createVillaMotion();
-    this.yaw = car ? Math.PI / 2 + this.state.driving.yaw : Math.PI; this.pitch = -0.06;
+    const exit = car ? villaCarAnchors(this.state.driving).exit : scooter ? villaScooterSafeExit(this.state.scooter, this.scene?.scooterObstacles ?? [])
+      : rest ? rest.exits.find(p => this.canFit(1.75, p)) : VILLA_RACING.exit;
+    if (!exit || !this.canFit(1.75, exit) || (car && !villaCarExitClear(this.state.driving, this.scene?.drivingObstacles ?? []))) {
+      if (car) this.closeCarAt = this.time + .25;
+      this.message(this.isZhLang() ? '旁边没有安全的站立空间，请稍候或换个位置。' : 'There is no safe standing space beside you. Wait or reposition.'); return;
+    }
+    this.position = { ...exit }; this.state.seated = null; this.state.relaxSeatId = null; this.eyeY = exit.y; this.motion = createVillaMotion();
+    this.yaw = car ? Math.PI / 2 + this.state.driving.yaw : scooter ? Math.PI / 2 + this.state.scooter.yaw : this.yaw; this.pitch = -.06;
+    if (car) { this.state.driving.speed = 0; this.state.driving.handbrake = false; this.closeCarAt = this.time + .55; }
+    if (scooter) { this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false; }
     this.transition = { from, at: this.time }; this.clearInput();
-    this.message(this.isZhLang() ? '已起身，可以继续参观。' : 'Back on your feet. Continue exploring.');
+    this.message(this.isZhLang() ? (car ? '已下车，车门会自动关好。' : '已起身，可以继续参观。') : (car ? 'Stepped outside. The door will close automatically.' : 'Back on your feet. Continue exploring.'));
   }
 
   private inElevator(): boolean {
@@ -530,22 +589,42 @@ export class VillaGame extends BaseGame {
     return x >= 2.28 && Math.abs(z - .15) <= .48;
   }
 
+  /** Boarding must not cut through an intervening wall just because a hotspot is close. */
+  private approachClear(target: VillaPosition): boolean {
+    const from = this.groundPosition();
+    if (Math.abs(from.y - target.y) > .1) return false;
+    const steps = Math.max(1, Math.ceil(Math.hypot(target.x - from.x, target.z - from.z) / .1));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (!this.canFit(1.75, { x: from.x + (target.x - from.x) * t, y: target.y, z: from.z + (target.z - from.z) * t })) return false;
+    }
+    return true;
+  }
+
+  private requestCarAccess() {
+    const zh = this.isZhLang(), leaving = this.state.seated === 'car';
+    if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
+    if (Math.abs(this.state.driving.speed) > .12) { this.message(zh ? '请先刹停，再打开车门。' : 'Stop the car before opening the door.'); return; }
+    if (!leaving && (!this.atDriverDoor() || !this.approachClear(villaCarAnchors(this.state.driving).exit))) {
+      this.message(zh ? '请稍微后退，站到驾驶位车门外侧再互动。' : 'Step back to the outside of the driver doorway before entering.'); return;
+    }
+    if (!villaCarExitClear(this.state.driving, this.scene?.drivingObstacles ?? [])) {
+      this.message(zh ? '车门通道被挡住了，请换个空旷位置。' : 'The doorway is obstructed. Reposition in a clear space.'); return;
+    }
+    this.clearInput(); this.closeCarAt = Infinity; this.state.carDoorOpen = true;
+    this.doorReadyAt = this.time + Math.max(.02, (1 - (this.scene?.carDoorProgress ?? 0)) * CAR_DOOR_SECONDS);
+    if (leaving) this.exitCarAt = this.doorReadyAt; else this.enterCarAt = this.doorReadyAt;
+    this.message(zh ? (leaving ? '正在开门，下车后会自动关门…' : '正在开门，随后自动坐进驾驶位…')
+      : (leaving ? 'Opening the door. Step out, then it closes automatically…' : 'Opening the door, then taking the driver seat automatically…'));
+    this.scene?.updateActivities(this.time, this.state); this.publishState();
+  }
+
   private secondaryInteraction() {
-    if (this.transition) return;
+    if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
     const id = this.hotspot()?.id;
-    if (this.state.seated === 'car' || id === 'car') {
-      if (Math.abs(this.state.driving.speed) > .12) { this.message(this.isZhLang() ? '请先刹停，再打开车门。' : 'Stop the car before opening the door.'); return; }
-      if (!this.state.seated && !this.atDriverDoor()) {
-        this.message(this.isZhLang() ? '站到驾驶位车门外侧，后退半步留出开门空间。' : 'Face the driver door and step back to leave room for its swing.'); return;
-      }
-      if (this.exitCarAt !== Infinity) return;
-      if (!this.state.carDoorOpen && !villaCarExitClear(this.state.driving, this.scene?.drivingObstacles ?? [])) {
-        this.message(this.isZhLang() ? '车门外空间不足，换个位置再开门。' : 'The door needs a clear space outside. Reposition the car.'); return;
-      }
-      this.closeCarAt = Infinity; this.state.carDoorOpen = !this.state.carDoorOpen;
-      this.doorReadyAt = this.time + CAR_DOOR_SECONDS;
-      this.message(this.isZhLang() ? (this.state.carDoorOpen ? '正在打开车门。' : '正在关闭车门。') : (this.state.carDoorOpen ? 'Opening the door.' : 'Closing the door.'));
-    } else if (this.state.seated === 'racing' || id === 'media' || id === 'racing') {
+    if (this.state.seated === 'car' || (!this.state.seated && id === 'car')) {
+      this.requestCarAccess(); return;
+    } else if (this.state.seated === 'racing' || (!this.state.seated && (id === 'media' || id === 'racing'))) {
       this.state.screenSource = nextVillaScreen(this.state.screenSource);
       const name = this.state.screenSource === 'pc' ? 'PC' : this.state.screenSource === 'ps' ? 'PlayStation' : 'Switch';
       this.message(this.isZhLang() ? `大屏虚拟信号源：${name}` : `Virtual screen input: ${name}`);
@@ -555,7 +634,7 @@ export class VillaGame extends BaseGame {
 
   private interactionHint(): string | null {
     const zh = this.isZhLang();
-    if (this.exitCarAt !== Infinity) return zh ? '车门正在打开…' : 'Opening the door…';
+    if (this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return zh ? '车门正在打开，随后自动进出…' : 'Opening the door, then stepping through…';
     if (this.inElevator()) {
       const lift = this.state.elevator;
       if (lift.phase === 'open') return zh ? '1 / 2 / 3 选择楼层 · 开门后步行进出' : '1 / 2 / 3 select floor · Walk through open doors';
@@ -563,16 +642,18 @@ export class VillaGame extends BaseGame {
       return zh ? `电梯 → ${lift.target + 1}F · 请稍候，可自由环顾` : `Elevator → ${lift.target + 1}F · Please wait, look around`;
     }
     if (this.state.snookerActive) return zh ? '鼠标 / ←→ 瞄准 · ↑↓ 力度 · 空格击球 · R 重摆 · E 离开' : 'Mouse / ←→ aim · ↑↓ power · Space shoot · R reset · E leave';
-    if (this.state.seated === 'car') return zh ? 'W/S 前进倒车 · A/D 转向 · 空格刹车 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space brake · E exit when stopped · R reset';
-    if (this.state.seated === 'racing') return zh ? `W/S 油门刹车 · A/D 转向 · 空格制动 · R 重开 · E 起身 · Q ${this.state.screenSource.toUpperCase()}` : `W/S throttle/brake · A/D steer · Space brake · R restart · E exit · Q ${this.state.screenSource.toUpperCase()}`;
+    if (this.state.seated === 'car') return zh ? 'W/S 前进倒车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space handbrake · E exit when stopped · R reset';
+    if (this.state.seated === 'racing') return zh ? `拉力赛 · W 油门 / S 刹车 · A/D 转向 · 空格手刹 · E 起身 · Q ${this.state.screenSource.toUpperCase()}` : `Rally · W throttle / S brake · A/D steer · Space handbrake · E exit · Q ${this.state.screenSource.toUpperCase()}`;
+    if (this.state.seated === 'scooter') return zh ? 'W 加速 · S 刹车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W accelerate · S brake · A/D steer · Space handbrake · E dismount when stopped · R reset';
+    if (this.state.seated) return zh ? '坐下来慢慢看风景 · E 或点离开起身' : 'Sit back and enjoy the view · E or Exit to stand';
     const hotspot = this.hotspot();
     if (!hotspot) return null;
-    if (hotspot.id === 'car') return zh ? (this.state.carDoorOpen ? 'E 坐进驾驶位 · Q 关门' : 'E 打开驾驶位车门') : (this.state.carDoorOpen ? 'E take a seat · Q close door' : 'E open the driver door');
+    if (hotspot.id === 'car') return zh ? 'E 或 Q 开门并自动入座' : 'E or Q opens the door and seats you automatically';
     return `E  ${zh ? hotspot.zh : hotspot.name}`;
   }
 
   private interact() {
-    if (this.transition || this.exitCarAt !== Infinity) { this.message(this.isZhLang() ? '正在切换位置，请稍候。' : 'Please wait for the movement to finish.'); return; }
+    if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) { this.message(this.isZhLang() ? '正在切换位置，请稍候。' : 'Please wait for the movement to finish.'); return; }
     if (this.motion.offset > .001 || this.motion.velocity) { this.message(this.isZhLang() ? '请先落地，再互动。' : 'Land before interacting.'); return; }
     if (this.state.snookerActive) {
       const from = this.view(); this.state.snookerActive = false; this.transition = { from, at: this.time }; this.clearInput(); this.publishState(); return;
@@ -583,23 +664,22 @@ export class VillaGame extends BaseGame {
       if (this.state.elevator.phase === 'closed') requestVillaElevator(this.state.elevator, this.state.elevator.floor);
       this.message(this.interactionHint() ?? ''); this.publishState(); return;
     }
-    if (this.state.seated === 'car') {
-      if (Math.abs(this.state.driving.speed) > .12) { this.message(zh ? '请先踩刹车停稳，再下车。' : 'Brake to a complete stop before getting out.'); return; }
-      if (!villaCarExitClear(this.state.driving, this.scene?.drivingObstacles ?? [])) { this.message(zh ? '车门外被挡住了，请换个停车位置。' : 'The exit is obstructed. Reposition the car first.'); return; }
-      this.closeCarAt = Infinity;
-      this.exitCarAt = this.time + (this.state.carDoorOpen ? Math.max(0, this.doorReadyAt - this.time) : CAR_DOOR_SECONDS);
-      this.state.carDoorOpen = true; this.clearInput(); this.message(zh ? '打开车门后下车…' : 'Opening the door to step outside…');
-      this.scene?.updateActivities(this.time, this.state); this.publishState(); return;
-    }
-    if (this.state.seated === 'racing') { this.leaveSeat(); this.publishState(); return; }
+    if (this.state.seated === 'car') { this.requestCarAccess(); return; }
+    if (this.state.seated) { this.leaveSeat(); this.publishState(); return; }
     if (!hotspot) {
       this.message(this.touchMode ? (zh ? '请靠近出现提示的物品或小动物，再点互动。' : 'Move closer until an action hint appears, then tap Use.')
         : (zh ? '走近家具、水龙头、小动物或驾驶座，再按 E。' : 'Walk closer to a furnishing, tap, pet or driving seat, then press E.')); return;
     }
-    const pet = this.state.pets.pets.find(p => `pet-${p.kind}` === hotspot.id);
+    const rest = villaRelaxSeat(hotspot.id);
+    if (rest) {
+      if (this.approachClear(rest.approach)) this.takeRelaxSeat(rest.id);
+      else this.message(zh ? '请从座位前方或侧面靠近，不要隔着家具入座。' : 'Approach the front or side of the seat, without furniture in between.');
+      this.publishState(); return;
+    }
+    const pet = this.state.pets.pets.find(p => `pet-${p.id}` === hotspot.id);
     if (pet) {
       const labels = VILLA_PET_LABELS[pet.kind], name = zh ? labels.zh : labels.en;
-      if (feedVillaPet(this.state.pets, pet.kind)) this.message(zh ? `给${name}添了${labels.foodZh}。` : `${name} has some ${labels.foodEn.toLowerCase()}.`);
+      if (feedVillaPet(this.state.pets, pet.id)) this.message(zh ? `给${name}添了${labels.foodZh}。` : `${name} has some ${labels.foodEn.toLowerCase()}.`);
       else this.message(zh ? (pet.cooldown > 0 ? `${name}吃饱了，先歇一会儿。` : '再靠近一点，等它停稳。')
         : (pet.cooldown > 0 ? `${name} is full. Let it rest a little.` : 'Come a little closer and let it settle.'));
       this.scene?.updatePets(this.time, this.state.pets); this.publishState(); return;
@@ -623,13 +703,15 @@ export class VillaGame extends BaseGame {
           : (accepted ? 'Elevator called. Walk inside, then press 1 / 2 / 3.' : 'The elevator is busy. Please wait.'));
         break;
       }
-      case 'car':
-        if (!villaCarExitClear(this.state.driving, this.scene?.drivingObstacles ?? [])) { this.message(zh ? '车门通道被挡住了，请从空旷处入座。' : 'The doorway is obstructed. Use a clear approach.'); break; }
-        if (!this.atDriverDoor()) { this.message(zh ? '请站在打开车门的外侧，稍微后退，再按 E。' : 'Stand outside the driver doorway, a step back, then press E.'); break; }
-        if (!this.state.carDoorOpen) this.secondaryInteraction();
-        else if (this.time < this.doorReadyAt) this.message(zh ? '等车门完全打开，再按 E 入座。' : 'Wait for the door to open, then press E to sit.');
-        else this.takeSeat('car');
+      case 'car': this.requestCarAccess(); break;
+      case 'scooter': {
+        const bike = this.state.scooter;
+        const clear = villaScooterAnchors(bike).exits.some((exit, i) =>
+          villaScooterExitClear(bike, this.scene?.scooterObstacles ?? [], i === 0 ? 1 : -1) && this.approachClear(exit));
+        if (clear) this.takeSeat('scooter');
+        else this.message(zh ? '请从电动车旁的空旷位置靠近。' : 'Approach a clear side of the electric scooter.');
         break;
+      }
       case 'racing': this.takeSeat('racing'); break;
       case 'media': this.secondaryInteraction(); break;
       case 'figures': case 'replicas':
@@ -689,8 +771,8 @@ export class VillaGame extends BaseGame {
       if (key === ' ') {
         e.preventDefault();
         if (!this.mapOpen && !this.helpOpen) {
-          if (this.state.seated) this.keys.add(key);
-          else if (!e.repeat) this.activate(this.state.snookerActive ? 'shoot' : 'jump');
+          if (this.drivingSeat()) this.keys.add(key);
+          else if (!this.state.seated && !e.repeat) this.activate(this.state.snookerActive ? 'shoot' : 'jump');
         }
         return;
       }
@@ -741,7 +823,7 @@ export class VillaGame extends BaseGame {
             this.touchActions.set(touch.identifier, button.id); continue;
           }
           if (this.clickUi(point)) continue;
-          if (point.x < this.width * 0.44 && !this.joystick) this.joystick = { id: touch.identifier, origin: point, point };
+          if (point.x < this.width * 0.44 && !this.joystick && (!this.state.seated || this.drivingSeat())) this.joystick = { id: touch.identifier, origin: point, point };
           else if (!this.lookTouch) this.lookTouch = { id: touch.identifier, point };
         } else if (e.type === 'touchmove') {
           if (this.joystick?.id === touch.identifier) this.joystick.point = point;
@@ -762,7 +844,7 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), dark = this.isDarkTheme();
     if (zh !== this.lastLang) {
       this.lastLang = zh;
-      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走或驾驶，Shift 跑步，C 蹲下，空格跳跃、刹车或击球。I 切换仅显示当前位置的沉浸模式，R 重开当前练习。移动鼠标环顾或斯诺克瞄准，Esc 释放光标。沿楼梯上下楼，或在走廊尽头 E 呼叫电梯，进入后按 1、2、3 选层。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口，F 全屏或退出全屏。' : 'Warm Villa. WASD walk or drive, Shift run, C crouch, Space jump, brake or shoot. I toggles location-only immersive mode, R resets the current activity. Mouse looks or aims at snooker; Esc releases cursor. Use stairs or press E to call the elevator at the gallery end, then 1, 2, 3 inside. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance, F fullscreen.');
+      this.canvas.setAttribute('aria-label', zh ? '暖居别墅。WASD 行走或驾驶，Shift 跑步，C 蹲下，空格跳跃、手刹或击球。I 切换仅显示当前位置的沉浸模式，R 重置当前活动。移动鼠标环顾或斯诺克瞄准，Esc 释放光标。沿楼梯上下楼，或在走廊尽头 E 呼叫电梯，进入后按 1、2、3 选层。E 互动或入座，Q 车门或屏幕信号，M 导览图，T 日光黄昏，H 回门口，F 全屏或退出全屏。' : 'Warm Villa. WASD walk or drive, Shift run, C crouch, Space jump, handbrake or shoot. I toggles location-only immersive mode, R resets the current activity. Mouse looks or aims at snooker; Esc releases cursor. Use stairs or press E to call the elevator at the gallery end, then 1, 2, 3 inside. E interact or sit, Q door or screen input, M floor plan, T daylight or sunset, H entrance, F fullscreen.');
     }
     ctx.fillStyle = dark ? '#252e2e' : '#d9d4c9'; ctx.fillRect(0, 0, this.width, this.height);
     const rendered = this.scene?.render(ctx, this.width, this.height, this.pixelRatio, this.view(), this.time, this.state);
@@ -807,11 +889,11 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = b.id === `elevator-${this.state.elevator.target}` ? 'rgba(79,103,69,.92)' : 'rgba(33,35,31,.72)';
       this.rounded(ctx, b.x, b.y, b.w, b.h);
       ctx.fillStyle = '#fff7e9'; ctx.textAlign = 'center'; ctx.font = `500 ${this.touchMode ? 17 * s : 13}px ${UI_FONT}`;
-      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2, b.w - 6 * s);
     }
     ctx.textAlign = 'center';
     if (this.touchMode) {
-      if (!this.state.snookerActive) {
+      if (!this.state.snookerActive && (!this.state.seated || this.drivingSeat())) {
       const origin = this.joystick?.origin ?? { x: 78 * s, y: this.height - 78 * s };
       ctx.strokeStyle = 'rgba(255,251,236,.45)'; ctx.lineWidth = 1.5 * s; ctx.fillStyle = 'rgba(29,35,31,.20)';
       ctx.beginPath(); ctx.arc(origin.x, origin.y, 51 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -840,8 +922,9 @@ export class VillaGame extends BaseGame {
     if (this.touchMode && !hasToast && hint.length > (zh ? 17 : 38)) {
       hint = this.inElevator() ? (this.state.elevator.phase === 'open' ? (zh ? '上方按钮选层 · 开门后进出' : 'Choose a floor above · Walk out when open')
         : (zh ? `电梯 → ${this.state.elevator.target + 1}F · 可环顾` : `Elevator → ${this.state.elevator.target + 1}F · Look around`))
-        : this.state.seated ? (zh ? '左杆驾驶 · 右侧环顾 · 按住刹车' : 'Left stick drives · Hold Brake to stop')
-        : hotspot?.id === 'car' ? (zh ? '互动：开门 / 坐入驾驶位' : 'Use: open door / take a seat')
+        : this.drivingSeat() ? (zh ? '左杆驾驶 · 右侧环顾 · 按住手刹' : 'Left stick drives · Hold HB: handbrake')
+          : this.state.seated ? (zh ? '右侧环顾 · 点离开起身' : 'Look around · Tap Exit to stand')
+        : hotspot?.id === 'car' ? (zh ? '互动：开门后自动入座' : 'Use: open door and sit automatically')
           : hotspot ? (zh ? hotspot.zh : hotspot.name) : (zh ? '不赶时间，慢慢逛' : 'Take your time and explore');
     }
     const font = this.touchMode ? 12 * s : 14;
@@ -885,12 +968,11 @@ export class VillaGame extends BaseGame {
         `${zh ? '目标' : 'Target'}: ${target} · ${zh ? '力度' : 'Power'} ${Math.round(table.power * 100)}%`,
         table.moving ? (zh ? '球正在滚动…' : 'Balls rolling…') : table.phase === 'complete' ? (zh ? '清台成功！R 开新局' : 'Table cleared! R for a fresh rack')
           : table.foul ? (zh ? `犯规：${fouls[table.foul] ?? '请按目标击球'}` : table.foul) : (zh ? '先红后彩；彩球清台按顺序' : 'Red, colour; then colours in order'));
-    } else if (this.state.seated === 'car') {
-      const car = this.state.driving;
-      lines.push(`${car.speed < -.05 ? 'R' : 'D'}  ${Math.abs(car.speed * 3.6).toFixed(0)} km/h`,
-        `${zh ? '倒库' : 'Reverse bay'} ${car.reverseParked ? '✓' : '—'} · ${zh ? '侧方' : 'Parallel'} ${car.parallelParked ? '✓' : '—'}`,
-        `S ${car.sCheckpoint}/4 · ${zh ? '直角' : 'Corner'} ${car.cornerCheckpoint}/4`);
-      if (!this.touchMode) lines.push(car.contact ? (zh ? '碰到边界，请刹停后调整' : 'Obstacle ahead — stop and adjust') : (zh ? '出车库向前，沿车道进入练习场' : 'Follow the driveway out to the course'));
+    } else if (this.state.seated === 'car' || this.state.seated === 'scooter') {
+      const vehicle = this.state.seated === 'car' ? this.state.driving : this.state.scooter;
+      lines.push(`${vehicle.handbrake ? 'Ⓟ' : vehicle.speed < -.05 ? 'R' : 'D'}  ${Math.abs(vehicle.speed * 3.6).toFixed(0)} km/h`);
+      if (vehicle.handbrake) lines.push(zh ? '手刹已拉起' : 'Handbrake applied');
+      else if (vehicle.contact) lines.push(zh ? '前方有障碍，请减速调整' : 'Obstacle ahead — stop and adjust');
     }
     if (!lines.length) return;
     const x = 24, y = this.touchMode ? 22 + 47 * s : 108, w = this.touchMode ? 168 * s : 294;
@@ -910,16 +992,19 @@ export class VillaGame extends BaseGame {
       figures: { x: 2.58, y: 1.4, z: 6.45 }, replicas: { x: 10.35, y: 1.4, z: 3.5 },
       racing: { ...VILLA_RACING.seat, y: 1.3 }, gaming: { x: 7.05, y: 1.5, z: 3.7 },
       media: { ...VILLA_RACING.screen }, snooker: { ...VILLA_SNOOKER.center, y: VILLA_SNOOKER.height + .15 },
-      fireplace: { x: -10, y: 1.35, z: .78 }, aquarium: { x: -3.5, y: 1.5, z: 1.1 },
+      fireplace: { x: -10, y: 1.35, z: .78 }, aquarium: { ...VILLA_AQUARIUM.anchor },
+      scooter: { ...villaScooterAnchors(this.state.scooter).seat, y: 1.15 },
       elevator: { x: 0, y: target.y + 1.45, z: VILLA_ELEVATOR.frontZ + .06 },
       faucet: { ...VILLA_FAUCET.outlet, y: 1.4 }, 'tea-bar': VILLA_TEA_BAR.anchor,
     };
-    const anchor = anchors[target.id] ?? { x: target.x, y: target.y + (target.id.startsWith('pet-') ? .88 : 1.4), z: target.z };
+    const seat = villaRelaxSeat(target.id);
+    const anchor = anchors[target.id] ?? (seat ? { ...seat.seat, y: seat.seat.y + .85 }
+      : { x: target.x, y: target.y + (target.id.startsWith('pet-') ? .88 : 1.4), z: target.z });
     anchor.y = Math.min(anchor.y, target.y + villaEyeHeight(this.motion) + .2);
     const point = this.scene.projectInteraction(anchor, this.width, this.height);
     if (!point) { this.canvas.dataset.villaPrompt = ''; return; }
     const zh = this.isZhLang(), s = this.touchMode ? this.uiScale() * .85 : 1;
-    const labels: Record<string, [string, string]> = { car: [this.state.carDoorOpen ? '坐进驾驶位' : '打开车门', this.state.carDoorOpen ? 'Take driver seat' : 'Open door'], racing: ['开始赛车', 'Race'], snooker: ['打斯诺克', 'Play snooker'], elevator: ['呼叫电梯', 'Call lift'], figures: ['开关柜灯', 'Display lights'], replicas: ['开关柜灯', 'Display lights'], fireplace: ['开关壁炉', 'Fireplace'], aquarium: ['喂鱼', 'Feed fish'], gaming: ['开关电脑', 'PC power'], media: ['切换信号', 'Screen input'], tea: ['喝茶', 'Have tea'], roof: ['赏景', 'Enjoy the view'] };
+    const labels: Record<string, [string, string]> = { car: ['开门并入座', 'Open & sit'], racing: ['开始拉力赛', 'Rally'], scooter: ['骑电动车', 'Ride scooter'], snooker: ['打斯诺克', 'Play snooker'], elevator: ['呼叫电梯', 'Call lift'], figures: ['开关柜灯', 'Display lights'], replicas: ['开关柜灯', 'Display lights'], fireplace: ['开关壁炉', 'Fireplace'], aquarium: ['喂鱼', 'Feed fish'], gaming: ['开关电脑', 'PC power'], media: ['切换信号', 'Screen input'], tea: ['喝茶', 'Have tea'], roof: ['赏景', 'Enjoy the view'] };
     const label = labels[target.id]?.[zh ? 0 : 1] ?? (zh ? target.zh : target.name);
     this.canvas.dataset.villaPrompt = target.id;
     ctx.save(); ctx.globalAlpha = Math.min(1, this.promptAlpha) * .94; ctx.font = `500 ${13 * s}px ${UI_FONT}`;
@@ -966,9 +1051,9 @@ export class VillaGame extends BaseGame {
     ctx.fillStyle = dark ? '#707466' : '#ebe1ce'; ctx.fillRect(mx(-12), mz(-9), 24 * scale, 18 * scale);
     if (this.mapFloor === 0) {
       ctx.fillStyle = '#78b6bc'; ctx.fillRect(mx(POOL.minX), mz(POOL.minZ), (POOL.maxX - POOL.minX) * scale, (POOL.maxZ - POOL.minZ) * scale);
-      ctx.fillStyle = '#37505a'; ctx.font = `${12 * s}px ${UI_FONT}`; ctx.fillText(zh ? '泳池' : 'Pool', mx(-18.25), mz(0), 7 * scale);
+      ctx.fillStyle = '#37505a'; ctx.font = `${12 * s}px ${UI_FONT}`; ctx.fillText(zh ? '泳池' : 'Pool', mx((POOL.minX + POOL.maxX) / 2), mz((POOL.minZ + POOL.maxZ) / 2), 7 * scale);
       ctx.fillStyle = '#e9dfcb'; ctx.fillRect(mx(-1.7), mz(9), 3.4 * scale, 14 * scale);
-      ctx.fillStyle = '#85897d'; ctx.fillRect(mx(13), mz(10), 6 * scale, (grounds ? 16 : 14) * scale);
+      ctx.fillStyle = '#85897d'; ctx.fillRect(mx(16.2 - VILLA_SCENIC_ROAD.drivewayWidth / 2), mz(2), VILLA_SCENIC_ROAD.drivewayWidth * scale, (grounds ? 32 : 22) * scale);
       for (const bed of VILLA_VEGETABLE_BEDS) {
         ctx.fillStyle = '#75634c'; ctx.fillRect(mx(bed.x - bed.w / 2), mz(bed.z - bed.d / 2), bed.w * scale, bed.d * scale);
         ctx.fillStyle = '#a4b475'; ctx.fillRect(mx(bed.x - bed.w / 2) + 1, mz(bed.z - bed.d / 2) + 1, Math.max(1, bed.w * scale - 2), Math.max(1, bed.d * scale - 2));
@@ -978,15 +1063,13 @@ export class VillaGame extends BaseGame {
       ctx.fillText(zh ? '菜地' : 'Veg beds', mx(-7.9), mz(16), 7 * scale);
       for (const pet of this.state.pets.pets) { ctx.fillStyle = '#ead9a8'; ctx.beginPath(); ctx.arc(mx(pet.x), mz(pet.z), 2.5, 0, Math.PI * 2); ctx.fill(); }
       if (grounds) {
-        ctx.fillStyle = '#586366'; ctx.fillRect(mx(-10), mz(25), 34 * scale, 28 * scale);
-        ctx.strokeStyle = '#f4e4a3'; ctx.lineWidth = 1;
-        ctx.strokeRect(mx(-7.7), mz(27.5), 3.4 * scale, 7 * scale);
-        ctx.strokeRect(mx(-8.75), mz(46.3), 7.5 * scale, 3.4 * scale);
-        ctx.beginPath(); [[4,29],[7,33],[4,38],[1,42]].forEach(([x,z], i) => i ? ctx.lineTo(mx(x),mz(z)) : ctx.moveTo(mx(x),mz(z))); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(mx(17),mz(37)); ctx.lineTo(mx(17),mz(47)); ctx.lineTo(mx(9),mz(47)); ctx.stroke();
+        const road = VILLA_SCENIC_ROAD;
+        ctx.strokeStyle = '#586366'; ctx.lineWidth = road.width * scale;
+        ctx.beginPath(); ctx.ellipse(mx(road.x), mz(road.z), road.radiusX * scale, road.radiusZ * scale, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1;
       }
-      ctx.fillStyle = grounds ? '#fff4d2' : '#3c4b3e'; ctx.textAlign = 'center'; ctx.font = `${this.touchMode ? 10 * s : 12}px ${UI_FONT}`;
-      ctx.fillText(zh ? (grounds ? '试驾练习场' : '↓ 试驾考场') : (grounds ? 'Driving practice' : '↓ Driving course'), mx(7), mz(grounds ? 51 : 23), 25 * scale);
+      ctx.fillStyle = dark ? '#f3e7c4' : '#3c4b3e'; ctx.textAlign = 'center'; ctx.font = `${this.touchMode ? 10 * s : 12}px ${UI_FONT}`;
+      ctx.fillText(zh ? (grounds ? '林荫环路' : '↓ 林荫环路') : (grounds ? 'Garden road' : '↓ Garden road'), mx(6), mz(grounds ? 39 : 23), 25 * scale);
     }
     for (const room of VILLA_ROOMS.filter(r => r.floor === this.mapFloor)) {
       ctx.fillStyle = dark ? '#697465' : '#e8ddc6';
@@ -1024,15 +1107,15 @@ export class VillaGame extends BaseGame {
     const zh = this.isZhLang(), p = this.panel(ctx, zh ? '慢慢走，像在自己家一样' : 'Make yourself at home');
     const rows = zh ? [
       ['W A S D', '行走；Shift 跑步；↑↓ 行走，←→ 转向'], ['鼠标 / Esc', '移动自动环顾；Esc 释放光标，点击画面恢复'],
-      ['C / 空格', '蹲下或站起 / 跳跃；头顶空间不足时不会强行站起'], ['E / Q', '互动、投喂、泡茶、水龙头、入座 / 车门与信号'],
-      ['驾驶 / 赛车', 'W/S 前进倒车或制动，A/D 转向，空格刹车；R 复位'], ['斯诺克', '鼠标或←→瞄准，↑↓力度，空格击球，R重摆，E离开'],
+      ['C / 空格', '蹲下或站起 / 跳跃；头顶空间不足时不会强行站起'], ['E / Q', '互动、投喂、坐卧 / 开门自动进出、屏幕信号'],
+      ['驾驶 / 骑行', 'W/S 行驶或刹车，A/D 转向，空格手刹；R 复位'], ['斯诺克', '鼠标或←→瞄准，↑↓力度，空格击球，R重摆，E离开'],
       ['楼梯 / 电梯', 'E 呼叫电梯，进入后 1/2/3 选层；无人四秒后关门'], ['I 沉浸', '仅保留当前位置；手机点左上位置信息恢复按钮'],
       ['M / T / H', '导览图 / 日光黄昏 / 回到门口并停住车辆'], ['F / Esc', '进入 / 退出全屏；只放大别墅，不改变其他游戏'],
       ['手机 / 平板', '左杆移动，右侧环顾；互动按钮会提示操作结果或原因'],
     ] : [
       ['W A S D', 'Walk; Shift runs. Up/down walks, left/right turns.'], ['Mouse / Esc', 'Move to look. Esc frees cursor; click scene to resume.'],
-      ['C / Space', 'Crouch or stand / jump, subject to head clearance.'], ['E / Q', 'Interact, feed, tap, seats / car door and screen input.'],
-      ['Drive / race', 'W/S throttle/reverse or brake; A/D steer; Space brake; R reset.'], ['Snooker', 'Mouse/←→ aim; ↑↓ power; Space shoot; R rack; E leave.'],
+      ['C / Space', 'Crouch or stand / jump, subject to head clearance.'], ['E / Q', 'Interact, feed, sit / auto car entry and exit, screen input.'],
+      ['Drive / ride', 'W/S throttle/reverse or brake; A/D steer; Space handbrake; R reset.'], ['Snooker', 'Mouse/←→ aim; ↑↓ power; Space shoot; R rack; E leave.'],
       ['Stairs / Lift', 'E calls lift; 1/2/3 inside. Empty doors close after four seconds.'], ['I immersive', 'Location-only HUD; touch the location to restore controls.'],
       ['M / T / H', 'Floor plan / daylight or sunset / return home and stop car.'], ['F / Esc', 'Enter / leave villa fullscreen without changing other games.'],
       ['Touch', 'Left stick moves; right looks; Use explains success or rejection.'],

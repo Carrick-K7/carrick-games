@@ -28,7 +28,13 @@ export async function mount(page: Page) {
     document.addEventListener('touchstart', e => { if ((e.target as Element)?.closest?.('[data-villa-use]')) f.trusted.push(e.isTrusted); }, { capture: true });
     f.tick = (n = 1) => { for (let i = 0; i < n; i++) g.update(.05); };
     f.render = () => { f.words = []; g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.renderFrame(); };
-    f.pose = (x: number, z: number) => { g.init(); g.position = { x, y: 0, z }; g.eyeY = 0; g.yaw = 0; g.pitch = -.2; f.tick(2); f.render(); };
+    f.scooterHome = structuredClone(g.state.scooter);
+    f.pose = (x: number, z: number) => {
+      g.init(); g.enterCarAt = g.exitCarAt = g.closeCarAt = Infinity;
+      g.state.seated = null; g.state.relaxSeatId = null; g.state.carDoorOpen = false; g.transition = null;
+      Object.assign(g.state.scooter, f.scooterHome);
+      g.position = { x, y: 0, z }; g.eyeY = 0; g.yaw = 0; g.pitch = -.2; f.tick(2); f.render();
+    };
     f.pose(-5.67, -7.2); (window as any).villaInput = f;
   }, moduleUrl());
 }
@@ -55,10 +61,10 @@ export function registerVillaInteractionTests() {
     await page.goto('/#/villa'); await page.locator('#startOverlay').tap();
     await page.waitForFunction(() => document.getElementById('gameCanvas')?.dataset.villaTarget === 'pet-dog');
     const button = page.locator('button[data-villa-use]'); await expect(button).toBeVisible(); await button.tap();
-    await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPets!).find((p: any) => p.kind === 'dog').feedCount === 1);
+    await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPets!).find((p: any) => p.id === 'dog').feedCount === 1);
     await button.tap();
     await page.waitForFunction(() => /吃饱|full/.test(document.getElementById('gameCanvas')!.dataset.villaUseFeedback!));
-    expect(await page.locator('#gameCanvas').evaluate(c => JSON.parse(c.dataset.villaPets!).find((p: any) => p.kind === 'dog').feedCount)).toBe(1);
+    expect(await page.locator('#gameCanvas').evaluate(c => JSON.parse(c.dataset.villaPets!).find((p: any) => p.id === 'dog').feedCount)).toBe(1);
     await page.goto('/#/snake'); await expect(page.locator('[data-villa-use]')).toHaveCount(0); expect(errors).toEqual([]);
   });
 
@@ -71,21 +77,87 @@ export function registerVillaInteractionTests() {
       // Native keyboard/assistive button activation must not become Space/jump.
       await page.locator('[data-villa-use]').focus(); await page.keyboard.press('Space');
       expect(await page.evaluate(() => { const f = (window as any).villaInput; return [f.calls, f.g.state.faucetOn, f.g.motion.velocity]; })).toEqual([3, true, 0]);
+      const scooterApproach = await page.evaluate(() => {
+        const home = (window as any).villaInput.scooterHome;
+        return { x: home.x + 1, z: home.z - .23 };
+      });
       const cases: Array<[number, number, string, string]> = [
         [-6.7, -1.65, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
-        [0, -4.38, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'], [8.15, 6.2, 'racing', 'race'],
+        [0, -4.38, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'],
+        [-5.25, 5.45, 'sofa-living', 'sofa'], [-21.25, 9.5, 'lounger-west', 'lounger'],
+        [scooterApproach.x, scooterApproach.z, 'scooter', 'scooter'], [-16.5, 14.3, 'pet-parrot-blue', 'blue'],
+        [8.15, 6.2, 'racing', 'race'],
       ];
       for (const [x, z, target, action] of cases) {
-        await page.evaluate(({ x, z }) => (window as any).villaInput.pose(x, z), { x, z });
+        const clean = await page.evaluate(({ x, z, action }) => {
+          const f = (window as any).villaInput; f.pose(x, z);
+          if (action === 'blue') {
+            // A deliberately grounded feeding fixture; retain both birds' authored X/Z positions.
+            const bird = f.g.state.pets.pets.find((p: any) => p.id === 'parrot-blue');
+            Object.assign(bird, { y: 0, flightHeight: 0, verticalSpeed: 0, wingFold: 0, speed: 0, mode: 'idle', timer: 100,
+              targetX: bird.x, targetZ: bird.z });
+            f.tick(2); f.render();
+          }
+          return { seat: f.g.state.seated, relax: f.g.state.relaxSeatId,
+            scooterReset: JSON.stringify(f.g.state.scooter) === JSON.stringify(f.scooterHome),
+            scooterApproachSafe: action !== 'scooter' || f.g.canFit(1.75),
+            accessIdle: [f.g.enterCarAt, f.g.exitCarAt, f.g.closeCarAt].every(t => t === Infinity) };
+        }, { x, z, action });
+        expect(clean, `${action} fixture reset`).toEqual({ seat: null, relax: null, scooterReset: true, scooterApproachSafe: true, accessIdle: true });
         expect(await page.evaluate(() => (window as any).villaInput.g.hotspot()?.id), action).toBe(target);
-        const before = await page.evaluate(() => (window as any).villaInput.calls); await tapPaintedUse(page);
-        const result = await page.evaluate(action => {
+        const before = await page.evaluate(() => (window as any).villaInput.calls);
+        const trustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
+        await tapPaintedUse(page);
+        const result = await page.evaluate(({ action, target, trustedBefore }) => {
           const f = (window as any).villaInput, g = f.g;
           const changed = action === 'tea' ? g.state.teaUntil > g.time : action === 'fire' ? !g.state.fireplace : action === 'pc' ? !g.state.gaming
-            : action === 'lift' ? g.state.elevator.phase !== 'closed' : action === 'door' ? g.state.carDoorOpen : g.state.seated === 'racing';
-          return { calls: f.calls, changed };
-        }, action);
-        expect(result, action).toEqual({ calls: before + 1, changed: true });
+            : action === 'lift' ? g.state.elevator.phase !== 'closed' : action === 'door' ? g.state.carDoorOpen
+            : action === 'sofa' || action === 'lounger' ? g.state.seated === action && g.state.relaxSeatId === target
+            : action === 'scooter' ? g.state.seated === 'scooter' && g.state.relaxSeatId === null
+            : action === 'blue' ? g.state.pets.pets.find((p: any) => p.id === 'parrot-blue').feedCount === 1
+            : g.state.seated === 'racing';
+          return { calls: f.calls, changed, trusted: f.trusted.slice(trustedBefore) };
+        }, { action, target, trustedBefore });
+        expect(result, action).toEqual({ calls: before + 1, changed: true, trusted: [true] });
+        if (action === 'door') {
+          expect(await page.evaluate(() => {
+            const f = (window as any).villaInput; f.tick(40); f.render();
+            return { seated: f.g.state.seated, open: f.g.state.carDoorOpen, calls: f.calls };
+          })).toEqual({ seated: 'car', open: false, calls: before + 1 });
+        } else if (action === 'sofa' || action === 'lounger' || action === 'scooter') {
+          expect(await page.evaluate(() => {
+            const f = (window as any).villaInput; f.tick(12); f.render();
+            return { seat: f.g.canvas.dataset.villaSeat, relax: f.g.canvas.dataset.villaRelaxSeat,
+              scooterSpeed: JSON.parse(f.g.canvas.dataset.villaScooter).speed, settled: f.g.transition === null };
+          })).toEqual({ seat: action, relax: action === 'scooter' ? '' : target, scooterSpeed: 0, settled: true });
+          const exitTrustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
+          await tapPaintedUse(page);
+          expect(await page.evaluate(({ exitTrustedBefore, action }) => {
+            const f = (window as any).villaInput; f.tick(12); f.render();
+            const exits = action === 'sofa' ? [[-5.25, 5.45], [-6.1, 4.6]]
+              : action === 'lounger' ? [[-21.25, 9.5], [-20.2, 10.85]]
+                : [1, -1].map(side => [f.scooterHome.x + side, f.scooterHome.z - .23]);
+            const p = f.g.position;
+            return { seat: f.g.state.seated, relax: f.g.state.relaxSeatId, snapshot: f.g.canvas.dataset.villaSeat,
+              snapshotRelax: f.g.canvas.dataset.villaRelaxSeat, safe: f.g.canFit(1.75), settled: f.g.transition === null,
+              authoredExit: p.y === 0 && exits.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < 1e-6),
+              calls: f.calls, trusted: f.trusted.slice(exitTrustedBefore) };
+          }, { exitTrustedBefore, action })).toEqual({ seat: null, relax: null, snapshot: 'none', snapshotRelax: '', safe: true, settled: true,
+            authoredExit: true, calls: before + 2, trusted: [true] });
+        } else if (action === 'blue') {
+          const snapshot = await page.evaluate(() => {
+            const f = (window as any).villaInput, pets = JSON.parse(f.g.canvas.dataset.villaPets);
+            return { blue: pets.find((p: any) => p.id === 'parrot-blue'),
+              others: pets.filter((p: any) => p.id !== 'parrot-blue').map((p: any) => p.feedCount), sequence: f.g.state.pets.feedSequence };
+          });
+          expect(snapshot.blue).toMatchObject({ id: 'parrot-blue', kind: 'parrot', feedCount: 1 });
+          expect(snapshot.blue.cooldown).toBeGreaterThan(0); expect(snapshot.others).toEqual([0, 0, 0, 0]); expect(snapshot.sequence).toBe(1);
+          await tapPaintedUse(page);
+          expect(await page.evaluate(() => {
+            const f = (window as any).villaInput;
+            return { count: f.g.state.pets.pets.find((p: any) => p.id === 'parrot-blue').feedCount, sequence: f.g.state.pets.feedSequence, calls: f.calls };
+          })).toEqual({ count: 1, sequence: 1, calls: before + 2 });
+        }
       }
       // A key held before focus enters the native control must still be released.
       await page.evaluate(() => { const f = (window as any).villaInput; f.tick(16); f.g.canvas.tabIndex = 0; f.render(); });

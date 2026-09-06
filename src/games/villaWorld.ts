@@ -1,5 +1,7 @@
-import { VILLA_CAR, VILLA_RACING } from './villaActivities.js';
+import { VILLA_CAR, VILLA_RACING, VILLA_SCOOTER } from './villaActivities.js';
 import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
+import { VILLA_AQUARIUM, VILLA_RELAX_SEATS } from './villaSeating.js';
+import type { VillaPetId } from './villaPets.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
@@ -30,7 +32,7 @@ export const STAIR_TREAD_THICKNESS = 0.15;
 export const VILLA_SPAWN: VillaPosition = { x: -17, y: 0, z: 19.5 };
 export const VILLA_ENTRANCE: VillaPosition = { x: 0, y: 0, z: 11.5 };
 export const STAIR_HOLE = { minX: 2.15, maxX: 6.25, minZ: -7, maxZ: 0.5 };
-export const POOL = { minX: -22, maxX: -14.5, minZ: -6, maxZ: 5 };
+export const POOL = { minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 };
 export const VILLA_RAMPS: VillaRamp[] = [0, STOREY].flatMap(base => [
   { minX: 2.3, maxX: 4.08, startZ: 0.5, endZ: -5.5, bottom: base, top: base + 1.8, base },
   { minX: 4.32, maxX: 6.1, startZ: -5.5, endZ: 0.5, bottom: base + 1.8, top: base + STOREY, base },
@@ -194,7 +196,7 @@ function inRect(x: number, z: number, r: { minX: number; maxX: number; minZ: num
 export function villaFloor(y: number): number { return Math.max(0, Math.min(2, Math.floor((y + 0.15) / STOREY))); }
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
-  if (floor === 0 && p.z >= 24) return { id: 'driving-course', name: 'Driving practice course', zh: '试驾练习场' };
+  if (floor === 0 && p.z >= 24) return { id: 'driving-course', name: 'Garden road', zh: '林荫环路' };
   if (floor === 0 && p.x < -3.4 && p.x > -22.8 && p.z >= 12.8 && p.z < 24) {
     return p.x > -11.6 && p.z >= 17 ? { id: 'garden', name: 'Vegetable garden', zh: '花园 · 菜地' }
       : { id: 'garden', name: 'Orchard & pets', zh: '果园 · 小伙伴' };
@@ -278,11 +280,14 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | `pet-${'dog' | 'cat' | 'parrot' | 'rabbit'}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | `sofa-${string}` | `lounger-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: 0, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
-  { id: 'aquarium', x: -3.5, y: 0, z: 2, name: 'Feed the fish', zh: '喂喂小鱼' },
+  { id: 'aquarium', ...VILLA_AQUARIUM.approach, name: 'Feed the fish', zh: '喂喂小鱼' },
+  ...VILLA_RELAX_SEATS.map(seat => ({ id: seat.id as VillaHotspot['id'], ...seat.approach, radius: 1.05,
+    name: seat.kind === 'sofa' ? 'Sit on the sofa' : 'Relax by the pool', zh: seat.kind === 'sofa' ? '坐在沙发上' : '躺在池畔休息' })),
+  { id: 'scooter', x: VILLA_SCOOTER.center.x + 1, y: 0, z: VILLA_SCOOTER.center.z - .23, radius: 1.15, name: 'Ride the electric scooter', zh: '骑上电动车' },
   { id: 'faucet', x: -5.67, y: 0, z: -7.2, radius: 1.05, name: 'Kitchen tap on / off', zh: '开关厨房水龙头' },
   { id: 'tea-bar', x: -6.7, y: 0, z: -1.65, radius: .95, name: 'Brew a pot of tea', zh: '冲一壶茶' },
   { id: 'gaming', x: 6.65, y: 0, z: 4.9, radius: 1.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
@@ -295,11 +300,11 @@ export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
 ];
-export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
+export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;
   let distance = Infinity;
   for (const original of VILLA_HOTSPOTS) {
-    const h = original.id === 'car' && car ? { ...original, ...car.door } : original;
+    const h = original.id === 'car' && car ? { ...original, ...car.door } : original.id === 'scooter' && scooter ? { ...original, ...scooter } : original;
     if (Math.abs(h.y - p.y) > 0.4) continue;
     if (h.id === 'car' && (car ? !car.driverSide : p.x < VILLA_CAR.body.maxX)) continue;
     if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x) > 0.85)) continue;

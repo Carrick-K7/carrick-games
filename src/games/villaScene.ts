@@ -6,7 +6,9 @@ import { createVillaGaming } from './villaGaming.js';
 import { createVillaElevatorModel } from './villaElevatorModel.js';
 import { createVillaElevatorColliders, villaElevatorShaftContains, type VillaElevatorState } from './villaElevator.js';
 import type { VillaActivityState } from './villaActivities.js';
-import { isVillaVehicleCollider, type VillaDrivingState } from './villaDriving.js';
+import { isVillaVehicleCollider, VILLA_SCENIC_ROAD, type VillaDrivingState } from './villaDriving.js';
+import { createVillaScooterModel } from './villaScooterModel.js';
+import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
 import { createVillaDrivingCourse } from './villaDrivingCourse.js';
 import type { VillaRaceState } from './villaRacing.js';
 import type { VillaSnookerState } from './villaSnooker.js';
@@ -21,7 +23,7 @@ import {
 
 export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number; fov?: number }
 export type VillaSceneState = VillaFurnishingState & VillaActivityState & {
-  elevator: VillaElevatorState; driving: VillaDrivingState; race: VillaRaceState;
+  elevator: VillaElevatorState; driving: VillaDrivingState; scooter: VillaScooterState; race: VillaRaceState;
   snooker: VillaSnookerState; snookerActive: boolean; pets: VillaPetsState;
 };
 
@@ -105,12 +107,14 @@ export class VillaScene {
   private readonly lamps: THREE.PointLight[] = [];
   private readonly furnishings: ReturnType<typeof furnishVilla>;
   private readonly vehicle: ReturnType<typeof createVillaVehicle>;
+  private readonly scooter: ReturnType<typeof createVillaScooterModel>;
   private readonly gaming: ReturnType<typeof createVillaGaming>;
   private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
   private readonly course: ReturnType<typeof createVillaDrivingCourse>;
   private readonly snooker: ReturnType<typeof createVillaSnookerModel>;
   private readonly pets: ReturnType<typeof createVillaPetModel>;
   readonly drivingObstacles: VillaCollider[];
+  readonly scooterObstacles: VillaCollider[];
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
   private lastStateKey = '';
@@ -261,46 +265,62 @@ export class VillaScene {
     // Garden lawn surrounds a genuinely recessed tiled pool (no lawn under the water).
     const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
     box(0, -1.2, 0, 360, 0.12, 360, grass);
-    for (const [minX, maxX, minZ, maxZ] of [[-25, -22, -17, 24], [-14.5, 25, -17, 24], [-22, -14.5, -17, -6], [-22, -14.5, 5, 24]]) {
+    for (const [minX, maxX, minZ, maxZ] of [[-25, POOL.minX, -17, 24], [POOL.maxX, 25, -17, 24], [POOL.minX, POOL.maxX, -17, POOL.minZ], [POOL.minX, POOL.maxX, POOL.maxZ, 24]]) {
       box((minX + maxX) / 2, -0.08, (minZ + maxZ) / 2, maxX - minX, 0.12, maxZ - minZ, grass);
     }
-    // Extend the front lawn to the private driving course, beyond the old garden.
+    // Extend the front lawn to the private scenic road, beyond the old garden.
     box(1.5, -.08, 41, 54, .12, 34, grass);
     box(26.5, -.08, 3.5, 3, .12, 41, grass);
     // Concrete in the attached garage and pale tile in the upstairs wet room.
     box(16, -0.025, -3, 8, 0.08, 10, materials.stone);
     box(9.25, 3.61, -4, 5.45, 0.025, 9.8, materials.stone);
     box(0, -0.015, 15.9, 3.8, 0.055, 13.5, materials.stone);
-    box(16.2, -0.015, 11.7, 5.9, 0.055, 20, materials.stone);
+    box(16.2, -0.015, 11.7, VILLA_SCENIC_ROAD.drivewayWidth, 0.055, 20, materials.stone);
     box(8, -0.015, 11, 13, 0.055, 2.2, materials.stone);
     box(-13.15, -0.01, 0, 2.2, 0.06, 20, materials.stone);
     for (let i = 0; i < 11; i++) box(-2.5 - i * 1.16, 0.008, 11.5, 0.92, 0.07, 1.2, materials.stone);
     for (let i = 0; i < 7; i++) box(0, 0.018, 10.5 + i * 1.7, 3.55, 0.02, 0.018, materials.bronze);
     const poolTile = new THREE.MeshStandardMaterial({ map: texture('tile'), roughness: 0.42 });
     const cx = (POOL.minX + POOL.maxX) / 2, cz = (POOL.minZ + POOL.maxZ) / 2;
-    box(cx, -1.04, cz, 7.5, 0.14, 11, poolTile);
-    for (const x of [POOL.minX, POOL.maxX]) {
-      box(x, -0.51, cz, 0.15, 1.1, 11.2, poolTile);
-      box(x, 0.045, cz, 0.36, 0.15, 11.6, materials.stone);
+    const poolWidth = POOL.maxX - POOL.minX, poolLength = POOL.maxZ - POOL.minZ;
+    const wall = .15, coping = .36;
+    // POOL describes the water opening. Walls and coping sit OUTSIDE it, so no
+    // lawn or stone top spans the unsupported swimming area as dimensions grow.
+    box(cx, -1.04, cz, poolWidth + wall * 2, .14, poolLength + wall * 2, poolTile);
+    for (const side of [-1, 1]) {
+      const edgeX = side < 0 ? POOL.minX : POOL.maxX, edgeZ = side < 0 ? POOL.minZ : POOL.maxZ;
+      box(edgeX + side * wall / 2, -.51, cz, wall, 1.1, poolLength + wall * 2, poolTile);
+      box(edgeX + side * coping / 2, .015, cz, coping, .09, poolLength, materials.stone);
+      box(cx, -.51, edgeZ + side * wall / 2, poolWidth, 1.1, wall, poolTile);
+      box(cx, .015, edgeZ + side * coping / 2, poolWidth + coping * 2, .09, coping, materials.stone);
     }
-    for (const z of [POOL.minZ, POOL.maxZ]) {
-      box(cx, -0.51, z, 7.5, 1.1, 0.15, poolTile);
-      box(cx, 0.045, z, 7.7, 0.15, 0.36, materials.stone);
-    }
+    // Thin ground finish under the relocated loungers, not a raised obstacle.
+    // Top remains 2cm above ground support; no plank enters the water opening.
+    const deckMinX = POOL.minX - .3, deckMaxX = POOL.maxX + .5;
+    const deckMinZ = POOL.maxZ + .2, deckMaxZ = POOL.maxZ + 4;
+    const deck = materials.oak.clone(); deck.color.set('#ba9570'); deck.roughness = .82; deck.name = 'Poolside cedar deck';
+    const deckWidth = deckMaxX - deckMinX, deckLength = deckMaxZ - deckMinZ;
+    const deckX = (deckMinX + deckMaxX) / 2, deckZ = (deckMinZ + deckMaxZ) / 2;
+    box(deckX, -.02, deckZ, deckWidth, .04, deckLength, deck);
+    const plankCount = Math.ceil(deckLength / .19), pitch = deckLength / plankCount;
+    for (let i = 0; i < plankCount; i++) box(deckX, .008, deckMinZ + (i + .5) * pitch, deckWidth - .08, .024, pitch - .008, deck);
+    for (const x of [deckMinX + .018, deckMaxX - .018]) box(x, .008, deckZ, .036, .024, deckLength, deck);
     this.waterMap = texture('water');
-    this.waterMap.repeat.set(3, 4);
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(7.3, 10.8), new THREE.MeshPhongMaterial({
+    this.waterMap.repeat.set(poolWidth / 2.5, poolLength / 2.75);
+    this.water = new THREE.Mesh(new THREE.PlaneGeometry(poolWidth, poolLength), new THREE.MeshPhongMaterial({
       color: 0x5aaeb6, specular: 0xffecc8, shininess: 110, transparent: true, opacity: 0.64,
       bumpMap: this.waterMap, bumpScale: 0.065, side: THREE.DoubleSide, depthWrite: false,
     }));
+    this.water.name = 'villa-pool-water';
     this.water.rotation.x = -Math.PI / 2; this.water.position.set(cx, -0.035, cz); this.scene.add(this.water);
-    // Stainless pool ladder.
-    for (const x of [cx - 0.4, cx + 0.4]) {
-      beam(new THREE.Vector3(x, -0.75, 4.5), new THREE.Vector3(x, 0.55, 4.5), 0.035, materials.bronze);
-      beam(new THREE.Vector3(x, 0.55, 4.5), new THREE.Vector3(x, 0.55, 5.35), 0.035, materials.bronze);
-      beam(new THREE.Vector3(x, 0.55, 5.35), new THREE.Vector3(x, 0.03, 5.35), 0.035, materials.bronze);
+    // Stainless ladder follows the near pool edge and lands between the loungers.
+    const ladderInsideZ = POOL.maxZ - .5, ladderDeckZ = POOL.maxZ + .35;
+    for (const x of [cx - .4, cx + .4]) {
+      beam(new THREE.Vector3(x, -.75, ladderInsideZ), new THREE.Vector3(x, .55, ladderInsideZ), .035, materials.bronze);
+      beam(new THREE.Vector3(x, .55, ladderInsideZ), new THREE.Vector3(x, .55, ladderDeckZ), .035, materials.bronze);
+      beam(new THREE.Vector3(x, .55, ladderDeckZ), new THREE.Vector3(x, .03, ladderDeckZ), .035, materials.bronze);
     }
-    for (let y = -0.65; y <= 0.1; y += 0.25) box(cx, y, 4.5, 0.85, 0.03, 0.13, materials.bronze);
+    for (let y = -.65; y <= .1; y += .25) box(cx, y, ladderInsideZ, .85, .03, .13, materials.bronze);
 
     // Rooftop pergola, warm festoon lights and perimeter garden fence.
     for (const x of [-10.3, -3.1]) for (const z of [1.3, 7]) {
@@ -324,7 +344,7 @@ export class VillaScene {
     // The visible old garden fence must remain solid after expanding the grounds.
     for (const x of [-24.8, 24.8]) this.colliders.push({ minX: x - .06, maxX: x + .06, minZ: -16.8, maxZ: 23.5, minY: 0, maxY: 1.2 });
     this.colliders.push({ minX: -24.8, maxX: 24.8, minZ: -16.86, maxZ: -16.74, minY: 0, maxY: 1.2 });
-    // A wider boundary encloses the practice lawn; the driveway stays unobstructed.
+    // A wider boundary encloses the scenic garden road; the approach stays open.
     for (const x of [-24.8, 27.8]) {
       for (let z = 25; z <= 57; z += 2) box(x, .6, z, .12, 1.2, .12, materials.oak);
       for (const y of [.35, .9]) box(x, y, 41, .075, .085, 32, materials.oak);
@@ -364,15 +384,18 @@ export class VillaScene {
     }
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
+    this.scooter = createVillaScooterModel(this.scene);
     this.gaming = createVillaGaming(this.scene);
     this.elevator = createVillaElevatorModel(this.scene);
     this.course = createVillaDrivingCourse(this.scene);
     this.snooker = createVillaSnookerModel(this.scene);
     const garden = createVillaGarden(this.scene);
     this.pets = createVillaPetModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders);
-    // Pets never block a walking visitor; the sedan stops before reaching them.
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders);
+    // Keep live object identities: each vehicle ignores only its own bounds,
+    // collides with the other vehicle, and stops before pets (walkers do not).
     this.drivingObstacles = [...this.colliders.filter(c => !isVillaVehicleCollider(c)), ...this.pets.drivingColliders];
+    this.scooterObstacles = [...this.colliders.filter(c => !isVillaScooterCollider(c)), ...this.pets.drivingColliders];
     this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
@@ -404,6 +427,7 @@ export class VillaScene {
   /** Advance door collisions even between cached software-GL frames. */
   updateActivities(time: number, state: VillaSceneState) {
     if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
+    if (this.scooter.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
     if (this.snooker.update(state.snooker, state.snookerActive)) this.renderer.shadowMap.needsUpdate = true;

@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
   advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet,
-  VILLA_PET_FEED_COOLDOWN, VILLA_PET_FOOD, VILLA_PET_KINDS, VILLA_PET_LABELS, VILLA_PET_LAWN, VILLA_PET_RADIUS,
+  VILLA_PET_VISIT_ROUTE, VILLA_PET_FEED_COOLDOWN, VILLA_PET_FOOD, VILLA_PET_KINDS, VILLA_PET_LABELS, VILLA_PET_LAWN, VILLA_PET_RADIUS,
   type VillaPet, type VillaPetsState,
 } from '../../src/games/villaPets';
+import { furnishVilla } from '../../src/games/villaFurnishings';
 import { createVillaPetModel } from '../../src/games/villaPetModel';
 import { VILLA_WALL_COLLIDERS, type VillaCollider } from '../../src/games/villaWorld';
 
@@ -16,9 +17,10 @@ const obstacles = [...VILLA_WALL_COLLIDERS, ...actualBeds, box(-14.25, -13.75, 2
 function safe(state: VillaPetsState, colliders = obstacles): void {
   for (const p of state.pets) {
     expect([p.x, p.y, p.z, p.yaw, p.timer, p.gait, p.cooldown].every(Number.isFinite)).toBe(true);
+    const visiting = p.visit !== 'lawn';
     expect(p.x - VILLA_PET_RADIUS).toBeGreaterThanOrEqual(VILLA_PET_LAWN.minX - 1e-8);
-    expect(p.x + VILLA_PET_RADIUS).toBeLessThanOrEqual(VILLA_PET_LAWN.maxX + 1e-8);
-    expect(p.z - VILLA_PET_RADIUS).toBeGreaterThanOrEqual(VILLA_PET_LAWN.minZ - 1e-8);
+    expect(p.x + VILLA_PET_RADIUS).toBeLessThanOrEqual(visiting ? 0.6 : VILLA_PET_LAWN.maxX + 1e-8);
+    expect(p.z - VILLA_PET_RADIUS).toBeGreaterThanOrEqual(visiting ? 3.9 : VILLA_PET_LAWN.minZ - 1e-8);
     expect(p.z + VILLA_PET_RADIUS).toBeLessThanOrEqual(VILLA_PET_LAWN.maxZ + 1e-8);
     for (const c of colliders) {
       if (c.maxY <= 0.025 || c.minY >= 1.65) continue;
@@ -35,11 +37,13 @@ function follow(state: VillaPetsState, p: VillaPet, dt = 1 / 30): void {
 }
 
 describe('peaceful villa lawn pets', () => {
-  it('starts four distinct small species near spawn with fresh independent state', () => {
+  it('starts five independently identified pets of four species near spawn', () => {
     const a = createVillaPets(), b = createVillaPets();
-    expect(a.pets.map(p => p.kind)).toEqual(['dog', 'cat', 'parrot', 'rabbit']);
+    expect(a.pets.map(p => p.kind)).toEqual(['dog', 'cat', 'parrot', 'rabbit', 'parrot']);
+    expect(a.pets.map(p => p.id)).toEqual(['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue']);
+    expect(new Set(a.pets.map(p => p.seed)).size).toBe(5);
     expect(a).toEqual(b); expect(a.pets[0]).not.toBe(b.pets[0]);
-    expect(new Set(a.pets.map(p => `${p.x}/${p.z}`)).size).toBe(4);
+    expect(new Set(a.pets.map(p => `${p.x}/${p.z}`)).size).toBe(5);
     expect(a.pets.every(p => !p.fed && p.feedCount === 0 && p.cooldown === 0)).toBe(true);
     safe(a);
     a.pets[0].fed = true; expect(createVillaPets()).toEqual(b);
@@ -83,7 +87,7 @@ describe('peaceful villa lawn pets', () => {
 
   it('wanders deterministically, rests, flies/lands and hops safely for fifteen minutes', () => {
     const a = createVillaPets(), b = createVillaPets(), starts = a.pets.map(p => ({ ...p }));
-    const distances = [0, 0, 0, 0], modes = new Set<string>(); let birdHigh = false, birdLanded = false, rabbitHop = false;
+    const distances = a.pets.map(() => 0), modes = new Set<string>(); let birdHigh = false, birdLanded = false, rabbitHop = false;
     for (let tick = 0; tick < 3600; tick++) {
       const previous = a.pets.map(p => ({ ...p }));
       advanceVillaPets(a, 0.25, obstacles); advanceVillaPets(b, 0.25, obstacles);
@@ -96,11 +100,30 @@ describe('peaceful villa lawn pets', () => {
       rabbitHop ||= a.pets[3].y > 0.05;
       if (tick % 15 === 0) safe(a);
     }
-    expect(a).toEqual(b); expect(distances.every(d => d > 25)).toBe(true);
+    expect(a).toEqual(b); distances.forEach((d, i) => expect(d, a.pets[i].id).toBeGreaterThan(25));
     expect(modes).toEqual(new Set(['idle', 'exploring']));
     expect(birdHigh && birdLanded && rabbitHop).toBe(true);
     expect(a.pets.every(p => !('health' in p) && !('attack' in p) && !('damage' in p))).toBe(true);
     expect(a.pets.some((p, i) => Math.hypot(p.x - starts[i].x, p.z - starts[i].z) > 2)).toBe(true);
+  });
+
+  it('eases takeoff and landing with bounded vertical acceleration, curved heading and gradual wing folding', () => {
+    const state = createVillaPets(), bird = state.pets[2]; state.pets = [bird];
+    bird.x = -16; bird.z = 16; bird.yaw = 0; aim(bird, -10, 16); bird.flightHeight = 0.65;
+    const h = 1 / 30;
+    for (let i = 0; i < 90; i++) {
+      const y = bird.y, velocity = bird.verticalSpeed, yaw = bird.yaw, fold = bird.wingFold;
+      advanceVillaPets(state, h, []);
+      expect(Math.abs(bird.y - y)).toBeLessThanOrEqual(0.48 * h + 1e-8);
+      expect(Math.abs(bird.verticalSpeed - velocity)).toBeLessThanOrEqual(1.4 * h + 1e-8);
+      expect(Math.abs(bird.yaw - yaw)).toBeLessThanOrEqual(2.4 * h + 1e-8);
+      expect(Math.abs(bird.wingFold - fold)).toBeLessThanOrEqual(4 * h + 1e-8);
+    }
+    expect(bird.y).toBeGreaterThan(0.5); expect(bird.wingFold).toBe(1);
+    const visitor = { x: bird.x, y: 0, z: bird.z };
+    advanceVillaPets(state, h, [], visitor); expect(bird.y).toBeGreaterThan(0.4);
+    for (let i = 0; i < 240; i++) advanceVillaPets(state, h, [], visitor);
+    expect(bird.y).toBe(0); expect(bird.verticalSpeed).toBe(0); expect(bird.wingFold).toBe(0);
   });
 
   it('sweeps long movement against hair-thin walls and low vegetable barriers, including flight', () => {
@@ -138,6 +161,66 @@ describe('peaceful villa lawn pets', () => {
     const overlap = box(pet.x - 1, pet.x + 1, pet.z - 1, pet.z + 1, 1.45);
     advanceVillaPets(state, 2, [overlap]);
     expect({ x: pet.x, z: pet.z }).toEqual(before);
+  });
+
+  it('visits the actual furnished living room through the front doorway and returns without tunnelling', () => {
+    // Texture painting is irrelevant to collider extraction; no browser/WebGL needed.
+    const paint = new Proxy({}, { get: () => () => undefined, set: () => true });
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => paint }) });
+    const scene = new THREE.Scene();
+    let furniture: ReturnType<typeof furnishVilla>;
+    try { furniture = furnishVilla(scene); } finally { vi.unstubAllGlobals(); }
+    const colliders = [...obstacles, ...furniture.colliders];
+    for (let edge = 1; edge < VILLA_PET_VISIT_ROUTE.length; edge++) {
+      const a = VILLA_PET_VISIT_ROUTE[edge - 1], b = VILLA_PET_VISIT_ROUTE[edge];
+      for (let i = 0; i <= 100; i++) {
+        const x = a[0] + (b[0] - a[0]) * i / 100, z = a[1] + (b[1] - a[1]) * i / 100;
+        const hit = colliders.filter(c => c.maxY > 0.025 && c.minY < 1.65 && x + 0.4 >= c.minX && x - 0.4 <= c.maxX && z + 0.4 >= c.minZ && z - 0.4 <= c.maxZ);
+        expect(hit, `route edge ${edge}`).toEqual([]);
+      }
+    }
+    const state = createVillaPets(), visits = new Set<string>(), returns = new Set<string>();
+    for (let frame = 0; frame < 2400; frame++) {
+      const before = state.pets.map(p => ({ x: p.x, z: p.z }));
+      advanceVillaPets(state, 0.25, colliders);
+      state.pets.forEach((p, i) => {
+        if ((p.z - 9) * (before[i].z - 9) < 0) expect(Math.abs(p.x)).toBeLessThan(1.05);
+        if (p.visit === 'living') { visits.add(p.id); expect(p.x).toBeLessThan(-2); expect(p.z).toBeLessThan(9); }
+        if (visits.has(p.id) && p.visit === 'lawn') returns.add(p.id);
+        expect(Math.hypot(p.x - before[i].x, p.z - before[i].z)).toBeLessThanOrEqual(0.66 * 0.25 + 1e-8);
+      });
+      if (frame % 8 === 0) safe(state, colliders);
+    }
+    expect([...visits].sort()).toEqual(['cat', 'dog']); expect([...returns].sort()).toEqual(['cat', 'dog']);
+    scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose(); } });
+  });
+
+  it('waits at a newly closed front door and resumes its route only after reopening', () => {
+    const state = createVillaPets(); state.pets = [state.pets[0]];
+    const pet = state.pets[0]; pet.visitTimer = 0;
+    for (let i = 0; i < 400 && pet.z > 10.2; i++) advanceVillaPets(state, 0.25, VILLA_WALL_COLLIDERS);
+    expect(pet.visit).toBe('outbound'); expect(pet.z).toBeLessThan(10.2);
+    const closed = [...VILLA_WALL_COLLIDERS, box(-1.45, 1.45, 8.99, 9.01, 3)];
+    for (let i = 0; i < 300; i++) { advanceVillaPets(state, 0.25, closed); expect(pet.z).toBeGreaterThan(9.4); }
+    for (let i = 0; i < 300 && pet.visit !== 'living'; i++) advanceVillaPets(state, 0.25, VILLA_WALL_COLLIDERS);
+    expect(pet.visit).toBe('living');
+  });
+
+  it('feeds the second parrot by stable ID without sharing cooldowns or reactions', () => {
+    const state = createVillaPets(), first = state.pets[2], second = state.pets[4];
+    follow(state, second); expect(nearestVillaPet(state, state.visitor!)!.id).toBe('parrot-blue');
+    expect(feedVillaPet(state, 'parrot')).toBe(false);
+    expect(feedVillaPet(state, 'parrot-blue')).toBe(true);
+    expect(first.feedCount).toBe(0); expect(first.cooldown).toBe(0);
+    expect(second.feedCount).toBe(1); expect(second.cooldown).toBe(8);
+    follow(state, first); expect(feedVillaPet(state, 'parrot')).toBe(true);
+    const scene = new THREE.Scene(), model = createVillaPetModel(scene);
+    first.mode = 'eating'; second.mode = 'eating'; model.update(1, state);
+    const a = scene.getObjectByName('parrot/food-plate')!, b = scene.getObjectByName('parrot-blue/food-plate')!;
+    expect(a).not.toBe(b); expect(a.visible && b.visible).toBe(true); expect(a.position.equals(b.position)).toBe(false);
+    const anchor = b.position.clone(); first.mode = 'idle'; model.update(2, state);
+    expect(a.visible).toBe(false); expect(b.visible).toBe(true); expect(b.position.equals(anchor)).toBe(true);
+    expect(model.drivingColliders).toHaveLength(5);
   });
 
   it('requires ground proximity and line of sight, not upstairs or through walls', () => {
@@ -200,10 +283,10 @@ describe('scene-owned villa pet geometry without WebGL', () => {
         o.geometry.computeBoundingBox(); expect(o.geometry.boundingBox!.isEmpty()).toBe(false);
       }
     });
-    expect(meshes).toBeLessThanOrEqual(28); expect(lights).toBe(0);
+    expect(meshes).toBeLessThanOrEqual(39); expect(lights).toBe(0);
     let visibleMeshes = 0;
     scene.traverseVisible(o => { if (o instanceof THREE.Mesh) visibleMeshes++; });
-    expect(visibleMeshes).toBe(24); // Four additional food batches are hidden until eating.
+    expect(visibleMeshes).toBe(34); // Five independent food batches are hidden until eating.
     for (const kind of VILLA_PET_KINDS) {
       const root = scene.getObjectByName(`villa-pet-${kind}`)!;
       expect(root.userData).toMatchObject({ petKind: kind, peaceful: true, food: VILLA_PET_FOOD[kind] });
@@ -230,27 +313,22 @@ describe('scene-owned villa pet geometry without WebGL', () => {
     expect(marked).toBeGreaterThan(30);
   });
 
-  it('joins each parrot foot to its belly with a batched shank', () => {
-    const scene = new THREE.Scene(); createVillaPetModel(scene);
-    const body = scene.getObjectByName('parrot/body/surface') as THREE.Mesh;
-    const positions = body.geometry.getAttribute('position'), colors = body.geometry.getAttribute('color');
-    const dark = new THREE.Color(0x382d2a);
-    for (const side of [-1, 1]) {
-      let top = 0, bottom = 0;
-      for (let i = 0; i < positions.count; i++) {
-        const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
-        if (Math.sign(x) !== side || Math.abs(colors.getX(i) - dark.r) > 1e-6) continue;
-        if (Math.abs(y - 0.12) < 1e-6) {
-          top++;
-          expect((x / 0.095) ** 2 + ((y - 0.23) / 0.145) ** 2 + (z / 0.105) ** 2).toBeLessThan(1);
-        }
-        if (Math.abs(y - 0.03) < 1e-6) {
-          bottom++;
-          expect(((x - side * 0.042) / 0.018) ** 2 + ((y - 0.025) / 0.025) ** 2 + ((z - 0.032) / 0.055) ** 2).toBeLessThan(1);
-        }
-      }
-      expect(top).toBeGreaterThan(8); expect(bottom).toBeGreaterThan(8);
-    }
+  it('animates separate alternating toes and smoothly folds independent bird wings', () => {
+    const scene = new THREE.Scene(), model = createVillaPetModel(scene), state = createVillaPets();
+    const bird = state.pets[2]; bird.speed = 0.3; bird.gait = Math.PI / 2;
+    model.update(1, state);
+    const left = scene.getObjectByName('parrot/foot-left')!, right = scene.getObjectByName('parrot/foot-right')!;
+    expect(left.rotation.x).toBeGreaterThan(0); expect(right.rotation.x).toBeLessThan(0);
+    expect(left.position.y).toBeGreaterThan(right.position.y);
+    expect(left.children).toHaveLength(1); expect(right.children).toHaveLength(1);
+    bird.y = 0.5; bird.wingFold = 1; bird.wingPhase = 1;
+    model.update(2, state);
+    expect(scene.getObjectByName('parrot/wing-left')!.rotation.z).not.toBe(0);
+    expect(scene.getObjectByName('parrot-blue/wing-left')!.rotation.z).toBeCloseTo(0);
+    expect(left.rotation.x).toBe(-0.65); expect(right.rotation.x).toBe(-0.65);
+    bird.y = 0; bird.wingFold = 0; bird.speed = 0; model.update(3, state);
+    expect(scene.getObjectByName('parrot/wing-left')!.rotation.z).toBeCloseTo(0);
+    expect(left.rotation.x).toBe(0);
   });
 
   it.each(VILLA_PET_KINDS)('shows a stationary species-appropriate %s dish only while eating and clears it on reset', kind => {
@@ -289,10 +367,11 @@ describe('scene-owned villa pet geometry without WebGL', () => {
         p.x = 0; p.z = 0; p.yaw = frame * Math.PI / 13;
         p.mode = frame % 3 === 0 ? 'happy' : frame % 3 === 1 ? 'eating' : 'exploring';
         p.speed = frame % 2 ? 0.5 : 0; p.gait = frame * 0.4; p.y = p.kind === 'parrot' ? 0.65 : 0;
+        p.wingFold = frame % 3 / 2; p.wingPhase = frame * 0.7; p.verticalSpeed = Math.sin(frame) * 0.48; p.bank = Math.sin(frame) * 0.18;
       });
       model.update(frame / 13, state); scene.updateMatrixWorld(true);
       state.pets.forEach(p => {
-        const bounds = new THREE.Box3().setFromObject(scene.getObjectByName(`villa-pet-${p.kind}`)!, true);
+        const bounds = new THREE.Box3().setFromObject(scene.getObjectByName(`villa-pet-${p.id}`)!, true);
         expect(bounds.min.x).toBeGreaterThanOrEqual(-VILLA_PET_RADIUS);
         expect(bounds.max.x).toBeLessThanOrEqual(VILLA_PET_RADIUS);
         expect(bounds.min.z).toBeGreaterThanOrEqual(-VILLA_PET_RADIUS);
@@ -302,7 +381,7 @@ describe('scene-owned villa pet geometry without WebGL', () => {
     }
   });
 
-  it('updates four plain driving boxes in place, animates parts and keeps all resources traversable', () => {
+  it('updates five plain driving boxes in place, animates parts and keeps all resources traversable', () => {
     const scene = new THREE.Scene(), model = createVillaPetModel(scene), state = createVillaPets();
     const array = model.drivingColliders, refs = [...array];
     const tail = scene.getObjectByName('dog/tail')!;
@@ -314,12 +393,12 @@ describe('scene-owned villa pet geometry without WebGL', () => {
       const c = array[i]; expect(c).toBe(refs[i]); expect(Object.getPrototypeOf(c)).toBe(Object.prototype);
       expect((c.minX + c.maxX) / 2).toBeCloseTo(pet.x); expect((c.minZ + c.maxZ) / 2).toBeCloseTo(pet.z);
       expect(c.maxY).toBeGreaterThan(pet.y + 0.5);
-      const root = scene.getObjectByName(`villa-pet-${pet.kind}`)!;
+      const root = scene.getObjectByName(`villa-pet-${pet.id}`)!;
       expect(root.position.toArray()).toEqual([pet.x, pet.y, pet.z]);
     });
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
     scene.traverse(o => { if (o instanceof THREE.Mesh) { geometries.add(o.geometry); for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m); } });
-    expect(geometries.size).toBe(28); expect(materials.size).toBe(2);
+    expect(geometries.size).toBe(39); expect(materials.size).toBe(2);
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); scene.clear();
     expect(scene.children).toHaveLength(0);
   });

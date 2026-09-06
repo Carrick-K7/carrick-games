@@ -2,9 +2,40 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_RACING, type VillaActivityState, type VillaScreenSource } from './villaActivities.js';
 import type { VillaCollider } from './villaWorld.js';
-import { createVillaRace, drawVillaRace, type VillaRaceState } from './villaRacing.js';
+import { createVillaRace, drawVillaRace, VILLA_RACE_WHEEL_TURN, type VillaRaceState } from './villaRacing.js';
 
 type V3 = [number, number, number];
+
+/** Fixed shaft tilt and independent wheel-local Z spin. The driver looks +Z,
+ * so world -X projects to screen right: POSITIVE local Z is driver-clockwise.
+ * Exported for projection tests using the same authored geometry as the rig.
+ */
+export function createVillaRallyWheel(parent: THREE.Object3D, rubber = villaMaterial('#20272b', .87), steel = villaMaterial('#697782', .28, .8), markerMaterial = villaMaterial('#e7c95d', .5)) {
+  const mount = new THREE.Group(); mount.name = 'racingWheelShaft';
+  mount.position.set(VILLA_RACING.seat.x, 1.045, 6.825); mount.rotation.x = .25; parent.add(mount);
+  const shaft = new VillaModelBuilder(mount, 'fixedRacingShaft');
+  shaft.cylinder(0, 0, .12, .025, .025, .24, steel, [Math.PI / 2, 0, 0]); shaft.finish();
+  const wheel = new VillaModelBuilder(mount, 'interactiveRacingWheel');
+  wheel.geometry(new THREE.TorusGeometry(.178, .019, 10, 48), rubber);
+  wheel.cylinder(0, 0, -.007, .047, .047, .048, rubber, [Math.PI / 2, 0, 0], 24);
+  // Flat, tapered three spokes, rather than bars through the whole wheel.
+  for (const a of [0, Math.PI, Math.PI * 1.5]) {
+    const shape = new THREE.Shape(); shape.moveTo(.035, -.025); shape.lineTo(.153, -.014);
+    shape.lineTo(.153, .014); shape.lineTo(.035, .025); shape.closePath();
+    wheel.geometry(new THREE.ExtrudeGeometry(shape, { depth: .012, bevelEnabled: false }), steel, [0, 0, -.014], [0, 0, a]);
+  }
+  wheel.box(0, .178, 0, .025, .031, .041, markerMaterial, .003);
+  const marker = new THREE.Object3D(); marker.name = 'racingWheelTopMarker'; marker.position.set(0, .178, -.022); wheel.root.add(marker);
+  for (const side of [-1, 1]) {
+    wheel.box(side * .105, .012, .044, .038, .102, .012, steel, .006);
+    for (const x of [.071, .112]) wheel.cylinder(side * x, 0, -.025, .008, .008, .009, markerMaterial, [Math.PI / 2, 0, 0], 10);
+  }
+  wheel.finish();
+  mount.traverse(node => { if (node instanceof THREE.Mesh) node.castShadow = false; });
+  return { mount, spin: wheel.root, marker, setSteer(steer: number) {
+    wheel.root.rotation.z = (Number.isFinite(steer) ? Math.max(-1, Math.min(1, steer)) : 0) * VILLA_RACE_WHEEL_TURN;
+  } };
+}
 
 /** Authored, nonfunctional display replicas and virtual-input gaming furniture.
  * Geometry is batched by material, with one steerable wheel group; the owner disposes the scene.
@@ -358,19 +389,8 @@ export function createVillaGaming(parent: THREE.Object3D): {
   b.box(sx, .93, 7.065, 1.1, .055, .35, black);
   b.box(sx, 1.01, 7.05, .32, .16, .31, black);
   for (let i = 0; i < 5; i++) b.box(sx - .11 + i * .055, 1.095, 7.065, .02, .01, .21, steel, .001);
-  // Only the wheel is transformable: three material batches, no per-button meshes.
-  const wheelMount = new THREE.Group(); wheelMount.position.set(sx, 1.045, 6.825); wheelMount.rotation.x = -.25; b.root.add(wheelMount);
-  const wheel = new VillaModelBuilder(wheelMount, 'interactiveRacingWheel');
-  wheel.geometry(new THREE.TorusGeometry(.178, .018, 6, 24), rubber);
-  wheel.cylinder(0, 0, .014, .057, .057, .055, rubber, [Math.PI / 2, 0, 0]);
-  for (const a of [0, Math.PI, Math.PI * 1.5]) wheel.beam([0, 0, 0], [Math.cos(a) * .16, Math.sin(a) * .16, 0], .013, steel);
-  wheel.box(0, .174, 0, .022, .023, .03, turquoise, .003);
-  for (const side of [-1, 1]) {
-    wheel.box(side * .092, .016, .055, .047, .125, .014, steel, .008);
-    for (const x of [.068, .105]) wheel.cylinder(side * x, .019, -.025, .009, .009, .009, turquoise, [Math.PI / 2, 0, 0], 8);
-  }
-  wheel.finish();
-  wheel.root.traverse(node => { if (node instanceof THREE.Mesh) node.castShadow = false; });
+  // The FFB base, shaft and dashboard stay fixed; only the circular rim spins.
+  const wheel = createVillaRallyWheel(b.root, rubber, steel);
   b.box(sx, .24, 7.66, .67, .045, .64, black);
   for (let i = 0; i < 3; i++) {
     const x = sx - .22 + i * .22;
@@ -470,7 +490,7 @@ export function createVillaGaming(parent: THREE.Object3D): {
     colliders: b.colliders,
     update(time, state) {
       const tick = Math.floor(time * (state.screenSource === 'pc' ? 30 : 12));
-      wheel.root.rotation.z = -(state.race?.steer ?? 0) * .55;
+      wheel.setSteer(state.race?.steer ?? 0);
       if (state.gaming !== lastGaming || state.displayLights !== lastLights) {
         rgb.emissiveIntensity = state.gaming && state.displayLights ? 1.1 : 0;
         rgbPink.emissiveIntensity = state.gaming && state.displayLights ? .8 : 0;

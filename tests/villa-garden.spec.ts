@@ -29,31 +29,33 @@ async function mount(page: Page, touch = false) {
     const sink = () => { press('h'); walk(0, -2.1); walk(-2.8, -2.1); walk(-2.8, -7.1); walk(-5.67, -7.1); game.yaw = 0; game.pitch = -.2; tick(); };
     // A small four-neighbour test navigator still uses actual WASD/controller collision.
     // It can walk around a vegetable bed to a moving pet, rather than teleporting either.
-    const approach = (kind: string) => {
+    const approach = (petId: string) => {
+      // Include the actual front entrance/living aisle now that cats and dogs visit indoors.
+      const columns = 56, rows = 48;
       for (let attempt = 0; attempt < 4; attempt++) {
-        const pet = game.state.pets.pets.find((p: any) => p.kind === kind);
-        if (game.hotspot()?.id === `pet-${kind}` && Math.hypot(game.position.x - pet.x, game.position.z - pet.z) < 1.15) return;
-        const point = (id: number) => ({ x: -21 + (id % 45) * .4, y: 0, z: 12.6 + Math.floor(id / 45) * .4 });
-        const start = Math.round((game.position.z - 12.6) / .4) * 45 + Math.round((game.position.x + 21) / .4);
+        const pet = game.state.pets.pets.find((p: any) => p.id === petId);
+        if (game.hotspot()?.id === `pet-${petId}` && Math.hypot(game.position.x - pet.x, game.position.z - pet.z) < 1.15) return;
+        const point = (id: number) => ({ x: -21 + (id % columns) * .4, y: 0, z: 3.8 + Math.floor(id / columns) * .4 });
+        const start = Math.round((game.position.z - 3.8) / .4) * columns + Math.round((game.position.x + 21) / .4);
         const queue = [start], previous = new Map<number, number>([[start, -1]]); let goal = -1;
         const free = (p: any) => game.canFit(1.75, p);
         for (let i = 0; i < queue.length && goal < 0; i++) {
           const id = queue[i], p = point(id), distance = Math.hypot(p.x - pet.x, p.z - pet.z);
           if (distance < 1.05 && game.state.pets.pets.every((other: any) => other === pet || Math.hypot(p.x - other.x, p.z - other.z) > distance)
             && [0, .25, .5, .75, 1].every(t => free({ x: p.x + (pet.x - p.x) * t, y: 0, z: p.z + (pet.z - p.z) * t }))) { goal = id; break; }
-          for (const next of [id - 1, id + 1, id - 45, id + 45]) {
+          for (const next of [id - 1, id + 1, id - columns, id + columns]) {
             const q = point(next);
-            if (next < 0 || next >= 45 * 26 || Math.abs(q.x - p.x) > .41 || previous.has(next) || !free(q)
+            if (next < 0 || next >= columns * rows || Math.abs(q.x - p.x) > .41 || previous.has(next) || !free(q)
               || !free({ x: (p.x + q.x) / 2, y: 0, z: (p.z + q.z) / 2 })) continue;
             previous.set(next, id); queue.push(next);
           }
         }
-        if (goal < 0) throw new Error(`No walking route to ${kind}`);
+        if (goal < 0) throw new Error(`No walking route to ${petId}`);
         const route: number[] = []; for (let id = goal; id >= 0; id = previous.get(id)!) route.push(id);
         for (const id of route.reverse()) { const p = point(id); walk(p.x, p.z); }
-        tick(35); // A parrot lands gently before accepting food.
+        tick(70); // Acceleration-limited descent and wing folding settle before feeding.
       }
-      throw new Error(`Could not approach ${kind}: ${JSON.stringify(game.state.pets.pets)}`);
+      throw new Error(`Could not approach ${petId}: ${JSON.stringify(game.state.pets.pets)}`);
     };
     if (touch) for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) canvas.addEventListener(type, () => tick(), { passive: false });
     (window as any).garden = { game, key, press, tick, walk, sink, render, approach };
@@ -85,7 +87,7 @@ test('villa garden: walk to the real kitchen sink and toggle an animated, draini
   } finally { await dispose(page); }
 });
 
-test('villa garden: authored plants, open vegetable aisles and four freely roaming feedable pets', async ({ page }) => {
+test('villa garden: authored plants, open vegetable aisles and five independently feedable pets, including visiting cats and dogs', async ({ page }) => {
   test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -98,21 +100,23 @@ test('villa garden: authored plants, open vegetable aisles and four freely roami
       const potsSolid = !game.canFit(1.75, { x: -10.5, y: 0, z: 16 }) && !game.canFit(1.75, { x: -9.7, y: 0, z: 16.3 });
       walk(-12.6, 11.5); walk(-12.6, 15.3); walk(-7.8, 15.3); walk(-7.8, 22.3); walk(-7.8, 19.4); walk(-12.6, 19.4); walk(-12.6, 13.8);
       const fed: string[] = [], visibleFood: string[] = [];
-      for (const kind of ['dog', 'cat', 'parrot', 'rabbit']) {
-        approach(kind); const pet = game.state.pets.pets.find((p: any) => p.kind === kind), before = pet.feedCount;
-        press('e'); if (pet.feedCount === before + 1) fed.push(kind);
+      for (const id of ['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue']) {
+        approach(id); const pet = game.state.pets.pets.find((p: any) => p.id === id), before = pet.feedCount;
+        const otherCounts = game.state.pets.pets.filter((p: any) => p !== pet).map((p: any) => p.feedCount);
+        press('e'); if (pet.feedCount === before + 1) fed.push(id);
         press('e'); if (pet.feedCount !== before + 1) throw new Error('Repeated feed was not bounded');
-        tick(26); render(); if (game.scene.scene.getObjectByName(`${kind}/food-plate`).visible) visibleFood.push(kind);
+        if (JSON.stringify(otherCounts) !== JSON.stringify(game.state.pets.pets.filter((p: any) => p !== pet).map((p: any) => p.feedCount))) throw new Error('Feeding changed a different pet');
+        tick(26); render(); if (game.scene.scene.getObjectByName(`${id}/food-plate`).visible) visibleFood.push(id);
       }
       press('i'); render(); const quiet = !game.canvas.dataset.villaPrompt;
       const finite = game.state.pets.pets.every((p: any) => [p.x, p.y, p.z].every(Number.isFinite));
-      const synced = game.state.pets.pets.every((p: any) => { const model = game.scene.scene.getObjectByName(`villa-pet-${p.kind}`); return model.userData.peaceful && Math.abs(model.position.x - p.x) < 1e-8; });
+      const synced = game.state.pets.pets.every((p: any) => { const model = game.scene.scene.getObjectByName(`villa-pet-${p.id}`); return model.userData.peaceful && Math.abs(model.position.x - p.x) < 1e-8; });
       game.init(); const reset = game.state.pets.feedSequence === 0 && game.state.pets.pets.every((p: any) => p.feedCount === 0 && !p.fed);
       return { species, roamed, fed, visibleFood, quiet, finite, synced, reset, potsSolid };
     });
     expect(new Set(result.species['fruit-tree'])).toEqual(new Set(['cherry', 'orange', 'mango', 'apple', 'pear', 'lemon']));
     expect(result.species['fruit-tree']).toHaveLength(10); expect(result.species['flower-planter']).toHaveLength(6); expect(result.species['vegetable-bed']).toHaveLength(4);
-    expect(result.fed).toEqual(['dog', 'cat', 'parrot', 'rabbit']); expect(result.visibleFood).toEqual(result.fed);
+    expect(result.fed).toEqual(['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue']); expect(result.visibleFood).toEqual(result.fed);
     for (const key of ['roamed', 'quiet', 'finite', 'synced', 'reset', 'potsSolid'] as const) expect(result[key], key).toBe(true);
     expect(errors).toEqual([]);
   } finally { await dispose(page); }
@@ -125,12 +129,15 @@ test('villa garden: sedan stops before peaceful animals without pushing or harmi
       const { game, key, tick } = (window as any).garden;
       // Deliberate safety fixture, away from roads: a resting rabbit in front of the car.
       for (const pet of game.state.pets.pets) { pet.mode = 'eating'; pet.timer = 100; }
-      Object.assign(game.state.driving, { x: -18, z: 12, yaw: 0, speed: 0, steering: 0 });
-      game.state.seated = 'car'; game.position = { x: -17.57, y: 0, z: 12.05 }; game.yaw = Math.PI;
+      // Keep the car beyond the new deck umbrella, with the rabbit ahead on open lawn.
+      game.state.pets.pets.find((p: any) => p.id === 'rabbit').z = 18.5;
+      Object.assign(game.state.driving, { x: -18, z: 14.5, yaw: 0, speed: 0, steering: 0 });
+      game.enterCarAt = game.exitCarAt = game.closeCarAt = Infinity;
+      game.state.seated = 'car'; game.position = { x: -17.57, y: 0, z: 14.55 }; game.yaw = Math.PI;
       game.scene.updateActivities(game.time, game.state);
       const before = game.state.pets.pets.map((p: any) => [p.x, p.z]); key('w'); tick(120); key('w', false);
       const car = game.state.driving, body = game.scene.vehicle.colliders[0], rabbit = game.state.pets.pets.find((p: any) => p.kind === 'rabbit');
-      return { contact: car.contact, speed: car.speed, advanced: car.z > 12, stoppedBefore: body.maxZ <= rabbit.z - .4 + .01,
+      return { contact: car.contact, speed: car.speed, advanced: car.z > 14.5, stoppedBefore: body.maxZ <= rabbit.z - .4 + .01,
         unchanged: game.state.pets.pets.every((p: any, i: number) => p.x === before[i][0] && p.z === before[i][1]),
         walkingClear: game.canFit(1.75, { x: rabbit.x, y: 0, z: rabbit.z }) };
     });

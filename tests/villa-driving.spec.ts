@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const villaUrl = () => '/' + JSON.parse(readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'))['src/games/villa.ts'].file;
 
-test('villa sedan drives out to the practice course, turns, safely exits at an angle and completes a corner', async ({ page }) => {
+test('villa sedan drives onto the scenic road, turns, safely exits at an angle and continues around the bend', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/#/snake');
@@ -30,7 +30,7 @@ test('villa sedan drives out to the practice course, turns, safely exits at an a
     const until = (condition: () => boolean, max = 900) => { while (!condition() && max-- > 0) cruise(); if (max <= 0) throw new Error('Drive blocked: ' + JSON.stringify(game.state.driving)); };
     const stop = () => { key('w', false); key('d', false); key('a', false); key(' '); tick(24); key(' ', false); };
     key('h'); walk(0, 1.4); walk(13.4, 1.4); walk(18.55, 1.4); walk(18.55, -2.45);
-    key('e'); tick(14); key('e'); tick(30);
+    key('e'); tick(40); // One action opens, automatically boards, then closes the door.
     const seated = game.state.seated;
     until(() => game.state.driving.z > 29);
     const reachedCourse = game.state.driving.z, room = canvas.dataset.villaRoom;
@@ -43,13 +43,15 @@ test('villa sedan drives out to the practice course, turns, safely exits at an a
     const angle = game.state.driving.yaw;
     const lookFollowsBody = Math.abs((game.yaw - Math.PI - game.state.driving.yaw) - relativeLook) < 1e-6;
     const parked = { x: game.state.driving.x, z: game.state.driving.z, yaw: angle };
-    key('e'); tick(25); const angledExit = game.state.seated === null;
+    key('e'); tick(40); const angledExit = game.state.seated === null && !game.state.carDoorOpen;
     const exit = { ...game.position };
     walk(exit.x + Math.cos(angle) * .5, exit.z - Math.sin(angle) * .5); walk(exit.x, exit.z);
-    key('e'); tick(30); const reentered = game.state.seated;
+    key('e'); tick(40); const reentered = game.state.seated;
     key('d'); until(() => game.state.driving.yaw <= -1.48, 240); key('d', false);
     until(() => game.state.driving.x <= 9.2, 240); stop();
-    const corner = game.state.driving.cornerCheckpoint;
+    const bend = { x: game.state.driving.x, yaw: game.state.driving.yaw };
+    const road = game.scene.scene.getObjectByName('villa-driving-course').userData;
+    const noExamState = ['progress', 'reverseParked', 'parallelParked', 'sCheckpoint', 'cornerCheckpoint'].every(k => !(k in game.state.driving));
     const vehicle = game.scene.scene.getObjectByName('villa-vehicle');
     const poseSynced = Math.abs(vehicle.position.x - game.state.driving.x) < 1e-9 && Math.abs(vehicle.position.z - game.state.driving.z) < 1e-9 && Math.abs(vehicle.rotation.y - game.state.driving.yaw) < 1e-9;
     game.scene.softwareInputFrames = 0; game.scene.lastDrawAt = -Infinity; game.renderFrame(); const image = canvas.toDataURL();
@@ -58,15 +60,17 @@ test('villa sedan drives out to the practice course, turns, safely exits at an a
     key('w'); tick(16); game.clearInput(); tick(30); const blurStops = game.state.driving.speed === 0;
     key('h'); const home = { seat: game.state.seated, speed: game.state.driving.speed, z: game.position.z };
     game.destroy(); const cleaned = !Object.keys(canvas.dataset).some(k => k.startsWith('villa')); canvas.remove();
-    return { seated, reachedCourse, room, movingDoorSafe, noCarCrouch, angle, lookFollowsBody, parked, angledExit, reentered, corner, poseSynced, stopped, reset, blurStops, home, scores, cleaned, image };
+    return { seated, reachedCourse, room, movingDoorSafe, noCarCrouch, angle, lookFollowsBody, parked, angledExit, reentered, bend, road, noExamState, poseSynced, stopped, reset, blurStops, home, scores, cleaned, image };
   }, villaUrl());
   expect(result.seated).toBe('car'); expect(result.reachedCourse).toBeGreaterThan(29); expect(result.room).toBe('driving-course');
   expect(result.movingDoorSafe).toBe(true); expect(result.noCarCrouch).toBe(true); expect(Math.abs(result.angle)).toBeGreaterThan(.7); expect(Math.abs(result.angle)).toBeLessThan(1.1);
   expect(result.lookFollowsBody).toBe(true); expect(result.angledExit).toBe(true); expect(result.reentered).toBe('car');
-  expect(result.corner).toBe(4); expect(result.poseSynced).toBe(true); expect(result.stopped).toBe(true);
+  expect(result.bend.x).toBeLessThanOrEqual(9.2); expect(result.bend.yaw).toBeLessThanOrEqual(-1.48);
+  expect(result.road).toMatchObject({ kind: 'scenic-loop', examination: false }); expect(result.noExamState).toBe(true);
+  expect(result.poseSynced).toBe(true); expect(result.stopped).toBe(true);
   expect(result.reset).toEqual({ x: 16.2, z: -2.6, speed: 0, seated: 'car' }); expect(result.blurStops).toBe(true);
   expect(result.home).toEqual({ seat: null, speed: 0, z: 11.5 }); expect(result.cleaned).toBe(true); expect(result.scores).toBe(0); expect(errors).toEqual([]);
-  await test.info().attach('driving-practice-cockpit', { body: Buffer.from(result.image.split(',')[1], 'base64'), contentType: 'image/png' });
+  await test.info().attach('scenic-driving-cockpit', { body: Buffer.from(result.image.split(',')[1], 'base64'), contentType: 'image/png' });
 });
 
 test('villa rejects an exit across the garage wall and stops at the rendered garden fence', async ({ page }) => {
@@ -79,6 +83,7 @@ test('villa rejects an exit across the garage wall and stops at the rendered gar
     const tick = (n: number) => { for (let i = 0; i < n; i++) game.update(.05); };
     // Deliberate collision-fixture placement: the car fits, but its driver doorway faces an intact wall.
     Object.assign(game.state.driving, { x: 18.5, z: -.8, yaw: 0, speed: 0, steering: 0 });
+    game.enterCarAt = game.exitCarAt = game.closeCarAt = Infinity;
     game.state.seated = 'car'; game.position = { x: 18.93, y: 0, z: -.75 }; game.yaw = Math.PI;
     game.scene.updateActivities(game.time, game.state);
     key('e'); key('q'); tick(30);

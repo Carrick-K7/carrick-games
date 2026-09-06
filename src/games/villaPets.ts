@@ -1,6 +1,8 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
 export type VillaPetKind = 'dog' | 'cat' | 'parrot' | 'rabbit';
+export type VillaPetId = VillaPetKind | 'parrot-blue';
+export const VILLA_PET_IDS: readonly VillaPetId[] = ['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue'];
 export type VillaPetMode = 'idle' | 'exploring' | 'approaching' | 'eating' | 'happy';
 export const VILLA_PET_KINDS: readonly VillaPetKind[] = ['dog', 'cat', 'parrot', 'rabbit'];
 /** Bounds contain the entire pet, including wings/tails, not only its centre. */
@@ -19,7 +21,10 @@ export const VILLA_PET_LABELS = {
   rabbit: { en: 'Rabbit', zh: '兔子', foodEn: 'Hay and greens', foodZh: '干草和青菜' },
 } as const;
 export interface VillaPet extends VillaPosition {
-  kind: VillaPetKind; yaw: number; mode: VillaPetMode;
+  id: VillaPetId; kind: VillaPetKind; yaw: number; mode: VillaPetMode;
+  /** Independent excursion clock and waypoint cursor; feeding pauses, not cancels, a visit. */
+  visitTimer: number; visit: 'lawn' | 'outbound' | 'living' | 'returning'; waypoint: number;
+  wingPhase: number; wingFold: number; verticalSpeed: number; bank: number;
   fed: boolean; feedCount: number; cooldown: number; food: string;
   speed: number; gait: number; timer: number; targetX: number; targetZ: number;
   flightHeight: number; seed: number;
@@ -35,14 +40,21 @@ export interface VillaPetsState {
   feedSequence: number;
 }
 const SPEED: Record<VillaPetKind, number> = { dog: 0.66, cat: 0.43, parrot: 0.52, rabbit: 0.58 };
-const STARTS = [[-16, 18], [-15, 15], [-13, 14], [-18, 16]] as const;
+const STARTS = [[-16, 18], [-15, 15], [-13, 14], [-18, 16], [-16.5, 13.5]] as const;
+/** Front opening is x ±1.45 at z=9. The east living aisle avoids sofa, table and aquarium. */
+export const VILLA_PET_VISIT_ROUTE = [[-13, 14.5], [-3, 14.5], [0, 11.5], [0, 6.5], [-4.6, 6.5], [-4.6, 4.5]] as const;
 export function createVillaPets(): VillaPetsState {
-  return { time: 0, feedSequence: 0, visitor: null, colliders: [], pets: VILLA_PET_KINDS.map((kind, i) => ({
-    kind, x: STARTS[i][0], y: 0, z: STARTS[i][1], yaw: i * 1.4,
-    mode: 'idle', fed: false, feedCount: 0, cooldown: 0, food: VILLA_PET_FOOD[kind],
-    speed: 0, gait: i, timer: 0.6 + i * 0.4, targetX: STARTS[i][0], targetZ: STARTS[i][1],
-    flightHeight: 0, seed: 1709 + i * 7919,
-  })) };
+  return { time: 0, feedSequence: 0, visitor: null, colliders: [], pets: VILLA_PET_IDS.map((id, i) => {
+    const kind: VillaPetKind = id === 'parrot-blue' ? 'parrot' : id;
+    return {
+      id, kind, x: STARTS[i][0], y: 0, z: STARTS[i][1], yaw: i * 1.4,
+      visitTimer: 18 + i * 23, visit: 'lawn', waypoint: 0,
+      wingPhase: i * 1.7, wingFold: 0, verticalSpeed: 0, bank: 0,
+      mode: 'idle', fed: false, feedCount: 0, cooldown: 0, food: VILLA_PET_FOOD[kind],
+      speed: 0, gait: i, timer: 0.6 + i * 0.4, targetX: STARTS[i][0], targetZ: STARTS[i][1],
+      flightHeight: 0, seed: 1709 + i * 7919,
+    };
+  }) };
 }
 function random(pet: VillaPet): number {
   pet.seed = (Math.imul(pet.seed, 1664525) + 1013904223) >>> 0;
@@ -93,8 +105,8 @@ export function nearestVillaPet(state: VillaPetsState, p: VillaPosition, collide
   return nearest;
 }
 /** Feed only a currently close, unobstructed pet; repeated input never resets its reaction. */
-export function feedVillaPet(state: VillaPetsState, kind: VillaPetKind): boolean {
-  const pet = state.pets.find(p => p.kind === kind);
+export function feedVillaPet(state: VillaPetsState, id: VillaPetId): boolean {
+  const pet = state.pets.find(p => p.id === id);
   if (!pet || !state.visitor || pet.cooldown > 0 || !reachablePet(pet, state.visitor, state.colliders)) return false;
   pet.fed = true; pet.feedCount++; state.feedSequence++; pet.cooldown = VILLA_PET_FEED_COOLDOWN;
   pet.mode = 'approaching'; pet.timer = 1.2; pet.flightHeight = 0;
@@ -114,6 +126,42 @@ function explore(pet: VillaPet, colliders: readonly VillaCollider[]): void {
   }
   pet.mode = 'idle'; pet.timer = 1; pet.flightHeight = 0;
 }
+/** A tiny authored navigation graph, not a per-frame world search. Every edge is
+ * validated against live furniture/doors/cars; a blocked animal waits in place. */
+function visitStep(pet: VillaPet, state: VillaPetsState): boolean {
+  if (pet.kind !== 'dog' && pet.kind !== 'cat') return false;
+  const route = VILLA_PET_VISIT_ROUTE;
+  if (pet.visit === 'lawn') {
+    if (pet.visitTimer > 0) return false;
+    // Single-file front-door etiquette prevents opposite-direction deadlocks.
+    if (state.pets.some(other => other !== pet && other.visit !== 'lawn')) return false;
+    pet.visitTimer = 8;
+    if (!pathClear(pet.x, pet.z, route[0][0], route[0][1], state.colliders, VILLA_PET_RADIUS)) return false;
+    for (let i = 1; i < route.length; i++) {
+      const from = route[i - 1], to = route[i];
+      if (!pathClear(from[0], from[1], to[0], to[1], state.colliders, VILLA_PET_RADIUS)) return false;
+    }
+    pet.visit = 'outbound'; pet.waypoint = 0;
+  }
+  if (pet.visit === 'living') {
+    pet.mode = 'idle'; pet.timer = 1;
+    if (pet.visitTimer > 0) return true;
+    pet.visit = 'returning'; pet.waypoint = route.length - 2;
+  }
+  const [x, z] = route[pet.waypoint];
+  if (Math.hypot(pet.x - x, pet.z - z) < 0.19) {
+    pet.waypoint += pet.visit === 'outbound' ? 1 : -1;
+    if (pet.waypoint === route.length) {
+      pet.visit = 'living'; pet.visitTimer = 8 + random(pet) * 8; pet.mode = 'idle'; pet.timer = 1; return true;
+    }
+    if (pet.waypoint < 0) {
+      pet.visit = 'lawn'; pet.visitTimer = 90 + random(pet) * 70; pet.mode = 'idle'; pet.timer = 2; return true;
+    }
+  }
+  [pet.targetX, pet.targetZ] = route[pet.waypoint];
+  pet.mode = 'exploring'; pet.timer = 2;
+  return true;
+}
 function segmentDistance(ax: number, az: number, bx: number, bz: number, x: number, z: number): number {
   const dx = bx - ax, dz = bz - az, squared = dx * dx + dz * dz;
   const t = squared ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / squared)) : 0;
@@ -125,12 +173,21 @@ function move(pet: VillaPet, state: VillaPetsState, dt: number): void {
   if (distance <= stop) {
     pet.timer = 0; return;
   }
-  const angle = Math.atan2(dx, dz), step = Math.min(distance - stop, SPEED[pet.kind] * dt);
+  const angle = Math.atan2(dx, dz);
+  // Birds steer along their heading, rather than sliding sideways while turning.
+  const bird = pet.kind === 'parrot';
+  const turn = Math.atan2(Math.sin(angle - pet.yaw), Math.cos(angle - pet.yaw));
+  if (bird) pet.yaw += Math.max(-dt * 2.4, Math.min(dt * 2.4, turn));
+  pet.bank += ((bird && pet.y > 0.08 ? -turn * 0.18 : 0) - pet.bank) * Math.min(1, dt * 5);
+  const cruise = bird ? (pet.y > 0.15 ? 0.66 : 0.3) * Math.max(0.15, Math.cos(turn)) : SPEED[pet.kind];
+  const step = Math.min(distance - stop, cruise * dt);
   const side = pet.kind === 'cat' || pet.kind === 'rabbit' ? -1 : 1;
-  for (const offset of [0, 0.45, -0.45, 0.95, -0.95, 1.5, -1.5, 2.3, -2.3, Math.PI]) {
-    const heading = angle + offset * side;
+  const visiting = pet.visit !== 'lawn';
+  const singleFile = visiting && (!inLawn(pet.x, pet.z) || !inLawn(pet.targetX, pet.targetZ));
+  for (const offset of bird || singleFile ? [0] : [0, 0.45, -0.45, 0.95, -0.95, 1.5, -1.5, 2.3, -2.3, Math.PI]) {
+    const heading = (bird ? pet.yaw : angle) + offset * side;
     const x = pet.x + Math.sin(heading) * step, z = pet.z + Math.cos(heading) * step;
-    if (!inLawn(x, z) || !pathClear(pet.x, pet.z, x, z, state.colliders, VILLA_PET_RADIUS)) continue;
+    if ((!visiting && !inLawn(x, z)) || !pathClear(pet.x, pet.z, x, z, state.colliders, VILLA_PET_RADIUS)) continue;
     if (state.pets.some(other => other !== pet && segmentDistance(pet.x, pet.z, x, z, other.x, other.z) < 2 * VILLA_PET_RADIUS + 0.05)) continue;
     pet.x = x; pet.z = z; pet.speed = step / dt;
     const turn = Math.atan2(Math.sin(heading - pet.yaw), Math.cos(heading - pet.yaw));
@@ -138,7 +195,12 @@ function move(pet: VillaPet, state: VillaPetsState, dt: number): void {
     return;
   }
   // Yield without pushing, chasing or clipping through another animal/obstacle.
-  if (pet.mode === 'exploring') { pet.mode = 'idle'; pet.timer = 0.5 + random(pet) * 0.7; pet.flightHeight = 0; }
+  if (pet.mode === 'exploring') {
+    pet.flightHeight = 0;
+    // A bird can finish turning on its toes while blocked, not restart the turn
+    // after every tiny failed step (which would permanently trap facing birds).
+    if (!bird && !visiting) { pet.mode = 'idle'; pet.timer = 0.5 + random(pet) * 0.7; }
+  }
 }
 /**
  * Seconds, deterministic for identical calls. Invalid/nonpositive dt is ignored.
@@ -155,6 +217,9 @@ export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: r
     state.time += h;
     for (const pet of state.pets) {
       pet.cooldown = Math.max(0, pet.cooldown - h); pet.timer -= h; pet.speed = 0;
+      pet.visitTimer -= h;
+      const reacting = pet.mode === 'approaching' || pet.mode === 'eating' || pet.mode === 'happy';
+      if (!reacting) visitStep(pet, state);
       const visitor = state.visitor;
       // A nearby visitor gets a calm greeting, not a moving target. Airborne birds
       // also notice the visitor and gently land; no following/chasing is required.
@@ -173,10 +238,18 @@ export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: r
         else { pet.mode = 'idle'; pet.timer = 0.9 + random(pet) * 2.2; pet.flightHeight = 0; }
       }
       if (pet.mode === 'exploring' || pet.mode === 'approaching') move(pet, state, h);
-      pet.gait += h * (pet.speed > 0 ? 9 : 2);
+      pet.gait += h * (pet.speed > 0 ? pet.kind === 'parrot' ? pet.speed * 24 : 9 : 2);
       if (pet.kind === 'parrot') {
-        const target = pet.mode === 'exploring' ? pet.flightHeight : 0;
-        pet.y += Math.max(-h * 0.4, Math.min(h * 0.4, target - pet.y));
+        const remaining = Math.hypot(pet.targetX - pet.x, pet.targetZ - pet.z);
+        const target = pet.mode === 'exploring' ? pet.flightHeight * Math.min(1, remaining / 0.9, Math.max(0, pet.timer) / 1.4) : 0;
+        const desired = Math.max(-0.48, Math.min(0.48, (target - pet.y) * 3));
+        pet.verticalSpeed += Math.max(-h * 1.4, Math.min(h * 1.4, desired - pet.verticalSpeed));
+        pet.y = Math.max(0, Math.min(0.72, pet.y + pet.verticalSpeed * h));
+        if (target === 0 && pet.y < 0.002) { pet.y = 0; pet.verticalSpeed = 0; }
+        const spread = target > 0.03 || pet.y > 0.015 ? 1 : 0;
+        pet.wingFold += Math.max(-h * 2.5, Math.min(h * 4, spread - pet.wingFold));
+        pet.wingPhase += h * (pet.verticalSpeed > 0.03 ? 17 : pet.verticalSpeed < -0.03 ? 11 : 13);
+        pet.bank *= Math.max(0, 1 - h * (pet.speed === 0 ? 5 : 0.5));
       } else pet.y = pet.kind === 'rabbit' && pet.speed > 0 ? Math.max(0, Math.sin(pet.gait)) * 0.11 : 0;
     }
   }

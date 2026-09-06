@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 test('villa upgrades are physical models with reachable car seats, simulator inputs and safe running', async ({ page }) => {
@@ -52,7 +52,12 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
       if (/^originalChibiGirl-\d+$/.test(o.name)) figures.push(o.userData);
       if (/miku/i.test(o.name) || /miku/i.test(JSON.stringify(o.userData))) legacyFigureNames.push(o.name);
       if (o.name === 'originalChibiGirlWall') modelData.figureWall = o.userData;
-      if (o.name === 'interactiveRacingWheel') modelData.wheel = { batches: o.children.length, castsShadow: o.children.some((child: any) => child.castShadow) };
+      if (o.name === 'interactiveRacingWheel') {
+        const meshes = o.children.filter((child: any) => child.isMesh);
+        const marker = o.getObjectByName('racingWheelTopMarker');
+        modelData.wheel = { batches: meshes.length, castsShadow: meshes.some((child: any) => child.castShadow),
+          markerExists: !!marker && marker.parent === o && !marker.isMesh };
+      }
       if (o.userData.snooker) modelData.snooker = o.userData.snooker;
       if (o.userData.kitchen) modelData.kitchen = o.userData.kitchen;
       if (o.isMesh) {
@@ -82,8 +87,8 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     walk(7.1, -3.8); walk(7.1, 1.4); walk(13.4, 1.4); walk(18.55, 1.4); walk(18.55, -2.45);
     key('e'); tick(14); const openAngle = door.rotation.y;
     const doorHasGlazing = door.children.some((o: any) => o.userData.kind === 'glazing');
-    key('e'); key('q'); const doorStaysOpenDuringEntry = game.state.carDoorOpen;
-    tick(27); const seat = game.state.seated;
+    const doorStaysOpenDuringEntry = game.state.carDoorOpen;
+    tick(26); const seat = game.state.seated; // A single E opens, auto-boards and auto-closes.
     forceRender(); const carImage = canvas.toDataURL('image/png');
     const seatEye = game.scene.camera.position.y;
     const garagePose = { x: game.state.driving.x, z: game.state.driving.z, yaw: game.state.driving.yaw };
@@ -103,10 +108,12 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     key('r'); tick(1); forceRender();
     carChecks.resetToGarage = game.state.driving.speed === 0 && game.state.driving.distance === 0
       && game.state.driving.x === garagePose.x && game.state.driving.z === garagePose.z && game.state.driving.yaw === garagePose.yaw;
-    // Legacy door/exit checks start stationary at the original garage anchors.
+    // Q is the same single-action access flow as E, not a manual door toggle.
     key('q'); tick(14); const qOpens = door.rotation.y < -1.09;
-    key('q'); tick(14); const qCloses = Math.abs(door.rotation.y) < 0.001;
-    key('e'); tick(25); const exited = { seat: game.state.seated, ...game.position };
+    tick(26); const qCloses = Math.abs(door.rotation.y) < 0.001 && !game.state.carDoorOpen;
+    const exited = { seat: game.state.seated, ...game.position };
+    key('q'); tick(40); const qBoards = game.state.seated === 'car' && !game.state.carDoorOpen;
+    key('e'); tick(40); const eExits = game.state.seated === null && !game.state.carDoorOpen;
     walk(18.55, -1.3); key('e'); const fenderCannotEnter = game.state.seated === null;
     // A restart must reset both the visible door and its mutable collider immediately.
     game.init(); const restartDoorClosed = !game.state.carDoorOpen && game.scene.vehicle.doorProgress === 0 && door.rotation.y === 0;
@@ -124,8 +131,11 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     const laneBefore = game.state.race.lane;
     key('d'); tick(4); key('d', 'keyup');
     racingChecks.steeredRight = game.state.race.lane > laneBefore;
+    racingChecks.smoothedSteer = game.state.race.steer > 0 && game.state.race.steer < 1;
+    racingChecks.roadsideRocks = game.state.race.obstacles.length === 16 && game.state.race.obstacles[0].distance === 140
+      && game.state.race.obstacles[0].lane === 1.12 && game.state.race.obstacles.every((o: any) => Math.abs(o.lane) > 1);
     forceRender(); const wheel = world.getObjectByName('interactiveRacingWheel');
-    racingChecks.wheelFollowsSteer = Math.abs(wheel.rotation.z + game.state.race.steer * .55) < 1e-6 && Math.abs(wheel.rotation.z) > .1;
+    racingChecks.wheelFollowsSteer = Math.abs(wheel.rotation.z - game.state.race.steer * .85) < 1e-6 && Math.abs(wheel.rotation.z) > .1;
     const laneRight = game.state.race.lane;
     key('a'); tick(4); key('a', 'keyup');
     racingChecks.steeredLeft = game.state.race.lane < laneRight;
@@ -164,8 +174,8 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     const pcOff = !game.state.gaming;
     game.destroy(); canvas.remove();
     return { modelData, figures, legacyFigureNames, racingChecks, invalidVertices, meshCount, yieldsInputFrames, walking, running, panelClearsMovement, snookerVisited, tableBlocksRun,
-      openAngle, doorHasGlazing, doorStaysOpenDuringEntry, seat, seatEye, carChecks, qOpens, qCloses, exited, fenderCannotEnter, restartDoorClosed,
-      racingSeat, sources, distinctScreenFrames: new Set(screenFrames).size, racingExit, lightsOff, pcOff, scores, carImage, screenImage };
+      openAngle, doorHasGlazing, doorStaysOpenDuringEntry, seat, seatEye, carChecks, qOpens, qCloses, qBoards, eExits, exited, fenderCannotEnter, restartDoorClosed,
+      racingSeat, sources, distinctScreenFrames: new Set(screenFrames).size, racingExit, lightsOff, pcOff, scores, carImage, screenImage, rallyTexture: screenFrames[0]! };
   }, `/${manifest['src/games/villa.ts'].file}`);
   expect(result.yieldsInputFrames).toBe(true);
   expect(result.invalidVertices).toBe(0);
@@ -186,7 +196,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     expect(figure.clothing).toMatch(/long dress and cardigan|overalls and long-sleeve shirt|cardigan and trousers/);
     expect(figure.pose).toMatch(/^(wave|book|seed pouch)$/);
   }
-  expect(result.modelData.wheel).toEqual({ batches: 3, castsShadow: false });
+  expect(result.modelData.wheel).toEqual({ batches: 3, castsShadow: false, markerExists: true });
   expect(result.modelData.snooker).toMatchObject({ ballCount: 22, redCount: 15, pocketCount: 6 });
   expect(result.modelData.kitchen.components).toEqual(expect.arrayContaining(['four-zone hob', 'wall-mounted extractor', 'fridge-freezer', 'dishwasher', 'recessed sink']));
   expect(result.walking).toBeCloseTo(1.375, 6); expect(result.running).toBeCloseTo(2.9, 6);
@@ -195,19 +205,21 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
   expect(result.doorStaysOpenDuringEntry).toBe(true);
   expect(result.seat).toBe('car'); expect(result.seatEye).toBeCloseTo(1.16, 5);
   expect(result.carChecks).toEqual({ movesCar: true, lockedToSeat: true, brakes: true, shiftDoesNotBoost: true, resetToGarage: true });
-  expect(result.qOpens).toBe(true); expect(result.qCloses).toBe(true);
+  expect(result.qOpens).toBe(true); expect(result.qCloses).toBe(true); expect(result.qBoards).toBe(true); expect(result.eExits).toBe(true);
   expect(result.exited).toMatchObject({ seat: null, x: 18.55, y: 0, z: -2.45 });
   expect(result.fenderCannotEnter).toBe(true); expect(result.restartDoorClosed).toBe(true);
   expect(result.racingSeat).toBe('racing'); expect(result.sources).toEqual(['pc', 'ps', 'switch']); expect(result.distinctScreenFrames).toBe(3);
   expect(result.racingChecks.entrySource).toBe('pc');
   expect(result.racingChecks.accelerated.speed).toBeGreaterThan(5);
   expect(result.racingChecks.accelerated.distance).toBeGreaterThan(2);
-  expect(result.racingChecks).toMatchObject({ pcScreenChanged: true, steeredRight: true, steeredLeft: true, wheelFollowsSteer: true,
+  expect(result.racingChecks).toMatchObject({ pcScreenChanged: true, steeredRight: true, steeredLeft: true, smoothedSteer: true, roadsideRocks: true, wheelFollowsSteer: true,
     sBrakes: true, spaceStops: true, clearInputStops: true, staysStoppedUntilThrottle: true, freshThrottleRestarts: true,
     consoleFreezesRace: true, switchFreezesRace: true, seatedDoesNotWalk: true, exitFreezesRace: true,
     reset: { speed: 0, distance: 0, lane: 0, laps: 0, crashes: 0 } });
   expect(result.racingExit).toMatchObject({ seat: null, x: 8.15, y: 0, z: 6.2 });
   expect(result.lightsOff).toBe(true); expect(result.pcOff).toBe(true); expect(result.scores).toBe(0); expect(errors).toEqual([]);
-  await test.info().attach('sedan-driver-seat', { body: Buffer.from(result.carImage.split(',')[1], 'base64'), contentType: 'image/png' });
-  await test.info().attach('simulator-screen', { body: Buffer.from(result.screenImage.split(',')[1], 'base64'), contentType: 'image/png' });
+  for (const [name, image] of [['sedan-driver-seat', result.carImage], ['simulator-screen', result.screenImage], ['rally-gravel-stage', result.rallyTexture]]) {
+    const path = test.info().outputPath(name + '.png'); writeFileSync(path, Buffer.from(image.split(',')[1], 'base64'));
+    await test.info().attach(name, { path, contentType: 'image/png' });
+  }
 });

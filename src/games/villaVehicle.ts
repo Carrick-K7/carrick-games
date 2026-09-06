@@ -268,14 +268,26 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   cabin.box(0.13, 0.952, 0.587, 0.043, 0.078, 0.003, upholstery, 0.008);
   for (let i = 0; i < 3; i++) cabin.box(0.13, 0.869 + i * 0.015, 0.587, 0.068, 0.004, 0.002, displayAccent, 0);
 
+  // The column remains fixed; only the wheel spins about its own tilted shaft.
+  // Its top is below the driver's eyeline, not a detached ring across the windscreen.
+  cabin.beam([.43, .873, .821], [.43, .925, .652], .033, dark);
   const steering = new VillaModelBuilder(car, 'vehicle-steering');
-  steering.root.userData = { kind: 'steering', driverSide: '+X', position: [0.43, 0.935, 0.443] };
-  steering.beam([0.43, 0.828, 0.749], [0.43, 0.923, 0.46], 0.035, dark);
-  steering.geometry(new THREE.TorusGeometry(0.161, 0.019, 10, 36), dark, [0.43, 0.935, 0.443], [-0.23, 0, 0]);
-  steering.box(0.43, 0.92, 0.442, 0.11, 0.067, 0.045, dark, 0.015);
-  for (const side of [-1, 1]) steering.beam([0.43 + side * 0.047, 0.93, 0.443], [0.43 + side * 0.146, 0.948, 0.44], 0.012, silver);
-  steering.beam([0.43, 0.903, 0.445], [0.43, 0.781, 0.479], 0.011, dark);
-  steering.box(0.43, 0.922, 0.416, 0.024, 0.008, 0.002, silver, 0.002);
+  steering.root.position.set(.43, .935, .62); steering.root.rotation.x = .30;
+  steering.root.userData = { kind: 'steering', driverSide: '+X', position: [.43, .935, .62], shaftTilt: .30, animated: true };
+  const wheel = new VillaModelBuilder(steering.root, 'vehicle-steering-wheel');
+  wheel.geometry(new THREE.TorusGeometry(.174, .020, 10, 48), rubber);
+  wheel.geometry(new THREE.TorusGeometry(.148, .004, 6, 40), silver, [0, 0, -.005]);
+  wheel.box(0, -.008, -.008, .104, .076, .046, dark, .018);
+  for (const side of [-1, 1]) {
+    wheel.beam([side * .037, -.006, 0], [side * .157, .016, 0], .016, dark);
+    wheel.box(side * .085, .006, -.018, .037, .024, .008, silver, .005);
+    for (const y of [-.003, .009]) wheel.box(side * .085, y, -.024, .018, .002, .002, rubber, 0);
+  }
+  wheel.beam([-.025, -.029, 0], [-.025, -.157, 0], .011, dark);
+  wheel.beam([.025, -.029, 0], [.025, -.157, 0], .011, dark);
+  wheel.box(0, .175, -.005, .026, .025, .037, upholstery, .004);
+  const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'vehicle-wheel-top-marker'; wheelMarker.position.set(0, .174, 0); wheel.root.add(wheelMarker);
+  wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true };
   cabin.box(0.485, 0.341, 0.704, 0.076, 0.11, 0.03, silver, 0.01);
   cabin.box(0.315, 0.353, 0.704, 0.11, 0.08, 0.03, rubber, 0.008);
   cabin.box(0, 1.33, 0.327, 0.216, 0.072, 0.039, dark, 0.015);
@@ -324,7 +336,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   });
   buildDoor(passenger, glazing, -1);
 
-  for (const builder of [body, cabin, glazing, steering, driver, doorWindows, passenger]) builder.finish();
+  for (const builder of [body, cabin, glazing, steering, wheel, driver, doorWindows, passenger]) builder.finish();
   car.traverse(node => {
     if (node instanceof THREE.Mesh) {
       const material = node.material as THREE.Material;
@@ -374,7 +386,10 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       if (!Number.isFinite(time)) return false;
       const pose = state.driving;
       const x = pose?.x ?? VILLA_CAR.center.x, z = pose?.z ?? VILLA_CAR.center.z, yaw = pose?.yaw ?? 0;
-      const moved = car.position.x !== x || car.position.z !== z || car.rotation.y !== yaw;
+      const wheelAngle = THREE.MathUtils.clamp(pose?.steering ?? 0, -.56, .56) * 4.5;
+      const moved = car.position.x !== x || car.position.z !== z || car.rotation.y !== yaw || wheel.root.rotation.z !== wheelAngle;
+      // Seen from a +Z-facing driver, positive local Z is clockwise (world -X).
+      wheel.root.rotation.z = wheelAngle;
       car.position.set(x, 0, z); car.rotation.y = yaw;
       if (moved) updateCollider();
       const target = state.carDoorOpen ? 1 : 0;

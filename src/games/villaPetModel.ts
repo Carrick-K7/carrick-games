@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
-import { createVillaPets, VILLA_PET_FOOD, VILLA_PET_KINDS, VILLA_PET_RADIUS, type VillaPetKind, type VillaPetsState } from './villaPets.js';
+import { createVillaPets, VILLA_PET_FOOD, VILLA_PET_IDS, VILLA_PET_RADIUS, type VillaPetId, type VillaPetsState } from './villaPets.js';
 import type { VillaCollider } from './villaWorld.js';
 
 type Triple = [number, number, number];
@@ -18,7 +18,7 @@ export interface VillaPetModel {
 export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
   const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x25372b, transparent: true, opacity: 0.16, depthWrite: false });
-  const rigs = new Map<VillaPetKind, PetRig>();
+  const rigs = new Map<VillaPetId, PetRig>();
   const drivingColliders: VillaCollider[] = [];
   const cream = 0xf6e5c8, brown = 0xba824f, dark = 0x382d2a, pink = 0xe0a2a0;
 
@@ -56,29 +56,26 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     b.geometry(g, material, [0, 0.235, -0.035]);
   }
-  for (const kind of VILLA_PET_KINDS) {
-    const root = new THREE.Group(); root.name = `villa-pet-${kind}`;
-    root.userData = { petKind: kind, peaceful: true, food: VILLA_PET_FOOD[kind], radius: VILLA_PET_RADIUS };
+  for (const id of VILLA_PET_IDS) {
+    const kind = id === 'parrot-blue' ? 'parrot' : id;
+    const blue = id === 'parrot-blue';
+    const root = new THREE.Group(); root.name = `villa-pet-${id}`;
+    root.userData = { petId: id, petKind: kind, peaceful: true, food: VILLA_PET_FOOD[kind], radius: VILLA_PET_RADIUS };
     parent.add(root);
     const rabbit = kind === 'rabbit', bird = kind === 'parrot', cat = kind === 'cat';
     const fur = rabbit ? cream : cat ? 0xc4b7a6 : brown;
-    const body = part(root, `${kind}/body`, [0, 0, 0], b => {
+    const body = part(root, `${id}/body`, [0, 0, 0], b => {
       if (bird) {
-        oval(b, 0x48a763, [0, 0.23, 0], [0.095, 0.145, 0.105]);
+        oval(b, blue ? 0x429bca : 0x48a763, [0, 0.23, 0], [0.095, 0.145, 0.105]);
         oval(b, 0xe6c955, [0, 0.26, 0.071], [0.075, 0.09, 0.047]);
-        for (const x of [-0.042, 0.042]) {
-          // Thin shanks overlap both the belly and toes, including in flight.
-          shape(b, new THREE.CylinderGeometry(0.01, 0.012, 0.09, 8), dark, [x, 0.075, 0.02]);
-          oval(b, dark, [x, 0.025, 0.032], [0.018, 0.025, 0.055]);
-        }
       } else {
         if (cat) catBody(b);
         else oval(b, fur, [0, rabbit ? 0.19 : 0.235, -0.035], [0.14, rabbit ? 0.145 : 0.13, 0.195]);
         oval(b, cream, [0, 0.22, 0.105], [0.088, 0.11, 0.07]);
       }
     });
-    const head = part(body, `${kind}/head`, [0, bird ? 0.39 : rabbit ? 0.29 : 0.35, bird ? 0.04 : 0.175], b => {
-      oval(b, bird ? 0x51b66a : fur, [0, 0, 0], bird ? [0.087, 0.09, 0.08] : [0.12, 0.115, 0.108]);
+    const head = part(body, `${id}/head`, [0, bird ? 0.39 : rabbit ? 0.29 : 0.35, bird ? 0.04 : 0.175], b => {
+      oval(b, bird ? blue ? 0x69b9dc : 0x51b66a : fur, [0, 0, 0], bird ? [0.087, 0.09, 0.08] : [0.12, 0.115, 0.108]);
       if (bird) {
         // Cream cheek patches, bright hooked beak, dark lower beak.
         for (const x of [-0.068, 0.068]) oval(b, cream, [x, 0.009, 0.037], [0.024, 0.037, 0.033]);
@@ -104,7 +101,7 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
         oval(b, 0xffffff, [side * (bird ? 0.069 : 0.059) - 0.003, 0.023, bird ? 0.069 : 0.101], [0.004, 0.005, 0.003]);
       }
     });
-    const tail = part(body, `${kind}/tail`, [0, bird ? 0.16 : rabbit ? 0.18 : 0.26, -0.205], b => {
+    const tail = part(body, `${id}/tail`, [0, bird ? 0.16 : rabbit ? 0.18 : 0.26, -0.205], b => {
       if (rabbit) oval(b, 0xfff5e7, [0, 0, -0.034], [0.061, 0.06, 0.061]);
       else if (bird) {
         oval(b, 0x3682a7, [0, -0.055, -0.064], [0.052, 0.033, 0.105]);
@@ -115,8 +112,16 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       } else oval(b, brown, [0, 0.038, -0.058], [0.035, 0.048, 0.097]);
     });
     const legs: THREE.Group[] = [];
+    if (bird) for (const side of [-1, 1]) {
+      legs.push(part(body, `${id}/foot-${side < 0 ? 'left' : 'right'}`, [side * 0.042, 0.12, 0.02], b => {
+        shape(b, new THREE.CylinderGeometry(0.01, 0.012, 0.09, 8), dark, [0, -0.045, 0]);
+        // Two forward toes and a rear gripping toe, each connected to its shank.
+        for (const toe of [-1, 1]) oval(b, dark, [toe * 0.009, -0.105, 0.022], [0.009, 0.015, 0.043]);
+        oval(b, dark, [0, -0.103, -0.025], [0.009, 0.014, 0.029]);
+      }));
+    }
     if (!bird) for (let pair = 0; pair < 2; pair++) {
-      legs.push(part(body, `${kind}/legs-${pair}`, [0, 0.13, 0], b => {
+      legs.push(part(body, `${id}/legs-${pair}`, [0, 0.13, 0], b => {
         for (const side of [-1, 1]) {
           const z = (pair === 0 ? side : -side) * 0.12;
           oval(b, fur, [side * 0.089, -0.045, z], [rabbit ? 0.045 : 0.029, 0.07, rabbit ? 0.068 : 0.034]);
@@ -126,14 +131,16 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
     }
     const wings: THREE.Group[] = [];
     if (bird) for (const side of [-1, 1]) {
-      wings.push(part(body, `${kind}/wing-${side < 0 ? 'left' : 'right'}`, [side * 0.075, 0.28, 0], b => {
-        oval(b, 0x318966, [side * 0.065, -0.06, -0.018], [0.08, 0.09, 0.044]);
-        oval(b, 0x337eac, [side * 0.09, -0.105, -0.022], [0.056, 0.052, 0.042]);
+      wings.push(part(body, `${id}/wing-${side < 0 ? 'left' : 'right'}`, [side * 0.075, 0.28, 0], b => {
+        oval(b, blue ? 0x3679ba : 0x318966, [side * 0.045, -0.06, -0.018], [0.055, 0.09, 0.044]);
+        for (let feather = 0; feather < 3; feather++) {
+          oval(b, blue ? 0x275596 : 0x337eac, [side * (0.058 + feather * 0.012), -0.12, -0.012 - feather * 0.024], [0.022, 0.065 - feather * 0.007, 0.019]);
+        }
       }));
     }
     // One extra batch only while eating. Parent-space anchor keeps the dish on
     // the ground: it is never attached to a walking/hopping/turning animal.
-    const foodPlate = part(parent, `${kind}/food-plate`, [0, 0, 0], b => {
+    const foodPlate = part(parent, `${id}/food-plate`, [0, 0, 0], b => {
       const dishColor = rabbit ? 0xc9aa74 : cat ? 0xc88666 : bird ? cream : 0x91b8bd;
       shape(b, new THREE.CylinderGeometry(0.105, 0.097, 0.018, 16), dishColor, [0, 0.014, 0]);
       shape(b, new THREE.TorusGeometry(0.103, 0.013, 6, 16), dishColor, [0, 0.026, 0], [Math.PI / 2, 0, 0]);
@@ -155,18 +162,18 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       }
     });
     foodPlate.visible = false;
-    foodPlate.userData = { petKind: kind, food: VILLA_PET_FOOD[kind], role: 'pet-food', contents: rabbit ? ['hay', 'greens'] : bird ? ['seeds'] : ['kibble'] };
+    foodPlate.userData = { petId: id, petKind: kind, food: VILLA_PET_FOOD[kind], role: 'pet-food', contents: rabbit ? ['hay', 'greens'] : bird ? ['seeds'] : ['kibble'] };
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), shadowMaterial);
-    shadow.name = `${kind}/contact-shadow`; shadow.rotation.x = -Math.PI / 2;
+    shadow.name = `${id}/contact-shadow`; shadow.rotation.x = -Math.PI / 2;
     shadow.scale.set(bird ? 0.18 : 0.23, bird ? 0.23 : 0.31, 1);
     parent.add(shadow);
-    rigs.set(kind, { root, body, head, tail, legs, wings, shadow, foodPlate, foodFeedCount: -1, headRestY: head.position.y });
+    rigs.set(id, { root, body, head, tail, legs, wings, shadow, foodPlate, foodFeedCount: -1, headRestY: head.position.y });
     drivingColliders.push({ minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY: 0 });
   }
   const update = (time: number, state: VillaPetsState): void => {
     const t = Number.isFinite(time) ? time : state.time;
     for (const pet of state.pets) {
-      const rig = rigs.get(pet.kind); if (!rig) continue;
+      const rig = rigs.get(pet.id); if (!rig) continue;
       rig.root.position.set(pet.x, pet.y, pet.z); rig.root.rotation.y = pet.yaw;
       const moving = pet.speed > 0.01, happy = pet.mode === 'happy', eating = pet.mode === 'eating';
       if (eating && (!rig.foodPlate.visible || rig.foodFeedCount !== pet.feedCount)) {
@@ -183,14 +190,29 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       rig.head.rotation.x = eating ? 0.55 + Math.sin(t * 10) * 0.09 : happy ? Math.sin(t * 4) * 0.08 : 0;
       rig.head.rotation.z = happy ? Math.sin(t * 3) * 0.09 : 0;
       rig.tail.rotation.y = pet.kind === 'dog' ? Math.sin(t * (happy ? 14 : 7)) * (happy ? 0.6 : 0.3) : pet.kind === 'cat' ? Math.sin(t * 1.8) * 0.16 : 0;
+      const bird = pet.kind === 'parrot', airborne = bird && pet.y > 0.025;
+      if (bird) {
+        rig.body.rotation.x = airborne ? 0.12 + pet.speed * 0.22 - pet.verticalSpeed * 0.25 : 0;
+        rig.body.rotation.z = Math.max(-0.18, Math.min(0.18, pet.bank));
+        rig.body.position.y = moving && !airborne ? Math.abs(Math.sin(pet.gait)) * 0.009 : 0;
+        rig.head.rotation.x += moving && !airborne ? Math.sin(pet.gait) * 0.055 : 0;
+        rig.tail.rotation.x = airborne ? -0.12 - pet.verticalSpeed * 0.2 : 0;
+      }
       rig.legs.forEach((leg, i) => {
-        leg.rotation.x = moving ? Math.sin(pet.gait + i * Math.PI) * 0.24 : sitting ? (i ? -0.32 : 0.32) : 0;
+        const stride = Math.sin(pet.gait + i * Math.PI);
+        leg.rotation.x = bird ? airborne ? -0.65 : moving ? stride * 0.27 : 0
+          : moving ? stride * 0.24 : sitting ? (i ? -0.32 : 0.32) : 0;
+        if (bird) leg.position.y = 0.12 + (airborne ? 0.018 : moving ? Math.max(0, stride) * 0.028 : 0);
       });
       rig.wings.forEach((wing, i) => {
-        wing.rotation.z = (i === 0 ? -1 : 1) * (pet.y > 0.03 ? 0.85 + Math.sin(t * 12) * 0.45 : happy ? 0.22 : 0);
+        // Smooth spread/fold, asymmetric downstroke, and feather sweep in recovery.
+        const flap = Math.sin(pet.wingPhase), spread = pet.wingFold;
+        wing.rotation.z = (i === 0 ? -1 : 1) * spread * (0.95 + flap * (pet.verticalSpeed > 0.03 ? 0.6 : 0.42));
+        wing.rotation.x = spread * (0.12 + Math.max(0, -flap) * 0.3);
+        wing.rotation.y = (i === 0 ? -1 : 1) * spread * Math.max(0, -flap) * 0.18;
       });
       rig.shadow.position.set(pet.x, 0.014, pet.z); rig.shadow.rotation.z = -pet.yaw;
-      const c = drivingColliders[VILLA_PET_KINDS.indexOf(pet.kind)], r = VILLA_PET_RADIUS;
+      const c = drivingColliders[VILLA_PET_IDS.indexOf(pet.id)], r = VILLA_PET_RADIUS;
       c.minX = pet.x - r; c.maxX = pet.x + r; c.minZ = pet.z - r; c.maxZ = pet.z + r;
       c.minY = pet.y; c.maxY = pet.y + 0.61;
     }

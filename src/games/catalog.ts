@@ -510,7 +510,7 @@ export const GAMES: GameMeta[] = [
         { keys: ['Mouse'], action: 'Look / snooker aim', actionZh: '环顾 / 台球瞄准' },
         { keys: ['Shift'], action: 'Run', actionZh: '跑步' },
         { keys: ['C'], action: 'Crouch / stand', actionZh: '蹲下 / 站起' },
-        { keys: ['Space'], action: 'Jump / brake / shoot', actionZh: '跳跃 / 刹车 / 击球' },
+        { keys: ['Space'], action: 'Jump / handbrake / shoot', actionZh: '跳跃 / 手刹 / 击球' },
         { keys: ['Esc'], action: 'Free cursor', actionZh: '释放光标' },
         { keys: ['E'], action: 'Interact / feed / sit', actionZh: '互动 / 投喂 / 入座' },
         { keys: ['Q'], action: 'Door / screen input', actionZh: '车门 / 大屏信号' },

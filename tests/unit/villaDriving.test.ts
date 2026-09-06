@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaActivities, VILLA_CAR } from '../../src/games/villaActivities.js';
-import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_DRIVING_COURSE } from '../../src/games/villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from '../../src/games/villaDriving.js';
 import { createVillaVehicle } from '../../src/games/villaVehicle.js';
 import { createVillaDrivingCourse } from '../../src/games/villaDrivingCourse.js';
 import { moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, type VillaCollider } from '../../src/games/villaWorld.js';
-const idle = { throttle: 0, steer: 0, brake: false };
+const idle = { throttle: 0, steer: 0, brake: false, handbrake: false };
 const tick = (state: ReturnType<typeof createVillaDriving>, input = idle, seconds = 1, obstacles: readonly VillaCollider[] = []) => {
   for (let i = 0; i < Math.round(seconds * 120); i++) advanceVillaDriving(state, input, 1 / 120, obstacles);
 };
@@ -26,6 +26,31 @@ describe('Villa driving physics', () => {
     expect(state.speed).toBeGreaterThan(speed); expect(state.speed).toBeLessThan(0);
     tick(state, { ...idle, brake: true }); expect(state.speed).toBe(0);
     state.speed = 2; tick(state); expect(state.speed).toBeGreaterThan(0); expect(state.speed).toBeLessThan(2);
+  });
+  it('distinguishes handbrake, service brake and coasting, with both brakes overriding throttle', () => {
+    const coast = createVillaDriving(), service = createVillaDriving(), hand = createVillaDriving();
+    for (const state of [coast, service, hand]) Object.assign(state, { x: 0, z: 25, speed: 7 });
+    tick(coast, idle, .25); tick(service, { ...idle, throttle: 1, brake: true }, .25); tick(hand, { ...idle, throttle: 1, handbrake: true }, .25);
+    expect(hand.speed).toBeLessThan(service.speed); expect(service.speed).toBeLessThan(coast.speed); expect(coast.speed).toBeLessThan(7);
+    expect(hand.handbrake).toBe(true); expect(service.handbrake).toBe(false); expect(coast.handbrake).toBe(false);
+    expect(hand.speed).toBeCloseTo(7 - 8.5 * .25); expect(service.speed).toBeCloseTo(7 - 5.5 * .25);
+    tick(hand, { ...idle, throttle: 1, handbrake: true }, 1); expect(hand.speed).toBe(0);
+    const stopped = hand.distance; tick(hand, { ...idle, throttle: 1, handbrake: true }); expect(hand.distance).toBe(stopped);
+    // Omitted optional handbrake must clear it, not retain a latched brake.
+    advanceVillaDriving(hand, { throttle: 1, steer: 0, brake: false }, .25, []);
+    expect(hand.handbrake).toBe(false); expect(hand.speed).toBeGreaterThan(0); expect(hand.distance).toBeGreaterThan(stopped);
+  });
+  it('stops reverse travel with either brake and recentres analog steering on release', () => {
+    for (const input of [{ ...idle, brake: true }, { ...idle, handbrake: true }]) {
+      const state = createVillaDriving(); Object.assign(state, { x: 0, z: 25, speed: -3, steering: .3 });
+      advanceVillaDriving(state, input, 1 / 120, []); expect(state.speed).toBeGreaterThan(-3); expect(state.speed).toBeLessThan(0);
+      tick(state, input); expect(state.speed).toBe(0); expect(state.steering).toBe(0);
+    }
+    const state = createVillaDriving(); advanceVillaDriving(state, { ...idle, steer: .5 }, 1 / 120, []);
+    expect(state.steering).toBeGreaterThan(0); expect(state.steering).toBeLessThan(.28);
+    tick(state, { ...idle, steer: .5 }, .25); expect(state.steering).toBeCloseTo(.28);
+    advanceVillaDriving(state, idle, 1 / 120, []); expect(state.steering).toBeGreaterThan(0); expect(state.steering).toBeLessThan(.28);
+    tick(state, idle, .25); expect(state.steering).toBe(0);
   });
   it('turns right with decreasing yaw and reverses the steering direction in reverse', () => {
     const forward = createVillaDriving(); tick(forward, { ...idle, throttle: 1, steer: 1 });
@@ -62,26 +87,12 @@ describe('Villa driving physics', () => {
   });
 });
 
-describe('Villa practice goals and vehicle transforms', () => {
-  it('requires genuine reverse travel, containment and a stationary dwell for reverse parking', () => {
-    const state = createVillaDriving(); Object.assign(state, { x: -6, z: 31.5 });
-    tick(state); expect(state.reverseParked).toBe(false);
-    tick(state, { ...idle, throttle: -1 }, 1.1);
-    tick(state, { ...idle, brake: true }, 1.5);
-    expect(state.reverseParked).toBe(true);
-  });
-  it('requires a fully contained and aligned stopped parallel park', () => {
-    const state = createVillaDriving(); Object.assign(state, { x: -5, z: 48, yaw: 0 }); tick(state); expect(state.parallelParked).toBe(false);
-    state.yaw = Math.PI / 2; tick(state); expect(state.parallelParked).toBe(true); expect(state.progress).toContain('Practice 1/4');
-  });
-  it('visits S and corner checkpoints in order, rather than awarding the last point alone', () => {
-    const state = createVillaDriving(); Object.assign(state, VILLA_DRIVING_COURSE.sPoints[3], { speed: 1 });
-    advanceVillaDriving(state, idle, 0.01, []); expect(state.sCheckpoint).toBe(0);
-    for (const points of [VILLA_DRIVING_COURSE.sPoints, VILLA_DRIVING_COURSE.cornerPoints]) for (const point of points) {
-      Object.assign(state, point, { speed: 1 }); advanceVillaDriving(state, idle, 0.01, []);
-    }
-    expect(state.sCheckpoint).toBe(4); expect(state.cornerCheckpoint).toBe(4); expect(state.progress).toContain('Practice 2/4');
-    expect(createVillaDriving()).toMatchObject({ sCheckpoint: 0, cornerCheckpoint: 0, reverseParked: false, parallelParked: false });
+describe('Villa scenic road and vehicle transforms', () => {
+  it('keeps a free-driving session without retired examination counters or scores', () => {
+    const state = createVillaDriving();
+    expect(Object.keys(state).sort()).toEqual(['x', 'z', 'yaw', 'speed', 'steering', 'distance', 'collisions', 'contact', 'handbrake'].sort());
+    tick(state, { ...idle, throttle: 1 });
+    expect(state.distance).toBeGreaterThan(0); expect(state.handbrake).toBe(false);
   });
   it('rotates existing ground anchors in the same convention as Three', () => {
     const state = createVillaDriving(); const anchors = villaCarAnchors(state);
@@ -102,6 +113,32 @@ describe('Villa practice goals and vehicle transforms', () => {
     vehicle.update(1, { ...activities, carDoorOpen: true, driving }); expect(vehicle.doorProgress).toBe(1);
     vehicle.update(0, activities); expect(vehicle.doorProgress).toBe(0); expect(body).toEqual(VILLA_CAR.body);
     expect(scene.getObjectByName('villa-vehicle')?.rotation.y).toBe(0);
+  });
+  it('projects the real top marker clockwise for right steer from the actual +Z-facing driver seat without spinning the shaft or car', () => {
+    const scene = new THREE.Group(), vehicle = createVillaVehicle(scene), activities = createVillaActivities(), driving = createVillaDriving();
+    const car = scene.getObjectByName('villa-vehicle')!, mount = scene.getObjectByName('vehicle-steering')!, wheel = scene.getObjectByName('vehicle-steering-wheel')!, marker = scene.getObjectByName('vehicle-wheel-top-marker')!, cabin = scene.getObjectByName('vehicle-cabin')!;
+    expect(wheel.parent).toBe(mount); expect(marker.parent).toBe(wheel); expect(mount.rotation.x).toBe(.30);
+    const camera = new THREE.PerspectiveCamera(64, 16 / 9, .01, 100);
+    camera.position.set(VILLA_CAR.seat.x, VILLA_CAR.seat.y + VILLA_CAR.eyeHeight, VILLA_CAR.seat.z);
+    camera.lookAt(camera.position.clone().add(new THREE.Vector3(0, 0, 1))); camera.updateMatrixWorld(true);
+    const project = () => {
+      vehicle.update(0, { ...activities, driving }); scene.updateMatrixWorld(true);
+      const center = wheel.getWorldPosition(new THREE.Vector3()).project(camera), top = marker.getWorldPosition(new THREE.Vector3()).project(camera);
+      return new THREE.Vector2(top.x - center.x, top.y - center.y);
+    };
+    const neutral = project(), shaftMatrix = mount.matrixWorld.clone(), bodyMatrix = car.matrixWorld.clone(), cabinMatrix = cabin.matrixWorld.clone();
+    expect(neutral.x).toBeCloseTo(0); expect(neutral.y).toBeGreaterThan(0);
+    tick(driving, { ...idle, steer: .2 }, .15); const right = project();
+    expect(wheel.rotation.z).toBeCloseTo(driving.steering * 4.5);
+    // NDC is +X right/+Y up: the top marker moving right is clockwise.
+    expect(right.x).toBeGreaterThan(0); expect(neutral.cross(right)).toBeLessThan(0);
+    expect(mount.matrixWorld.equals(shaftMatrix)).toBe(true); expect(car.matrixWorld.equals(bodyMatrix)).toBe(true); expect(cabin.matrixWorld.equals(cabinMatrix)).toBe(true);
+    expect(mount.rotation.z).toBe(0); expect(wheel.rotation.x).toBe(0); expect(wheel.rotation.y).toBe(0);
+    tick(driving, { ...idle, steer: -.2 }, .2); const left = project();
+    expect(left.x).toBeLessThan(0); expect(neutral.cross(left)).toBeGreaterThan(0);
+    tick(driving, idle, .2); const released = project();
+    expect(driving.steering).toBe(0); expect(wheel.rotation.z).toBe(0); expect(released.x).toBeCloseTo(neutral.x); expect(released.y).toBeCloseTo(neutral.y);
+    expect(mount.matrixWorld.equals(shaftMatrix)).toBe(true); expect(car.matrixWorld.equals(bodyMatrix)).toBe(true);
   });
   it.each([30, 45, 60])('allows walking to and exiting an angled car at %s degrees', degrees => {
     const root = new THREE.Group(), vehicle = createVillaVehicle(root);
@@ -147,12 +184,28 @@ describe('Villa practice goals and vehicle transforms', () => {
     expect(villaCarExitClear({ ...state, x: 29 }, [])).toBe(false); // property edge
     expect(villaCarExitClear({ ...state, yaw: NaN }, [])).toBe(false);
   });
-  it('provides a clear driveway and physically reachable course fixtures', () => {
-    const course = createVillaDrivingCourse(new THREE.Group());
-    expect(course.colliders.length).toBeGreaterThan(10);
-    for (let z = 3; z <= 30; z++) expect(villaDrivingPoseBlocked({ x: 16.2, z, yaw: 0 }, course.colliders)).toBe(false);
-    expect(villaDrivingPoseBlocked({ x: -6, z: 31, yaw: 0 }, course.colliders)).toBe(false);
-    expect(villaDrivingPoseBlocked({ x: -5, z: 48, yaw: Math.PI / 2 }, course.colliders)).toBe(false);
-    for (const point of VILLA_DRIVING_COURSE.cornerPoints) expect(villaDrivingPoseBlocked({ ...point, yaw: point.z === 47 ? -Math.PI / 2 : 0 }, course.colliders)).toBe(false);
+  it('provides a clear driveway and a wide continuous oval with only three island-tree colliders', () => {
+    const scene = new THREE.Group(), course = createVillaDrivingCourse(scene), road = VILLA_SCENIC_ROAD;
+    expect(course.colliders).toHaveLength(3); expect(road.width).toBeGreaterThan(8); expect(road.drivewayWidth).toBeGreaterThan(8);
+    expect(scene.getObjectByName('villa-driving-course')?.userData).toMatchObject({ kind: 'scenic-loop', examination: false, roadWidth: road.width });
+    for (const tree of course.colliders) {
+      expect(tree.maxX - tree.minX).toBeCloseTo(.3); expect(tree.maxZ - tree.minZ).toBeCloseTo(.3);
+      const x = (tree.minX + tree.maxX) / 2, z = (tree.minZ + tree.maxZ) / 2;
+      expect(((x - road.x) / (road.radiusX - road.width / 2)) ** 2 + ((z - road.z) / (road.radiusZ - road.width / 2)) ** 2).toBeLessThan(1);
+      expect(villaDrivingPoseBlocked({ x, z, yaw: 0 }, course.colliders)).toBe(true);
+    }
+    for (let z = 3; z <= 34; z++) expect(villaDrivingPoseBlocked({ x: 16.2, z, yaw: 0 }, course.colliders)).toBe(false);
+    // Sample the tangent-aligned car on the centre and both broad road lanes.
+    for (let i = 0; i < 96; i++) {
+      const angle = i / 96 * Math.PI * 2, dx = -road.radiusX * Math.sin(angle), dz = road.radiusZ * Math.cos(angle), length = Math.hypot(dx, dz);
+      for (const offset of [-2.2, 0, 2.2]) {
+        const pose = { x: road.x + road.radiusX * Math.cos(angle) + dz / length * offset,
+          z: road.z + road.radiusZ * Math.sin(angle) - dx / length * offset, yaw: Math.atan2(dx, dz) };
+        expect(villaDrivingPoseBlocked(pose, course.colliders)).toBe(false);
+      }
+    }
+    scene.traverse(node => expect(/cone|checkpoint|exam-sign|parking-bay/i.test(node.name)).toBe(false));
+    const state = createVillaDriving(); state.distance = 123; course.update(state);
+    expect(scene.getObjectByName('villa-driving-course')?.userData.distance).toBe(123);
   });
 });

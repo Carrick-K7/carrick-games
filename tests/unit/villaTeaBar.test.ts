@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaTeaBar, VILLA_TEA_BAR } from '../../src/games/villaTeaBar';
+import { VILLA_AQUARIUM } from '../../src/games/villaSeating';
 import { moveVillaPlayer, villaCollides, VILLA_WALL_COLLIDERS, type VillaCollider, type VillaPosition } from '../../src/games/villaWorld';
 
 const box = (x: number, z: number, w: number, d: number, height: number): VillaCollider => ({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, minY: 0, maxY: height });
 // Exact nearby fixture dimensions from villaFurnishings, without a DOM/canvas dependency.
 const neighbors = [
   box(-10, -0.1, 2.5, 0.42, 3.4), box(-10, 0.35, 2.88, 0.9, 1.61),
-  box(-3.5, 0.6, 3.43, 1.03, 2.17), box(-8.5, -2.8, 2.8, 1.35, 0.76),
+  box(VILLA_AQUARIUM.x, VILLA_AQUARIUM.z, VILLA_AQUARIUM.width, VILLA_AQUARIUM.depth, 2.17), box(-8.5, -2.8, 2.8, 1.35, 0.76),
   ...[-9.33, -7.67].flatMap(x => [-3.88, -1.72].map(z => box(x, z, 0.65, 0.68, 1.1))),
   box(-5.2, -5.6, 2.7, 1.43, 1.03), ...[-5.85, -4.55].map(x => box(x, -4.48, 0.54, 0.51, 0.8)),
   box(-5.67, -8.35, 1.22, 1.08, 0.99),

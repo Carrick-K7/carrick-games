@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EYE_HEIGHT, PLAYER_RADIUS, STAIR_TREAD_THICKNESS, STOREY, VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_HOTSPOTS,
+  EYE_HEIGHT, PLAYER_RADIUS, POOL, STAIR_TREAD_THICKNESS, STOREY, VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_HOTSPOTS,
   VILLA_RAILS, VILLA_RAMPS, VILLA_ROOMS, VILLA_SPAWN, VILLA_WALL_COLLIDERS,
   moveVillaPlayer, nearestVillaHotspot, villaCollides, villaFloor, villaRoomAt, villaSupportAt,
   type VillaCollider, type VillaPosition,
@@ -181,6 +181,17 @@ describe('Villa collision, support and safe boundaries', () => {
       expect(villaSupportAt(x, z, 0)).toBeNull();
     }
   });
+  it('excludes the widened west pool from every side while keeping the south deck and pet lawn supported', () => {
+    expect(POOL).toEqual({ minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 });
+    for (const [x, z] of [[-22.8, 0], [-18, -7], [-18, 6], [-14.6, 0]]) expect(villaSupportAt(x, z, 0)).toBeNull();
+    const north = moveVillaPlayer({ x: -18, y: 0, z: -9 }, 0, 5, []);
+    const south = moveVillaPlayer({ x: -18, y: 0, z: 9 }, 0, -5, []);
+    const west = moveVillaPlayer({ x: -24, y: 0, z: 0 }, 5, 0, []);
+    expect(north.z).toBeLessThanOrEqual(POOL.minZ - PLAYER_RADIUS);
+    expect(south.z).toBeGreaterThanOrEqual(POOL.maxZ + PLAYER_RADIUS);
+    expect(west.x).toBeLessThanOrEqual(POOL.minX - PLAYER_RADIUS);
+    for (const x of [-20.2, -16.7]) for (const z of [9, 10.85, 13.2, 18]) expect(villaSupportAt(x, z, 0)).toBe(0);
+  });
   it('supports all inclusive expanded ground bounds and rejects positions just outside', () => {
     for (const [x, z] of [[-24.5, 20], [27.5, 20], [0, -16.5], [0, 56.5], [25, 0], [0, 24], [27.5, 56.5]]) {
       expect(villaSupportAt(x, z, 0)).toBe(0);
@@ -295,10 +306,12 @@ describe('Villa room and interaction classification', () => {
     expect(villaRoomAt({ x: 3.2, y: 1.8, z: -4 }).id).toBe('stairs');
     expect([-10, 0, 3.6, 7.2, 100].map(villaFloor)).toEqual([0, 0, 1, 2, 2]);
   });
-  it.each(VILLA_HOTSPOTS)('finds $id locally but never from another floor', hotspot => {
+  it.each(VILLA_HOTSPOTS)('finds $id locally without selecting fixtures on the wrong floor', hotspot => {
     expect(nearestVillaHotspot(hotspot)?.id).toBe(hotspot.id);
+    // The new east library sofa is directly above the ground-floor racing approach.
     const above = hotspot.id === 'elevator'
-      ? VILLA_HOTSPOTS.find(h => h.id === 'elevator' && h.y === hotspot.y + STOREY) ?? null : null;
+      ? VILLA_HOTSPOTS.find(h => h.id === 'elevator' && h.y === hotspot.y + STOREY) ?? null
+      : hotspot.id === 'racing' ? VILLA_HOTSPOTS.find(h => h.id === 'sofa-library-east')! : null;
     expect(nearestVillaHotspot({ ...hotspot, y: hotspot.y + STOREY })).toBe(above);
     expect(hotspot.name.length).toBeGreaterThan(0);
     expect(hotspot.zh.length).toBeGreaterThan(0);

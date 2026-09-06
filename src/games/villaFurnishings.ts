@@ -5,6 +5,7 @@ import { VILLA_SNOOKER } from './villaActivities.js';
 import { createVillaFaucet } from './villaFaucet.js';
 import { createVillaBedroom } from './villaBedroom.js';
 import { createVillaTeaBar } from './villaTeaBar.js';
+import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat } from './villaSeating.js';
 import type { VillaCollider } from './villaWorld.js';
 
 export interface VillaFurnishingState {
@@ -105,13 +106,23 @@ export function furnishVilla(scene: THREE.Scene): {
   function cushion(x: number, y: number, z: number, material: THREE.Material, yaw = 0) {
     at(x, y, z, yaw, () => { box(0, 0, 0, 0.55, 0.52, 0.22, material, 0.1); box(0, 0, 0.117, 0.45, 0.42, 0.012, material, 0.045); });
   }
-  function sofa(w = 3.4, material = linen, chaise = false) {
+  function seatMarker(id: string, width: number, depth: number): void {
+    const definition = villaRelaxSeat(id)!;
+    const marker = new THREE.Object3D(); marker.name = `relax-seat/${id}`;
+    marker.position.set(definition.seat.x, definition.seat.y, definition.seat.z);
+    marker.rotation.y = definition.yaw;
+    const origin = new THREE.Vector3().applyMatrix4(frame);
+    marker.userData = { ...definition, modelOrigin: { x: origin.x, y: origin.y, z: origin.z }, width, depth };
+    root.add(marker); // Metadata only: furniture remains in its existing material batches.
+  }
+  function sofa(w = 3.4, material = linen, chaise = false, seatId?: string) {
     legs(w, 1.2, 0.2); box(0, 0.32, 0, w, 0.37, 1.26, material, 0.12); box(0, 0.85, 0.5, w, 0.82, 0.28, material, 0.11);
     for (const x of [-w / 2 + 0.13, w / 2 - 0.13]) box(x, 0.62, 0, 0.28, 0.65, 1.3, material, 0.11);
     const n = Math.max(1, Math.round(w / 1.1));
     for (let i = 0; i < n; i++) { const x = -w / 2 + 0.3 + (i + 0.5) * (w - 0.6) / n; box(x, 0.56, -0.1, (w - 0.63) / n, 0.23, 0.98, material, 0.075); box(x, 0.92, 0.31, (w - 0.65) / n, 0.55, 0.22, material, 0.09); }
     cushion(-w / 2 + 0.65, 0.86, 0.12, terra, 0.14); if (w > 1.6) cushion(w / 2 - 0.65, 0.86, 0.11, sage, -0.17); hit(0, 0, 0, w, 1.26, 1.3);
     if (chaise) { box(-w / 2 + 0.63, 0.36, -1.05, 1.24, 0.48, 1.4, material, 0.13); box(-w / 2 + 0.63, 0.61, -1.03, 1.17, 0.15, 1.33, material, 0.07); hit(-w / 2 + 0.63, 0, -1.05, 1.24, 0.7, 1.4); }
+    if (seatId) seatMarker(seatId, w, 1.3);
   }
   function plant(x: number, y: number, z: number, s = 1, flowers = false) {
     at(x, y, z, 0, () => {
@@ -156,12 +167,10 @@ export function furnishVilla(scene: THREE.Scene): {
   }
 
   // Living room. The chaise is on the west, preserving the route to the aquarium.
-  at(-8, 0, 5.8, 0, () => sofa(4.2, linen, true)); box(-8, 0.018, 3.9, 6.1, 0.028, 4.15, rugMat, 0.01);
+  at(-8, 0, 5.8, 0, () => sofa(4.2, linen, true, 'sofa-living')); box(-8, 0.018, 3.9, 6.1, 0.028, 4.15, rugMat, 0.01);
   at(-7.6, 0, 3.55, 0, () => { table(2.2, 1.25, 0.44, walnut); box(-0.45, 0.49, 0.06, 0.55, 0.08, 0.42, sage); box(-0.42, 0.545, 0.02, 0.47, 0.04, 0.35, cream); tea(0.6, 0.45, 0.13); plant(0.05, 0.45, -0.25, 0.46, true); });
   at(-10.8, 0, 6.8, 0, () => lamp(true)); plant(-3, 0, 7.9, 1.45);
-  // A tiny sleeping cat, not a collider.
-  orb(-7.1, 0.84, 5.56, 0.32, 0.16, 0.24, coral); orb(-6.88, 0.89, 5.43, 0.14, 0.13, 0.13, coral);
-  put(new THREE.ConeGeometry(0.063, 0.13, 4), coral, -6.96, 1.025, 5.43); put(new THREE.ConeGeometry(0.063, 0.13, 4), coral, -6.82, 1.025, 5.43); put(new THREE.TorusGeometry(0.23, 0.055, 6, 14, Math.PI * 1.5), coral, -7.17, 0.86, 5.51, Math.PI / 2);
+  // The live lawn cat occasionally visits; no duplicate static animal on the sofa.
   // A full chimney breast supports the mantel and artwork between living/dining.
   box(-10, 1.7, -0.1, 2.5, 3.4, 0.42, cream, 0);
   box(-10, 0.13, 0.37, 2.85, 0.26, 0.88, stone); box(-10, 0.73, 0.12, 2.42, 1.28, 0.48, dark);
@@ -176,7 +185,7 @@ export function furnishVilla(scene: THREE.Scene): {
   // Aquarium: real transparent panels, fine substrate and individually animated fish.
   const glass = new THREE.MeshStandardMaterial({ color: '#bfedf0', roughness: 0.09, metalness: 0.12, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide });
   const water = new THREE.MeshStandardMaterial({ color: '#56b9be', roughness: 0.15, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
-  at(-3.5, 0, 0.6, 0, () => {
+  at(VILLA_AQUARIUM.x, 0, VILLA_AQUARIUM.z, 0, () => {
     box(0, 0.325, 0, 3.4, 0.65, 1, walnut, 0.06);
     for (const x of [-1.1, 0, 1.1]) { box(x, 0.34, 0.514, 1.055, 0.5, 0.026, oak); box(x + 0.36, 0.43, 0.539, 0.11, 0.025, 0.025, brass); }
     box(0, 0.69, 0, 3.43, 0.09, 1.03, black); box(0, 2.135, 0, 3.43, 0.07, 1.03, black); box(0, 0.77, 0, 3.24, 0.09, 0.89, stone);
@@ -188,9 +197,9 @@ export function furnishVilla(scene: THREE.Scene): {
       orb(x, 0.91, -0.12, 0.18, 0.17, 0.17, stone);
       for (let i = 0; i < 5; i++) { const px = x + (i - 2) * 0.095, h = 0.3 + random() * 0.57; rod(new THREE.Vector3(px, 0.8, -0.22), new THREE.Vector3(px + 0.08, 0.8 + h, -0.2), 0.014, leaf); orb(px + 0.06, 0.86 + h * 0.66, -0.2, 0.053, h * 0.45, 0.027, leafLight, -0.2); }
     }
-    hit(0, 0, 0, 3.43, 2.17, 1.03);
+    hit(0, 0, 0, VILLA_AQUARIUM.width, 2.17, VILLA_AQUARIUM.depth);
   });
-  const aquariumLight = new THREE.PointLight('#81ded9', 1.6, 4.5, 2); aquariumLight.position.set(-3.5, 1.8, 0.6); root.add(aquariumLight);
+  const aquariumLight = new THREE.PointLight('#81ded9', 1.6, 4.5, 2); aquariumLight.name = 'aquarium/light'; aquariumLight.position.set(VILLA_AQUARIUM.x, 1.8, VILLA_AQUARIUM.z); root.add(aquariumLight);
   const fish: THREE.Group[] = [], fishMaterials = ['#eaaa49', '#d77450', '#65b7bf', '#c4b8dc', '#e3d794'].map(c => mat(c, 0.35));
   for (let i = 0; i < 10; i++) {
     const f = new THREE.Group(); f.name = `Aquarium fish ${i + 1}`;
@@ -201,7 +210,7 @@ export function furnishVilla(scene: THREE.Scene): {
     f.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } }); f.scale.setScalar(0.73 + (i % 4) * 0.13); root.add(f); fish.push(f);
   }
   const bubbleMat = new THREE.MeshBasicMaterial({ color: '#c7f8f1', transparent: true, opacity: 0.38, depthWrite: false });
-  const bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(0.018, 6, 5), bubbleMat, 18); bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled = false; root.add(bubbles); const dummy = new THREE.Object3D();
+  const bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(0.018, 6, 5), bubbleMat, 18); bubbles.name = 'aquarium/bubbles'; bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled = false; root.add(bubbles); const dummy = new THREE.Object3D();
 
   // Fitted kitchen: low splashback stays below the two north windows. The
   // cooker/hood and upper cabinetry attach only to the solid central pier.
@@ -361,7 +370,7 @@ export function furnishVilla(scene: THREE.Scene): {
   // First floor bedrooms and library.
   bed(-8, 3.6, 5.5, 0); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
   const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
-  at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage)); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-2.14, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
+  at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage, false, 'sofa-master')); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-2.14, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.
   for (const x of [-11.05, -8.97, -5.72, -2.8]) {
     for (let i = 0; i < 4; i++) cyl(x + (i - 1.5) * 0.075, 5.13, 8.72, 0.055, 0.065, 2.77, linen);
@@ -369,7 +378,7 @@ export function furnishVilla(scene: THREE.Scene): {
   bed(-8, 3.6, -5.5, Math.PI, 2.1);
   at(-4.05, 3.6, -6.65, 0, () => { table(1.75, 0.75); books(-0.75, 0.77, -0.08, 4); at(0.62, 0.77, -0.05, 0, () => lamp()); box(0, 0.775, 0.1, 0.55, 0.013, 0.33, cream, 0); });
   at(-4.05, 3.6, -5.65, 0, () => chair()); at(-9.8, 3.6, -0.55, Math.PI, () => shelf(2.4)); plant(-3, 3.6, -8.1, 1.1);
-  at(10.7, 3.6, 3.45, 0, () => shelf(1.9)); at(11.48, 3.6, 6.4, -Math.PI / 2, () => shelf(2.8)); at(6.9, 3.6, 6.9, -0.4, () => sofa(1.5, terra)); at(4.2, 3.6, 6.4, 0.4, () => sofa(1.4, linen));
+  at(10.7, 3.6, 3.45, 0, () => shelf(1.9)); at(11.48, 3.6, 6.4, -Math.PI / 2, () => shelf(2.8)); at(6.9, 3.6, 6.9, -0.4, () => sofa(1.5, terra, false, 'sofa-library-east')); at(4.2, 3.6, 6.4, 0.4, () => sofa(1.4, linen, false, 'sofa-library-west'));
   at(5.5, 3.6, 5.6, 0, () => { table(1.25, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(5.7, 3.617, 6.3, 4.6, 0.028, 3.5, rugMat, 0); plant(3, 3.6, 8.1, 1.55); at(8.45, 3.6, 7.6, 0, () => lamp(true));
 
   // Bathroom/laundry, with an open tub basin and a metallic (non-render-target) mirror.
@@ -387,7 +396,7 @@ export function furnishVilla(scene: THREE.Scene): {
   });
 
   // Roof terrace leaves stair x[2.15,6.25], z[-7,.5] completely vacant.
-  at(-7, 7.2, 5.5, 0, () => sofa(4.15, sage, true)); at(-7, 7.2, 3.4, 0, () => { table(1.85, 1.05, 0.43); tea(0.5, 0.44, 0); plant(-0.3, 0.44, 0, 0.45, true); }); box(-7, 7.217, 4.3, 5.8, 0.028, 4.4, rugMat, 0);
+  at(-7, 7.2, 5.5, 0, () => sofa(4.15, sage, true, 'sofa-roof')); at(-7, 7.2, 3.4, 0, () => { table(1.85, 1.05, 0.43); tea(0.5, 0.44, 0); plant(-0.3, 0.44, 0, 0.45, true); }); box(-7, 7.217, 4.3, 5.8, 0.028, 4.4, rugMat, 0);
   at(-6, 7.2, -4.5, 0, () => {
     cyl(0, 0.36, 0, 0.07, 0.07, 0.72, black); cyl(0, 0.04, 0, 0.48, 0.48, 0.08, black); cyl(0, 0.77, 0, 0.88, 0.88, 0.1, oak); hit(0, 0, 0, 1.76, 0.83, 1.76); plant(0, 0.83, 0, 0.42, true);
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; at(Math.sin(a) * 1.3, 0, Math.cos(a) * 1.3, a, () => chair()); }
@@ -409,18 +418,27 @@ export function furnishVilla(scene: THREE.Scene): {
     for (let level = 0; level < 4; level++) { box(0, 0.2 + level * 0.64, 0, 1.7, 0.06, 0.6, steel); for (const x of [-0.43, 0.43]) { box(x, 0.42 + level * 0.64, 0, 0.72, 0.37, 0.48, level % 2 ? sage : oak); box(x, 0.44 + level * 0.64, 0.247, 0.2, 0.065, 0.01, cream, 0); } } hit(0, 0, 0, 1.8, 2.4, 0.64);
   });
 
-  // Poolside loungers fit between the parent's pool edge x=-14 and house x=-12.
-  for (const z of [-3, 1]) at(-13.04, 0, z, 0, () => {
-    legs(0.94, 2.42, 0.28); box(0, 0.32, 0, 0.91, 0.14, 2.32, oak);
-    for (let i = 0; i < 12; i++) box(0, 0.42, -1.05 + i * 0.18, 0.87, 0.06, 0.135, linen, 0.02);
-    put(new RoundedBoxGeometry(0.9, 0.12, 0.86, 2, 0.035), linen, 0, 0.64, 0.9, -0.55); box(0, 0.86, 1.1, 0.65, 0.16, 0.34, sage, 0.07); hit(0, 0, 0, 0.97, 1, 2.7);
+  // Both loungers face -Z across the widened west pool from its dry south deck.
+  for (const id of ['lounger-west', 'lounger-east']) {
+    const seat = villaRelaxSeat(id)!;
+    at(seat.seat.x, 0, 9, seat.yaw, () => {
+      legs(0.94, 2.42, 0.28); box(0, 0.32, 0, 0.91, 0.14, 2.32, oak);
+      for (let i = 0; i < 12; i++) box(0, 0.42, -1.05 + i * 0.18, 0.87, 0.06, 0.135, linen, 0.02);
+      put(new RoundedBoxGeometry(0.9, 0.12, 0.86, 2, 0.035), linen, 0, 0.64, 0.9, -0.55); box(0, 0.86, 1.1, 0.65, 0.16, 0.34, sage, 0.07); hit(0, 0, 0, 0.97, 1, 2.7);
+      seatMarker(id, 0.97, 2.7);
+    });
+  }
+  at(-18.45, 0, 11.5, 0, () => {
+    cyl(0, 0.065, 0, 0.42, 0.48, 0.13, stone); cyl(0, 1.3, 0, 0.037, 0.037, 2.6, walnut); put(new THREE.ConeGeometry(1.65, 0.53, 10, 1, true), linen, 0, 2.63, 0);
+    for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; rod(new THREE.Vector3(0, 2.895, 0), new THREE.Vector3(Math.cos(a) * 1.65, 2.365, Math.sin(a) * 1.65), 0.014, oak); }
+    hit(0, 0, 0, 0.96, 0.13, 0.96); hit(0, 0.13, 0, 0.074, 2.5, 0.074);
   });
-  cyl(-13, 0.065, 6, 0.42, 0.48, 0.13, stone); cyl(-13, 1.3, 6, 0.037, 0.037, 2.6, walnut); put(new THREE.ConeGeometry(1.65, 0.53, 10, 1, true), linen, -13, 2.63, 6);
-  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; rod(new THREE.Vector3(-13, 2.895, 6), new THREE.Vector3(-13 + Math.cos(a) * 1.65, 2.365, 6 + Math.sin(a) * 1.65), 0.014, oak); }
   for (const x of [-3, 3]) { plant(x, 0, 10.3, 1.25, true); hit(x, 0, 10.3, 0.6, 0.48, 0.6); }
   // The same ten perimeter tree sites are now planted by villaGarden.
-  for (let i = 0; i < 28; i++) orb(i < 14 ? -23.35 : 23.35, 0.49, -12 + (i % 14) * 2.45, 0.72, 0.55 + random() * 0.25, 0.82, i % 3 ? leaf : leafLight);
-  for (const [x, z] of [[-9, 11], [-10.5, 16], [7, 11], [8.5, 18], [-19, 8]]) { plant(x, 0, z, 1, true); plant(x + 0.8, 0, z + 0.3, 0.65, true); }
+  // Keep the west hedge between the fence and the enlarged pool's coping.
+  for (let i = 0; i < 28; i++) orb(i < 14 ? -24.15 : 23.35, 0.49, -12 + (i % 14) * 2.45, i < 14 ? .5 : .72, 0.55 + random() * 0.25, .82, i % 3 ? leaf : leafLight);
+  for (const [x, z] of [[-9, 11], [-10.5, 16], [7, 11], [8.5, 18], [-22.6, 11.5]]) { plant(x, 0, z, 1, true); plant(x + 0.8, 0, z + 0.3, 0.65, true); }
+  hit(-22.6, 0, 11.5, .5, .39, .5); hit(-21.8, 0, 11.8, .325, .2535, .325);
   // These two existing pots share the pets' lawn: preserve their solid footprints.
   hit(-10.5, 0, 16, .5, .39, .5); hit(-9.7, 0, 16.3, .325, .2535, .325);
 
@@ -431,6 +449,11 @@ export function furnishVilla(scene: THREE.Scene): {
     if (!geometry) continue; geometry.computeBoundingSphere(); staticVertices += geometry.getAttribute('position').count;
     const mesh = new THREE.Mesh(geometry, material); mesh.name = 'Batched villa details'; mesh.castShadow = !material.transparent; mesh.receiveShadow = !material.transparent; root.add(mesh);
   }
+  root.userData.relaxSeats = VILLA_RELAX_SEATS;
+  root.userData.aquarium = VILLA_AQUARIUM;
+  const aquariumMarker = new THREE.Object3D(); aquariumMarker.name = 'aquarium/cabinet';
+  aquariumMarker.position.set(VILLA_AQUARIUM.x, 0, VILLA_AQUARIUM.z); aquariumMarker.userData = { ...VILLA_AQUARIUM };
+  root.add(aquariumMarker);
   root.userData.furnishings = { colliders: colliders.length, staticBatches: batches.size, staticVertices, fish: fish.length, pointLights: 2 };
   let wasEvening: boolean | undefined;
   let previousTime = 0, foodBlend = 0;
@@ -442,10 +465,10 @@ export function furnishVilla(scene: THREE.Scene): {
     fish.forEach((f, i) => {
       const a = t * (0.2 + i * 0.012) + i * 2.399, radius = 1.28 - foodBlend * 0.91, depth = 0.29 - foodBlend * 0.1;
       const cruisingY = 1.39 + Math.sin(a * 1.37 + i) * 0.35, eatingY = 1.81 + Math.sin(a * 2 + i) * 0.09;
-      f.position.set(-3.5 + Math.cos(a) * radius, THREE.MathUtils.lerp(cruisingY, eatingY, foodBlend), 0.6 + Math.sin(a) * depth);
+      f.position.set(VILLA_AQUARIUM.x + Math.cos(a) * radius, THREE.MathUtils.lerp(cruisingY, eatingY, foodBlend), VILLA_AQUARIUM.z + Math.sin(a) * depth);
       f.rotation.y = Math.atan2(-Math.cos(a) * depth, -Math.sin(a) * radius); f.rotation.z = Math.sin(t * 2 + i) * 0.06; f.children[1].rotation.y = Math.sin(t * 8 + i) * 0.35;
     });
-    for (let i = 0; i < 18; i++) { const phase = (t * 0.21 + i / 18) % 1; dummy.position.set(-4.92 + Math.sin(t * 1.8 + i) * 0.055 + (i % 2) * 2.8, 0.86 + phase * 1.15, 0.39 + Math.cos(i + t) * 0.05); dummy.scale.setScalar(0.55 + phase * 0.5); dummy.updateMatrix(); bubbles.setMatrixAt(i, dummy.matrix); } bubbles.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < 18; i++) { const phase = (t * 0.21 + i / 18) % 1; dummy.position.set(VILLA_AQUARIUM.x - 1.42 + Math.sin(t * 1.8 + i) * 0.055 + (i % 2) * 2.8, 0.86 + phase * 1.15, VILLA_AQUARIUM.z - 0.21 + Math.cos(i + t) * 0.05); dummy.scale.setScalar(0.55 + phase * 0.5); dummy.updateMatrix(); bubbles.setMatrixAt(i, dummy.matrix); } bubbles.instanceMatrix.needsUpdate = true;
     for (let i = 0; i < flames.length; i++) { flames[i].visible = state.fireplace; flames[i].scale.y = 0.2 + 0.16 * (0.5 + Math.sin(t * 8 + i * 1.9) * 0.5); flames[i].position.y = 0.48 + flames[i].scale.y * 0.67; flames[i].rotation.z = Math.sin(t * 5 + i) * 0.16; }
     fireLight.intensity = state.fireplace ? (state.evening ? 3.5 : 1.8) * (0.9 + Math.sin(t * 11) * 0.06 + Math.sin(t * 7.3) * 0.04) : 0;
     if (wasEvening !== state.evening) { lampGlow.emissiveIntensity = state.evening ? 1.5 : 0.2; aquariumLight.intensity = state.evening ? 2.1 : 1; wasEvening = state.evening; }

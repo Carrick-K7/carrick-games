@@ -1,14 +1,15 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
 export type VillaScreenSource = 'pc' | 'ps' | 'switch';
-export type VillaSeat = 'car' | 'racing' | null;
+export type VillaSeat = 'car' | 'racing' | 'scooter' | 'sofa' | 'lounger' | null;
 export interface VillaActivityState {
   carDoorOpen: boolean;
   seated: VillaSeat;
+  relaxSeatId?: string | null;
   screenSource: VillaScreenSource;
   displayLights: boolean;
 }
-export const createVillaActivities = (): VillaActivityState => ({ carDoorOpen: false, seated: null, screenSource: 'pc', displayLights: true });
+export const createVillaActivities = (): VillaActivityState => ({ carDoorOpen: false, seated: null, relaxSeatId: null, screenSource: 'pc', displayLights: true });
 export const CAR_DOOR_SECONDS = 0.65;
 export const VILLA_WALK_SPEED = 2.75;
 export const VILLA_RUN_SPEED = 5.8;
@@ -23,6 +24,8 @@ export const VILLA_CAR = {
   eyeHeight: 1.16,
   yaw: Math.PI,
 };
+/** Park beside the driveway, leaving both sides clear of the lemon-tree trunk. */
+export const VILLA_SCOOTER = { center: { x: 21.5, y: 0, z: 7 }, eyeHeight: 1.44, yaw: Math.PI };
 export const VILLA_RACING = {
   seat: { x: 9.8, y: 0, z: 6.12 } satisfies VillaPosition,
   exit: { x: 8.15, y: 0, z: 6.2 } satisfies VillaPosition,

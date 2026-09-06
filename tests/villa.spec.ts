@@ -109,9 +109,9 @@ test.describe('Warm Villa', () => {
       walk(4.2, 1.4); walk(4.2, 4); // gaming room
       walk(4.2, 1.4); walk(13.4, 1.4); // internally connected garage
       walk(0, 1.4); walk(0, -2.8); walk(-3.2, -2.8); // kitchen
-      walk(0, -2.8); walk(0, 2.2); walk(-3.5, 2.2); key('e');
+      walk(0, -2.8); walk(0, 2.2); walk(-3.5, 2.2); walk(-3.5, .8); key('e');
       const fed = game.state.fedUntil > game.time;
-      walk(-6, 2.2); walk(-10, 2.2); key('e');
+      walk(-3.5, 2.2); walk(-6, 2.2); walk(-10, 2.2); key('e');
       const fireOff = !game.state.fireplace;
       game.renderFrame();
       const interiorImage = canvas.toDataURL('image/png');
