@@ -325,10 +325,82 @@ describe('scene-owned villa pet geometry without WebGL', () => {
     model.update(2, state);
     expect(scene.getObjectByName('parrot/wing-left')!.rotation.z).not.toBe(0);
     expect(scene.getObjectByName('parrot-blue/wing-left')!.rotation.z).toBeCloseTo(0);
-    expect(left.rotation.x).toBe(-0.65); expect(right.rotation.x).toBe(-0.65);
+    expect(left.rotation.x).toBe(1.05); expect(right.rotation.x).toBe(1.05);
     bird.y = 0; bird.wingFold = 0; bird.speed = 0; model.update(3, state);
     expect(scene.getObjectByName('parrot/wing-left')!.rotation.z).toBeCloseTo(0);
     expect(left.rotation.x).toBe(0);
+  });
+
+  it.each(['parrot', 'parrot-blue'])('%s keeps actual tail feathers embedded and tucks actual toes backward through flight and landing', id => {
+    const scene = new THREE.Scene(), model = createVillaPetModel(scene), state = createVillaPets();
+    const bird = state.pets.find(p => p.id === id)!;
+    const body = scene.getObjectByName(`${id}/body`)!;
+    const tail = scene.getObjectByName(`${id}/tail`)!;
+    const feet = ['left', 'right'].map(side => scene.getObjectByName(`${id}/foot-${side}`)!);
+    // Read authored mesh vertices, not marker/pivot positions. The world->body
+    // transform includes each part's animation while cancelling the bird's
+    // translation, yaw, torso pitch and bank for an anatomical-space comparison.
+    const verticesInBody = (part: THREE.Object3D, toesOnly = false): THREE.Vector3[] => {
+      const points: THREE.Vector3[] = [], inverseBody = body.matrixWorld.clone().invert();
+      part.traverse(node => {
+        if (!(node instanceof THREE.Mesh)) return;
+        const positions = node.geometry.getAttribute('position');
+        const toBody = inverseBody.clone().multiply(node.matrixWorld);
+        for (let i = 0; i < positions.count; i++) {
+          // The toe ellipsoids extend below local y=-.09; the shank does not.
+          if (toesOnly && positions.getY(i) >= -.091) continue;
+          points.push(new THREE.Vector3().fromBufferAttribute(positions, i).applyMatrix4(toBody));
+        }
+      });
+      return points;
+    };
+    const poses = [
+      { name: 'standing', y: 0, speed: 0, verticalSpeed: 0, bank: 0, wingFold: 0, wingPhase: 0, yaw: .7 },
+      { name: 'climbing', y: .3, speed: .45, verticalSpeed: .48, bank: 0, wingFold: 1, wingPhase: .8, yaw: -1.2 },
+      { name: 'banked flight left', y: .65, speed: .66, verticalSpeed: 0, bank: -.18, wingFold: 1, wingPhase: 3.8, yaw: 2.3 },
+      { name: 'banked flight right', y: .65, speed: .66, verticalSpeed: -.1, bank: .18, wingFold: 1, wingPhase: 5.1, yaw: -2.6 },
+      { name: 'landing approach', y: .09, speed: .12, verticalSpeed: -.48, bank: .06, wingFold: .35, wingPhase: 1.7, yaw: 1.5 },
+      { name: 'landed', y: 0, speed: 0, verticalSpeed: 0, bank: 0, wingFold: 0, wingPhase: 0, yaw: -.4 },
+    ];
+    let standingToes: THREE.Vector3[][] = [];
+    try {
+      for (const [index, pose] of poses.entries()) {
+        const { name, ...animation } = pose;
+        Object.assign(bird, animation, { x: -16 + index * .3, z: 17 - index * .2, mode: 'exploring', gait: 1.4 });
+        model.update(index + .25, state); scene.updateMatrixWorld(true);
+        const feathers = verticesInBody(tail);
+        expect(feathers.length, name).toBeGreaterThan(20);
+        const torsoDistances = feathers.map(p => (p.x / .095) ** 2 + ((p.y - .23) / .145) ** 2 + (p.z / .105) ** 2);
+        // Require meaningful penetration into the analytic torso, not a barely
+        // touching group origin that could hide detached visible geometry.
+        expect(Math.min(...torsoDistances), name).toBeLessThan(.95);
+        expect(torsoDistances.filter(d => d < 1 - 1e-5).length, name).toBeGreaterThan(5);
+        const toes = feet.map(foot => verticesInBody(foot, true));
+        toes.forEach(points => expect(points.length).toBeGreaterThan(20));
+        if (index === 0) standingToes = toes;
+        for (let side = 0; side < toes.length; side++) {
+          expect(toes[side].length).toBe(standingToes[side].length);
+          for (let i = 0; i < toes[side].length; i++) {
+            const point = toes[side][i], ground = standingToes[side][i];
+            expect([point.x, point.y, point.z].every(Number.isFinite)).toBe(true);
+            if (pose.y > .025) {
+              // Bird front is +Z. Every sampled airborne toe folds behind the
+              // torso centre and rises from its standing location, beneath the belly.
+              expect(point.z, `${name}: rearward toe`).toBeLessThan(0);
+              expect(point.z, `${name}: rearward vs ground`).toBeLessThan(ground.z - .025);
+              expect(point.y, `${name}: raised toe`).toBeGreaterThan(ground.y + .01);
+              expect(point.y, `${name}: beneath torso`).toBeLessThan(.23);
+            } else {
+              expect(point.distanceTo(ground), name).toBeLessThan(1e-6);
+            }
+          }
+        }
+      }
+    } finally {
+      const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+      scene.traverse(node => { if (node instanceof THREE.Mesh) { geometries.add(node.geometry); (Array.isArray(node.material) ? node.material : [node.material]).forEach(m => materials.add(m)); } });
+      geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); scene.clear();
+    }
   });
 
   it.each(VILLA_PET_KINDS)('shows a stationary species-appropriate %s dish only while eating and clears it on reset', kind => {

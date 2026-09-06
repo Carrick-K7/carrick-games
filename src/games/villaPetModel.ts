@@ -101,7 +101,9 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
         oval(b, 0xffffff, [side * (bird ? 0.069 : 0.059) - 0.003, 0.023, bird ? 0.069 : 0.101], [0.004, 0.005, 0.003]);
       }
     });
-    const tail = part(body, `${id}/tail`, [0, bird ? 0.16 : rabbit ? 0.18 : 0.26, -0.205], b => {
+    // A parrot's shorter rump needs its own embedded tail root, not the
+    // quadrupeds' rear anchor (which leaves the feathers floating behind it).
+    const tail = part(body, `${id}/tail`, [0, bird ? .205 : rabbit ? .18 : .26, bird ? -.075 : -.205], b => {
       if (rabbit) oval(b, 0xfff5e7, [0, 0, -0.034], [0.061, 0.06, 0.061]);
       else if (bird) {
         oval(b, 0x3682a7, [0, -0.055, -0.064], [0.052, 0.033, 0.105]);
@@ -200,9 +202,9 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       }
       rig.legs.forEach((leg, i) => {
         const stride = Math.sin(pet.gait + i * Math.PI);
-        leg.rotation.x = bird ? airborne ? -0.65 : moving ? stride * 0.27 : 0
+        leg.rotation.x = bird ? airborne ? 1.05 : moving ? stride * 0.27 : 0
           : moving ? stride * 0.24 : sitting ? (i ? -0.32 : 0.32) : 0;
-        if (bird) leg.position.y = 0.12 + (airborne ? 0.018 : moving ? Math.max(0, stride) * 0.028 : 0);
+        if (bird) leg.position.y = 0.12 + (airborne ? 0.03 : moving ? Math.max(0, stride) * 0.028 : 0);
       });
       rig.wings.forEach((wing, i) => {
         // Smooth spread/fold, asymmetric downstroke, and feather sweep in recovery.
