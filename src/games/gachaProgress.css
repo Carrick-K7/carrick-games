@@ -1,0 +1,32 @@
+.gacha-progress-hud {
+  position: absolute;
+  top: calc(12px + var(--safe-top, 0px));
+  left: calc(12px + var(--safe-left, 0px));
+  z-index: 30;
+  box-sizing: border-box;
+  width: min(320px, calc(100% - 132px - var(--safe-left, 0px) - var(--safe-right, 0px)));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, rgba(125,145,155,.22));
+  border-radius: 12px;
+  background: var(--page, #111827);
+  color: var(--text, #e5e7eb);
+  box-shadow: 0 2px 12px rgba(0,0,0,.05);
+  pointer-events: none;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.gacha-progress-metric { min-width: 0; position: relative; }
+.gacha-progress-metric + .gacha-progress-metric { border-left: 1px solid var(--border, rgba(125,145,155,.22)); padding-left: 12px; }
+.gacha-progress-metric > span { display: block; opacity: .62; font-size: 10px; line-height: 14px; white-space: nowrap; }
+.gacha-progress-metric > strong { display: block; font-size: 18px; line-height: 24px; font-weight: 650; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.gacha-progress-track { height: 2px; background: rgba(125,145,155,.2); border-radius: 2px; overflow: hidden; }
+.gacha-progress-track > i { display: block; height: 100%; background: #38a8cb; border-radius: inherit; transition: width .25s ease; }
+@media (max-width: 420px) {
+  .gacha-progress-hud { gap: 8px; padding: 7px 8px; }
+  .gacha-progress-metric + .gacha-progress-metric { padding-left: 8px; }
+  .gacha-progress-metric > span { font-size: 9px; }
+  .gacha-progress-metric > strong { font-size: 15px; line-height: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .gacha-progress-track > i { transition: none; } }

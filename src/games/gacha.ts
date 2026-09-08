@@ -18,8 +18,9 @@
  * menu shows a mode switcher automatically once more than one exists.
  */
 
-import { BaseGame, createDefaultGameHost, type GameHost } from '../core/game.js';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameViewport } from '../core/game.js';
 import { GachaSfx } from './gachaAudio.js';
+import { GachaProgressHud } from './gachaProgress.js';
 import {
   GACHA_POOL,
   GACHA_TIERS,
@@ -134,6 +135,7 @@ function palette(dark: boolean): GachaPalette {
 }
 
 export class GachaGame extends BaseGame {
+  private readonly progressHud = new GachaProgressHud();
   /**
    * Injectable RNG for deterministic tests. Use a sequence to cover the
    * tier roll and the item roll: 0 → blue (first item), 0.9999 → gold.
@@ -180,6 +182,11 @@ export class GachaGame extends BaseGame {
    * tall 4:5 canvas (the shell reads canvasSize on every fit, so the next
    * refit converges); landscape keeps the classic 4:3.
    */
+  override setViewport(viewport: GameViewport) {
+    // Reserve a quiet top row for progress and shell utilities on every device.
+    super.setViewport({ ...viewport, safeArea: { ...viewport.safeArea, top: viewport.safeArea.top + 80 } });
+  }
+
   override setDisplayScale(cssWidth: number) {
     if (Number.isFinite(cssWidth) && cssWidth > 0) {
       const meta = GAMES.find((g) => g.id === 'gacha');
@@ -239,6 +246,7 @@ export class GachaGame extends BaseGame {
   }
 
   destroy() {
+    this.progressHud.destroy();
     this.sfx.close();
     this.stop();
   }
@@ -446,6 +454,7 @@ export class GachaGame extends BaseGame {
   /* ─── Draw ─── */
 
   draw(ctx: CanvasRenderingContext2D) {
+    this.progressHud.update(this.canvas, this.stats, this.isZhLang());
     const dark = this.isDarkTheme();
     const p = palette(dark);
 
@@ -532,9 +541,6 @@ export class GachaGame extends BaseGame {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = p.text;
     ctx.fillText(zh ? '抽卡' : 'Gacha', 26, 32);
-    ctx.font = '11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = p.textFaint;
-    ctx.fillText(zh ? `已抽取 ${this.stats.totalPulls} 次` : `${this.stats.totalPulls} pulls`, 26, 48);
     ctx.strokeStyle = p.panelBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();

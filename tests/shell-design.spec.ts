@@ -212,7 +212,10 @@ test.describe('game-window shell design contracts', () => {
       const b = await bounds(page.locator('#gameCanvas'));
       expect(b.width).toBeGreaterThan(100); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.y).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(668); expect(Math.abs(b.x + b.width / 2 - 667 / 2)).toBeLessThanOrEqual(2);
-      expect(Math.min(Math.abs(b.width - 667), Math.abs(b.height - 375))).toBeLessThanOrEqual(1);
+      // Gacha reserves 80px for its persistent progress HUD; maximize the remaining stage.
+      const stageHeight = id === 'gacha' ? 375 - 80 : 375;
+      expect(Math.min(Math.abs(b.width - 667), Math.abs(b.height - stageHeight))).toBeLessThanOrEqual(1);
+      if (id === 'gacha') expect(b.y).toBeGreaterThanOrEqual(79); // Subpixel canvas rounding.
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await noOverflow(page);
     });
