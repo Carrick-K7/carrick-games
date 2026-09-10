@@ -1,12 +1,18 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { furnishVilla, type VillaFurnishingState } from './villaFurnishings.js';
 import { createVillaVehicle } from './villaVehicle.js';
 import { createVillaGaming } from './villaGaming.js';
 import { createVillaElevatorModel } from './villaElevatorModel.js';
-import { createVillaElevatorColliders, villaElevatorShaftContains, type VillaElevatorState } from './villaElevator.js';
+import { createVillaElevatorColliders, type VillaElevatorState } from './villaElevator.js';
 import type { VillaActivityState } from './villaActivities.js';
-import { isVillaVehicleCollider, VILLA_SCENIC_ROAD, type VillaDrivingState } from './villaDriving.js';
+import { isVillaVehicleCollider, type VillaDrivingState } from './villaDriving.js';
+import { createVillaPickupModel } from './villaPickupModel.js';
+import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
+import { createVillaEstateModel } from './villaEstateModel.js';
+import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
+import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
 import { createVillaDrivingCourse } from './villaDrivingCourse.js';
@@ -16,16 +22,38 @@ import { createVillaSnookerModel } from './villaSnookerModel.js';
 import { createVillaGarden } from './villaGarden.js';
 import { createVillaPetModel } from './villaPetModel.js';
 import type { VillaPetsState } from './villaPets.js';
+import { createVillaHome, villaAtmosphere, VILLA_SECURITY_CAMERAS, type VillaHomeState } from './villaHome.js';
+import { createVillaHomeModel } from './villaHomeModel.js';
+import { createVillaOutdoor, type VillaOutdoorState } from './villaOutdoor.js';
+import { createVillaOutdoorModel } from './villaOutdoorModel.js';
 import {
-  EYE_HEIGHT, POOL, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
+  EYE_HEIGHT, POOL, VILLA_SPAWN, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
   type VillaCollider, type VillaMaterial, type VillaPosition,
 } from './villaWorld.js';
 
-export interface VillaView extends VillaPosition { yaw: number; pitch: number; eyeHeight?: number; fov?: number }
+export interface VillaView extends VillaPosition { yaw: number; pitch: number; roll?: number; eyeHeight?: number; fov?: number }
 export type VillaSceneState = VillaFurnishingState & VillaActivityState & {
   elevator: VillaElevatorState; driving: VillaDrivingState; scooter: VillaScooterState; race: VillaRaceState;
+  /** Optional only for old scene snapshots; the pickup model supplies its spawn. */
+  pickup?: VillaPickupState;
+  home?: VillaHomeState; outdoor?: VillaOutdoorState;
   snooker: VillaSnookerState; snookerActive: boolean; pets: VillaPetsState;
 };
+
+/** Discrete inputs only. Animation clocks, rain/light blends, wardrobe progress,
+ * swing angle and carried-chair/player motion must NEVER bypass the six RAFs. */
+export function villaSceneInputKey(state: VillaSceneState): string {
+  const wardrobes = Object.entries(state.wardrobes?.wardrobes ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([id, w]) => `${id}:${w.open}`).join(',');
+  const camp = state.outdoor?.camping;
+  const camping = !camp ? 'legacy' : camp.carried ? 'carried' : `placed:${camp.x},${camp.y},${camp.z},${camp.yaw}`;
+  return `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${!!state.pickupDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}/${state.home?.revision ?? 0}/${state.tea?.phase ?? 'idle'}/${wardrobes}/${state.snooker.aimAssist !== false}/${state.aquariumOn !== false}/${camping}`;
+}
+export const VILLA_SECURITY_FEED_SIZE = { width: 384, height: 216, intervalMs: 500 } as const;
+/** Readback rows are bottom-up; the reusable canvas ImageData is top-down. */
+export function villaFlipSecurityPixels(source: Uint8Array, destination: Uint8ClampedArray, width: number, height: number): void {
+  const rowBytes = width * 4;
+  for (let row = 0; row < height; row++) destination.set(source.subarray((height - 1 - row) * rowBytes, (height - row) * rowBytes), row * rowBytes);
+}
 
 /** Small studio/sky reflection probe; all pixels are authored locally, no asset fetches. */
 function reflectionProbe(): THREE.CubeTexture {
@@ -112,13 +140,18 @@ export class VillaScene {
   readonly colliders: VillaCollider[];
   readonly lowSpec: boolean;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(64, 1.6, 0.065, 240);
+  private readonly camera = new THREE.PerspectiveCamera(64, 1.6, 0.065, 650);
   private readonly sun = new THREE.DirectionalLight(0xffddad, 2.4);
   private readonly hemi = new THREE.HemisphereLight(0xe1e6e5, 0x8f775e, 2);
   private readonly ambient = new THREE.AmbientLight(0xffe2bd, 0.34);
-  private readonly lamps: THREE.PointLight[] = [];
+  private readonly homeModel: ReturnType<typeof createVillaHomeModel>;
+  private readonly outdoorModel: ReturnType<typeof createVillaOutdoorModel>;
+  private readonly fallbackHome = createVillaHome();
+  private readonly fallbackOutdoor = createVillaOutdoor();
+  private primaryView: VillaView = { ...VILLA_SPAWN, yaw: 0, pitch: 0, eyeHeight: EYE_HEIGHT };
   private readonly furnishings: ReturnType<typeof furnishVilla>;
   private readonly vehicle: ReturnType<typeof createVillaVehicle>;
+  private readonly pickup: ReturnType<typeof createVillaPickupModel>;
   private readonly scooter: ReturnType<typeof createVillaScooterModel>;
   private readonly gaming: ReturnType<typeof createVillaGaming>;
   private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
@@ -126,6 +159,7 @@ export class VillaScene {
   private readonly snooker: ReturnType<typeof createVillaSnookerModel>;
   private readonly pets: ReturnType<typeof createVillaPetModel>;
   readonly drivingObstacles: VillaCollider[];
+  readonly pickupObstacles: VillaCollider[];
   readonly scooterObstacles: VillaCollider[];
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
@@ -133,16 +167,33 @@ export class VillaScene {
   private readonly water: THREE.Mesh;
   private readonly waterMap: THREE.CanvasTexture;
   private readonly sky: THREE.ShaderMaterial;
-  private readonly glow: THREE.MeshStandardMaterial;
   private disposed = false;
   private contextLost = false;
-  private lastEvening: boolean | null = null;
+  private readonly atmosphereColor = new THREE.Color();
+  private readonly securityCamera = new THREE.PerspectiveCamera(66, 16 / 9, .065, 650);
+  private securityTarget: THREE.WebGLRenderTarget | null = null;
+  private securitySceneTarget: THREE.WebGLRenderTarget | null = null;
+  private securityOutput: OutputPass | null = null;
+  private securityCanvas: HTMLCanvasElement | null = null;
+  private securityContext: CanvasRenderingContext2D | null = null;
+  private securityPixels: Uint8Array | null = null;
+  private securityImage: ImageData | null = null;
+  private securityKey = '';
+  private securityLastAt = -Infinity;
+  private securityLastTime = -Infinity;
   private readonly cachedFrame = document.createElement('canvas');
   private lastDrawAt = -Infinity;
   private cachedTime = -1;
   private softwareInputFrames = 0;
-  private readonly onContextLost = (event: Event) => { event.preventDefault(); this.contextLost = true; };
-  private readonly onContextRestored = () => { this.contextLost = false; this.renderer.shadowMap.needsUpdate = true; };
+  private readonly onContextLost = (event: Event) => { event.preventDefault(); this.contextLost = true; this.securityKey = ''; };
+  private readonly onContextRestored = () => {
+    this.contextLost = false; this.renderer.shadowMap.needsUpdate = true;
+    this.securityTarget?.dispose(); this.securityTarget = null;
+    this.securitySceneTarget?.dispose(); this.securitySceneTarget = null;
+    this.securityOutput?.dispose(); this.securityOutput = null;
+    this.securityKey = ''; this.securityLastAt = -Infinity;
+    this.softwareInputFrames = 0; this.lastStateKey = '';
+  };
 
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', alpha: false });
@@ -160,7 +211,7 @@ export class VillaScene {
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
     this.camera.rotation.order = 'YXZ';
-    this.scene.fog = new THREE.Fog(0xd6cbbb, 60, 170);
+    this.scene.fog = new THREE.Fog(0xd6cbbb, 105, 330);
     this.scene.add(this.hemi, this.ambient, this.sun);
     // Keep the reflection probe on hardware; CPU rasterizers retain diffuse
     // room lighting and baked contacts without paying for IBL on every surface.
@@ -201,7 +252,9 @@ export class VillaScene {
           #include <colorspace_fragment>
         }`,
     });
-    this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(190, 24, 12), this.sky));
+    const estateX = (VILLA_ESTATE_BOUNDS.minX + VILLA_ESTATE_BOUNDS.maxX) / 2, estateZ = (VILLA_ESTATE_BOUNDS.minZ + VILLA_ESTATE_BOUNDS.maxZ) / 2;
+    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 12), this.sky);
+    skyDome.position.set(estateX, 0, estateZ); this.scene.add(skyDome);
 
     const oak = texture('oak'), stone = texture('stone'), plaster = texture('plaster');
     const materials: Record<VillaMaterial, THREE.MeshStandardMaterial> = {
@@ -213,7 +266,7 @@ export class VillaScene {
       roof: new THREE.MeshStandardMaterial({ color: 0xa99b83, roughness: 0.8 }),
     };
     const stairNosing = materials.oak.clone(); stairNosing.color.set('#dac5a7'); stairNosing.name = 'Oak tread end grain';
-    this.glow = new THREE.MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffbe66, emissiveIntensity: 2, roughness: 0.45 });
+    this.homeModel = createVillaHomeModel(this.scene);
     const batches = new Map<THREE.Material, THREE.BufferGeometry[]>();
     const batch = (geo: THREE.BufferGeometry, material: THREE.Material) => {
       const list = batches.get(material) ?? []; list.push(geo); batches.set(material, list);
@@ -252,7 +305,7 @@ export class VillaScene {
         box(x, finishY, z - front * 0.01, w + 0.055, layer.finishTop - layer.finishBottom, 0.48, materials.oak);
         box(x, finishY, z + front * 0.24, w + 0.055, layer.finishTop - layer.finishBottom, 0.02, stairNosing);
         // Recessed warm strip below the nosing, never a glowing patch on the walking face.
-        if (i % 3 === 0) box(x, top - 0.065, z + Math.sign(r.startZ - r.endZ) * 0.251, w * 0.66, 0.012, 0.009, this.glow);
+        if (i % 3 === 0) box(x, top - 0.065, z + Math.sign(r.startZ - r.endZ) * 0.251, w * 0.66, 0.012, 0.009, this.homeModel.glow(`gallery-${Math.round(r.base / 3.6)}`));
       }
       for (const x of [r.minX - 0.045, r.maxX + 0.045]) {
         beam(new THREE.Vector3(x, r.bottom + 1.06, r.startZ), new THREE.Vector3(x, r.top + 1.06, r.endZ), 0.033, materials.oak);
@@ -262,7 +315,7 @@ export class VillaScene {
         }
       }
     }
-    for (const base of [0, 3.6]) box(4.2, base + 1.7, -6.2, 3.8, 0.2, 1.4, materials.oak);
+    for (const base of [0, 3.6]) box(1.2, base + 1.7, -6.2, 3.8, 0.2, 1.4, materials.oak);
     // Only non-stair-step rails need an additional visible horizontal balustrade.
     for (const r of VILLA_RAILS.filter(r => r.maxZ - r.minZ > 1 || r.maxX - r.minX > 1)) {
       const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
@@ -276,18 +329,15 @@ export class VillaScene {
 
     // Garden lawn surrounds a genuinely recessed tiled pool (no lawn under the water).
     const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
-    box(0, -1.2, 0, 360, 0.12, 360, grass);
-    for (const [minX, maxX, minZ, maxZ] of [[-25, POOL.minX, -17, 24], [POOL.maxX, 25, -17, 24], [POOL.minX, POOL.maxX, -17, POOL.minZ], [POOL.minX, POOL.maxX, POOL.maxZ, 24]]) {
-      box((minX + maxX) / 2, -0.08, (minZ + maxZ) / 2, maxX - minX, 0.12, maxZ - minZ, grass);
-    }
-    // Extend the front lawn to the private scenic road, beyond the old garden.
-    box(1.5, -.08, 41, 54, .12, 34, grass);
-    box(26.5, -.08, 3.5, 3, .12, 41, grass);
-    // Concrete in the attached garage and pale tile in the upstairs wet room.
-    box(16, -0.025, -3, 8, 0.08, 10, materials.stone);
+    box(estateX, -1.2, estateZ, 680, .12, 680, grass);
+    // One shared, metre-sampled lawn with real pool and pond holes; no duplicate
+    // flat south slab hides the rolling support or bridges the water opening.
+    batch(createVillaTerrainGeometry(), grass);
+    // Concrete spans all four garage bays; its shell belongs to World.
+    const garage = VILLA_GARAGE_EXTENT;
+    box((garage.minX + garage.maxX) / 2, -.025, (garage.minZ + garage.maxZ) / 2, garage.maxX - garage.minX, .08, garage.maxZ - garage.minZ, materials.stone);
     box(9.25, 3.61, -4, 5.45, 0.025, 9.8, materials.stone);
     box(0, -0.015, 15.9, 3.8, 0.055, 13.5, materials.stone);
-    box(16.2, -0.015, 11.7, VILLA_SCENIC_ROAD.drivewayWidth, 0.055, 20, materials.stone);
     box(8, -0.015, 11, 13, 0.055, 2.2, materials.stone);
     box(-13.15, -0.01, 0, 2.2, 0.06, 20, materials.stone);
     for (let i = 0; i < 11; i++) box(-2.5 - i * 1.16, 0.008, 11.5, 0.92, 0.07, 1.2, materials.stone);
@@ -346,43 +396,23 @@ export class VillaScene {
         const x = -10.25 + i * 7.1 / 17, nextX = -10.25 + (i + 1) * 7.1 / 17;
         const y = 9.8 - Math.sin(i / 17 * Math.PI) * 0.42;
         if (i < 17) beam(new THREE.Vector3(x, y, z), new THREE.Vector3(nextX, 9.8 - Math.sin((i + 1) / 17 * Math.PI) * 0.42, z), 0.009, materials.bronze);
-        if (i % 2 === 0) { const g = new THREE.SphereGeometry(0.045, 8, 6); g.translate(x, y - 0.085, z); batch(g, this.glow); }
+        if (i % 2 === 0) { const g = new THREE.SphereGeometry(0.045, 8, 6); g.translate(x, y - 0.085, z); batch(g, this.homeModel.glow('terrace')); }
       }
     }
-    for (let z = -16; z <= 23; z += 2) for (const x of [-24.8, 24.8]) box(x, 0.6, z, 0.12, 1.2, 0.12, materials.oak);
-    for (const x of [-24.8, 24.8]) for (const y of [0.35, 0.9]) box(x, y, 3.5, 0.075, 0.085, 40, materials.oak);
-    for (let x = -24; x <= 24; x += 2) box(x, 0.6, -16.8, 0.12, 1.2, 0.12, materials.oak);
-    for (const y of [0.35, 0.9]) box(0, y, -16.8, 49.5, 0.085, 0.075, materials.oak);
-    // The visible old garden fence must remain solid after expanding the grounds.
-    for (const x of [-24.8, 24.8]) this.colliders.push({ minX: x - .06, maxX: x + .06, minZ: -16.8, maxZ: 23.5, minY: 0, maxY: 1.2 });
-    this.colliders.push({ minX: -24.8, maxX: 24.8, minZ: -16.86, maxZ: -16.74, minY: 0, maxY: 1.2 });
-    // A wider boundary encloses the scenic garden road; the approach stays open.
-    for (const x of [-24.8, 27.8]) {
-      for (let z = 25; z <= 57; z += 2) box(x, .6, z, .12, 1.2, .12, materials.oak);
-      for (const y of [.35, .9]) box(x, y, 41, .075, .085, 32, materials.oak);
-      this.colliders.push({ minX: x - .06, maxX: x + .06, minZ: 25, maxZ: 57, minY: 0, maxY: 1.2 });
-    }
-    for (let x = -24; x <= 27; x += 2) box(x, .6, 57, .12, 1.2, .12, materials.oak);
-    for (const y of [.35, .9]) box(1.5, y, 57, 52.6, .085, .075, materials.oak);
-    this.colliders.push({ minX: -24.8, maxX: 27.8, minZ: 56.94, maxZ: 57.06, minY: 0, maxY: 1.2 });
+    // One continuous terrain-following estate perimeter; no internal x24.8 or
+    // z57 fence remains across the expanded garage and south scenic road.
+    const fence = createVillaEstateFence(this.scene, materials.oak);
+    this.colliders.push(...fence.colliders);
     for (const z of [11, 15, 19]) for (const x of [-2.3, 2.3]) {
       box(x, 0.3, z, 0.11, 0.6, 0.11, materials.bronze);
-      box(x, 0.56, z, 0.115, 0.08, 0.115, this.glow);
+      box(x, 0.56, z, 0.115, 0.08, 0.115, this.homeModel.glow('garden'));
     }
-    // Recessed warm lighting, deliberately few unshadowed local lights.
-    for (const [x, y, z] of [[-4.5, 2.85, 3], [0, 6.45, 1.5], [-6.7, 9.45, 4.1]]) {
-      const lamp = new THREE.PointLight(0xffd097, 16, 14, 2); lamp.position.set(x, y, z); this.lamps.push(lamp); this.scene.add(lamp);
-    }
-    for (const y of [3.28, 6.88]) {
-      for (const x of [-10, -5, 0, 8]) for (const z of [-6.5, 1.7, 7.5]) {
-        if (!villaElevatorShaftContains(x, z)) box(x, y, z, 0.24, 0.03, 0.24, this.glow);
-      }
-      box(-1.7, y, 0, 0.025, 0.04, 17.4, this.glow);
-    }
+    // HomeModel supplies all room fixtures/gallery strips and its six shared
+    // point-light slots. No duplicate fixed lamps or global always-on grid.
     for (const [material, geometries] of batches) {
       const merged = mergeGeometries(geometries);
       if (merged) {
-        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = !material.transparent && material !== this.glow; mesh.receiveShadow = true; this.scene.add(mesh);
+        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = !material.transparent && !material.name.startsWith('villa-lamp/'); mesh.receiveShadow = true; this.scene.add(mesh);
       }
       geometries.forEach(g => g.dispose());
     }
@@ -391,22 +421,26 @@ export class VillaScene {
     for (let i = 0; i < 16; i++) {
       const a = i / 16 * Math.PI * 2;
       const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), hillMat);
-      hill.position.set(Math.cos(a) * 108, -6, Math.sin(a) * 108);
+      hill.position.set(estateX + Math.cos(a) * 145, -6, estateZ + Math.sin(a) * 195);
       hill.scale.set(24 + i % 3 * 8, 13 + i % 4 * 4, 25); this.scene.add(hill);
     }
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
+    this.pickup = createVillaPickupModel(this.scene);
     this.scooter = createVillaScooterModel(this.scene);
     this.gaming = createVillaGaming(this.scene);
     this.elevator = createVillaElevatorModel(this.scene);
     this.course = createVillaDrivingCourse(this.scene);
     this.snooker = createVillaSnookerModel(this.scene);
-    const garden = createVillaGarden(this.scene);
+    const garden = createVillaGarden(this.scene), estate = createVillaEstateModel(this.scene);
+    this.outdoorModel = createVillaOutdoorModel(this.scene);
+    this.outdoorModel.update(this.fallbackOutdoor, this.primaryView, this.primaryView.yaw);
     this.pets = createVillaPetModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders);
-    // Keep live object identities: each vehicle ignores only its own bounds,
-    // collides with the other vehicle, and stops before pets (walkers do not).
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.pickup.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders, ...estate.colliders, ...this.outdoorModel.colliders);
+    // Keep live identities: each vehicle ignores ONLY itself, collides with both
+    // other vehicles, and stops before pets (walkers do not collide with pets).
     this.drivingObstacles = [...this.colliders.filter(c => !isVillaVehicleCollider(c)), ...this.pets.drivingColliders];
+    this.pickupObstacles = [...this.colliders.filter(c => !isVillaPickupCollider(c)), ...this.pets.drivingColliders];
     this.scooterObstacles = [...this.colliders.filter(c => !isVillaScooterCollider(c)), ...this.pets.drivingColliders];
     this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
@@ -436,9 +470,20 @@ export class VillaScene {
     else { material.dispose(); map.dispose(); }
   }
 
-  /** Advance door collisions even between cached software-GL frames. */
-  updateActivities(time: number, state: VillaSceneState) {
+  /** Advance collisions even between cached frames or while terminal tabs skip
+   * main rendering. A security camera is NEVER the carried-chair visitor. */
+  updateActivities(time: number, state: VillaSceneState, position?: VillaPosition, yaw?: number) {
+    if (position && [position.x, position.y, position.z].every(Number.isFinite)) {
+      this.primaryView = { ...this.primaryView, x: position.x, y: position.y, z: position.z };
+    }
+    if (yaw !== undefined && Number.isFinite(yaw)) this.primaryView.yaw = yaw;
+    if (this.outdoorModel.update(state.outdoor ?? this.fallbackOutdoor, this.primaryView, this.primaryView.yaw)) this.renderer.shadowMap.needsUpdate = true;
+    // Wardrobe hinges and narrow phases must be current for the controller's
+    // tentative-advance/overlap/rollback, including all six cached input frames.
+    const home = this.homeState(state);
+    if (this.furnishings.update(time, { ...state, roomLights: home.roomLights, nightFactor: home.darkness })) this.renderer.shadowMap.needsUpdate = true;
     if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
+    if (this.pickup.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     if (this.scooter.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
@@ -451,6 +496,7 @@ export class VillaScene {
   updatePets(time: number, state: VillaPetsState) { if (state) this.pets.update(time, state); }
 
   get carDoorProgress(): number { return this.vehicle.doorProgress; }
+  get pickupDoorProgress(): number { return this.pickup.doorProgress; }
 
   /** A small in-world interaction badge, never visible through walls or behind the camera. */
   projectInteraction(point: VillaPosition, width: number, height: number): { x: number; y: number } | null {
@@ -470,12 +516,126 @@ export class VillaScene {
       ? { x: (end.x + 1) * width / 2, y: (1 - end.y) * height / 2 } : null;
   }
 
+  private homeState(state: VillaSceneState): VillaHomeState {
+    if (state.home) return state.home;
+    // Legacy fixtures retain their day/evening switch; real sessions supply
+    // continuously blended Home state advanced by the controller.
+    this.fallbackHome.timeOfDay = state.evening ? 'evening' : 'day';
+    this.fallbackHome.darkness = state.evening ? .43 : 0;
+    this.fallbackHome.revision = state.evening ? 1 : 0;
+    return this.fallbackHome;
+  }
+
+  private primaryEye(): VillaPosition {
+    const view = this.primaryView;
+    return { x: view.x, y: view.y + (view.eyeHeight ?? EYE_HEIGHT), z: view.z };
+  }
+
+  /** Read blended Home values on actual rendered frames, never a new cache
+   * revision for each tiny lighting/rain transition. */
+  private updateAtmosphere(home: VillaHomeState): void {
+    const a = villaAtmosphere(home);
+    const blend = (color: THREE.Color, day: string, evening: string, night: string, rain: string) => {
+      if (a.darkness <= .43) color.set(day).lerp(this.atmosphereColor.set(evening), a.darkness / .43);
+      else color.set(evening).lerp(this.atmosphereColor.set(night), a.night);
+      color.lerp(this.atmosphereColor.set(rain), a.rain * (1 - a.night * .58));
+    };
+    blend(this.sky.uniforms.top.value, '#82b0d0', '#748fa7', '#17283f', '#657681');
+    blend(this.sky.uniforms.horizon.value, '#e1e6db', '#f2c9a4', '#49596e', '#8b9698');
+    blend(this.sun.color, '#fff0da', '#ffd09a', '#aac5e7', '#cad4d9');
+    blend(this.hemi.color, '#e1e6e5', '#cbd9e2', '#7e9bbd', '#a1b2bc');
+    blend(this.hemi.groundColor, '#8f775e', '#927053', '#4d5965', '#707770');
+    blend(this.ambient.color, '#ffe2bd', '#ffdec0', '#b3c7dd', '#c3ccd1');
+    this.sky.uniforms.sunColor.value.copy(this.sun.color).multiplyScalar((1 - a.night * .82) * (1 - a.rain * .84));
+    this.sun.intensity = a.sun; this.hemi.intensity = a.hemisphere; this.ambient.intensity = a.ambient;
+    this.renderer.toneMappingExposure = a.exposure;
+    this.scene.environmentIntensity = .32 * (1 - a.darkness * .72) * (1 - a.rain * .3);
+    const fog = this.scene.fog as THREE.Fog;
+    blend(fog.color, '#d6dbd1', '#d6c4ae', '#526175', '#8b999f'); fog.near = a.fogNear; fog.far = a.fogFar;
+  }
+
+  /** Shared actual-render preparation; CCTV cannot depend on a hidden main
+   * render refreshing furnishings, pets, room lights, water or rain first. */
+  private prepareVisuals(time: number, state: VillaSceneState, eye: VillaPosition): void {
+    const home = this.homeState(state);
+    this.updateAtmosphere(home); this.homeModel.update(time, home, eye);
+    this.waterMap.offset.set(Math.sin(time * .025) * .12, time * .012 % 1);
+    this.water.position.y = -.035 + Math.sin(time * .8) * .008;
+    this.gaming.update(time, state);
+  }
+
+  /** A real selected scene camera, rendered only on demand and at most 2Hz.
+   * Nothing is fetched and no synthetic replacement image is generated. */
+  renderSecurityFeed(id: string, time: number, state: VillaSceneState): HTMLCanvasElement | null {
+    if (this.disposed || this.contextLost || !Number.isFinite(time)) return null;
+    if (this.renderer.getContext().isContextLost()) { this.securityKey = ''; return null; }
+    const selected = VILLA_SECURITY_CAMERAS.find(camera => camera.id === id);
+    if (!selected) return null;
+    const home = this.homeState(state), key = `${id}/${home.revision}`, now = performance.now();
+    if (key === this.securityKey && this.securityCanvas && time >= this.securityLastTime && now - this.securityLastAt < VILLA_SECURITY_FEED_SIZE.intervalMs) return this.securityCanvas;
+    const { width, height } = VILLA_SECURITY_FEED_SIZE;
+    if (!this.securityCanvas) {
+      this.securityCanvas = document.createElement('canvas'); this.securityCanvas.width = width; this.securityCanvas.height = height;
+      this.securityContext = this.securityCanvas.getContext('2d');
+      if (!this.securityContext) { this.securityCanvas = null; return null; }
+      this.securityImage = this.securityContext.createImageData(width, height); this.securityPixels = new Uint8Array(width * height * 4);
+    }
+    if (!this.securityTarget) {
+      this.securityTarget = new THREE.WebGLRenderTarget(width, height, { format: THREE.RGBAFormat, type: THREE.UnsignedByteType, depthBuffer: false, stencilBuffer: false, samples: 0 });
+      this.securityTarget.texture.generateMipmaps = false; this.securityTarget.texture.name = 'villa-live-security-feed';
+      // Three intentionally bypasses tone mapping for ordinary render targets.
+      // One tiny output blit applies the renderer's ACES/exposure/sRGB transform
+      // before byte readback, rather than clipping bright raw-linear lighting.
+      const hdr = this.renderer.extensions.has('EXT_color_buffer_float');
+      this.securitySceneTarget = new THREE.WebGLRenderTarget(width, height, { format: THREE.RGBAFormat, type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: true, stencilBuffer: false, samples: 0 });
+      this.securitySceneTarget.texture.generateMipmaps = false; this.securitySceneTarget.texture.name = 'villa-security-scene-linear';
+      this.securityOutput = new OutputPass();
+    }
+    const renderer = this.renderer, previousTarget = renderer.getRenderTarget(), previousFace = renderer.getActiveCubeFace(), previousMip = renderer.getActiveMipmapLevel();
+    const previousSize = renderer.getSize(new THREE.Vector2()), previousRatio = renderer.getPixelRatio();
+    const previousViewport = renderer.getViewport(new THREE.Vector4()), previousScissor = renderer.getScissor(new THREE.Vector4()), previousScissorTest = renderer.getScissorTest();
+    const primary = { ...this.primaryView }, eye = this.primaryEye();
+    try {
+      this.updateActivities(time, state); // cars, doors, pets, swing, carried chair
+      this.prepareVisuals(time, state, selected.position);
+      this.securityCamera.position.set(selected.position.x, selected.position.y, selected.position.z);
+      this.securityCamera.up.set(0, 1, 0); this.securityCamera.lookAt(selected.target.x, selected.target.y, selected.target.z); this.securityCamera.updateMatrixWorld(true);
+      renderer.setRenderTarget(this.securitySceneTarget); renderer.setScissorTest(false); renderer.clear(true, true, true);
+      renderer.render(this.scene, this.securityCamera);
+      this.securityOutput!.render(renderer, this.securityTarget, this.securitySceneTarget!, 0, false);
+      renderer.readRenderTargetPixels(this.securityTarget, 0, 0, width, height, this.securityPixels!);
+      if (this.contextLost || renderer.getContext().isContextLost()) { this.securityKey = ''; return null; }
+      villaFlipSecurityPixels(this.securityPixels!, this.securityImage!.data, width, height);
+      this.securityContext!.putImageData(this.securityImage!, 0, 0);
+      this.securityKey = key; this.securityLastAt = performance.now(); this.securityLastTime = time;
+      return this.securityCanvas;
+    } catch {
+      // Context loss/readback failure is a recoverable unavailable feed, never a
+      // fake frozen image labelled live, and must not corrupt the main renderer.
+      this.securityKey = ''; return null;
+    } finally {
+      this.primaryView = primary;
+      // Recenter BOTH the six light slots and rain streak geometry, not only the
+      // camera transform. The primary camera itself was never mutated.
+      this.homeModel.update(time, home, eye);
+      this.homeModel.setView(home, eye);
+      try {
+        if (renderer.getPixelRatio() !== previousRatio) renderer.setPixelRatio(previousRatio);
+        const size = renderer.getSize(new THREE.Vector2());
+        if (!size.equals(previousSize)) renderer.setSize(previousSize.x, previousSize.y, false);
+        renderer.setRenderTarget(previousTarget, previousFace, previousMip);
+        renderer.setViewport(previousViewport); renderer.setScissor(previousScissor); renderer.setScissorTest(previousScissorTest);
+      } catch { /* A lost GL context is restored by the renderer's normal handler. */ }
+    }
+  }
+
   render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
     if (this.disposed || this.contextLost) return false;
     const { w, h } = villaRendererSize(width, height, pixelRatio, this.lowSpec);
     const now = performance.now();
-    const stateKey = `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}`;
-    this.updateActivities(time, state);
+    const stateKey = villaSceneInputKey(state);
+    this.primaryView = { ...view };
+    this.updateActivities(time, state, view, view.yaw);
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
     // longer than the time budget. A wall-clock cap alone starves real key events
     // on SwiftShader. Long manual time jumps and activity changes still draw now.
@@ -488,22 +648,8 @@ export class VillaScene {
     if (this.renderer.domElement.width !== w || this.renderer.domElement.height !== h) this.renderer.setSize(w, h, false);
     this.camera.aspect = width / height; this.camera.fov = view.fov ?? 64; this.camera.updateProjectionMatrix();
     this.camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
-    this.camera.rotation.set(view.pitch, view.yaw, 0);
-    if (this.lastEvening !== state.evening) {
-      this.lastEvening = state.evening;
-      this.sky.uniforms.top.value.set(state.evening ? '#748fa7' : '#82b0d0');
-      this.sky.uniforms.horizon.value.set(state.evening ? '#f2c9a4' : '#e1e6db');
-      this.sun.color.set(state.evening ? 0xffd09a : 0xfff0da);
-      this.sun.intensity = state.evening ? 2.45 : 2.9;
-      this.hemi.intensity = state.evening ? 1.7 : 2.15;
-      this.ambient.intensity = state.evening ? 0.38 : 0.25;
-      this.glow.emissiveIntensity = state.evening ? 2.1 : 0.7;
-      this.lamps.forEach(l => { l.intensity = state.evening ? 23 : 8; });
-    }
-    this.waterMap.offset.set(Math.sin(time * 0.025) * 0.12, time * 0.012 % 1);
-    this.water.position.y = -0.035 + Math.sin(time * 0.8) * 0.008;
-    this.furnishings.update(time, state);
-    this.gaming.update(time, state);
+    this.camera.rotation.set(view.pitch, view.yaw, view.roll ?? 0, 'YXZ');
+    this.prepareVisuals(time, state, this.camera.position);
     this.renderer.render(this.scene, this.camera);
     this.lastStateKey = stateKey;
     if (this.lowSpec) {
@@ -530,6 +676,11 @@ export class VillaScene {
     materials.forEach(m => { Object.values(m).forEach(value => { if (value instanceof THREE.Texture) textures.add(value); }); m.dispose(); });
     textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose());
     this.environment.dispose();
+    this.securityTarget?.dispose(); this.securityTarget = null;
+    this.securitySceneTarget?.dispose(); this.securitySceneTarget = null;
+    this.securityOutput?.dispose(); this.securityOutput = null;
+    if (this.securityCanvas) this.securityCanvas.width = this.securityCanvas.height = 0;
+    this.securityCanvas = null; this.securityContext = null; this.securityPixels = null; this.securityImage = null; this.securityKey = '';
     this.sun.shadow.map?.dispose();
     this.renderer.dispose(); this.renderer.forceContextLoss(); this.scene.clear();
     this.cachedFrame.width = this.cachedFrame.height = 0;

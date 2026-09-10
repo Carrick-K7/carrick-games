@@ -59,9 +59,9 @@ describe('Villa activity defaults and screen inputs', () => {
   it('returns independently mutable state with the expected defaults', () => {
     const first = createVillaActivities(), second = createVillaActivities();
     expect(first).not.toBe(second);
-    expect(first).toEqual({ carDoorOpen: false, seated: null, relaxSeatId: null, screenSource: 'pc', displayLights: true });
+    expect(first).toEqual({ carDoorOpen: false, pickupDoorOpen: false, seated: null, relaxSeatId: null, relaxSeatPosition: null, relaxEntryPosition: null, screenSource: 'pc', displayLights: true });
     first.carDoorOpen = true; first.seated = 'car'; first.relaxSeatId = 'sofa-living'; first.screenSource = 'switch'; first.displayLights = false;
-    expect(second).toEqual({ carDoorOpen: false, seated: null, relaxSeatId: null, screenSource: 'pc', displayLights: true });
+    expect(second).toEqual({ carDoorOpen: false, pickupDoorOpen: false, seated: null, relaxSeatId: null, relaxSeatPosition: null, relaxEntryPosition: null, screenSource: 'pc', displayLights: true });
     expect(createVillaActivities()).toEqual(second);
     expect(CAR_DOOR_SECONDS).toBe(0.65);
   });

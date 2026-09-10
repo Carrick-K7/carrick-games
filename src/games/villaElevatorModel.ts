@@ -10,6 +10,9 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
 } {
   const e = VILLA_ELEVATOR;
   const shaft = new VillaModelBuilder(parent, 'villa-elevator');
+  // Authored around the original shaft centre (0, -6.3); one translation moves
+  // the whole tower to its swapped location without rewriting ~40 literals.
+  shaft.root.position.set(e.centerX, 0, e.centerZ + 6.3);
   const bronze = villaMaterial('#8d7051', .36, .72);
   const brushed = villaMaterial('#ac9b82', .48, .68);
   const oak = villaMaterial('#b18a60', .64);
@@ -111,7 +114,8 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
 
   const car = new VillaModelBuilder(shaft.root, 'elevator-car');
   // Floor top is exactly state.y; the entire thickness travels below the passenger.
-  car.box(0, -.055, (e.carMinZ + e.carMaxZ) / 2,
+  // The car lives under the translated shaft root, so its floor uses local Z.
+  car.box(0, -.055, (e.carMinZ + e.carMaxZ) / 2 - e.centerZ,
     e.carMaxX - e.carMinX, .11, e.carMaxZ - e.carMinZ, stone, .004);
   car.box(0, -.125, -6.24, 1.89, .03, 2.25, bronze, 0);
   car.box(0, 2.395, -6.25, 1.96, .09, 2.3, stone, .005);

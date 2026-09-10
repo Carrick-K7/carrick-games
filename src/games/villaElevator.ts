@@ -1,10 +1,12 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
-/** Shared shaft, doorway and moving-floor dimensions, in metres. */
+/** Shared shaft, doorway and moving-floor dimensions, in metres.
+ * The staircase and the lift swapped places: the shaft now sits inside the
+ * north end of the former stairwell, with its doors still facing +Z. */
 export const VILLA_ELEVATOR = {
-  minX: -1.1, maxX: 1.1, minZ: -7.5, maxZ: -5.1, frontZ: -5.1,
-  centerX: 0, centerZ: -6.3, doorWidth: 1.3,
-  carMinX: -0.98, carMaxX: 0.98, carMinZ: -7.4, carMaxZ: -5.04,
+  minX: 3.45, maxX: 5.65, minZ: -7.0, maxZ: -4.6, frontZ: -4.6,
+  centerX: 4.55, centerZ: -5.8, doorWidth: 1.3,
+  carMinX: 3.57, carMaxX: 5.53, carMinZ: -6.9, carMaxZ: -4.54,
   floors: [0, 3.6, 7.2] as const,
 };
 export type VillaElevatorPhase = 'closed' | 'opening' | 'open' | 'closing' | 'moving';
@@ -28,7 +30,7 @@ export function villaElevatorCabinContains(p: VillaPosition, state: VillaElevato
 }
 /** A person's full footprint must clear the sill before the doors may close. */
 export function villaElevatorDoorwayObstructed(p: VillaPosition, state: VillaElevatorState): boolean {
-  return Math.abs(p.y - state.y) < 0.3 && Math.abs(p.x) < VILLA_ELEVATOR.doorWidth / 2 + 0.25
+  return Math.abs(p.y - state.y) < 0.3 && Math.abs(p.x - VILLA_ELEVATOR.centerX) < VILLA_ELEVATOR.doorWidth / 2 + 0.25
     && Math.abs(p.z - VILLA_ELEVATOR.frontZ) < 0.36;
 }
 /** No queuing or destination changes during a journey. Same-floor calls open the doors. */
@@ -96,17 +98,17 @@ export function createVillaElevatorColliders(): { colliders: VillaCollider[]; up
     const c = { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, minY: y, maxY: y + h };
     colliders.push(c); return c;
   };
-  box(-1.04, 0, e.centerZ, 0.12, 10.1, 2.4);
-  box(1.04, 0, e.centerZ, 0.12, 10.1, 2.4);
-  box(0, 0, -7.44, 2.2, 10.1, 0.12);
+  box(e.centerX - 1.04, 0, e.centerZ, 0.12, 10.1, 2.4);
+  box(e.centerX + 1.04, 0, e.centerZ, 0.12, 10.1, 2.4);
+  box(e.centerX, 0, e.centerZ - 1.14, 2.2, 10.1, 0.12);
   const gates = e.floors.map(y => {
     const height = Math.min(3.6, 10.1 - y);
-    box(-0.875, y, e.frontZ, 0.45, height, 0.12);
-    box(0.875, y, e.frontZ, 0.45, height, 0.12);
-    box(0, y + 2.3, e.frontZ, 1.3, height - 2.3, 0.12);
-    return box(0, y, e.frontZ, 1.3, 2.3, 0.12);
+    box(e.centerX - 0.875, y, e.frontZ, 0.45, height, 0.12);
+    box(e.centerX + 0.875, y, e.frontZ, 0.45, height, 0.12);
+    box(e.centerX, y + 2.3, e.frontZ, 1.3, height - 2.3, 0.12);
+    return box(e.centerX, y, e.frontZ, 1.3, 2.3, 0.12);
   });
-  const ceiling = box(0, 2.3, e.centerZ, 1.96, .18, 2.36);
+  const ceiling = box(e.centerX, 2.3, e.centerZ, 1.96, .18, 2.36);
   const update = (state: VillaElevatorState) => {
     ceiling.minY = state.y + 2.3; ceiling.maxY = state.y + 2.48;
     gates.forEach((gate, floor) => {

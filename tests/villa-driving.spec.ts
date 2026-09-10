@@ -55,7 +55,10 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
     const vehicle = game.scene.scene.getObjectByName('villa-vehicle');
     const poseSynced = Math.abs(vehicle.position.x - game.state.driving.x) < 1e-9 && Math.abs(vehicle.position.z - game.state.driving.z) < 1e-9 && Math.abs(vehicle.rotation.y - game.state.driving.yaw) < 1e-9;
     game.scene.softwareInputFrames = 0; game.scene.lastDrawAt = -Infinity; game.renderFrame(); const image = canvas.toDataURL();
-    const stopped = game.state.driving.speed === 0 && game.position.y === 0 && game.motion.offset === 0;
+    // Seated, the camera follows the sampled terrain height under the car
+    // (the southern road is no longer pinned to y=0).
+    const stopped = game.state.driving.speed === 0 && game.position.y < .15
+      && Math.abs(game.position.y - game.eyeY) < 1e-9 && game.motion.offset === 0;
     key('r'); tick(30); const reset = { x: game.state.driving.x, z: game.state.driving.z, speed: game.state.driving.speed, seated: game.state.seated };
     key('w'); tick(16); game.clearInput(); tick(30); const blurStops = game.state.driving.speed === 0;
     key('h'); const home = { seat: game.state.seated, speed: game.state.driving.speed, z: game.position.z };
@@ -81,19 +84,23 @@ test('villa rejects an exit across the garage wall and stops at the rendered gar
     game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
     const key = (key: string, down = true) => game.handleInput(new KeyboardEvent(down ? 'keydown' : 'keyup', { key }));
     const tick = (n: number) => { for (let i = 0; i < n; i++) game.update(.05); };
-    // Deliberate collision-fixture placement: the car fits, but its driver doorway faces an intact wall.
+    // Deliberate collision-fixture placement: both real standing candidates are
+    // obstructed, so no safe exit exists and the car must refuse to open.
     Object.assign(game.state.driving, { x: 18.5, z: -.8, yaw: 0, speed: 0, steering: 0 });
     game.enterCarAt = game.exitCarAt = game.closeCarAt = Infinity;
     game.state.seated = 'car'; game.position = { x: 18.93, y: 0, z: -.75 }; game.yaw = Math.PI;
     game.scene.updateActivities(game.time, game.state);
+    const wall = { minX: 15.5, maxX: 21.5, minZ: -1.15, maxZ: -.15, minY: 0, maxY: 2 };
+    game.scene.colliders.push(wall); game.scene.drivingObstacles.push(wall);
     key('e'); key('q'); tick(30);
     const rejectsWallExit = game.state.seated === 'car' && !game.state.carDoorOpen && game.exitCarAt === Infinity;
-    Object.assign(game.state.driving, { x: 21, z: 12, yaw: Math.PI / 2, speed: 0, steering: 0 });
+    // The estate now extends to x=45; the car starts near the real east fence.
+    Object.assign(game.state.driving, { x: 40, z: 12, yaw: Math.PI / 2, speed: 0, steering: 0 });
     game.yaw = Math.PI * 1.5; game.scene.updateActivities(game.time, game.state);
     key('w'); tick(120); key('w', false);
     const fence = { x: game.state.driving.x, contact: game.state.driving.contact, speed: game.state.driving.speed };
     game.destroy(); canvas.remove(); return { rejectsWallExit, fence };
   }, villaUrl());
-  expect(result.rejectsWallExit).toBe(true); expect(result.fence.x).toBeGreaterThan(21); expect(result.fence.x).toBeLessThan(22.5);
+  expect(result.rejectsWallExit).toBe(true); expect(result.fence.x).toBeGreaterThan(40); expect(result.fence.x).toBeLessThan(45);
   expect(result.fence.contact).toBe(true); expect(result.fence.speed).toBe(0);
 });

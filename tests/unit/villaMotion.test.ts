@@ -93,15 +93,16 @@ describe('Villa crouching and full-body clearance', () => {
     const s = createVillaMotion(); toggleVillaCrouch(s, clear);
     for (let i = 0; i < 20; i++) advanceVillaMotion(s, .05, clear);
     const colliders = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS];
-    let p = { x: 5.2, y: 0, z: -4 };
+    let p = { x: 0.04, y: 0, z: -4 };
     const support = (x: number, z: number, y: number) => villaSupportAt(x, z, y, villaBodyHeight(s));
     for (let i = 0; i < 44; i++) p = moveVillaPlayer(p, 0, -.05, colliders, support, villaBodyHeight(s));
     expect(p.z).toBeCloseTo(-6.2); expect(p.y).toBe(0);
     const canFit = (height: number) => villaSupportAt(p.x, p.z, p.y, height) !== null && !villaCollides(p, colliders, height);
     expect(canFit(villaBodyHeight(s))).toBe(true); expect(canFit(1.75)).toBe(false);
     expect(toggleVillaCrouch(s, canFit)).toBe(false); expect(s.crouched).toBe(true);
-    for (let i = 0; i < 44; i++) p = moveVillaPlayer(p, 0, .05, colliders, support, villaBodyHeight(s));
-    expect(p.z).toBeCloseTo(-4); expect(toggleVillaCrouch(s, canFit)).toBe(true);
+    // Leave the stair footprint westwards, then stand up in the clear hall.
+    for (let i = 0; i < 32; i++) p = moveVillaPlayer(p, -.05, 0, colliders, support, villaBodyHeight(s));
+    expect(p.x).toBeCloseTo(-1.56); expect(toggleVillaCrouch(s, canFit)).toBe(true);
     for (let i = 0; i < 20; i++) advanceVillaMotion(s, .05, canFit);
     expect(s.stance).toBe(0);
   });

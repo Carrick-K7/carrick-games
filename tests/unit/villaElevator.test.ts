@@ -231,7 +231,7 @@ describe('Villa elevator support and safety gates', () => {
         gates.update(state);
         for (const [landing, y] of floors.entries()) {
           const open = landing === floor && phase === 'open' && door === 1 && offset === 0;
-          expect(villaCollides({ x: 0, y, z: VILLA_ELEVATOR.frontZ }, gates.colliders)).toBe(!open);
+          expect(villaCollides({ x: VILLA_ELEVATOR.centerX, y, z: VILLA_ELEVATOR.frontZ }, gates.colliders)).toBe(!open);
         }
       }
     }
@@ -239,8 +239,8 @@ describe('Villa elevator support and safety gates', () => {
   it('updates independent collider sets without sharing mutable gate objects', () => {
     const a = createVillaElevatorColliders(), b = createVillaElevatorColliders();
     a.update(atFloor(0, true));
-    expect(villaCollides({ x: 0, y: 0, z: -5.1 }, a.colliders)).toBe(false);
-    expect(villaCollides({ x: 0, y: 0, z: -5.1 }, b.colliders)).toBe(true);
+    expect(villaCollides({ x: 4.55, y: 0, z: -4.6 }, a.colliders)).toBe(false);
+    expect(villaCollides({ x: 4.55, y: 0, z: -4.6 }, b.colliders)).toBe(true);
   });
   it('keeps the mutable cabin ceiling attached between floors and rejects head penetration', () => {
     const gates = createVillaElevatorColliders();
@@ -249,40 +249,40 @@ describe('Villa elevator support and safety gates', () => {
     for (const y of [0, 1.8, 3.6, 5.4, 7.2]) {
       gates.update({ ...createVillaElevator(), y });
       expect(ceiling.minY).toBeCloseTo(y + 2.3); expect(ceiling.maxY).toBeCloseTo(y + 2.48);
-      expect(villaCollides({ x: 0, y, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
-      expect(villaCollides({ x: 0, y: y + .5, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
-      expect(villaCollides({ x: 0, y: y + .65, z: -6.3 }, gates.colliders, 1.75)).toBe(true);
+      expect(villaCollides({ x: 4.55, y, z: -5.8 }, gates.colliders, 1.75)).toBe(false);
+      expect(villaCollides({ x: 4.55, y: y + .5, z: -5.8 }, gates.colliders, 1.75)).toBe(false);
+      expect(villaCollides({ x: 4.55, y: y + .65, z: -5.8 }, gates.colliders, 1.75)).toBe(true);
     }
     const independent = createVillaElevatorColliders();
-    expect(villaCollides({ x: 0, y: .65, z: -6.3 }, independent.colliders, 1.75)).toBe(true);
-    expect(villaCollides({ x: 0, y: .65, z: -6.3 }, gates.colliders, 1.75)).toBe(false);
+    expect(villaCollides({ x: 4.55, y: .65, z: -5.8 }, independent.colliders, 1.75)).toBe(true);
+    expect(villaCollides({ x: 4.55, y: .65, z: -5.8 }, gates.colliders, 1.75)).toBe(false);
   });
   it('removes static support throughout the shaft on all floors and between floors', () => {
-    for (const y of [0, 1.8, 3.6, 5.4, 7.2]) for (const x of [-1, 0, 1]) for (const z of [-7.45, -6.3, -5.11]) {
+    for (const y of [0, 1.8, 3.6, 5.4, 7.2]) for (const x of [3.55, 4.55, 5.55]) for (const z of [-6.95, -5.8, -4.65]) {
       expect(villaElevatorShaftContains(x, z)).toBe(true);
       expect(villaSupportAt(x, z, y)).toBeNull();
     }
   });
   it.each([0, 1.8, 3.6, 5.4, 7.2])('supports passengers only at the car at y=%s', y => {
     const state = { ...createVillaElevator(), y };
-    expect(villaElevatorSupportAt(state, 0, -6.3, y)).toBe(y);
-    expect(villaElevatorSupportAt(state, 0, -6.3, y + .29)).toBe(y);
-    for (const oldY of [y + .31, y - .31, NaN, Infinity]) expect(villaElevatorSupportAt(state, 0, -6.3, oldY)).toBeNull();
-    for (const [x, z] of [[-1, -6.3], [1, -6.3], [0, -7.41], [0, -5.03]]) {
+    expect(villaElevatorSupportAt(state, 4.55, -5.8, y)).toBe(y);
+    expect(villaElevatorSupportAt(state, 4.55, -5.8, y + .29)).toBe(y);
+    for (const oldY of [y + .31, y - .31, NaN, Infinity]) expect(villaElevatorSupportAt(state, 4.55, -5.8, oldY)).toBeNull();
+    for (const [x, z] of [[3.55, -5.8], [5.55, -5.8], [4.55, -6.91], [4.55, -4.53]]) {
       expect(villaElevatorSupportAt(state, x, z, y)).toBeNull();
     }
     for (const floorY of floors) if (Math.abs(floorY - y) > .3) {
-      expect(world(state).support(0, -6.3, floorY)).toBeNull();
+      expect(world(state).support(4.55, -5.8, floorY)).toBeNull();
     }
-    expect(villaElevatorCabinContains({ x: 0, y, z: -6.3 }, state)).toBe(true);
-    expect(villaElevatorCabinContains({ x: 0, y: y + .3, z: -6.3 }, state)).toBe(false);
+    expect(villaElevatorCabinContains({ x: 4.55, y, z: -5.8 }, state)).toBe(true);
+    expect(villaElevatorCabinContains({ x: 4.55, y: y + .3, z: -5.8 }, state)).toBe(false);
   });
   it('detects a doorway footprint but not a rider safely inside or on another landing', () => {
     const state = atFloor(1, true);
-    for (const [x, z] of [[0, -5.1], [.8, -5.3], [-.8, -4.9]]) {
+    for (const [x, z] of [[4.55, -4.6], [5.35, -4.8], [3.75, -4.4]]) {
       expect(villaElevatorDoorwayObstructed({ x, y: floors[1], z }, state)).toBe(true);
     }
-    for (const p of [{ x: 0, y: floors[1], z: -6.3 }, { x: 1, y: floors[1], z: -5.1 }, { x: 0, y: 0, z: -5.1 }]) {
+    for (const p of [{ x: 4.55, y: floors[1], z: -5.8 }, { x: 5.55, y: floors[1], z: -4.6 }, { x: 4.55, y: 0, z: -4.6 }]) {
       expect(villaElevatorDoorwayObstructed(p, state)).toBe(false);
     }
   });
@@ -291,34 +291,34 @@ describe('Villa elevator support and safety gates', () => {
 describe('Villa elevator physical world integration', () => {
   it.each([0, 1, 2])('walks both ways through open floor %i and stops at its closed portal', floor => {
     const state = atFloor(floor, true), y = floors[floor];
-    const start = { x: 0, y, z: -4.3 };
-    const inside = walk(state, start, [[0, -6.3]]);
+    const start = { x: 4.55, y, z: -3.8 };
+    const inside = walk(state, start, [[4.55, -5.8]]);
     expect(inside.y).toBe(y);
-    expect(walk(state, inside, [[0, -4.3]])).toEqual(start);
+    expect(walk(state, inside, [[4.55, -3.8]])).toEqual(start);
     const w = world(atFloor(floor));
     const stopped = w.move(start, 0, -2);
-    expect(stopped.z).toBeGreaterThanOrEqual(-5.04 + PLAYER_RADIUS - 1e-8);
+    expect(stopped.z).toBeGreaterThanOrEqual(VILLA_ELEVATOR.carMaxZ + PLAYER_RADIUS - 1e-8);
     expect(stopped.z).toBeLessThan(start.z);
     expect(villaCollides(stopped, w.colliders)).toBe(false);
     const withoutCarSupport = moveVillaPlayer(start, 0, -2, world(state).colliders);
     expect(withoutCarSupport.z).toBeGreaterThan(VILLA_ELEVATOR.frontZ);
   });
   it.each([0, 1, 2])('does not tunnel through floor %i gates or the open cabin rear at high speed', floor => {
-    const start = { x: 0, y: floors[floor], z: -4.3 };
+    const start = { x: 4.55, y: floors[floor], z: -3.8 };
     for (const carFloor of [0, 1, 2]) {
       const w = world(atFloor(carFloor));
       const stopped = w.move(start, 0, -50);
-      expect(stopped.z).toBeGreaterThanOrEqual(-5.04 + PLAYER_RADIUS - 1e-8);
+      expect(stopped.z).toBeGreaterThanOrEqual(VILLA_ELEVATOR.carMaxZ + PLAYER_RADIUS - 1e-8);
       expect(stopped.y).toBe(start.y);
       expect(villaCollides(stopped, w.colliders)).toBe(false);
     }
     const open = world(atFloor(floor, true)), inside = open.move(start, 0, -50);
-    expect(inside.z).toBeLessThan(-6.3);
-    expect(inside.z).toBeGreaterThanOrEqual(-7.38 + PLAYER_RADIUS - 1e-8);
+    expect(inside.z).toBeLessThan(-5.8);
+    expect(inside.z).toBeGreaterThanOrEqual(VILLA_ELEVATOR.carMinZ + PLAYER_RADIUS - 1e-8);
     expect(villaCollides(inside, open.colliders)).toBe(false);
   });
   it.each([0, 1, 2])('preserves both narrow bypass routes around the shaft on floor %i', floor => {
-    for (const x of [-1.5, 1.5]) {
+    for (const x of [-1.5, 6.0]) {
       const start = { x, y: floors[floor], z: -4.3 };
       const end = walk(atFloor(0), start, [[x, -8]]);
       expect(end.y).toBe(start.y);
@@ -327,15 +327,15 @@ describe('Villa elevator physical world integration', () => {
   });
   it('preserves continuous staircase ascent and descent with the elevator enclosure present', () => {
     const state = createVillaElevator();
-    const ascent = [[3.2, -6.2], [5.2, -6.2], [5.2, 1.3]] as const;
-    const descent = [[5.2, -6.2], [3.2, -6.2], [3.2, 1.3]] as const;
-    let p = walk(state, { x: 3.2, y: 0, z: 1.3 }, ascent);
+    const ascent = [[0.04, -6.2], [2.06, -6.2], [2.06, 1.3]] as const;
+    const descent = [[2.06, -6.2], [0.04, -6.2], [0.04, 1.3]] as const;
+    let p = walk(state, { x: 0.04, y: 0, z: 1.3 }, ascent);
     expect(p.y).toBeCloseTo(floors[1], 6);
-    p = walk(state, p, [[3.2, 1.3], ...ascent]);
+    p = walk(state, p, [[0.04, 1.3], ...ascent]);
     expect(p.y).toBeCloseTo(floors[2], 6);
     p = walk(state, p, descent);
     expect(p.y).toBeCloseTo(floors[1], 6);
-    p = walk(state, p, [[5.2, 1.3], ...descent]);
+    p = walk(state, p, [[2.06, 1.3], ...descent]);
     expect(p.y).toBeCloseTo(0, 6);
   });
   it.each(floors)('keeps rendered floor slabs at y=%s completely outside the shaft', y => {
@@ -347,6 +347,6 @@ describe('Villa elevator physical world integration', () => {
       expect(overlapX > 1e-8 && overlapZ > 1e-8, `slab at (${slab.x}, ${slab.z}) overlaps shaft`).toBe(false);
     }
     const covers = (x: number, z: number) => slabs.some(b => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2);
-    for (const [x, z] of [[-1.5, -6.3], [1.5, -6.3], [0, -4.3], [0, -8]]) expect(covers(x, z)).toBe(true);
+    for (const [x, z] of [[-1.5, -6.3], [6.0, -6.3], [3.275, -6.3], [4.55, -3.0], [4.55, -8]]) expect(covers(x, z)).toBe(true);
   });
 });

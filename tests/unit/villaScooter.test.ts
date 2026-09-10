@@ -5,6 +5,7 @@ import { createVillaScooterModel } from '../../src/games/villaScooterModel.js';
 import { isVillaVehicleCollider, registerVillaVehicleColliders, villaCarOverlaps, VILLA_SCENIC_ROAD } from '../../src/games/villaDriving.js';
 import { createVillaGarden } from '../../src/games/villaGarden.js';
 import { VILLA_CAR } from '../../src/games/villaActivities.js';
+import { VILLA_SCOOTER_PARKING, villaTerrainHeight, villaTerrainOrientation } from '../../src/games/villaEstateLayout.js';
 import { moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, POOL, type VillaCollider } from '../../src/games/villaWorld.js';
 const idle = { throttle: 0, steer: 0, brake: false, handbrake: false };
 const open = () => ({ ...createVillaScooter(), x: 20, z: 25 });
@@ -17,7 +18,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
   it('starts independently parked facing local +Z with the camera offset documented', () => {
     const a = createVillaScooter(), b = createVillaScooter();
     expect(a).toEqual({ x: VILLA_SCOOTER.center.x, z: VILLA_SCOOTER.center.z, yaw: 0, speed: 0, steering: 0, distance: 0, collisions: 0, contact: false, handbrake: false });
-    expect(VILLA_SCOOTER).toEqual({ center: { x: 21.5, y: 0, z: 7 }, eyeHeight: 1.44, yaw: Math.PI });
+    expect(VILLA_SCOOTER).toEqual({ center: VILLA_SCOOTER_PARKING, eyeHeight: 1.44, yaw: Math.PI });
     a.distance = 3; expect(b).toEqual(createVillaScooter()); expect(villaScooterPoseBlocked(b, [])).toBe(false);
   });
   it('keeps the real garden spawn, positive exit and from-south mounting approach clear of the lemon tree', () => {
@@ -26,7 +27,8 @@ describe('Villa electric scooter physics and safe interaction', () => {
       model.update(0, { scooter: state });
       const obstacles = [...VILLA_WALL_COLLIDERS, ...garden.colliders, ...model.colliders];
       const anchors = villaScooterAnchors(state), exit = anchors.exits[0]!;
-      expect(exit.x).toBeGreaterThan(state.x); expect(exit.x).toBeCloseTo(22.5); expect(exit.z).toBeCloseTo(6.77);
+      expect(exit.x).toBeGreaterThan(state.x); expect(exit.x).toBeCloseTo(VILLA_SCOOTER_PARKING.x + 1); expect(exit.z).toBeCloseTo(6.77);
+      expect(villaScooterExitClear(state, obstacles, -1)).toBe(true); // both sides clear of the garage apron
       expect(villaScooterPoseBlocked(state, obstacles)).toBe(false); // own model is ignored, real trees/walls are not
       expect(model.colliders[0]!.minX).toBeGreaterThan(VILLA_CAR.center.x + VILLA_SCENIC_ROAD.drivewayWidth / 2);
       expect(villaSupportAt(exit.x, exit.z, 0, 1.8)).toBe(0);
@@ -68,14 +70,15 @@ describe('Villa electric scooter physics and safe interaction', () => {
       materials.forEach(m => m.dispose());
     }
   });
-  it('accelerates forwards under 22km/h and coasts without reversing', () => {
+  it('accelerates forwards under 22km/h, coasts, then brakes and reverses slowly under held S', () => {
     const state = open(); tick(state, { ...idle, throttle: 1 }, 2);
     expect(state.speed).toBeGreaterThan(2); expect(state.z).toBeGreaterThan(27); expect(state.distance).toBeGreaterThan(2);
     const speed = state.speed; tick(state, idle); expect(state.speed).toBeLessThan(speed);
     state.speed = 100; advanceVillaScooter(state, { ...idle, throttle: 1 }, .01, []);
     expect(state.speed).toBeLessThanOrEqual(VILLA_SCOOTER_LIMITS.maxSpeed); expect(state.speed * 3.6).toBeLessThanOrEqual(22);
-    tick(state, { ...idle, throttle: -1 }, 2); expect(state.speed).toBe(0);
-    const position = { x: state.x, z: state.z }; tick(state, { ...idle, throttle: -1 }); expect({ x: state.x, z: state.z }).toEqual(position);
+    tick(state, { ...idle, throttle: -1 }, 2); expect(state.speed).toBeLessThan(0);
+    const position = { x: state.x, z: state.z }; tick(state, { ...idle, throttle: -1 }); expect(state.x).toBe(position.x); expect(state.z).toBeLessThan(position.z);
+    expect(state.speed).toBeGreaterThanOrEqual(-VILLA_SCOOTER_LIMITS.maxReverse);
   });
   it('S/service brake and Space/handbrake override throttle, brake distinctly and release', () => {
     const s = open(), brake = open(), hand = open(); s.speed = brake.speed = hand.speed = 6;
@@ -83,6 +86,31 @@ describe('Villa electric scooter physics and safe interaction', () => {
     expect(s.speed).toBeCloseTo(brake.speed); expect(hand.speed).toBeLessThan(s.speed); expect(hand.handbrake).toBe(true);
     tick(hand, { ...idle, handbrake: true }, 1); expect(hand.speed).toBe(0);
     tick(hand, { ...idle, throttle: 1 }, .25); expect(hand.handbrake).toBe(false); expect(hand.speed).toBeGreaterThan(0);
+  });
+  it('brakes either direction to zero before reversing, bounds reverse speed and reverses kinematic steering', () => {
+    const state = open(); state.speed = 1;
+    let crossedZero = false;
+    for (let i = 0; i < 400; i++) {
+      const previous = state.speed; advanceVillaScooter(state, { ...idle, throttle: -1 }, 1 / 120, []);
+      expect(Math.abs(state.speed - previous)).toBeLessThan(.04);
+      if (state.speed === 0) crossedZero = true;
+      if (state.speed < 0) expect(crossedZero).toBe(true);
+    }
+    expect(state.speed).toBe(-VILLA_SCOOTER_LIMITS.maxReverse); expect(state.wheelTravel).toBeLessThan(0);
+    const reverse = { ...open(), speed: -1.4 }; tick(reverse, { ...idle, steer: .7 }, .25); expect(reverse.yaw).toBeGreaterThan(0);
+    const previous = state.speed; advanceVillaScooter(state, { ...idle, throttle: 1 }, 1 / 120, []); expect(state.speed).toBeGreaterThan(previous); expect(state.speed).toBeLessThan(0);
+    tick(state, { ...idle, throttle: 1 }, 1); expect(state.speed).toBeGreaterThan(0);
+    for (const input of [{ ...idle, brake: true }, { ...idle, handbrake: true }]) {
+      const stopped = { ...open(), speed: -1.5 }; tick(stopped, input, 1); expect(stopped.speed).toBe(0); const z = stopped.z; tick(stopped, input, 1); expect(stopped.z).toBe(z);
+    }
+  });
+  it('sweeps reverse collisions and keeps elevated support, height-relative obstacles and exits on southern slopes', () => {
+    const state = { ...open(), x: 24, z: 122, speed: -1.65 }, obstacle = { ...box(24, 120.75, 3, .012, .3), minY: villaTerrainHeight(24, 120.75), maxY: villaTerrainHeight(24, 120.75) + .3 };
+    advanceVillaScooter(state, { ...idle, throttle: -1 }, .25, [obstacle]); expect(state.contact).toBe(true); expect(state.speed).toBe(0); expect(villaScooterFootprint(state).every(p => p.z > obstacle.maxZ)).toBe(true);
+    const anchors = villaScooterAnchors(state); expect(anchors.seat.y).toBe(villaTerrainHeight(anchors.seat.x, anchors.seat.z)); expect(villaScooterSafeExit(state, [])).not.toBeNull();
+    expect(villaScooterPoseBlocked({ x: -13, z: 77.5, yaw: 0 }, [])).toBe(true);
+    const scene = new THREE.Group(), model = createVillaScooterModel(scene); model.update(0, { scooter: state, seated: 'scooter' }); expect(model.colliders[0].minY).toBeGreaterThan(1);
+    scene.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(m => m.dispose()); } });
   });
   it('smooths analog steer, D/right decreases yaw and turns driver-right, release recentres', () => {
     const right = open(), left = open(), parked = open(); right.speed = left.speed = 3;
@@ -112,7 +140,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
     }
   });
   it('blocks pool, staircase, lift shaft, building walls and property edges without caller geometry', () => {
-    for (const pose of [{ x: -18, z: 3, yaw: 0 }, { x: 3, z: 0, yaw: 0 }, { x: 0, z: -6.3, yaw: 0 }, { x: 12, z: 5, yaw: 0 }, { x: 27.2, z: 20, yaw: 0 }]) expect(villaScooterPoseBlocked(pose, [])).toBe(true);
+    for (const pose of [{ x: -18, z: 3, yaw: 0 }, { x: 3, z: 0, yaw: 0 }, { x: 0, z: -6.3, yaw: 0 }, { x: 12, z: 5, yaw: 0 }, { x: VILLA_SCOOTER_BOUNDS.maxX - .3, z: 20, yaw: 0 }]) expect(villaScooterPoseBlocked(pose, [])).toBe(true);
     const state = { ...open(), x: POOL.maxX + VILLA_SCOOTER_LIMITS.halfLength + .6, z: 0, yaw: -Math.PI / 2, speed: 6.1 };
     advanceVillaScooter(state, { ...idle, throttle: 1 }, .25, []); expect(state.contact).toBe(true);
     expect(villaScooterFootprint(state).every(p => p.x > POOL.maxX)).toBe(true);
@@ -153,7 +181,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
     expect(villaScooterExitClear(pose, [between])).toBe(false);
     expect(villaScooterExitClear(pose, [{ ...between, minY: 1.4, maxY: 1.65 }])).toBe(false);
     expect(villaScooterExitClear({ ...pose, x: POOL.maxX + .35, z: 0 }, [], -1)).toBe(false);
-    expect(villaScooterExitClear({ ...pose, x: 27.1 }, [], 1)).toBe(false);
+    expect(villaScooterExitClear({ ...pose, x: VILLA_SCOOTER_BOUNDS.maxX - .4 }, [], 1)).toBe(false);
   });
 });
 
@@ -170,6 +198,16 @@ describe('Villa scene-owned electric scooter model', () => {
     expect(model.update(100, { scooter: state, seated: 'scooter' })).toBe(false);
     expect(model.update(101, { scooter: createVillaScooter() })).toBe(true);
     expect(root.position.x).toBe(VILLA_SCOOTER.center.x); expect(root.position.z).toBe(VILLA_SCOOTER.center.z); expect(front.rotation.x).toBe(0); expect(fork.rotation.y).toBe(0); expect(lean.rotation.z).toBe(0); expect(stand.rotation.x).toBe(0);
+    scene.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(m => m.dispose()); } });
+  });
+  it('tilts with terrain and spins both tyres backwards from signed state, without time-only invalidation', () => {
+    const scene = new THREE.Group(), model = createVillaScooterModel(scene), state = { ...open(), x: 24, z: 108, yaw: .7, speed: -1.4, steering: .4, distance: 4, wheelTravel: -2 };
+    model.update(0, { scooter: state, seated: 'scooter' }); const root = scene.getObjectByName('rideableElectricScooter')!, t = villaTerrainOrientation(state.x, state.z, state.yaw);
+    expect(root.position.y).toBe(t.y); expect(root.rotation.x).toBe(t.pitch); expect(root.rotation.z).toBe(t.roll); expect(root.rotation.order).toBe('YXZ');
+    expect(scene.getObjectByName('scooterFrontWheel')!.rotation.x).toBeLessThan(0); expect(scene.getObjectByName('scooterRearWheel')!.rotation.x).toBeLessThan(0);
+    scene.updateMatrixWorld(true); const bounds = new THREE.Box3().setFromObject(root), collider = model.colliders[0];
+    expect(bounds.min.x).toBeGreaterThan(collider.minX); expect(bounds.max.x).toBeLessThan(collider.maxX); expect(bounds.max.y).toBeLessThan(collider.maxY);
+    expect(model.update(80, { scooter: state, seated: 'scooter' })).toBe(false);
     scene.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(m => m.dispose()); } });
   });
   it('places handlebar grips below the actual seated horizon and keeps animated geometry inside the conservative collider', () => {

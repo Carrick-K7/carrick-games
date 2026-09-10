@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { VILLA_AQUARIUM } from '../src/games/villaLivingLayout';
 
 function villaModule(): string {
   const manifest = JSON.parse(readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'));
@@ -50,8 +51,11 @@ test.describe('Warm Villa', () => {
     expect(await canvas.getAttribute('data-villa-position')).toBe(beforeMap);
     await page.keyboard.press('Escape');
     await expect(canvas).toHaveAttribute('data-villa-map', 'false');
-    await page.keyboard.press('t');
-    await expect(canvas).toHaveAttribute('data-villa-time', 'day');
+    await expect(canvas).toHaveAttribute('data-villa-time', 'evening');
+    for (const time of ['night', 'day', 'evening']) {
+      await page.keyboard.press('t');
+      await expect(canvas).toHaveAttribute('data-villa-time', time);
+    }
     const lookBefore = await canvas.getAttribute('data-villa-look');
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
@@ -69,7 +73,7 @@ test.describe('Warm Villa', () => {
   test('furnished controller walks both stairs up and down, enters every room, and interacts', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/#/snake');
-    const result = await page.evaluate(async (moduleUrl) => {
+    const result = await page.evaluate(async ({ moduleUrl, aquariumApproach }) => {
       const { VillaGame } = await import(moduleUrl);
       const canvas = document.createElement('canvas');
       canvas.style.width = '1120px'; canvas.style.height = '700px'; document.body.append(canvas);
@@ -90,29 +94,34 @@ test.describe('Warm Villa', () => {
           if (budget <= 0) throw new Error(`Walk blocked before ${x},${z}: ${JSON.stringify(game.position)}`);
         }
       };
-      key('h'); walk(0, 1.4); walk(3.2, 1.4);
+      key('h'); walk(0.04, 1.4);
       const floors: number[] = [];
-      const ascend = () => { walk(3.2, -6.2); walk(5.2, -6.2); walk(5.2, 1.4); floors.push(game.position.y); };
+      const ascend = () => { walk(0.04, -6.2); walk(2.06, -6.2); walk(2.06, 1.4); floors.push(game.position.y); };
       ascend();
       walk(0, 1.4); walk(0, 2.6); walk(-3.4, 2.6); // master entry
       const masterHudText: string[] = [], originalFillText = game.ctx.fillText;
       game.ctx.fillText = (text: string) => masterHudText.push(text);
       game.drawHud(game.ctx); game.ctx.fillText = originalFillText;
       const masterHudHasRoomLabel = masterHudText.some(text => text.includes('主卧'));
-      walk(0, 2.6); walk(0, -3.5); walk(-3.4, -3.5); // guest entry
-      walk(0, -3.5); walk(0, 1.7); walk(8.2, 1.7); walk(8.2, -0.5); // bath entry
+      // The stairwell now sits on the north hall: reach the guest door by the
+      // west aisle instead of stepping onto the lower flight at x=0.
+      walk(0, 2.6); walk(-1.5, 2.6); walk(-1.5, -3.5); walk(-3.4, -3.5); // guest entry
+      walk(-1.5, -3.5); walk(-1.5, 1.7); walk(8.2, 1.7); walk(8.2, -0.5); // bath entry
       walk(8.2, 1.7); walk(4.2, 1.7); walk(4.2, 4); // reading room entry
-      walk(4.2, 1.4); walk(3.2, 1.4); ascend();
+      walk(4.2, 1.4); walk(2.06, 1.4); ascend();
       game.renderFrame();
       const roofImage = canvas.toDataURL('image/png');
-      const descend = () => { walk(5.2, -6.2); walk(3.2, -6.2); walk(3.2, 1.4); floors.push(game.position.y); };
-      descend(); walk(5.2, 1.4); descend();
+      const descend = () => { walk(2.06, -6.2); walk(0.04, -6.2); walk(0.04, 1.4); floors.push(game.position.y); };
+      descend(); walk(2.06, 1.4); descend();
       walk(4.2, 1.4); walk(4.2, 4); // gaming room
       walk(4.2, 1.4); walk(13.4, 1.4); // internally connected garage
-      walk(0, 1.4); walk(0, -2.8); walk(-3.2, -2.8); // kitchen
-      walk(0, -2.8); walk(0, 2.2); walk(-3.5, 2.2); walk(-3.5, .8); key('e');
+      // Route round the stairwell and the aquarium cabinet (x=0 and x=-3.2 at
+      // z=1.4 are now the lower flight and the aligned aquarium respectively).
+      walk(0, 1.4); walk(-1.5, 1.4); walk(-1.5, -2.8); walk(-3.2, -2.8); // kitchen
+      walk(-1.5, -2.8); walk(-1.5, 2.2); walk(aquariumApproach.x, 2.2); walk(aquariumApproach.x, aquariumApproach.z);
+      const aquariumTarget = game.hotspot()?.id, aquariumApproachSafe = game.canFit(1.75); key('e');
       const fed = game.state.fedUntil > game.time;
-      walk(-3.5, 2.2); walk(-6, 2.2); walk(-10, 2.2); key('e');
+      walk(aquariumApproach.x, 2.2); walk(-6, 2.2); walk(-10, 2.2); key('e');
       const fireOff = !game.state.fireplace;
       game.renderFrame();
       const interiorImage = canvas.toDataURL('image/png');
@@ -123,14 +132,15 @@ test.describe('Warm Villa', () => {
       game.destroy();
       const cleaned = game.scene === null && !canvas.hasAttribute('data-villa-renderer');
       canvas.remove();
-      return { floors, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, roofImage, interiorImage };
-    }, villaModule());
+      return { floors, aquariumTarget, aquariumApproachSafe, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, roofImage, interiorImage };
+    }, { moduleUrl: villaModule(), aquariumApproach: VILLA_AQUARIUM.approach });
     expect(result.floors[0]).toBeCloseTo(3.6, 4);
     expect(result.floors[1]).toBeCloseTo(7.2, 4);
     expect(result.floors[2]).toBeCloseTo(3.6, 4);
     expect(result.floors[3]).toBeCloseTo(0, 4);
     expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'gaming', 'garage', 'master', 'guest', 'bath', 'library', 'terrace', 'stairs']));
     expect(result.masterHudHasRoomLabel).toBe(false);
+    expect(result.aquariumTarget).toBe('aquarium'); expect(result.aquariumApproachSafe).toBe(true);
     expect(result.fed).toBe(true);
     expect(result.fireOff).toBe(true);
     expect(result.blurStopped).toBe(true);

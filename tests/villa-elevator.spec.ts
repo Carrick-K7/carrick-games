@@ -30,11 +30,11 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
     };
     const car = game.scene.scene.getObjectByName('elevator-car');
     const leaf = (floor: number) => game.scene.scene.getObjectByName(`elevator-landing-${floor}-door-right-inner`);
-    key('h'); walk(0, -4.3); key('w'); tick(15); key('w', 'keyup');
-    const gateStopped = game.position.z > -4.82;
+    key('h'); walk(0, 1.4); walk(4.55, 1.4); walk(4.55, -3.8); key('w'); tick(15); key('w', 'keyup');
+    const gateStopped = game.position.z > -4.32;
     key('e'); tick(8); key('w'); tick(4); key('w', 'keyup');
-    const partialGateStopped = game.position.z > -4.82;
-    tick(6); walk(0, -6.2);
+    const partialGateStopped = game.position.z > -4.32;
+    tick(6); walk(4.55, -5.8);
     const journey = (floor: number) => {
       key(String(floor + 1)); const x = game.position.x, z = game.position.z;
       key('w'); key('Shift'); key('ArrowLeft');
@@ -54,19 +54,19 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
     };
     const up = journey(2); game.yaw = Math.PI; game.pitch = .02; game.time++; game.renderFrame();
     const cabinImage = canvas.toDataURL();
-    walk(0, -4.3); const roofExit = { ...game.position };
-    // Leave by the original staircase, then summon the now-empty car downstairs.
-    walk(0, 2); walk(5.2, 2); walk(5.2, 1.4); // clear the pavilion's side-wall corner before entering
-    walk(5.2, -6.2); walk(3.2, -6.2); walk(3.2, 1.4);
+    walk(4.55, -3.8); const roofExit = { ...game.position };
+    // Leave by the swapped staircase, then summon the now-empty car downstairs.
+    walk(4.55, 2); walk(2.06, 2); walk(2.06, 1.4); // clear the pavilion's side-wall corner before entering
+    walk(2.06, -6.2); walk(0.04, -6.2); walk(0.04, 1.4);
     const stairsStillWork = Math.abs(game.position.y - 3.6) < .01;
-    walk(0, 1.4); walk(0, -4.3); key('e');
+    walk(0.04, 1.4); walk(4.55, -3.8); key('e');
     const waitingY = game.position.y; let waitBudget = 240;
     while (game.state.elevator.phase !== 'open' && waitBudget-- > 0) game.update(.05);
     const emptyCall = waitBudget > 0 && game.position.y === waitingY && game.state.elevator.floor === 1 && !game.state.elevator.riding;
-    walk(0, -6.2); const down = journey(0); walk(0, -4.3); const groundExit = { ...game.position };
+    walk(4.55, -5.8); const down = journey(0); walk(4.55, -3.8); const groundExit = { ...game.position };
     // A body crossing the sill must never trigger departure.
-    walk(0, -5.2); key('3'); const sillSafe = game.state.elevator.phase === 'open' && !game.state.elevator.riding;
-    walk(0, -6.2); key('3'); tick(35); key('h');
+    walk(4.55, -4.0); key('3'); const sillSafe = game.state.elevator.phase === 'open' && !game.state.elevator.riding;
+    walk(4.55, -5.8); key('3'); tick(35); key('h');
     const homeResets = game.state.elevator.phase === 'closed' && car.position.y === 0 && !game.state.elevator.riding && game.position.z === 11.5;
     game.init(); const restartResets = game.state.elevator.y === 0 && game.state.elevator.door === 0;
     game.destroy(); const cleaned = !canvas.dataset.villaElevator; canvas.remove();
@@ -99,7 +99,18 @@ test('villa elevator floor buttons accept real coarse-pointer taps', async ({ br
       for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) canvas.addEventListener(type, e => game.handleInput(e), { passive: false });
       const key = (key: string, type = 'keydown') => game.handleInput(new KeyboardEvent(type, { key }));
       const tick = (n: number) => { for (let i = 0; i < n; i++) game.update(.05); };
-      key('h'); key('w'); tick(125); key('w', 'keyup'); key('e'); tick(18);
+      const walk = (x: number, z: number) => {
+        for (const axis of ['x', 'z']) {
+          const target = axis === 'x' ? x : z; let budget = 600;
+          while (Math.abs(game.position[axis] - target) > .005 && budget-- > 0) {
+            const diff = target - game.position[axis];
+            game.yaw = axis === 'x' ? (diff > 0 ? -Math.PI / 2 : Math.PI / 2) : (diff > 0 ? Math.PI : 0);
+            key('w'); game.update(Math.min(.05, Math.abs(diff) / 2.75)); key('w', 'keyup');
+          }
+          if (budget <= 0) throw new Error('Walk blocked at ' + JSON.stringify(game.position));
+        }
+      };
+      key('h'); walk(0, 1.4); walk(4.55, 1.4); walk(4.55, -3.8); key('e'); tick(18);
       key('w'); tick(9); key('w', 'keyup'); game.renderFrame();
       const b = game.buttons().find((b: any) => b.id === 'elevator-2'); if (!b) throw new Error('No cabin floor button');
       const r = canvas.getBoundingClientRect();
@@ -131,12 +142,39 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   await canvas.click();
   await page.waitForFunction(() => document.pointerLockElement === document.getElementById('gameCanvas'));
   await page.keyboard.press('h');
-  await page.keyboard.down('Shift'); await page.keyboard.down('w');
-  await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPosition!).z < -4.1, null, { timeout: 45_000 });
-  await page.keyboard.up('w'); await page.keyboard.up('Shift'); await page.keyboard.press('e');
+  // The swapped lift sits east of the hall and the staircase now fills x~0, so
+  // walk the west aisle, cross SOUTH of the open stairwell, then turn north.
+  // Each leg is one page-side loop, so live telemetry is never sampled late
+  // enough to overshoot the half-metre front doorway at running speed.
+  const script = `(async () => {
+    const canvas = document.getElementById('gameCanvas');
+    const position = () => JSON.parse(canvas.dataset.villaPosition);
+    const press = key => window.dispatchEvent(new KeyboardEvent('keydown', { key }));
+    const release = key => window.dispatchEvent(new KeyboardEvent('keyup', { key }));
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const legs = [
+      [['w'], p => p.z < 7.8, 'through the front doorway'],
+      [['a'], p => p.x < -1.7, 'west clear of the doorway wall'],
+      [['w'], p => p.z < -1.2, 'north up the west aisle'],
+      [['s'], p => p.z > 1.2, 'south of the stairwell opening'],
+      [['d'], p => p.x > 4.4, 'east across the south hall'],
+      [['w'], p => p.z < -3.35, 'north to the lift doorway'],
+    ];
+    for (const [keys, check, label] of legs) {
+      keys.forEach(press);
+      const deadline = performance.now() + 40000;
+      while (!check(position()) && performance.now() < deadline) await sleep(40);
+      keys.forEach(release);
+      if (!check(position())) return { stuck: label, at: position() };
+    }
+    return { at: position() };
+  })()`;
+  const walked = await page.evaluate(script) as { stuck?: string; at?: { x: number; z: number } };
+  expect(walked.stuck ?? '', JSON.stringify(walked)).toBe('');
+  await page.keyboard.press('e');
   await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!).phase === 'open');
   await page.keyboard.down('w');
-  await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPosition!).z < -5.75);
+  await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPosition!).z < -5.5);
   await page.keyboard.up('w'); await page.keyboard.press('2');
   await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-elevator'))!), {
     message: 'The real floor-selection key must begin a passenger trip',

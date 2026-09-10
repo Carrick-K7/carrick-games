@@ -26,17 +26,21 @@ describe('north-wall master bedroom joinery', () => {
   it('makes one fitted five-bay wardrobe row with ten doors and handles', () => {
     const w = VILLA_MASTER_WARDROBE;
     expect(root.getObjectByName('Bedroom/wardrobe-row')?.userData).toMatchObject({ bays: 5, doors: 10, wall: 'north' });
-    const bays = root.children.filter(n => n.name.startsWith('Bedroom/wardrobe-bay-'));
+    const bays: THREE.Object3D[] = []; root.traverse(n => { if (n.name.startsWith('Bedroom/wardrobe-bay-')) bays.push(n); });
     expect(bays).toHaveLength(5);
     bays.forEach((bay, i) => {
       expect(bay.userData).toMatchObject({ doors: 2, handles: 2 });
       expect(bay.position.x).toBeCloseTo(-11.2 + (i + 0.5) * 1.04);
       expect(bay.position.y).toBe(3.6);
     });
-    const c = colliders[0];
-    expect(c.minX).toBeCloseTo(-11.2); expect(c.maxX).toBeCloseTo(-6);
-    expect(c.minZ).toBeCloseTo(0.15); expect(c.maxZ).toBeCloseTo(w.handleFrontZ);
-    expect(c.minY).toBe(3.6); expect(c.maxY).toBeCloseTo(6.28);
+    const wardrobeColliders = colliders.filter(c => c.maxX <= -6 + 1e-8);
+    expect(Math.min(...wardrobeColliders.map(c => c.minX))).toBeCloseTo(-11.2);
+    expect(Math.max(...wardrobeColliders.map(c => c.maxX))).toBeCloseTo(-6);
+    expect(Math.min(...wardrobeColliders.map(c => c.minZ))).toBeCloseTo(0.15);
+    expect(Math.max(...wardrobeColliders.map(c => c.maxZ))).toBeCloseTo(w.handleFrontZ);
+    // Real sides, back, shelves and independently moving doors replace a giant solid box.
+    expect(wardrobeColliders.length).toBeGreaterThan(20);
+    expect(wardrobeColliders.every(c => c.maxX - c.minX < 1 || c.maxY - c.minY < 0.2 || c.maxZ - c.minZ < 0.1)).toBe(true);
     expect(villaCollides({ x: w.x, y: 3.6, z: 0.8 }, colliders)).toBe(true);
   });
 
@@ -54,7 +58,7 @@ describe('north-wall master bedroom joinery', () => {
     const s = VILLA_MASTER_STOOL;
     expect(villaCollides({ x: s.x, y: s.y, z: s.z }, colliders)).toBe(true);
     expect(colliders[colliders.length - 1].maxY).toBeCloseTo(s.y + s.height);
-    expect(colliders).toHaveLength(11); // Row; four legs, rear brace, two drawers, top; mirror; stool.
+    expect(colliders.filter(c => c.minX > -6)).toHaveLength(10); // Vanity legs/brace/drawers/top; mirror; stool.
   });
 
   it('fits entirely inside the master room and preserves doors, bed access and glazing', () => {
@@ -94,8 +98,9 @@ describe('north-wall master bedroom joinery', () => {
 
   it('merges finite geometry by scene-owned materials without DOM textures or excessive draw calls', () => {
     expect(parent.children).toHaveLength(1); expect(root.name).toBe('Villa master bedroom');
-    expect(meshes.length).toBeLessThanOrEqual(12);
-    expect(new Set(meshes.map(mesh => mesh.material)).size).toBe(meshes.length);
+    expect(meshes.length).toBeLessThanOrEqual(24);
+    expect(meshes.filter(mesh => mesh instanceof THREE.InstancedMesh)).toHaveLength(3);
+    expect(new Set(meshes.map(mesh => mesh.material)).size).toBeLessThan(meshes.length);
     let vertices = 0;
     for (const mesh of meshes) {
       const p = mesh.geometry.getAttribute('position'); vertices += p.count;

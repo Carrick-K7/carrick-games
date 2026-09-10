@@ -1,8 +1,9 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
 export type VillaPetKind = 'dog' | 'cat' | 'parrot' | 'rabbit';
-export type VillaPetId = VillaPetKind | 'parrot-blue';
-export const VILLA_PET_IDS: readonly VillaPetId[] = ['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue'];
+export type VillaPetId = VillaPetKind | 'parrot-blue' | 'rabbit-female';
+export const VILLA_PET_IDS: readonly VillaPetId[] = ['dog', 'cat', 'parrot', 'rabbit', 'parrot-blue', 'rabbit-female'];
+export function villaPetKind(id: VillaPetId): VillaPetKind { return id === 'parrot-blue' ? 'parrot' : id === 'rabbit-female' ? 'rabbit' : id; }
 export type VillaPetMode = 'idle' | 'exploring' | 'approaching' | 'eating' | 'happy';
 export const VILLA_PET_KINDS: readonly VillaPetKind[] = ['dog', 'cat', 'parrot', 'rabbit'];
 /** Bounds contain the entire pet, including wings/tails, not only its centre. */
@@ -18,10 +19,18 @@ export const VILLA_PET_LABELS = {
   dog: { en: 'Puppy', zh: '小狗', foodEn: 'Dog kibble', foodZh: '狗粮' },
   cat: { en: 'Cat', zh: '小猫', foodEn: 'Cat kibble', foodZh: '猫粮' },
   parrot: { en: 'Parrot', zh: '鹦鹉', foodEn: 'Seeds', foodZh: '种子' },
-  rabbit: { en: 'Rabbit', zh: '兔子', foodEn: 'Hay and greens', foodZh: '干草和青菜' },
+  rabbit: { en: 'Male rabbit', zh: '公兔', foodEn: 'Hay and greens', foodZh: '干草和青菜' },
+  'rabbit-female': { en: 'Female rabbit', zh: '母兔', foodEn: 'Hay and greens', foodZh: '干草和青菜' },
+  'parrot-blue': { en: 'Blue parrot', zh: '蓝鹦鹉', foodEn: 'Seeds', foodZh: '种子' },
 } as const;
+export function villaPetLabel(pet: Pick<VillaPet, 'id'>) { return VILLA_PET_LABELS[pet.id]; }
 export interface VillaPet extends VillaPosition {
   id: VillaPetId; kind: VillaPetKind; yaw: number; mode: VillaPetMode;
+  sex: 'male' | 'female' | null;
+  /** Physical dry-roof status, not a promised/teleported destination. */
+  sheltered: boolean; shelterSite: 'living' | 'garage' | null;
+  shelterPhase: 'none' | 'seeking' | 'resting' | 'returning';
+  shelterRoute: [number, number][]; shelterWaypoint: number; shelterReplan: number; shelterWait: number;
   /** Independent excursion clock and waypoint cursor; feeding pauses, not cancels, a visit. */
   visitTimer: number; visit: 'lawn' | 'outbound' | 'living' | 'returning'; waypoint: number;
   wingPhase: number; wingFold: number; verticalSpeed: number; bank: number;
@@ -36,18 +45,21 @@ export interface VillaPetsState {
   /** Live, read-only scene/car boxes. Never include this model's own drivingColliders. */
   colliders: readonly VillaCollider[];
   time: number;
+  raining: boolean;
   /** Discrete cache invalidation token: increments only on successful feeding. */
   feedSequence: number;
 }
 const SPEED: Record<VillaPetKind, number> = { dog: 0.66, cat: 0.43, parrot: 0.52, rabbit: 0.58 };
-const STARTS = [[-16, 18], [-15, 15], [-13, 14], [-18, 16], [-16.5, 13.5]] as const;
+const STARTS = [[-16, 18], [-15, 15], [-13, 14], [-18, 16], [-16.5, 13.5], [-18.7, 14]] as const;
 /** Front opening is x ±1.45 at z=9. The east living aisle avoids sofa, table and aquarium. */
 export const VILLA_PET_VISIT_ROUTE = [[-13, 14.5], [-3, 14.5], [0, 11.5], [0, 6.5], [-4.6, 6.5], [-4.6, 4.5]] as const;
 export function createVillaPets(): VillaPetsState {
-  return { time: 0, feedSequence: 0, visitor: null, colliders: [], pets: VILLA_PET_IDS.map((id, i) => {
-    const kind: VillaPetKind = id === 'parrot-blue' ? 'parrot' : id;
+  return { time: 0, raining: false, feedSequence: 0, visitor: null, colliders: [], pets: VILLA_PET_IDS.map((id, i) => {
+    const kind = villaPetKind(id);
     return {
       id, kind, x: STARTS[i][0], y: 0, z: STARTS[i][1], yaw: i * 1.4,
+      sex: kind === 'rabbit' ? id === 'rabbit-female' ? 'female' : 'male' : null,
+      sheltered: false, shelterSite: null, shelterPhase: 'none', shelterRoute: [], shelterWaypoint: 0, shelterReplan: 0, shelterWait: 0,
       visitTimer: 18 + i * 23, visit: 'lawn', waypoint: 0,
       wingPhase: i * 1.7, wingFold: 0, verticalSpeed: 0, bank: 0,
       mode: 'idle', fed: false, feedCount: 0, cooldown: 0, food: VILLA_PET_FOOD[kind],
@@ -162,6 +174,95 @@ function visitStep(pet: VillaPet, state: VillaPetsState): boolean {
   pet.mode = 'exploring'; pet.timer = 2;
   return true;
 }
+/** Spaced rest sites leave the living/garage through-aisles unobstructed by sleeping pets. */
+export const VILLA_PET_SHELTERS: Readonly<Record<VillaPetId, { site: 'living' | 'garage'; x: number; z: number }>> = {
+  dog: { site: 'living', x: -4.6, z: 4.5 }, cat: { site: 'living', x: -4.6, z: 7.85 },
+  parrot: { site: 'garage', x: 24.95, z: -5 }, rabbit: { site: 'garage', x: 27.1, z: -5 },
+  'parrot-blue': { site: 'garage', x: 24.95, z: -3.4 }, 'rabbit-female': { site: 'garage', x: 27.1, z: -3.4 },
+};
+/** Stable visibility nodes, not a per-frame unbounded world search. Lawn nodes skirt
+ * vegetable beds/pots; the two doorway corridors connect to real roofed interiors. */
+const SHELTER_NODES: readonly (readonly [number, number])[] = [
+  ...[-20, -18, -16, -14, -12.3, -9, -6, -4].flatMap(x => [13.4, 14.8, 16.3, 19.5, 21.4].map(z => [x, z] as const)),
+  ...STARTS, [-3, 14.5], [0, 11.5], [0, 6.5], [-4.6, 6.5],
+  [12.5, 11.5], [26, 11.5], [26, 3.1], [26, -1.4], [26, -3.4], [26, -5],
+];
+function drySite(pet: VillaPet): VillaPet['shelterSite'] {
+  if (pet.x > -11.4 && pet.x < -2.4 && pet.z > 0.65 && pet.z < 8.4) return 'living';
+  if (pet.x > 12.5 && pet.x < 34.2 && pet.z > -7.4 && pet.z < 1.4) return 'garage';
+  return null;
+}
+/** Dijkstra on a tiny visibility graph. Every segment, including the initial
+ * connector, is swept against live walls/furniture/vehicles AND other pets.
+ * Replanning is bounded and happens only at weather changes or after yielding. */
+function shelterPlan(pet: VillaPet, state: VillaPetsState, target: readonly [number, number]): [number, number][] {
+  const obstacles = state.colliders.filter(c => blocksLawn(c) && c.minX < 29 && c.maxX > -21 && c.minZ < 23 && c.maxZ > -7);
+  const clear = (ax: number, az: number, bx: number, bz: number) => {
+    // Use the reserved bay, not a shortcut through a parked vehicle's working bay.
+    if ((az - 2) * (bz - 2) < 0) {
+      const sillX = ax + (bx - ax) * (2 - az) / (bz - az);
+      if (sillX > 11.8 && (sillX < 24.6 || sillX > 27.5)) return false;
+    }
+    return pathClear(ax, az, bx, bz, obstacles, VILLA_PET_RADIUS)
+      && state.pets.every(other => other === pet || segmentDistance(ax, az, bx, bz, other.x, other.z) >= 2 * VILLA_PET_RADIUS + 0.05 - 1e-8);
+  };
+  const nodes: (readonly [number, number])[] = [[pet.x, pet.z], target, ...SHELTER_NODES];
+  const valid = nodes.map(([x, z]) => clear(x, z, x, z));
+  if (!valid[0] || !valid[1]) return [];
+  const distance = nodes.map(() => Infinity), previous = nodes.map(() => -1), used = nodes.map(() => false);
+  distance[0] = 0;
+  for (let pass = 0; pass < nodes.length; pass++) {
+    let index = -1;
+    for (let i = 0; i < nodes.length; i++) if (valid[i] && !used[i] && Number.isFinite(distance[i]) && (index < 0 || distance[i] < distance[index])) index = i;
+    if (index < 0) return [];
+    if (index === 1) break;
+    used[index] = true; const [ax, az] = nodes[index];
+    for (let j = 1; j < nodes.length; j++) {
+      if (!valid[j] || used[j]) continue;
+      const [bx, bz] = nodes[j], next = distance[index] + Math.hypot(bx - ax, bz - az);
+      if (next >= distance[j] || !clear(ax, az, bx, bz)) continue;
+      distance[j] = next; previous[j] = index;
+    }
+  }
+  if (previous[1] < 0) return [];
+  const route: [number, number][] = [];
+  for (let i = 1; i > 0; i = previous[i]) { route.push([nodes[i][0], nodes[i][1]]); if (route.length > nodes.length) return []; }
+  return route.reverse();
+}
+function shelterStep(pet: VillaPet, state: VillaPetsState, dt: number): boolean {
+  if (pet.shelterPhase === 'none') return false;
+  pet.shelterReplan = Math.max(0, pet.shelterReplan - dt);
+  // Birds travel low over the collision-reserved forecourt, then stop/land/fold
+  // several metres BEFORE the garage sill. They walk while under either roof.
+  const walk = drySite(pet) !== null || (pet.x > 11.4 && pet.z < 4.8) || pet.shelterPhase === 'resting';
+  pet.flightHeight = pet.kind === 'parrot' && !walk ? 0.55 : 0;
+  if (pet.kind === 'parrot' && walk && (pet.y > 0.002 || pet.wingFold > 0.015)) { pet.mode = 'idle'; pet.timer = 1; return true; }
+  if (pet.shelterPhase === 'resting') {
+    const rest = VILLA_PET_SHELTERS[pet.id];
+    if (Math.hypot(pet.x - rest.x, pet.z - rest.z) <= 0.25) { pet.mode = 'idle'; pet.timer = 1; return true; }
+    // Feeding may have invited a sheltered pet a little closer. After its own
+    // reaction finishes, walk back to the dry rest site rather than freezing there.
+    pet.shelterPhase = 'seeking'; pet.shelterRoute = []; pet.shelterWaypoint = 0; pet.shelterReplan = 0;
+  }
+  const destination = pet.shelterPhase === 'seeking' ? VILLA_PET_SHELTERS[pet.id] : null;
+  const target = destination ? [destination.x, destination.z] as const : STARTS[VILLA_PET_IDS.indexOf(pet.id)];
+  if (!pet.shelterRoute.length && pet.shelterReplan === 0) {
+    pet.shelterRoute = shelterPlan(pet, state, target); pet.shelterWaypoint = 0; pet.shelterReplan = 1.1;
+  }
+  if (!pet.shelterRoute.length) { pet.mode = 'idle'; pet.timer = 1; return true; }
+  let point = pet.shelterRoute[pet.shelterWaypoint];
+  if (Math.hypot(pet.x - point[0], pet.z - point[1]) < 0.19) {
+    pet.shelterWaypoint++;
+    if (pet.shelterWaypoint === pet.shelterRoute.length) {
+      pet.shelterRoute = []; pet.shelterPhase = destination ? 'resting' : 'none';
+      pet.visit = 'lawn'; pet.visitTimer = 70 + random(pet) * 50; pet.mode = 'idle'; pet.timer = 1.2;
+      return true;
+    }
+    point = pet.shelterRoute[pet.shelterWaypoint];
+  }
+  [pet.targetX, pet.targetZ] = point; pet.mode = 'exploring'; pet.timer = 2;
+  return true;
+}
 function segmentDistance(ax: number, az: number, bx: number, bz: number, x: number, z: number): number {
   const dx = bx - ax, dz = bz - az, squared = dx * dx + dz * dz;
   const t = squared ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / squared)) : 0;
@@ -182,7 +283,7 @@ function move(pet: VillaPet, state: VillaPetsState, dt: number): void {
   const cruise = bird ? (pet.y > 0.15 ? 0.66 : 0.3) * Math.max(0.15, Math.cos(turn)) : SPEED[pet.kind];
   const step = Math.min(distance - stop, cruise * dt);
   const side = pet.kind === 'cat' || pet.kind === 'rabbit' ? -1 : 1;
-  const visiting = pet.visit !== 'lawn';
+  const visiting = pet.visit !== 'lawn' || pet.shelterPhase !== 'none';
   const singleFile = visiting && (!inLawn(pet.x, pet.z) || !inLawn(pet.targetX, pet.targetZ));
   for (const offset of bird || singleFile ? [0] : [0, 0.45, -0.45, 0.95, -0.95, 1.5, -1.5, 2.3, -2.3, Math.PI]) {
     const heading = (bird ? pet.yaw : angle) + offset * side;
@@ -208,10 +309,19 @@ function move(pet: VillaPet, state: VillaPetsState, dt: number): void {
  * in <=1/30s swept steps. Cars must stop before overlapping pets: a collider
  * inserted on top of a pet causes it to wait, never an arbitrary escape teleport.
  */
-export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: readonly VillaCollider[], visitor?: VillaPosition): void {
+export interface VillaPetWeather { raining: boolean }
+export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: readonly VillaCollider[], visitor?: VillaPosition, weather?: VillaPetWeather): void {
   if (!Number.isFinite(dt) || dt <= 0) return;
   state.colliders = colliders;
   state.visitor = visitor && [visitor.x, visitor.y, visitor.z].every(Number.isFinite) ? { ...visitor } : null;
+  const raining = !!weather?.raining;
+  if (raining !== state.raining) {
+    state.raining = raining;
+    for (const pet of state.pets) {
+      pet.shelterPhase = raining ? 'seeking' : 'returning'; pet.shelterRoute = []; pet.shelterWaypoint = 0;
+      pet.shelterReplan = 0; pet.shelterWait = 0; pet.flightHeight = 0; pet.visit = 'lawn';
+    }
+  }
   const elapsed = Math.min(dt, 2), steps = Math.ceil(elapsed * 30), h = elapsed / steps;
   for (let i = 0; i < steps; i++) {
     state.time += h;
@@ -219,11 +329,12 @@ export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: r
       pet.cooldown = Math.max(0, pet.cooldown - h); pet.timer -= h; pet.speed = 0;
       pet.visitTimer -= h;
       const reacting = pet.mode === 'approaching' || pet.mode === 'eating' || pet.mode === 'happy';
-      if (!reacting) visitStep(pet, state);
+      const weatherJourney = !reacting && shelterStep(pet, state, h);
+      if (!reacting && !weatherJourney) visitStep(pet, state);
       const visitor = state.visitor;
       // A nearby visitor gets a calm greeting, not a moving target. Airborne birds
       // also notice the visitor and gently land; no following/chasing is required.
-      if ((pet.mode === 'idle' || pet.mode === 'exploring') && visitor && Math.abs(visitor.y) <= 0.25
+      if (!weatherJourney && (pet.mode === 'idle' || pet.mode === 'exploring') && visitor && Math.abs(visitor.y) <= 0.25
         && Math.hypot(visitor.x - pet.x, visitor.z - pet.z) <= VILLA_PET_FEED_RANGE
         && pathClear(pet.x, pet.z, visitor.x, visitor.z, colliders, 0.025)) {
         pet.mode = 'idle'; pet.timer = 0.75; pet.flightHeight = 0;
@@ -234,10 +345,15 @@ export function advanceVillaPets(state: VillaPetsState, dt: number, colliders: r
       if (pet.timer <= 0) {
         if (pet.mode === 'approaching') { pet.mode = 'eating'; pet.timer = 1.8; }
         else if (pet.mode === 'eating') { pet.mode = 'happy'; pet.timer = 1.5; }
-        else if (pet.mode === 'idle') explore(pet, colliders);
+        else if (pet.mode === 'idle' && !weatherJourney) explore(pet, colliders);
         else { pet.mode = 'idle'; pet.timer = 0.9 + random(pet) * 2.2; pet.flightHeight = 0; }
       }
       if (pet.mode === 'exploring' || pet.mode === 'approaching') move(pet, state, h);
+      if (weatherJourney && pet.mode === 'exploring') {
+        pet.shelterWait = pet.speed > 0.001 ? 0 : pet.shelterWait + h;
+        if (pet.shelterWait > 1.2) { pet.shelterRoute = []; pet.shelterReplan = 0; pet.shelterWait = 0; }
+      }
+      pet.shelterSite = drySite(pet); pet.sheltered = pet.shelterSite !== null;
       pet.gait += h * (pet.speed > 0 ? pet.kind === 'parrot' ? pet.speed * 24 : 9 : 2);
       if (pet.kind === 'parrot') {
         const remaining = Math.hypot(pet.targetX - pet.x, pet.targetZ - pet.z);

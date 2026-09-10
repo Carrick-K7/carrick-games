@@ -38,7 +38,7 @@ describe('Villa HUD clears the brand/help/menu cluster', () => {
   function hud(width: number, height: number, safe: typeof VIEWPORTS[number]['safe'], touchMode: boolean, immersive: boolean, snookerActive = false) {
     return Object.assign(Object.create(VillaGame.prototype), {
       width, height, viewport: { width, height, dpr: 1, safeArea: safe }, touchMode, immersive,
-      state: { evening: true, snookerActive, seated: null },
+      state: { home: { timeOfDay: 'day' }, snookerActive, seated: null },
       isZhLang: () => false, hotspot: () => null, inElevator: () => false, drivingSeat: () => false,
     }) as { buttons(): (HudRect & { id: string })[]; compactHud(): boolean };
   }

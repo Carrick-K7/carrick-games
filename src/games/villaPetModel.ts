@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
-import { createVillaPets, VILLA_PET_FOOD, VILLA_PET_IDS, VILLA_PET_RADIUS, type VillaPetId, type VillaPetsState } from './villaPets.js';
+import { createVillaPets, villaPetKind, VILLA_PET_FOOD, VILLA_PET_IDS, VILLA_PET_RADIUS, type VillaPetId, type VillaPetsState } from './villaPets.js';
 import type { VillaCollider } from './villaWorld.js';
 
 type Triple = [number, number, number];
@@ -35,8 +35,8 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     b.geometry(g, material, p, rotation);
   }
-  function oval(b: VillaModelBuilder, color: number, p: Triple, scale: Triple): void {
-    const g = new THREE.SphereGeometry(1, 10, 7); g.scale(...scale); shape(b, g, color, p);
+  function oval(b: VillaModelBuilder, color: number, p: Triple, scale: Triple, rotation: Triple = [0, 0, 0]): void {
+    const g = new THREE.SphereGeometry(1, 10, 7); g.scale(...scale); shape(b, g, color, p, rotation);
   }
   function cone(b: VillaModelBuilder, color: number, p: Triple, radius: number, height: number, rotation: Triple = [0, 0, 0]): void {
     shape(b, new THREE.ConeGeometry(radius, height, 8), color, p, rotation);
@@ -57,13 +57,15 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
     b.geometry(g, material, [0, 0.235, -0.035]);
   }
   for (const id of VILLA_PET_IDS) {
-    const kind = id === 'parrot-blue' ? 'parrot' : id;
-    const blue = id === 'parrot-blue';
+    const kind = villaPetKind(id);
+    const blue = id === 'parrot-blue', female = id === 'rabbit-female';
     const root = new THREE.Group(); root.name = `villa-pet-${id}`;
-    root.userData = { petId: id, petKind: kind, peaceful: true, food: VILLA_PET_FOOD[kind], radius: VILLA_PET_RADIUS };
+    root.userData = { petId: id, petKind: kind, peaceful: true, food: VILLA_PET_FOOD[kind], radius: VILLA_PET_RADIUS,
+      sex: kind === 'rabbit' ? female ? 'female' : 'male' : null,
+      appearance: kind === 'rabbit' ? female ? 'silver-cream coat, gently splayed ears' : 'warm cream coat, upright ears' : blue ? 'blue plumage' : 'natural coat/plumage' };
     parent.add(root);
     const rabbit = kind === 'rabbit', bird = kind === 'parrot', cat = kind === 'cat';
-    const fur = rabbit ? cream : cat ? 0xc4b7a6 : brown;
+    const fur = rabbit ? female ? 0xd6d4cd : cream : cat ? 0xc4b7a6 : brown;
     const body = part(root, `${id}/body`, [0, 0, 0], b => {
       if (bird) {
         oval(b, blue ? 0x429bca : 0x48a763, [0, 0.23, 0], [0.095, 0.145, 0.105]);
@@ -86,8 +88,9 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
         oval(b, cat || rabbit ? pink : dark, [0, -0.015, cat || rabbit ? 0.129 : 0.151], [0.022, 0.016, 0.012]);
         for (const side of [-1, 1]) {
           if (rabbit) {
-            oval(b, fur, [side * 0.061, 0.143, -0.018], [0.038, 0.145, 0.03]);
-            oval(b, pink, [side * 0.061, 0.152, 0.008], [0.018, 0.109, 0.009]);
+            const tilt: Triple = [0, 0, female ? -side * 0.17 : 0];
+            oval(b, fur, [side * 0.061, 0.143, -0.018], [0.038, female ? 0.133 : 0.145, 0.03], tilt);
+            oval(b, female ? 0xd4aaa6 : pink, [side * 0.061, 0.152, 0.008], [0.018, female ? 0.096 : 0.109, 0.009], tilt);
           } else if (cat) {
             cone(b, fur, [side * 0.079, 0.115, -0.008], 0.047, 0.125);
             cone(b, pink, [side * 0.079, 0.117, 0.022], 0.026, 0.08);
@@ -177,6 +180,7 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
     for (const pet of state.pets) {
       const rig = rigs.get(pet.id); if (!rig) continue;
       rig.root.position.set(pet.x, pet.y, pet.z); rig.root.rotation.y = pet.yaw;
+      rig.root.userData.sheltered = pet.sheltered; rig.root.userData.shelterSite = pet.shelterSite;
       const moving = pet.speed > 0.01, happy = pet.mode === 'happy', eating = pet.mode === 'eating';
       if (eating && (!rig.foodPlate.visible || rig.foodFeedCount !== pet.feedCount)) {
         // Eating begins after approach has stopped. Snapshot once, not every RAF.
