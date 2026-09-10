@@ -2,11 +2,9 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import type { VillaCollider } from './villaWorld.js';
 
-/** North-wall joinery: south-facing doors, never placed across the west glazing. */
-export const VILLA_MASTER_WARDROBE = {
-  x: -8.6, y: 3.6, z: 0.54, width: 5.2, depth: 0.78, height: 2.68,
-  bays: 5, doorsPerBay: 2, handleFrontZ: 1.005,
-} as const;
+import { createVillaWardrobe, VILLA_MASTER_WARDROBE, type VillaWardrobeState } from './villaWardrobe.js';
+import { registerVillaSeatCollider, villaRelaxSeat } from './villaSeating.js';
+export { VILLA_MASTER_WARDROBE } from './villaWardrobe.js';
 export const VILLA_MASTER_VANITY = {
   x: -4.35, y: 3.6, z: 0.65, width: 2.05, depth: 0.72, height: 0.82,
   kneeWidth: 0.94, kneeHeight: 0.69,
@@ -19,8 +17,8 @@ export const VILLA_MASTER_STOOL = {
 } as const;
 export const VILLA_VANITY_ACCESSORIES = ['brush-cup', 'lipstick', 'compact', 'perfume-bottle', 'jewelry-tray'] as const;
 
-/** Static scene-owned bedroom joinery. No lights, DOM, render targets or interaction state. */
-export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCollider[] } {
+/** Scene-owned joinery; controller owns pure wardrobe state, no DOM or render targets. */
+export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCollider[]; update(state?: VillaWardrobeState, lightOn?: boolean): boolean } {
   const b = new VillaModelBuilder(parent, 'Villa master bedroom');
   const oak = villaMaterial('#b69771', 0.78), shadowOak = villaMaterial('#786047', 0.88);
   const linen = villaMaterial('#e4ddca', 0.93), sage = villaMaterial('#98a18a', 0.84);
@@ -34,34 +32,7 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
     node.userData = { kind, ...data }; b.root.add(node); return node;
   };
   const w = VILLA_MASTER_WARDROBE;
-  marker('wardrobe-row', w.x, w.y, w.z, { bays: w.bays, doors: w.bays * w.doorsPerBay, wall: 'north' });
-  b.at(w.x, w.y, w.z, 0, () => {
-    // Recessed toe kick and continuous cornice tie the five bays into one fitted row.
-    b.box(0, 0.07, -0.035, w.width - 0.12, 0.14, w.depth - 0.1, shadowOak, 0.008);
-    b.box(0, 1.36, -0.355, w.width, 2.56, 0.07, oak, 0.008);
-    for (const x of [-w.width / 2 + 0.035, w.width / 2 - 0.035]) b.box(x, 1.37, 0, 0.07, 2.56, w.depth, oak, 0.008);
-    b.box(0, 0.165, 0, w.width, 0.07, w.depth, oak, 0.008);
-    b.box(0, 2.635, 0, w.width, 0.09, w.depth, oak, 0.009);
-    b.box(0, 2.568, 0.366, w.width - 0.08, 0.026, 0.028, shadowOak, 0.003);
-    const bayWidth = w.width / w.bays;
-    for (let bay = 0; bay < w.bays; bay++) {
-      const center = -w.width / 2 + (bay + 0.5) * bayWidth;
-      marker(`wardrobe-bay-${bay + 1}`, w.x + center, w.y, w.z, { doors: 2, handles: 2 });
-      if (bay) b.box(center - bayWidth / 2, 1.37, 0.02, 0.035, 2.4, 0.69, oak, 0.004);
-      for (const side of [-1, 1]) {
-        const dx = center + side * bayWidth / 4, doorWidth = bayWidth / 2 - 0.024;
-        // Oak stiles around a subtly recessed linen/sage panel, genuine door reveals.
-        b.box(dx, 1.375, 0.361, doorWidth, 2.34, 0.058, oak, 0.008);
-        b.box(dx, 1.375, 0.394, doorWidth - 0.09, 2.23, 0.018, bay === 2 ? sage : linen, 0.005);
-        const hx = center + side * 0.075;
-        for (const y of [1.055, 1.385]) b.cylinder(hx, y, 0.432, 0.014, 0.014, 0.045, brass, [Math.PI / 2, 0, 0], 8);
-        b.cylinder(hx, 1.22, 0.451, 0.014, 0.014, 0.36, brass, [0, 0, 0], 8);
-      }
-    }
-    const backZ = w.z - w.depth / 2;
-    b.collide(0, 0, (w.handleFrontZ + backZ) / 2 - w.z,
-      w.width, w.height, w.handleFrontZ - backZ);
-  });
+  const wardrobe = createVillaWardrobe(b.root); b.colliders.push(...wardrobe.colliders);
 
   const v = VILLA_MASTER_VANITY;
   marker('dressing-table', v.x, v.y, v.z, { openKneeSpace: true, kneeWidth: v.kneeWidth, kneeHeight: v.kneeHeight, drawers: 2 });
@@ -133,8 +104,15 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
     b.box(0, 0.428, 0, s.width, 0.124, s.depth, linen, 0.075);
     b.box(0, 0.384, 0, s.width + 0.004, 0.01, s.depth + 0.004, sage, 0.04);
     b.collide(0, 0, 0, s.width + 0.004, s.height, s.depth + 0.004);
+    registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'stool-dressing');
   });
+  const seat = villaRelaxSeat('stool-dressing')!;
+  const seatMarker = new THREE.Object3D(); seatMarker.name = 'relax-seat/stool-dressing';
+  seatMarker.position.set(seat.seat.x, seat.seat.y, seat.seat.z); seatMarker.userData = { ...seat, modelOrigin: seat.origin }; b.root.add(seatMarker);
   b.finish();
   b.root.userData.bedroom = { wardrobeBays: w.bays, wardrobeDoors: 10, dressingTable: true, mirror: true, accessories: [...VILLA_VANITY_ACCESSORIES] };
-  return { colliders: b.colliders };
+  return { colliders: b.colliders, update(state, lightOn = true) {
+    glow.emissiveIntensity = lightOn ? 0.65 : 0;
+    return wardrobe.update(state, lightOn);
+  } };
 }

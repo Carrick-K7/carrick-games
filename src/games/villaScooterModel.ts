@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { createVillaScooter, registerVillaScooterColliders, villaScooterAnchors, VILLA_SCOOTER_LIMITS, type VillaScooterState } from './villaScooter.js';
+import { villaTerrainOrientation } from './villaEstateLayout.js';
 
 /** Scene-owned procedural electric step-through. All animation is a pure view of
  * state (distance drives tyres), so resetting or changing sessions leaves no drift.
@@ -98,29 +99,33 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
   const collider: VillaCollider = { ...villaScooterAnchors(fallback).body }, colliders = [collider];
   registerVillaScooterColliders(colliders);
   let pose = { x: fallback.x, z: fallback.z, yaw: fallback.yaw }, previous = '';
+  const inverse = new THREE.Matrix4(), query = new THREE.Vector3();
   // Pedestrians use a tighter rounded OBB, not the broadphase's rotated AABB.
   setVillaColliderNarrowPhase(collider, (p, height) => {
     if (p.y >= collider.maxY || p.y + height <= collider.minY) return false;
-    const dx = p.x - pose.x, dz = p.z - pose.z, c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
-    const x = dx * c - dz * s, z = dx * s + dz * c;
+    query.set(p.x, p.y, p.z).applyMatrix4(inverse);
+    const { x, z } = query;
     return Math.hypot(Math.max(0, Math.abs(x) - VILLA_SCOOTER_LIMITS.halfWidth), Math.max(0, Math.abs(z) - VILLA_SCOOTER_LIMITS.halfLength)) < PLAYER_RADIUS;
   });
   const update = (_time: number, state: { scooter?: VillaScooterState; seated?: string | null }): boolean => {
     const candidate = state.scooter ?? fallback;
     const scooter = [candidate.x, candidate.z, candidate.yaw].every(Number.isFinite) ? candidate : fallback;
-    const speed = Number.isFinite(scooter.speed) ? Math.max(0, Math.min(VILLA_SCOOTER_LIMITS.maxSpeed, scooter.speed)) : 0;
+    const speed = Number.isFinite(scooter.speed) ? Math.max(-VILLA_SCOOTER_LIMITS.maxReverse, Math.min(VILLA_SCOOTER_LIMITS.maxSpeed, scooter.speed)) : 0;
     const steering = Number.isFinite(scooter.steering) ? Math.max(-.5, Math.min(.5, scooter.steering)) : 0;
     const distance = Number.isFinite(scooter.distance) ? scooter.distance : 0;
+    const wheelTravel = Number.isFinite(scooter.wheelTravel) ? scooter.wheelTravel! : distance;
     const mounted = state.seated === 'scooter';
-    const signature = [scooter.x, scooter.z, scooter.yaw, speed, steering, distance, mounted, scooter.handbrake].join('/');
+    const signature = [scooter.x, scooter.z, scooter.yaw, speed, steering, wheelTravel, mounted, scooter.handbrake].join('/');
     if (signature === previous) return false;
     previous = signature; pose = { x: scooter.x, z: scooter.z, yaw: scooter.yaw };
-    root.position.set(pose.x, 0, pose.z); root.rotation.y = pose.yaw;
+    const terrain = villaTerrainOrientation(pose.x, pose.z, pose.yaw);
+    root.position.set(pose.x, terrain.y, pose.z); root.rotation.set(terrain.pitch, pose.yaw, terrain.roll, terrain.order);
     lean.rotation.z = mounted ? Math.max(-.1, Math.min(.1, steering * speed * .032)) : 0;
     front.rotation.y = steering === 0 ? 0 : -steering;
-    frontWheel.rotation.x = rear.rotation.x = (distance / VILLA_SCOOTER_LIMITS.wheelRadius) % (Math.PI * 2);
+    frontWheel.rotation.x = rear.rotation.x = (wheelTravel / VILLA_SCOOTER_LIMITS.wheelRadius) % (Math.PI * 2);
     stand.rotation.x = mounted ? -1.4 : 0;
     rearLens.emissiveIntensity = scooter.handbrake ? 1.4 : .35;
+    root.updateWorldMatrix(true, false); inverse.copy(root.matrixWorld).invert();
     Object.assign(collider, villaScooterAnchors(pose).body);
     return true;
   };

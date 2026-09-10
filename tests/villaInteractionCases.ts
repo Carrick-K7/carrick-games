@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { VILLA_TEA_BAR } from '../src/games/villaLivingLayout';
 
 const moduleUrl = () => process.env.VILLA_MODULE_URL || '/' + JSON.parse(readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'))['src/games/villa.ts'].file;
 
@@ -84,8 +85,8 @@ export function registerVillaInteractionTests() {
         return { x: home.x + 1, z: home.z - .23 };
       });
       const cases: Array<[number, number, string, string]> = [
-        [-6.7, -1.65, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
-        [0, -4.38, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'],
+        [VILLA_TEA_BAR.approach.x, VILLA_TEA_BAR.approach.z, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
+        [4.55, -3.88, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'],
         [-5.25, 5.45, 'sofa-living', 'sofa'], [-21.25, 9.5, 'lounger-west', 'lounger'],
         [scooterApproach.x, scooterApproach.z, 'scooter', 'scooter'], [-16.5, 14.3, 'pet-parrot-blue', 'blue'],
         [8.15, 6.2, 'racing', 'race'],
@@ -107,12 +108,17 @@ export function registerVillaInteractionTests() {
         }, { x, z, action });
         expect(clean, `${action} fixture reset`).toEqual({ seat: null, relax: null, scooterReset: true, scooterApproachSafe: true, accessIdle: true });
         expect(await page.evaluate(() => (window as any).villaInput.g.hotspot()?.id), action).toBe(target);
+        if (action === 'tea') expect(await page.evaluate(() => {
+          const g = (window as any).villaInput.g;
+          return { phase: g.state.tea.phase, fill: g.state.tea.fill, liquidVisible: g.scene.scene.getObjectByName('tea-bar/liquid').visible, safe: g.canFit(1.75) };
+        })).toEqual({ phase: 'empty', fill: 0, liquidVisible: false, safe: true });
         const before = await page.evaluate(() => (window as any).villaInput.calls);
         const trustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
         await tapPaintedUse(page);
         const result = await page.evaluate(({ action, target, trustedBefore }) => {
           const f = (window as any).villaInput, g = f.g;
-          const changed = action === 'tea' ? g.state.teaUntil > g.time : action === 'fire' ? !g.state.fireplace : action === 'pc' ? !g.state.gaming
+          const changed = action === 'tea' ? g.state.tea.phase === 'brewing' && g.state.tea.fill > 0 && g.state.tea.fill < 1 && g.state.teaUntil > g.time
+            : action === 'fire' ? !g.state.fireplace : action === 'pc' ? !g.state.gaming
             : action === 'lift' ? g.state.elevator.phase !== 'closed' : action === 'door' ? g.state.carDoorOpen
             : action === 'sofa' || action === 'lounger' ? g.state.seated === action && g.state.relaxSeatId === target
             : action === 'scooter' ? g.state.seated === 'scooter' && g.state.relaxSeatId === null
@@ -153,7 +159,7 @@ export function registerVillaInteractionTests() {
               others: pets.filter((p: any) => p.id !== 'parrot-blue').map((p: any) => p.feedCount), sequence: f.g.state.pets.feedSequence };
           });
           expect(snapshot.blue).toMatchObject({ id: 'parrot-blue', kind: 'parrot', feedCount: 1 });
-          expect(snapshot.blue.cooldown).toBeGreaterThan(0); expect(snapshot.others).toEqual([0, 0, 0, 0]); expect(snapshot.sequence).toBe(1);
+          expect(snapshot.blue.cooldown).toBeGreaterThan(0); expect(snapshot.others).toEqual([0, 0, 0, 0, 0]); expect(snapshot.sequence).toBe(1);
           await tapPaintedUse(page);
           expect(await page.evaluate(() => {
             const f = (window as any).villaInput;

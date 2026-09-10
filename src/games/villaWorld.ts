@@ -1,7 +1,9 @@
 import { VILLA_CAR, VILLA_RACING, VILLA_SCOOTER } from './villaActivities.js';
 import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
-import { VILLA_AQUARIUM, VILLA_RELAX_SEATS } from './villaSeating.js';
+import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition } from './villaSeating.js';
+import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import type { VillaPetId } from './villaPets.js';
+import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
@@ -31,11 +33,14 @@ export const PLAYER_RADIUS = 0.23;
 export const STAIR_TREAD_THICKNESS = 0.15;
 export const VILLA_SPAWN: VillaPosition = { x: -17, y: 0, z: 19.5 };
 export const VILLA_ENTRANCE: VillaPosition = { x: 0, y: 0, z: 11.5 };
-export const STAIR_HOLE = { minX: 2.15, maxX: 6.25, minZ: -7, maxZ: 0.5 };
+/** The staircase and the lift swapped places: the stairwell now occupies the
+ * former shaft footprint (shifted west, same 3.95 x 7.5 size) and the lift
+ * shaft sits in the north end of the former stairwell. */
+export const STAIR_HOLE = { minX: -0.85, maxX: 3.1, minZ: -7, maxZ: 0.5 };
 export const POOL = { minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 };
 export const VILLA_RAMPS: VillaRamp[] = [0, STOREY].flatMap(base => [
-  { minX: 2.3, maxX: 4.08, startZ: 0.5, endZ: -5.5, bottom: base, top: base + 1.8, base },
-  { minX: 4.32, maxX: 6.1, startZ: -5.5, endZ: 0.5, bottom: base + 1.8, top: base + STOREY, base },
+  { minX: -0.7, maxX: 1.08, startZ: 0.5, endZ: -5.5, bottom: base, top: base + 1.8, base },
+  { minX: 1.32, maxX: 3.1, startZ: -5.5, endZ: 0.5, bottom: base + 1.8, top: base + STOREY, base },
 ]);
 /** Separate structural soffit and oak finish: never share an exposed top plane. */
 export const STAIR_FINISH_THICKNESS = 0.04;
@@ -46,7 +51,7 @@ export const VILLA_ROOMS: VillaRoom[] = [
   { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
   { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: 12, minZ: 3, maxZ: 9 },
-  { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, minX: 12, maxX: 20, minZ: -8, maxZ: 2 },
+  { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, ...VILLA_GARAGE_EXTENT },
   { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 6.7, maxX: 12, minZ: -9, maxZ: 1 },
   { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
@@ -70,8 +75,11 @@ function wall(axis: 'x' | 'z', fixed: number, from: number, to: number, base: nu
   };
   let cursor = from;
   for (const opening of [...openings].sort((a, b) => a.from - b.from)) {
-    piece(cursor, opening.from, 0, 3.4);
-    piece(opening.from, opening.to, 3, 0.4);
+    // Cut an actual rebate for each timber jamb. Previously plaster and oak
+    // ended on the SAME exposed inner face, producing door-edge z-fighting.
+    const trim = opening.door ? .05 : 0, lintelY = opening.door ? 3.04 : 3;
+    piece(cursor, opening.from - trim, 0, 3.4);
+    piece(opening.from - trim, opening.to + trim, lintelY, 3.4 - lintelY);
     if (!opening.door) {
       piece(opening.from, opening.to, 0, 0.32);
       piece(opening.from, opening.to, 0.32, 2.68, 'glass', 0.045);
@@ -83,11 +91,11 @@ function wall(axis: 'x' | 'z', fixed: number, from: number, to: number, base: nu
       piece(opening.from, opening.to, 0.29, 0.055, 'bronze', 0.095);
       piece(opening.from, opening.to, 2.96, 0.055, 'bronze', 0.095);
     } else {
-      piece(opening.from - 0.05, opening.from, 0, 3, 'oak', 0.27);
-      piece(opening.to, opening.to + 0.05, 0, 3, 'oak', 0.27);
-      piece(opening.from, opening.to, 2.96, 0.06, 'oak', 0.27);
+      piece(opening.from - .05, opening.from, 0, 3.04, 'oak', .27);
+      piece(opening.to, opening.to + .05, 0, 3.04, 'oak', .27);
+      piece(opening.from, opening.to, 2.96, .08, 'oak', .27);
     }
-    cursor = opening.to;
+    cursor = opening.to + trim;
   }
   piece(cursor, to, 0, 3.4);
 }
@@ -110,29 +118,32 @@ wall('x', 3, 2, 12, STOREY, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, STOREY);
 wall('z', 6.5, -9, 1, STOREY);
 wall('x', 1, 6.5, 12, STOREY, [{ from: 7.3, to: 9.4, door: true }]);
-// Attached garage: wide, always-open rolling door and internal access.
-wall('z', 20, -8, 2, 0, [{ from: -6.5, to: -3 }]);
-wall('x', -8, 12, 20, 0);
-wall('x', 2, 12, 20, 0, [{ from: 14, to: 18.5, door: true }]);
-add(16, 3.5, -3, 8.4, 0.22, 10.4, 'roof', false);
+// Four south-facing bays: sedan, pickup, and two genuinely empty spare spaces.
+const garage = VILLA_GARAGE_EXTENT;
+wall('z', garage.maxX, garage.minZ, garage.maxZ, 0, [{ from: -6.5, to: -3 }]);
+wall('x', garage.minZ, garage.minX, garage.maxX, 0);
+wall('x', garage.maxZ, garage.minX, garage.maxX, 0, VILLA_GARAGE_BAYS.map(bay => ({ from: bay.doorMinX, to: bay.doorMaxX, door: true })));
+add((garage.minX + garage.maxX) / 2, garage.roofY, (garage.minZ + garage.maxZ) / 2,
+  garage.maxX - garage.minX + .4, .22, garage.maxZ - garage.minZ + .4, 'roof', false);
 
-// Split slabs around the shaft, including the ground floor: no coplanar floor
-// below the car and no ceiling cutting through a passenger during vertical travel.
-function slabAroundElevator(minX: number, maxX: number, y: number, thickness: number, material: VillaMaterial) {
-  const e = VILLA_ELEVATOR, cy = y - thickness / 2;
-  add((minX + e.minX) / 2, cy, 0, e.minX - minX, thickness, 18.4, material, false);
-  add((e.maxX + maxX) / 2, cy, 0, maxX - e.maxX, thickness, 18.4, material, false);
-  add(0, cy, (-9.2 + e.minZ) / 2, 2.2, thickness, e.minZ + 9.2, material, false);
-  add(0, cy, (e.maxZ + 9.2) / 2, 2.2, thickness, 9.2 - e.maxZ, material, false);
-}
-// Slabs also stop at the stairwell: neither flight has an invisible ceiling.
+// Slabs are cut around BOTH new openings: the shifted stairwell and the lift
+// shaft that now occupies the former stairwell. Explicit rectangles keep every
+// piece on a real edge instead of relying on one centred helper.
+// Storeys 1 and 2 stop at the stairwell; the ground floor only needs the shaft.
 for (const y of [STOREY, STOREY * 2]) {
-  slabAroundElevator(-12, 2.15, y, 0.2, y === STOREY ? 'oak' : 'stone');
-  add(9.225, y - 0.1, 0, 5.95, 0.2, 18.4, y === STOREY ? 'oak' : 'stone', false);
-  add(4.2, y - 0.1, -8.1, 4.1, 0.2, 2.2, 'stone', false);
-  add(4.2, y - 0.1, 4.85, 4.1, 0.2, 8.7, y === STOREY ? 'oak' : 'stone', false);
+  const finish: VillaMaterial = y === STOREY ? 'oak' : 'stone', cy = y - 0.1;
+  add(-6.6, cy, 0, 11.2, 0.2, 18.4, finish, false);
+  add(1.125, cy, -8.1, 3.95, 0.2, 2.2, 'stone', false);
+  add(1.125, cy, 4.85, 3.95, 0.2, 8.7, finish, false);
+  add(3.275, cy, 0, 0.35, 0.2, 18.4, finish, false);
+  add(4.55, cy, -8.1, 2.2, 0.2, 2.2, 'stone', false);
+  add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false);
+  add(8.925, cy, 0, 6.55, 0.2, 18.4, finish, false);
 }
-slabAroundElevator(-12.2, 12.2, 0, 0.26, 'oak');
+add(-4.375, -0.13, 0, 15.65, 0.26, 18.4, 'oak', false);
+add(8.925, -0.13, 0, 6.55, 0.26, 18.4, 'oak', false);
+add(4.55, -0.13, -8.1, 2.2, 0.26, 2.2, 'oak', false);
+add(4.55, -0.13, 2.3, 2.2, 0.26, 13.8, 'oak', false);
 add(-5, STOREY - 0.1, 10.25, 13, 0.2, 2.5, 'stone', false);
 // Layered fascia and timber accent fins make a composed modern exterior.
 for (const y of [3.42, 7.02]) {
@@ -144,10 +155,10 @@ for (const y of [3.42, 7.02]) {
 for (let x = -2.65; x <= -1.65; x += 0.16) add(x, 3.5, 9.17, 0.07, 6.9, 0.14, 'oak', false);
 add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false);
 // Third-storey glazed stair pavilion; both stairs open onto the terrace at the front.
-wall('z', 1.85, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
-wall('z', 6.55, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
-wall('x', -7.35, 1.85, 6.55, 7.2, [{ from: 2.2, to: 6.2 }]);
-add(4.2, 10.6, -3.05, 5.1, 0.2, 9.1, 'roof', false);
+wall('z', -1.15, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
+wall('z', 3.27, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
+wall('x', -7.35, -1.15, 3.27, 7.2, [{ from: -0.8, to: 2.92 }]);
+add(1.06, 10.6, -3.05, 4.82, 0.2, 9.1, 'roof', false);
 
 /** Rail collision matches the visible handrails and glass guards. */
 export const VILLA_RAILS: VillaCollider[] = [];
@@ -164,16 +175,16 @@ for (const ramp of VILLA_RAMPS) {
   }
 }
 for (const base of [0, STOREY]) {
-  rail(2.19, -6.2, 0.09, 1.4, base + 1.8);
-  rail(6.21, -6.2, 0.09, 1.4, base + 1.8);
-  rail(4.2, -6.93, 4.05, 0.09, base + 1.8);
+  rail(-0.81, -6.2, 0.09, 1.4, base + 1.8);
+  rail(3.21, -6.2, 0.09, 1.4, base + 1.8);
+  rail(1.2, -6.93, 4.05, 0.09, base + 1.8);
 }
 // Floor-level guards stop a player stepping sideways into the open stairwell.
 for (const y of [3.6, 7.2]) {
-  rail(2.13, -3.25, 0.08, 7.5, y);
-  rail(6.27, -3.25, 0.08, 7.5, y);
-  rail(4.2, -7.03, 4.2, 0.08, y);
-  rail(4.2, 0.51, 0.16, 0.12, y);
+  rail(-0.87, -3.25, 0.08, 7.5, y);
+  rail(3.27, -3.25, 0.08, 7.5, y);
+  rail(1.2, -7.03, 4.2, 0.08, y);
+  rail(1.2, 0.51, 0.16, 0.12, y);
 }
 // Rooftop and bedroom balcony glass balustrades.
 rail(0, 8.95, 24, 0.12, 7.2, 1.1);
@@ -196,7 +207,12 @@ function inRect(x: number, z: number, r: { minX: number; maxX: number; minZ: num
 export function villaFloor(y: number): number { return Math.max(0, Math.min(2, Math.floor((y + 0.15) / STOREY))); }
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
-  if (floor === 0 && p.z >= 24) return { id: 'driving-course', name: 'Garden road', zh: '林荫环路' };
+  if (p.z >= 24) {
+    if (p.x < -3.4) return p.z >= 64
+      ? { id: 'pond', name: 'South pond & meadow', zh: '南侧池塘 · 草甸' }
+      : { id: 'fields', name: 'South fields', zh: '南侧田地' };
+    return { id: 'driving-course', name: 'South scenic road', zh: '南侧景观道路' };
+  }
   if (floor === 0 && p.x < -3.4 && p.x > -22.8 && p.z >= 12.8 && p.z < 24) {
     return p.x > -11.6 && p.z >= 17 ? { id: 'garden', name: 'Vegetable garden', zh: '花园 · 菜地' }
       : { id: 'garden', name: 'Orchard & pets', zh: '果园 · 小伙伴' };
@@ -219,9 +235,10 @@ export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: s
  */
 export function villaSupportAt(x: number, z: number, previousY: number, headHeight = EYE_HEIGHT + 0.1): number | null {
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(previousY)) return null;
-  if (x < -24.5 || x > 27.5 || z < -16.5 || z > 56.5) return null;
-  if (inRect(x, z, POOL, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
-  const heights: number[] = [0];
+  const bounds = VILLA_ESTATE_BOUNDS;
+  if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return null;
+  if (inRect(x, z, POOL, PLAYER_RADIUS) || villaPondContains(x, z, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
+  const heights: number[] = [villaTerrainHeight(x, z)];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {
     if (inRect(x, z, { minX: -12.1, maxX: 12.1, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) {
@@ -238,7 +255,7 @@ export function villaSupportAt(x: number, z: number, previousY: number, headHeig
     }
   }
   for (const base of [0, STOREY]) {
-    if (inRect(x, z, { minX: 2.3, maxX: 6.1, minZ: -6.9, maxZ: -5.5 })) {
+    if (inRect(x, z, { minX: -0.7, maxX: 3.1, minZ: -6.9, maxZ: -5.5 })) {
       heights.push(base + 1.8);
       overhead.push({ top: base + 1.8, thickness: 0.2 });
     }
@@ -280,34 +297,50 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | `sofa-${string}` | `lounger-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'swing' | 'camping-chair' | 'wardrobe-master' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
-  ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: 0, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
+  ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: VILLA_ELEVATOR.centerX, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
   { id: 'aquarium', ...VILLA_AQUARIUM.approach, name: 'Feed the fish', zh: '喂喂小鱼' },
-  ...VILLA_RELAX_SEATS.map(seat => ({ id: seat.id as VillaHotspot['id'], ...seat.approach, radius: 1.05,
-    name: seat.kind === 'sofa' ? 'Sit on the sofa' : 'Relax by the pool', zh: seat.kind === 'sofa' ? '坐在沙发上' : '躺在池畔休息' })),
+  ...VILLA_RELAX_SEATS.map(seat => ({ id: seat.id as VillaHotspot['id'], ...seat.seat, radius: seat.kind === 'sofa' ? 1.7 : 1.35,
+    name: seat.kind === 'bed' ? 'Lie on the bed' : seat.kind === 'sofa' ? 'Sit on the sofa' : seat.kind === 'lounger' ? 'Relax by the pool' : 'Sit on the chair',
+    zh: seat.kind === 'bed' ? '躺在床上' : seat.kind === 'sofa' ? '坐在沙发上' : seat.kind === 'lounger' ? '躺在池畔休息' : '坐下休息' })),
   { id: 'scooter', x: VILLA_SCOOTER.center.x + 1, y: 0, z: VILLA_SCOOTER.center.z - .23, radius: 1.15, name: 'Ride the electric scooter', zh: '骑上电动车' },
   { id: 'faucet', x: -5.67, y: 0, z: -7.2, radius: 1.05, name: 'Kitchen tap on / off', zh: '开关厨房水龙头' },
-  { id: 'tea-bar', x: -6.7, y: 0, z: -1.65, radius: .95, name: 'Brew a pot of tea', zh: '冲一壶茶' },
-  { id: 'gaming', x: 6.65, y: 0, z: 4.9, radius: 1.3, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
+  { id: 'tea-bar', ...VILLA_TEA_BAR.approach, radius: 1.1, name: 'Brew a pot of tea', zh: '冲一壶茶' },
+  { id: 'gaming', x: 6.65, y: 0, z: 4.3, radius: .75, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
   { id: 'car', ...VILLA_CAR.door, radius: 1.75, name: 'Open the driver door / take a seat', zh: '打开驾驶位车门 / 入座' },
+  { id: 'pickup', ...VILLA_PICKUP.door, radius: 2.15, name: 'Drive the pickup', zh: '驾驶皮卡' },
   { id: 'racing', ...VILLA_RACING.exit, radius: 1.2, name: 'Sit in the simulator', zh: '坐进驾驶模拟器' },
   { id: 'media', x: 7.5, y: 0, z: 8.25, radius: 1.25, name: 'Screen input: PC / PlayStation / Switch', zh: '大屏信号源：PC / PlayStation / Switch' },
-  { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Original chibi collection · display lights', zh: '原创 Q 版手办 · 开关柜灯' },
+  { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Original anime figure collection · display lights', zh: '原创动漫美少女手办 · 开关柜灯' },
   { id: 'snooker', x: 9.15, y: 0, z: -.95, radius: 1.1, name: 'Play snooker practice', zh: '开始斯诺克练习' },
   { id: 'replicas', x: 10.35, y: 0, z: 4.1, radius: 1.15, name: 'Replica collection · display lights', zh: '仿真武器收藏 · 开关柜灯' },
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
 ];
-export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition): VillaHotspot | null {
+export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition, pickup?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;
   let distance = Infinity;
   for (const original of VILLA_HOTSPOTS) {
-    const h = original.id === 'car' && car ? { ...original, ...car.door } : original.id === 'scooter' && scooter ? { ...original, ...scooter } : original;
+    let h = original.id === 'car' && car ? { ...original, ...car.door }
+      : original.id === 'pickup' && pickup ? { ...original, ...pickup.door }
+        : original.id === 'scooter' && scooter ? { ...original, ...scooter } : original;
+    const seat = villaRelaxSeat(h.id);
+    if (seat) {
+      let point = resolveVillaSeatPosition(seat, p);
+      if (seat.kind === 'bed') {
+        const dx = p.x - seat.origin.x, dz = p.z - seat.origin.z, c = Math.cos(seat.yaw), s = Math.sin(seat.yaw);
+        const x = Math.max(-seat.width / 2, Math.min(seat.width / 2, dx * c - dz * s));
+        const z = Math.max(-seat.depth / 2, Math.min(seat.depth / 2, dx * s + dz * c));
+        point = { x: seat.origin.x + c * x + s * z, y: seat.origin.y, z: seat.origin.z - s * x + c * z };
+      }
+      h = { ...h, ...point };
+    }
     if (Math.abs(h.y - p.y) > 0.4) continue;
     if (h.id === 'car' && (car ? !car.driverSide : p.x < VILLA_CAR.body.maxX)) continue;
-    if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x) > 0.85)) continue;
+    if (h.id === 'pickup' && (pickup ? !pickup.driverSide : p.x < VILLA_PICKUP.body.maxX)) continue;
+    if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x - VILLA_ELEVATOR.centerX) > 0.85)) continue;
     const d = Math.hypot(h.x - p.x, h.z - p.z);
     if (d < (h.radius ?? 2.4) && d < distance) { nearest = h; distance = d; }
   }

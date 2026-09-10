@@ -3,6 +3,7 @@ import { CAR_DOOR_SECONDS, VILLA_CAR, type VillaActivityState } from './villaAct
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { registerVillaVehicleColliders, type VillaDrivingState } from './villaDriving.js';
+import { villaTerrainOrientation } from './villaEstateLayout.js';
 
 type Point = [number, number, number];
 
@@ -88,7 +89,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
 
   const body = new VillaModelBuilder(car, 'vehicle-body');
   const cabin = new VillaModelBuilder(car, 'vehicle-cabin');
-  cabin.root.userData = { kind: 'cabin', hollow: true, eyeHeight: VILLA_CAR.eyeHeight };
+  cabin.root.userData = { kind: 'cabin', hollow: true, eyeHeight: VILLA_CAR.eyeHeight, inspiration: 'refreshed-Model-S', landscapeDisplay: true, driverInstrumentCluster: true, dualPhoneChargers: true };
   const glazing = new VillaModelBuilder(car, 'vehicle-glazing');
   glazing.root.userData.kind = 'glazing';
 
@@ -107,8 +108,9 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     return [side * (width - 0.045 + 0.045 * Math.sin(Math.PI * t) - 0.035 * t), mix(lowerEdge(z), belt, t), z];
   };
   for (const side of [-1, 1]) {
-    // Driver opening is not covered by a second, fixed body panel.
-    const intervals = side === 1 ? [[-2.36, -0.3], [0.9, 2.36]] : [[-2.36, 2.36]];
+    // Neither opening is covered by a second fixed body panel: the automatic
+    // doors permit a physically real alternate-side exit when a wall blocks +X.
+    const intervals = [[-2.36, -0.3], [0.9, 2.36]];
     for (const [start, end] of intervals) body.geometry(sheet(Math.ceil((end - start) * 65), 8, (u, v) => sidePoint(side, mix(start, end, u), v)), paint);
     body.beam([side * 0.88, 0.245, -1.04], [side * 0.88, 0.245, 1.04], 0.052, paint);
     body.beam([side * 0.9, 0.21, -1.04], [side * 0.9, 0.21, 1.04], 0.019, dark);
@@ -157,10 +159,6 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     body.beam([side * 0.895, 0.925, -1.16], [side * 0.92, 0.735, -1.12], 0.003, seam, 5);
     body.beam([side * 0.92, 0.735, -1.12], [side * 0.924, 0.355, -0.98], 0.003, seam, 5);
     body.box(side * 0.928, 0.845, -0.98, 0.014, 0.023, 0.135, dark, 0.006);
-    if (side === -1) {
-      body.beam([-0.915, 0.925, -0.3], [-0.915, 0.32, -0.3], 0.003, seam, 5);
-      body.box(-0.928, 0.827, -0.17, 0.014, 0.023, 0.145, dark, 0.006);
-    }
   }
   // Four tires, brake discs and five swept aero spokes (all batched by material).
   for (const side of [-1, 1]) for (const z of wheelZ) {
@@ -223,6 +221,14 @@ export function createVillaVehicle(parent: THREE.Object3D): {
 
   // Cabin floor and footwells lie well below the seated eye; seats are individual upholstered forms.
   cabin.box(0, 0.257, -0.31, 1.72, 0.055, 2.61, dark, 0.025);
+  // A real inner bulkhead closes the forward footwell below the dashboard.
+  // It overlaps the existing floor/fascia, shielding the unchanged front tyres
+  // and road surface from seated free-look instead of hiding wheels or lifting the eye.
+  const footwell = new VillaModelBuilder(car, 'vehicle-front-footwell');
+  footwell.box(0, .546, .94, 1.72, .578, .08, dark, .012);
+  for (const side of [-1, 1]) footwell.box(side * .845, .51, .69, .045, .48, .50, dark, .012);
+  footwell.root.userData = { kind: 'opaque-front-footwell', joinsFloor: true, joinsDashboard: true };
+  footwell.finish();
   for (const side of [-1, 1]) {
     cabin.box(side * 0.43, 0.293, 0.39, 0.57, 0.012, 0.54, rubber, 0.02);
     cabin.box(side * 0.43, 0.355, -0.105, 0.53, 0.09, 0.58, dark, 0.035);
@@ -236,6 +242,9 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     cabin.beam([side * 0.43 - 0.07, 0.98, -0.371], [side * 0.43 - 0.07, 1.035, -0.371], 0.01, silver);
     cabin.beam([side * 0.43 + 0.07, 0.98, -0.371], [side * 0.43 + 0.07, 1.035, -0.371], 0.01, silver);
     cabin.box(side * 0.43, 1.08, -0.378, 0.263, 0.184, 0.14, upholstery, 0.045);
+    // Fine piping and perforation rows sit on the actual upholstered inserts.
+    for (const offset of [-.145, .145]) cabin.beam([side * .43 + offset, .542, -.18], [side * .43 + offset, .542, .135], .002, seam, 5);
+    for (let row = 0; row < 6; row++) for (const offset of [-.09, -.03, .03, .09]) cabin.box(side * .43 + offset, .541, -.14 + row * .045, .003, .001, .008, seam, 0);
     cabin.box(side * 0.13, 0.49, -0.2, 0.035, 0.055, 0.05, dark, 0.005);
     cabin.beam([side * 0.79, 1.12, -0.36], [side * 0.71, 0.43, -0.42], 0.012, dark, 6);
   }
@@ -245,14 +254,41 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     cabin.box(x, 0.992, -1.413, 0.23, 0.17, 0.125, upholstery, 0.034);
     cabin.beam([x - 0.17, 0.535, -1.315], [x - 0.17, 0.535, -0.94], 0.0025, seam, 5);
   }
-  // Minimalist dashboard: low continuous pad, real wood strip, and thin horizontal center display.
+  // Refreshed Model S inspiration (not a downloaded/branded asset): broad fascia,
+  // landscape tablet, driver cluster, twin inductive pads and padded console.
+  // Reference: motortrend.com/reviews/2022-tesla-model-s-plaid-new-interior-review
+  // Preserve our round functional wheel and its proven physical shaft mounting.
   cabin.box(0, 0.865, 0.842, 1.66, 0.116, 0.25, dark, 0.035);
   cabin.box(0, 0.854, 0.704, 1.61, 0.044, 0.017, wood, 0.006);
   for (let i = 0; i < 4; i++) cabin.box(0, 0.84 + i * 0.009, 0.693, 1.58, 0.0014, 0.001, seam, 0);
   cabin.box(0, 0.893, 0.705, 1.56, 0.009, 0.018, rubber, 0.001);
-  cabin.box(0, 0.476, 0.096, 0.245, 0.29, 0.99, dark, 0.025);
-  cabin.box(0, 0.628, -0.237, 0.235, 0.063, 0.3, upholstery, 0.018);
-  cabin.box(0, 0.622, 0.339, 0.215, 0.025, 0.285, wood, 0.007);
+  cabin.box(0, 0.476, 0.096, 0.275, 0.29, 0.99, dark, 0.025);
+  cabin.box(0, 0.628, -0.237, 0.265, 0.078, 0.33, upholstery, 0.025);
+  for (const x of [-.112, .112]) cabin.beam([x, .67, -.365], [x, .67, -.12], .002, seam, 5);
+  cabin.box(0, 0.622, 0.339, 0.258, 0.025, 0.285, wood, 0.007);
+  // Two independently recessed phone pads on a sloping, supported tray below
+  // the tablet. No phone/pad floats above the console or intersects a seat.
+  const chargers = new VillaModelBuilder(car, 'vehicle-dual-phone-chargers');
+  chargers.root.userData = { kind: 'inductive-phone-chargers', count: 2, consoleMounted: true };
+  chargers.geometry(new THREE.BoxGeometry(.269, .024, .222), dark, [0, .676, .442], [-.40, 0, 0]);
+  for (const x of [-.069, .069]) {
+    chargers.geometry(new THREE.BoxGeometry(.115, .008, .183), rubber, [x, .691, .436], [-.40, 0, 0]);
+    chargers.geometry(new THREE.BoxGeometry(.093, .004, .157), display, [x, .697, .434], [-.40, 0, 0]);
+    chargers.box(x, .662, .345, .104, .018, .019, silver, .004);
+  }
+  chargers.finish();
+  const instruments = new VillaModelBuilder(car, 'vehicle-driver-instruments');
+  instruments.root.userData = { kind: 'driver-instrument-cluster', behindSteeringWheel: true, driverX: .43 };
+  instruments.box(.43, .999, .762, .326, .117, .048, dark, .021);
+  instruments.box(.43, .999, .735, .291, .091, .005, display, .006);
+  // Low hood and slim vent remain beneath the windscreen, with a clear view
+  // through the wheel's upper opening from the existing physical driver seat.
+  instruments.box(.43, 1.061, .758, .341, .016, .070, dark, .008);
+  for (const x of [.344, .516]) instruments.box(x, .987, .731, .035, .046, .003, displayAccent, .004);
+  instruments.beam([.412, .964, .731], [.422, 1.032, .731], .002, displayAccent, 5);
+  instruments.beam([.449, .964, .731], [.439, 1.032, .731], .002, displayAccent, 5);
+  instruments.box(.43, .987, .729, .013, .030, .003, upholstery, .003);
+  instruments.finish();
   for (const z of [-0.005, 0.147]) {
     cabin.cylinder(0, 0.627, z, 0.052, 0.046, 0.008, rubber, [0, 0, 0], 24);
     cabin.geometry(new THREE.TorusGeometry(0.053, 0.004, 6, 24), silver, [0, 0.635, z], [Math.PI / 2, 0, 0]);
@@ -302,7 +338,10 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   const driver = new VillaModelBuilder(doorPivot, 'driver-door-panel');
   const doorWindows = new VillaModelBuilder(doorPivot, 'driver-door-glazing');
   doorWindows.root.userData.kind = 'glazing';
-  const passenger = new VillaModelBuilder(car, 'passenger-door-details');
+  const passengerPivot = new THREE.Group(); passengerPivot.name = 'vehicle-passenger-door';
+  passengerPivot.position.set(-.96, 0, .9); passengerPivot.userData = { kind: 'door', animated: true, hinge: [-.96, 0, .9], openAngle: 1.1, carriesGlazing: true }; car.add(passengerPivot);
+  const passenger = new VillaModelBuilder(passengerPivot, 'passenger-door-details');
+  const passengerWindows = new VillaModelBuilder(passengerPivot, 'passenger-door-glazing'); passengerWindows.root.userData.kind = 'glazing';
   const frontWindow = (side: number, u: number, v: number): Point => {
     const z = mix(-0.3, 0.9, u), top = z <= 0.08 ? 1.425 : mix(1.425, 0.973, (z - 0.08) / 0.82);
     return [side * mix(0.887, z <= 0.08 ? 0.747 : mix(0.747, 0.857, (z - 0.08) / 0.82), v), mix(0.944, top, v), z];
@@ -315,6 +354,9 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     // Keep the inner card fully inside the inward-tapering outer shoulder at both ends.
     builder.box(side * 0.827, 0.649, 0.27, 0.047, 0.32, 1.09, dark, 0.02);
     builder.box(side * 0.827, 0.668, 0.165, 0.069, 0.057, 0.51, upholstery, 0.016);
+    builder.box(side * .798, .565, .18, .012, .092, .77, upholstery, .016);
+    builder.beam([side * .789, .695, -.045], [side * .789, .695, .374], .002, seam, 5);
+    for (let i = 0; i < 12; i++) builder.box(side * .79, .564, -.14 + i * .054, .001, .036, .003, seam, 0);
     builder.box(side * 0.832, 0.812, 0.27, 0.014, 0.036, 1.024, wood, 0.006);
     builder.box(side * 0.817, 0.741, 0.558, 0.016, 0.032, 0.13, silver, 0.004);
     builder.box(side * 0.821, 0.704, 0.31, 0.025, 0.006, 0.086, dark, 0.002);
@@ -334,9 +376,15 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     // Windows use their own frame because builder transforms are intentionally independent.
     doorWindows.at(-0.96, 0, -0.9, 0, () => buildDoor(driver, doorWindows, 1));
   });
-  buildDoor(passenger, glazing, -1);
+  passenger.at(.96, 0, -.9, 0, () => {
+    passenger.geometry(sheet(28, 10, (u, v) => sidePoint(-1, mix(-.3, .9, u), v)), paint);
+    passenger.geometry(sheet(24, 1, (u, v) => { const z = mix(-.3, .9, u); return [-mix(.861, station(z).width - .08, v), station(z).belt, z]; }), paint);
+    for (const z of [-.3, .9]) passenger.beam([-.876, .28, z], [-.882, .925, z], .012, paint);
+    passenger.box(-.928, .827, -.17, .014, .023, .145, dark, .006);
+    passengerWindows.at(.96, 0, -.9, 0, () => buildDoor(passenger, passengerWindows, -1));
+  });
 
-  for (const builder of [body, cabin, glazing, steering, wheel, driver, doorWindows, passenger]) builder.finish();
+  for (const builder of [body, cabin, glazing, steering, wheel, driver, doorWindows, passenger, passengerWindows]) builder.finish();
   car.traverse(node => {
     if (node instanceof THREE.Mesh) {
       const material = node.material as THREE.Material;
@@ -352,12 +400,13 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   const worldDoorBounds = new THREE.Box3();
   const localBodyBounds = new THREE.Box3(new THREE.Vector3(-0.96, 0, -2.36), new THREE.Vector3(0.96, 1.48, 2.36));
   const worldBodyBounds = new THREE.Box3();
-  registerVillaVehicleColliders([bodyCollider, doorCollider]);
-  const bodyInverse = new THREE.Matrix4(), doorInverse = new THREE.Matrix4();
+  const passengerCollider: VillaCollider = { ...doorCollider }, passengerDoorBounds = new THREE.Box3(new THREE.Vector3(-.011, .27, -1.21), new THREE.Vector3(.155, 1.455, .013)), worldPassengerBounds = new THREE.Box3();
+  registerVillaVehicleColliders([bodyCollider, doorCollider, passengerCollider]);
+  const bodyInverse = new THREE.Matrix4(), doorInverse = new THREE.Matrix4(), passengerInverse = new THREE.Matrix4();
   const query = new THREE.Vector3();
   // World AABBs remain plain legacy snapshots; only the final walking test uses
   // hinge/body-local rectangles, so their empty rotated corners stay walkable.
-  for (const [collider, bounds, inverse] of [[bodyCollider, localBodyBounds, bodyInverse], [doorCollider, localDoorBounds, doorInverse]] as const) {
+  for (const [collider, bounds, inverse] of [[bodyCollider, localBodyBounds, bodyInverse], [doorCollider, localDoorBounds, doorInverse], [passengerCollider, passengerDoorBounds, passengerInverse]] as const) {
     setVillaColliderNarrowPhase(collider, p => {
       query.set(p.x, p.y, p.z).applyMatrix4(inverse);
       const dx = query.x - THREE.MathUtils.clamp(query.x, bounds.min.x, bounds.max.x);
@@ -366,8 +415,8 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     });
   }
   const updateCollider = () => {
-    doorPivot.updateWorldMatrix(true, false);
-    bodyInverse.copy(car.matrixWorld).invert(); doorInverse.copy(doorPivot.matrixWorld).invert();
+    doorPivot.updateWorldMatrix(true, false); passengerPivot.updateWorldMatrix(true, false);
+    bodyInverse.copy(car.matrixWorld).invert(); doorInverse.copy(doorPivot.matrixWorld).invert(); passengerInverse.copy(passengerPivot.matrixWorld).invert();
     worldBodyBounds.copy(localBodyBounds).applyMatrix4(car.matrixWorld);
     // Keep legacy spawn values bit-for-bit, including decimal rounding.
     if (car.position.x === VILLA_CAR.center.x && car.position.z === VILLA_CAR.center.z && car.rotation.y === 0) Object.assign(bodyCollider, VILLA_CAR.body);
@@ -376,11 +425,13 @@ export function createVillaVehicle(parent: THREE.Object3D): {
     doorCollider.minX = worldDoorBounds.min.x; doorCollider.maxX = worldDoorBounds.max.x;
     doorCollider.minZ = worldDoorBounds.min.z; doorCollider.maxZ = worldDoorBounds.max.z;
     doorCollider.minY = worldDoorBounds.min.y; doorCollider.maxY = worldDoorBounds.max.y;
+    worldPassengerBounds.copy(passengerDoorBounds).applyMatrix4(passengerPivot.matrixWorld);
+    Object.assign(passengerCollider, { minX: worldPassengerBounds.min.x, maxX: worldPassengerBounds.max.x, minZ: worldPassengerBounds.min.z, maxZ: worldPassengerBounds.max.z, minY: worldPassengerBounds.min.y, maxY: worldPassengerBounds.max.y });
   };
   updateCollider();
   let progress = 0, previousTime: number | undefined;
   return {
-    colliders: [bodyCollider, doorCollider],
+    colliders: [bodyCollider, doorCollider, passengerCollider],
     get doorProgress() { return progress; },
     update(time, state) {
       if (!Number.isFinite(time)) return false;
@@ -390,12 +441,13 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       const moved = car.position.x !== x || car.position.z !== z || car.rotation.y !== yaw || wheel.root.rotation.z !== wheelAngle;
       // Seen from a +Z-facing driver, positive local Z is clockwise (world -X).
       wheel.root.rotation.z = wheelAngle;
-      car.position.set(x, 0, z); car.rotation.y = yaw;
+      const terrain = villaTerrainOrientation(x, z, yaw);
+      car.position.set(x, terrain.y, z); car.rotation.set(terrain.pitch, yaw, terrain.roll, terrain.order);
       if (moved) updateCollider();
       const target = state.carDoorOpen ? 1 : 0;
       if (time === 0 || (previousTime !== undefined && time < previousTime)) {
         const changed = moved || progress !== target;
-        progress = target; previousTime = time; doorPivot.rotation.y = -1.1 * smooth(progress); updateCollider(); return changed;
+        progress = target; previousTime = time; doorPivot.rotation.y = -1.1 * smooth(progress); passengerPivot.rotation.y = 1.1 * smooth(progress); updateCollider(); return changed;
       }
       const elapsed = previousTime === undefined ? 0 : Math.max(0, time - previousTime);
       previousTime = time;
@@ -406,7 +458,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       progress = next;
       const angle = -1.1 * smooth(progress);
       if (doorPivot.rotation.y === angle) return moved;
-      doorPivot.rotation.y = angle;
+      doorPivot.rotation.y = angle; passengerPivot.rotation.y = -angle;
       updateCollider();
       return true;
     },

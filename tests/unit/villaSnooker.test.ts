@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  advanceVillaSnooker, createVillaSnooker, shootVillaSnooker,
-  VILLA_SNOOKER_BALL_RADIUS as R, VILLA_SNOOKER_POCKETS,
+  advanceVillaSnooker, createVillaSnooker, shootVillaSnooker, getVillaSnookerTrajectory,
+  VILLA_SNOOKER_BALL_RADIUS as R, VILLA_SNOOKER_POCKETS, VILLA_SNOOKER_POCKET_CAPTURE_RADIUS,
   type VillaSnookerState, type VillaSnookerTarget,
 } from '../../src/games/villaSnooker.js';
 
@@ -190,5 +190,109 @@ describe('villa snooker practice rules', () => {
     const s = createVillaSnooker(); for (const b of s.balls) if (b.kind === 'red') b.potted = true;
     result(s, 'yellow', 'pink', ['pink']); expect(s.target).toBe('yellow');
     expect(s.balls.find(b => b.id === 'pink')?.potted).toBe(false); expect(s.score).toBe(-6);
+  });
+});
+
+describe('Villa deterministic snooker assistance', () => {
+  it('uses the shot angle and stops at the first straight object-ball contact', () => {
+    const s = isolated('white', 'red-1');
+    s.balls[0].x = s.balls[1].x = 0; s.balls[0].z = 0.5; s.balls[1].z = -0.3;
+    const before = structuredClone(s), guide = getVillaSnookerTrajectory(s)!;
+    expect(s.aimAssist).toBe(true); expect(s).toEqual(before);
+    expect(guide.collision).toEqual({ kind: 'ball', ballId: 'red-1' });
+    expect(guide.cue.to.x).toBeCloseTo(0); expect(guide.cue.to.z).toBeCloseTo(-0.3 + R * 2);
+    expect(guide.ghost).toEqual(guide.cue.to); expect(guide.bank).toBeNull();
+    expect(guide.object!.to.x).toBe(0); expect(guide.object!.to.z).toBeCloseTo(-1);
+    expect(getVillaSnookerTrajectory(s)).toEqual(guide);
+    shootVillaSnooker(s); expect(s.balls[0].vx).toBeCloseTo(0); expect(s.balls[0].vz).toBeLessThan(0);
+    expect(getVillaSnookerTrajectory(s)).toBeNull();
+  });
+  it('projects an oblique cut along the line of ball centres, not the original aim', () => {
+    const s = isolated('white', 'red-1'); s.aim = Math.PI / 2;
+    s.balls[0].x = -0.4; s.balls[0].z = 0.4; s.balls[1].x = 0.1; s.balls[1].z = 0.4 + R;
+    const guide = getVillaSnookerTrajectory(s)!;
+    expect(guide.collision.kind).toBe('ball');
+    expect(guide.cue.to.x).toBeCloseTo(0.1 - Math.sqrt(3) * R); expect(guide.cue.to.z).toBeCloseTo(0.4);
+    expect(Math.hypot(guide.ghost!.x - s.balls[1].x, guide.ghost!.z - s.balls[1].z)).toBeCloseTo(R * 2);
+    const path = guide.object!, dx = path.to.x - path.from.x, dz = path.to.z - path.from.z;
+    expect(dx).toBeGreaterThan(0); expect(dz / dx).toBeCloseTo(1 / Math.sqrt(3));
+  });
+  it('chooses the nearest live ball independent of array order and clips the object projection too', () => {
+    const s = isolated('white', 'red-1', 'red-2', 'red-3'); s.aim = Math.PI / 2;
+    const [cue, near, next, potted] = s.balls;
+    cue.x = -0.6; near.x = -0.1; next.x = 0.1; potted.x = -0.3;
+    for (const b of [cue, near, next, potted]) b.z = 0.4;
+    potted.potted = true;
+    const guide = getVillaSnookerTrajectory(s)!;
+    expect(guide.collision).toEqual({ kind: 'ball', ballId: near.id });
+    expect(guide.object!.to.x).toBeCloseTo(next.x - R * 2);
+    s.balls.reverse(); expect(getVillaSnookerTrajectory(s)).toEqual(guide);
+    near.potted = true; expect(getVillaSnookerTrajectory(s)!.collision).toEqual({ kind: 'ball', ballId: next.id });
+  });
+  it('clips all four rail paths at ball-centre limits and adds only a short inward bank', () => {
+    for (const aim of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      const s = isolated('white'); s.aim = aim; s.balls[0].x = 0.25; s.balls[0].z = 0.35;
+      const guide = getVillaSnookerTrajectory(s)!;
+      expect(guide.collision.kind).toBe('cushion'); expect(guide.ghost).toBeNull(); expect(guide.object).toBeNull();
+      const axis = Math.abs(Math.sin(aim)) > 0.5 ? 'x' : 'z';
+      expect(Math.abs(guide.cue.to[axis])).toBeCloseTo((axis === 'x' ? 1.778 : 3.569) / 2 - R);
+      expect(guide.bank!.from).toEqual(guide.cue.to);
+      expect(Math.hypot(guide.bank!.to.x - guide.bank!.from.x, guide.bank!.to.z - guide.bank!.from.z)).toBeLessThanOrEqual(0.55 + 1e-9);
+    }
+  });
+  it('ends an oblique bank at its first ball rather than drawing through it', () => {
+    const s = isolated('white', 'red-1'); s.aim = Math.PI / 4;
+    s.balls[0].x = 0.5; s.balls[0].z = 0.5;
+    const railX = 1.778 / 2 - R, railZ = 0.5 - (railX - 0.5), offset = 0.22 / Math.sqrt(2);
+    s.balls[1].x = railX - offset; s.balls[1].z = railZ - offset;
+    const guide = getVillaSnookerTrajectory(s)!;
+    expect(guide.collision.kind).toBe('cushion');
+    expect(Math.hypot(guide.bank!.to.x - guide.bank!.from.x, guide.bank!.to.z - guide.bank!.from.z)).toBeCloseTo(0.22 - R * 2);
+    expect(Math.hypot(guide.bank!.to.x - s.balls[1].x, guide.bank!.to.z - s.balls[1].z)).toBeCloseTo(R * 2);
+  });
+  it('uses every actual pocket capture boundary without inventing cushion bounces at mouths', () => {
+    for (const [i, p] of VILLA_SNOOKER_POCKETS.entries()) {
+      const s = isolated('white'); s.balls[0].x = s.balls[0].z = 0; s.aim = Math.atan2(p.x, -p.z);
+      const guide = getVillaSnookerTrajectory(s)!;
+      expect(guide.collision).toEqual({ kind: 'pocket', pocketIndex: i }); expect(guide.bank).toBeNull();
+      expect(Math.hypot(guide.cue.to.x - p.x, guide.cue.to.z - p.z)).toBeCloseTo(VILLA_SNOOKER_POCKET_CAPTURE_RADIUS);
+    }
+  });
+  it('hides when disabled, inactive, rolling, complete, invalid, missing or sunk cue and resets default-on', () => {
+    const s = createVillaSnooker(); expect(getVillaSnookerTrajectory(s, false)).toBeNull();
+    s.aimAssist = false; expect(getVillaSnookerTrajectory(s)).toBeNull(); s.aimAssist = true;
+    s.moving = true; expect(getVillaSnookerTrajectory(s)).toBeNull(); s.moving = false;
+    for (const phase of ['rolling', 'complete'] as const) { s.phase = phase; expect(getVillaSnookerTrajectory(s)).toBeNull(); } s.phase = 'aiming';
+    s.aim = NaN; expect(getVillaSnookerTrajectory(s)).toBeNull(); s.aim = 0;
+    s.balls[0].potted = true; expect(getVillaSnookerTrajectory(s)).toBeNull(); s.balls[0].potted = false;
+    s.balls[0].vx = 0.1; expect(getVillaSnookerTrajectory(s)).toBeNull(); s.balls[0].vx = 0;
+    s.balls.shift(); expect(getVillaSnookerTrajectory(s)).toBeNull();
+    const reset = createVillaSnooker(); expect(reset.aimAssist).toBe(true); expect(getVillaSnookerTrajectory(reset)).not.toBeNull();
+    const snapshot = structuredClone(reset), guide = getVillaSnookerTrajectory(reset);
+    for (const dt of [0, NaN, Infinity, -1]) advanceVillaSnooker(reset, dt);
+    expect(reset).toEqual(snapshot); expect(getVillaSnookerTrajectory(reset)).toEqual(guide);
+  });
+  it('restores guides after an actual scratch settles and respots, without scoring changes', () => {
+    const s = isolated('white'); s.balls[0].x = 0.78; s.balls[0].z = 0; s.aim = Math.PI / 2; s.power = 0.1;
+    shootVillaSnooker(s); advanceVillaSnooker(s, 0.25); settle(s);
+    expect(s.foul).toBe('Cue ball potted'); expect(s.score).toBe(-4); expect(getVillaSnookerTrajectory(s)).not.toBeNull();
+  });
+  it('does not draw through an already-overlapping collider behind the cue direction', () => {
+    const s = isolated('white', 'red-1'); s.aim = Math.PI / 2;
+    s.balls[0].x = 0; s.balls[1].x = -0.01; s.balls[0].z = s.balls[1].z = 0.4;
+    const guide = getVillaSnookerTrajectory(s)!;
+    expect(guide.collision).toEqual({ kind: 'ball', ballId: 'red-1' });
+    expect(guide.cue.to).toEqual(guide.cue.from); expect(guide.object).toBeNull();
+  });
+  it('keeps every preview endpoint finite and bounded through a deterministic full aim sweep', () => {
+    for (let i = 0; i < 400; i++) {
+      const s = createVillaSnooker(); s.aim = i * Math.PI * 2 / 400;
+      const guide = getVillaSnookerTrajectory(s)!;
+      for (const segment of [guide.cue, guide.object, guide.bank]) if (segment) for (const p of [segment.from, segment.to]) {
+        expect(Number.isFinite(p.x + p.z)).toBe(true);
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(1.778 / 2 - R + 1e-9);
+        expect(Math.abs(p.z)).toBeLessThanOrEqual(3.569 / 2 - R + 1e-9);
+      }
+    }
   });
 });

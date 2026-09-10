@@ -3,6 +3,7 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_RACING, type VillaActivityState, type VillaScreenSource } from './villaActivities.js';
 import type { VillaCollider } from './villaWorld.js';
 import { createVillaRace, drawVillaRace, VILLA_RACE_WHEEL_TURN, type VillaRaceState } from './villaRacing.js';
+import { registerVillaSeatCollider } from './villaSeating.js';
 
 type V3 = [number, number, number];
 
@@ -37,6 +38,215 @@ export function createVillaRallyWheel(parent: THREE.Object3D, rubber = villaMate
   } };
 }
 
+export const VILLA_ANIME_FIGURES = [
+  { name: 'Hazel / seed curator', age: 28, hair: 'chestnut', hairstyle: 'layered bob', outfit: 'sage', clothing: 'ankle dress and cardigan', pose: 'contrapposto' },
+  { name: 'Alba / observatory guide', age: 27, hair: 'silver', hairstyle: 'side ponytail', outfit: 'navy', clothing: 'long coat and trousers', pose: 'greeting hand' },
+  { name: 'Poppy / botanical author', age: 31, hair: 'copper', hairstyle: 'low braid', outfit: 'rose', clothing: 'ankle dress and cardigan', pose: 'holding book' },
+  { name: 'Violet / city archivist', age: 29, hair: 'plum', hairstyle: 'swept bob', outfit: 'cream', clothing: 'long coat and trousers', pose: 'shoulder bag' },
+  { name: 'Maren / landscape architect', age: 32, hair: 'ink', hairstyle: 'swept bun', outfit: 'navy', clothing: 'high-collar dress and cape', pose: 'flowing cape' },
+  { name: 'Saffron / morning baker', age: 26, hair: 'gold', hairstyle: 'soft waves', outfit: 'ochre', clothing: 'ankle dress and cardigan', pose: 'holding book' },
+  { name: 'Fern / kite artisan', age: 30, hair: 'chestnut', hairstyle: 'short crop', outfit: 'cream', clothing: 'layered jacket and trousers', pose: 'greeting hand' },
+  { name: 'Rosie / garden designer', age: 28, hair: 'plum', hairstyle: 'long layers', outfit: 'sage', clothing: 'high-collar flowing dress', pose: 'flowing dress' },
+  { name: 'Dove / mural painter', age: 25, hair: 'silver', hairstyle: 'wind-swept layers', outfit: 'rose', clothing: 'long coat and trousers', pose: 'shoulder bag' },
+] as const;
+
+/** Original adult anime collector sculptures, not licensed characters or chibi.
+ * Research: https://bishoujoseries.com/about/ (Japanese-styled character statues),
+ * https://www.goodsmile.com/en/product/1139934/DR. (original scale figure), and
+ * https://www.goodsmile.com/en/product/1145953/Saori%2BDress%2B1%2B7%2BScale%2BFigure
+ * (sculpted dress + supplied stand). Only general collector presentation is used;
+ * no artwork, character designs, downloaded images, textures or meshes are copied.
+ * A shared batch per material keeps nine detailed figures and the case inexpensive.
+ */
+export function createVillaAnimeFigureDisplay(parent: THREE.Object3D, sharedLight?: THREE.MeshStandardMaterial) {
+  const b = new VillaModelBuilder(parent, 'originalAnimeFigureWall');
+  b.root.position.set(2.32, 0, 6.45); b.root.rotation.y = Math.PI / 2;
+  const palette = {
+    walnut: '#584131', ink: '#242932', cream: '#ebe6db', skin: '#f2d2bb', blush: '#b87e79',
+    sage: '#466759', navy: '#3f536f', rose: '#a87383', ochre: '#a4804e',
+    chestnut: '#554038', copper: '#98644e', silver: '#bdc7ce', plum: '#695971', gold: '#c1a373', brass: '#ad926c',
+  };
+  const materials = Object.fromEntries(Object.entries(palette).map(([key, hex]) => {
+    const material = villaMaterial(hex, key === 'brass' ? 0.4 : 0.65, key === 'brass' ? 0.5 : 0);
+    material.name = `anime-display-${key}`; return [key, material];
+  })) as Record<keyof typeof palette, THREE.MeshStandardMaterial>;
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#d6faff', transparent: true, opacity: 0.13, roughness: 0.07, metalness: 0.04, depthWrite: false, side: THREE.DoubleSide });
+  glass.name = 'anime-display-glass';
+  const light = sharedLight ?? new THREE.MeshStandardMaterial({ color: '#ffe4b2', emissive: '#ffc575', emissiveIntensity: 0.8 });
+  const { walnut, ink, cream, skin, blush, brass } = materials;
+  type Ring = { y: number; x?: number; z?: number; rx: number; rz: number; pleat?: number; lift?: number };
+  // Closed sculpted lofts give tapered jaws, fitted opaque layers and real drapery,
+  // rather than scaling a sphere for every body part.
+  const loft = (rings: Ring[], material: THREE.Material, segments = 18) => {
+    const positions: number[] = [], indices: number[] = [];
+    for (const r of rings) for (let i = 0; i < segments; i++) {
+      const a = i * Math.PI * 2 / segments, pleat = 1 + (r.pleat ?? 0) * Math.cos(a * 6);
+      positions.push((r.x ?? 0) + Math.cos(a) * r.rx * pleat, r.y + (r.lift ?? 0) * Math.sin(a + 0.8), (r.z ?? 0) + Math.sin(a) * r.rz * pleat);
+    }
+    for (let row = 0; row < rings.length - 1; row++) for (let i = 0; i < segments; i++) {
+      const a = row * segments + i, next = row * segments + (i + 1) % segments, upper = a + segments;
+      indices.push(a, upper, next, next, upper, next + segments);
+    }
+    for (const row of [0, rings.length - 1]) {
+      const r = rings[row], center = positions.length / 3; positions.push(r.x ?? 0, r.y, r.z ?? 0);
+      for (let i = 0; i < segments; i++) {
+        const a = row * segments + i, next = row * segments + (i + 1) % segments;
+        indices.push(...(row === 0 ? [center, a, next] : [center, next, a]));
+      }
+    }
+    const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.setIndex(indices); geometry.computeVertexNormals(); b.geometry(geometry, material);
+  };
+  // Tapered, curved hair ribbons have attached roots and pointed strand ends.
+  const lock = (points: V3[], width: number, material: THREE.Material) => {
+    const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), positions: number[] = [], indices: number[] = [];
+    for (let row = 0; row <= 9; row++) {
+      const t = row / 9, p = curve.getPoint(t), tangent = curve.getTangent(t).normalize();
+      const side = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 0, 1)).normalize(), back = new THREE.Vector3().crossVectors(tangent, side).normalize();
+      const taper = (0.55 + 0.45 * Math.sin(t * Math.PI)) * (1 - t * 0.97);
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3, vertex = p.clone().addScaledVector(side, Math.cos(a) * width * taper).addScaledVector(back, Math.sin(a) * 0.007 * taper);
+        positions.push(vertex.x, vertex.y, vertex.z);
+        if (row < 9) { const v = row * 6 + i, next = row * 6 + (i + 1) % 6; indices.push(v, next, v + 6, next, next + 6, v + 6); }
+      }
+    }
+    const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.setIndex(indices); geometry.computeVertexNormals(); b.geometry(geometry, material);
+  };
+  const figureNames: string[] = [];
+  VILLA_ANIME_FIGURES.forEach((design, index) => {
+    const x = (index % 3 - 1) * 1.22, shelfY = [0.0535, 0.8685, 1.6885][Math.floor(index / 3)];
+    const outfit = materials[design.outfit], hair = materials[design.hair], trousers = design.clothing.includes('trousers');
+    const sway = index % 2 ? -0.011 : 0.011, headX = -sway * 0.45;
+    b.at(x, shelfY, -0.006, 0, () => {
+      b.cylinder(0, 0.017, 0, 0.163, 0.163, 0.034, walnut, [0, 0, 0], 28);
+      b.geometry(new THREE.TorusGeometry(0.151, 0.0025, 5, 30), brass, [0, 0.032, 0], [Math.PI / 2, 0, 0]);
+      // Contrapposto: one straight supporting leg, the other knee relaxed. Opaque
+      // tights/trousers enter closed boots; BOTH soles touch the display base.
+      for (const side of [-1, 1]) {
+        const ankle: V3 = [side * 0.04 + (side < 0 ? -0.012 : 0), 0.085, side < 0 ? 0.025 : 0];
+        const knee: V3 = [side * 0.033 + sway, 0.22, side < 0 ? 0.018 : 0];
+        b.beam([side * 0.032 + sway, 0.34, 0], knee, trousers ? 0.022 : 0.018, trousers ? outfit : ink, 12);
+        b.beam(knee, ankle, trousers ? 0.02 : 0.015, trousers ? outfit : ink, 12);
+        b.ellipsoid(...knee, trousers ? 0.022 : 0.018, 0.023, trousers ? 0.021 : 0.018, trousers ? outfit : ink);
+        b.box(ankle[0], 0.037, ankle[2] + 0.021, 0.051, 0.006, 0.077, ink, 0.002);
+        b.ellipsoid(ankle[0], 0.053, ankle[2] + 0.017, 0.026, 0.019, 0.04, ink);
+        loft([{ x: ankle[0], y: 0.054, z: ankle[2], rx: 0.022, rz: 0.027 }, { x: ankle[0], y: 0.089, z: ankle[2], rx: 0.023, rz: 0.022 }, { x: ankle[0], y: 0.143, z: ankle[2], rx: 0.022, rz: 0.018 }], ink, 12);
+        b.box(ankle[0] + side * 0.022, 0.127, ankle[2], 0.004, 0.011, 0.014, brass, 0.001);
+      }
+      const flowing = design.pose === 'flowing dress' || design.pose === 'flowing cape';
+      if (!trousers || design.clothing.includes('coat')) {
+        loft([
+          { y: trousers ? 0.21 : 0.137, x: flowing ? 0.023 : 0, z: flowing ? -0.006 : 0, rx: flowing ? 0.125 : trousers ? 0.083 : 0.097, rz: flowing ? 0.071 : 0.056, pleat: 0.07, lift: flowing ? 0.014 : 0.004 },
+          { y: 0.265, x: sway * 0.5, rx: 0.077, rz: 0.047, pleat: 0.045 },
+          { y: 0.335, x: sway, rx: 0.055, rz: 0.037, pleat: 0.02 },
+          { y: 0.388, x: sway, rx: 0.038, rz: 0.03 },
+        ], outfit, 24);
+      }
+      loft([{ y: 0.329, x: sway, rx: 0.052, rz: 0.037 }, { y: 0.386, x: sway, rx: 0.039, rz: 0.03 }, { y: 0.456, rx: 0.055, rz: 0.035 }, { y: 0.495, rx: 0.064, rz: 0.03 }, { y: 0.518, rx: 0.027, rz: 0.024 }], outfit);
+      b.cylinder(0, 0.519, 0, 0.022, 0.028, 0.023, cream, [0, 0, 0], 14);
+      b.cylinder(headX, 0.543, 0, 0.014, 0.017, 0.041, skin, [0, 0, 0], 12);
+      // Lapels, sewn front edges and small buttons stay attached to the opaque coat.
+      for (const side of [-1, 1]) b.beam([side * 0.022, 0.503, 0.024], [side * 0.013 + sway, 0.454, 0.034], 0.005, cream, 6);
+      for (const y of [0.413, 0.44, 0.467]) b.ellipsoid(sway * 0.5, y, 0.036, 0.0028, 0.0028, 0.002, brass);
+      if (design.pose === 'flowing cape') {
+        // A closed, scalloped back cape meets both shoulders; its hem curves out.
+        loft([{ y: 0.242, x: 0.018, z: -0.068, rx: 0.127, rz: 0.029, pleat: 0.08, lift: 0.014 }, { y: 0.365, x: 0.008, z: -0.047, rx: 0.093, rz: 0.019, pleat: 0.04 }, { y: 0.493, z: -0.021, rx: 0.065, rz: 0.016 }, { y: 0.507, z: -0.012, rx: 0.042, rz: 0.017 }], cream, 24);
+      }
+      for (const side of [-1, 1]) {
+        const waving = design.pose === 'greeting hand' && side === 1;
+        const book = design.pose === 'holding book';
+        const elbow: V3 = [side * (waving ? 0.104 : 0.087), waving ? 0.456 : 0.407, book ? 0.031 : 0.004];
+        const wrist: V3 = waving ? [0.117, 0.568, 0.024] : book ? [side * 0.049, 0.373, 0.079] : design.pose === 'shoulder bag' && side === 1 ? [0.108, 0.335, 0.022] : [side * (flowing ? 0.11 : 0.069), flowing ? 0.363 : 0.347, 0.035];
+        b.beam([side * 0.058, 0.49, 0], elbow, 0.02, outfit, 12);
+        b.ellipsoid(...elbow, 0.019, 0.021, 0.019, outfit);
+        b.beam(elbow, wrist, 0.0155, outfit, 12);
+        const handY = wrist[1] + (waving ? 0.01 : -0.007);
+        b.ellipsoid(wrist[0], handY, wrist[2], 0.01, 0.015, 0.009, skin);
+        b.ellipsoid(wrist[0] - side * 0.009, handY - 0.002, wrist[2] + 0.004, 0.004, 0.008, 0.004, skin);
+        if (waving) for (let finger = 0; finger < 3; finger++) b.beam([wrist[0] - 0.006 + finger * 0.005, handY + 0.009, wrist[2]], [wrist[0] - 0.009 + finger * 0.008, handY + 0.024 - Math.abs(finger - 1) * 0.003, wrist[2]], 0.0023, skin, 6);
+      }
+      // Tapered chin and restrained almond eyes. Even INCLUDING the hair crown,
+      // this is a 5.2-head adult silhouette, not a one-third-height toy head.
+      loft([{ y: 0.56, x: headX, z: 0.008, rx: 0.008, rz: 0.009 }, { y: 0.572, x: headX, z: 0.008, rx: 0.023, rz: 0.02 }, { y: 0.59, x: headX, z: 0.008, rx: 0.035, rz: 0.028 }, { y: 0.617, x: headX, z: 0.008, rx: 0.041, rz: 0.035 }, { y: 0.641, x: headX, z: 0.006, rx: 0.04, rz: 0.033 }, { y: 0.666, x: headX, rx: 0.026, rz: 0.022 }, { y: 0.673, x: headX, rx: 0.007, rz: 0.008 }], skin, 20);
+      b.ellipsoid(headX, 0.644, -0.011, 0.047, 0.04, 0.038, hair);
+      for (const side of [-1, 1]) {
+        b.ellipsoid(headX + side * 0.04, 0.605, 0.003, 0.007, 0.012, 0.009, skin);
+        b.ellipsoid(headX + side * 0.018, 0.615, 0.038, 0.0105, 0.0057, 0.0036, cream);
+        b.ellipsoid(headX + side * 0.018, 0.615, 0.041, 0.004, 0.005, 0.0015, outfit);
+        b.ellipsoid(headX + side * 0.018, 0.615, 0.0423, 0.002, 0.004, 0.001, ink);
+        b.ellipsoid(headX + side * 0.019, 0.617, 0.0432, 0.0012, 0.0015, 0.0007, cream);
+        b.beam([headX + side * 0.009, 0.62, 0.04], [headX + side * 0.028, 0.619, 0.038], 0.0016, ink, 5);
+        b.beam([headX + side * 0.011, 0.631, 0.037], [headX + side * 0.028, 0.63, 0.034], 0.0018, hair, 5);
+      }
+      b.ellipsoid(headX, 0.598, 0.042, 0.0032, 0.0045, 0.004, skin);
+      b.beam([headX - 0.005, 0.578, 0.0315], [headX + 0.004, 0.578, 0.0315], 0.0012, blush, 6);
+      // Four asymmetrical pointed bangs attach to the cap; side locks overlap roots.
+      for (let i = 0; i < 4; i++) {
+        const xx = headX - 0.031 + i * 0.019;
+        lock([[xx - 0.006, 0.676, 0.007], [xx, 0.659, 0.032], [xx + 0.012, 0.636 - (i % 2) * 0.008, 0.04]], 0.019, hair);
+      }
+      const long = /long|waves|wind/.test(design.hairstyle), bob = design.hairstyle.includes('bob');
+      for (const side of [-1, 1]) for (let layer = 0; layer < (long ? 3 : 2); layer++) {
+        const endY = long ? 0.467 + layer * 0.028 : bob ? 0.561 + layer * 0.01 : 0.588 + layer * 0.015;
+        const wind = design.hairstyle.startsWith('wind') ? 0.024 : 0;
+        lock([[headX + side * 0.033, 0.661, -0.01 - layer * 0.011], [headX + side * 0.046, 0.606, -0.001 - layer * 0.011], [headX + side * (long ? 0.057 : 0.044) + wind, endY + 0.031, -0.016 - layer * 0.01], [headX + side * 0.042 + wind, endY, -0.013 - layer * 0.01]], 0.019, hair);
+      }
+      if (design.hairstyle === 'side ponytail') {
+        b.ellipsoid(headX + 0.037, 0.66, -0.035, 0.018, 0.018, 0.02, hair);
+        for (let i = 0; i < 3; i++) lock([[headX + 0.04, 0.66, -0.035], [headX + 0.072 + i * 0.004, 0.623, -0.041], [headX + 0.085, 0.558, -0.045 - i * 0.009], [headX + 0.061, 0.524 + i * 0.009, -0.047]], 0.021, hair);
+        b.box(headX + 0.055, 0.647, -0.025, 0.018, 0.01, 0.008, outfit, 0.002);
+      }
+      if (design.hairstyle === 'low braid') {
+        for (let i = 0; i < 3; i++) lock([[headX - 0.028, 0.635, -0.036], [headX - 0.046 + Math.sin(i * 2) * 0.008, 0.565, -0.026], [headX - 0.05 + Math.cos(i * 2) * 0.008, 0.504, -0.014], [headX - 0.046, 0.473, -0.011]], 0.018, hair);
+        b.box(headX - 0.046, 0.487, -0.007, 0.024, 0.009, 0.012, outfit, 0.002);
+      }
+      if (design.hairstyle === 'swept bun') {
+        b.ellipsoid(headX - 0.018, 0.645, -0.049, 0.029, 0.028, 0.022, hair);
+        for (let i = 0; i < 3; i++) lock([[headX + 0.025, 0.668, -0.023], [headX - 0.013, 0.671 - i * 0.006, -0.055], [headX - 0.037, 0.63, -0.049]], 0.009, hair);
+      }
+      if (design.pose === 'holding book') {
+        b.box(0, 0.372, 0.084, 0.094, 0.095, 0.02, walnut, 0.002);
+        b.box(0, 0.372, 0.089, 0.083, 0.083, 0.015, cream, 0.001);
+        b.box(-0.046, 0.372, 0.084, 0.009, 0.095, 0.023, outfit, 0.002);
+        b.box(0.022, 0.326, 0.095, 0.006, 0.018, 0.002, outfit, 0);
+      }
+      if (design.pose === 'shoulder bag') {
+        b.box(0.108, 0.282, 0.025, 0.068, 0.079, 0.037, walnut, 0.008);
+        b.box(0.108, 0.3, 0.046, 0.058, 0.027, 0.008, outfit, 0.004);
+        b.beam([0.085, 0.319, 0.025], [0.092, 0.339, 0.025], 0.0035, walnut, 6);
+        b.beam([0.092, 0.339, 0.025], [0.123, 0.335, 0.025], 0.0035, walnut, 6);
+        b.beam([0.123, 0.335, 0.025], [0.13, 0.319, 0.025], 0.0035, walnut, 6);
+        b.beam([-0.039, 0.495, 0.017], [0.071, 0.352, 0.04], 0.003, walnut, 6);
+        b.beam([0.071, 0.352, 0.04], [0.092, 0.32, 0.025], 0.003, walnut, 6);
+      }
+      if (design.pose === 'flowing dress' || design.pose === 'contrapposto') {
+        const hx = design.pose === 'flowing dress' ? -0.11 : -0.069, hy = design.pose === 'flowing dress' ? 0.36 : 0.344;
+        b.beam([hx, hy - 0.016, 0.037], [hx + 0.009, hy + 0.05, 0.037], 0.002, materials.sage, 6);
+        for (let petal = 0; petal < 5; petal++) {
+          const a = petal * Math.PI * 2 / 5;
+          b.ellipsoid(hx + 0.009 + Math.cos(a) * 0.008, hy + 0.05 + Math.sin(a) * 0.008, 0.037, 0.006, 0.007, 0.003, cream);
+        }
+      }
+    });
+    figureNames.push(design.name);
+    const marker = new THREE.Object3D(); marker.name = `originalAnimeFigure-${index}`; marker.position.set(x, shelfY, -0.006);
+    marker.userData = { character: design.name, characterAge: design.age, style: 'adult anime bishoujo', authored3D: true, originalDesigns: true, modestClothing: true, hairstyle: design.hairstyle, clothing: design.clothing, pose: design.pose, bodyHeight: 0.65, headHeight: 0.124, headsTall: 0.65 / 0.124, baseHeight: 0.034, soleHeight: 0.034, baseOnShelf: true };
+    b.root.add(marker);
+  });
+  b.box(0, 1.27, -0.207, 3.7, 2.5, 0.045, walnut);
+  b.box(0, 1.27, -0.18, 3.6, 2.4, 0.015, ink);
+  for (const x of [-1.825, 1.825]) b.box(x, 1.27, 0, 0.05, 2.5, 0.48, walnut);
+  for (const y of [0.035, 0.85, 1.67, 2.515]) b.box(0, y, 0, 3.7, 0.037, 0.48, walnut);
+  for (const x of [-0.61, 0.61]) b.box(x, 1.27, 0, 0.025, 2.46, 0.44, walnut);
+  for (const y of [0.81, 1.63, 2.47]) b.box(0, y, -0.135, 3.58, 0.015, 0.018, light, 0.002);
+  for (let i = 0; i < 3; i++) b.box((i - 1) * 1.22, 1.275, 0.241, 1.19, 2.43, 0.006, glass, 0);
+  b.root.userData = { figureNames, compartments: 9, variants: 9, originalDesigns: true, adultFigures: true, modestClothing: true, facing: '+X', frontMaxX: 2.564, proportions: '5.2 heads including hair', hairstyles: 'shaped tapered strands', lights: 'shared display switch' };
+  // Retain the old named cabinet anchor for existing scene integrations; it is
+  // non-rendering metadata only and no chibi geometry remains in the case.
+  const legacy = new THREE.Object3D(); legacy.name = 'originalChibiGirlWall'; legacy.userData = b.root.userData; b.root.add(legacy);
+  b.finish();
+  return { root: b.root, figureNames, colliders: [{ minX: 2.075, maxX: 2.565, minZ: 4.6, maxZ: 8.3, minY: 0, maxY: 2.52 }] };
+}
+
 /** Authored, nonfunctional display replicas and virtual-input gaming furniture.
  * Geometry is batched by material, with one steerable wheel group; the owner disposes the scene.
  * Time is seconds. Texture/emissive updates never require shadow invalidation.
@@ -56,8 +266,6 @@ export function createVillaGaming(parent: THREE.Object3D): {
   const turquoise = villaMaterial('#21c6c5', .36, .17);
   const blue = villaMaterial('#268ee2', .45);
   const red = villaMaterial('#ed585f', .45);
-  const skin = villaMaterial('#ffe0ca', .65);
-  const pink = villaMaterial('#ee87b7', .5);
   const green = villaMaterial('#133f35', .6);
   const orange = villaMaterial('#fa842d', .5);
   const glass = new THREE.MeshPhysicalMaterial({ color: '#d6faff', transparent: true, opacity: .13, roughness: .07, metalness: .04, depthWrite: false, side: THREE.DoubleSide });
@@ -234,7 +442,8 @@ export function createVillaGaming(parent: THREE.Object3D): {
     }
   });
   bucket(7.25, 5.1, 0, false); b.collide(7.25, 0, 5.1, .7, 1.31, .75);
-  mark('ergonomicGamingChair', [7.25, 0, 5.1], { wheels: 5, headrest: true, lumbar: true, armrests: 2 });
+  registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'chair-pc');
+  mark('ergonomicGamingChair', [7.25, 0, 5.1], { seatId: 'chair-pc', sitable: true, cushionHeight: .55, yaw: 0, wheels: 5, headrest: true, lumbar: true, armrests: 2 });
 
   // North-wall locked replica cabinet, warm rim light, three horizontal display bays.
   b.at(10.35, 0, 3.3, 0, () => {
@@ -292,88 +501,9 @@ export function createVillaGaming(parent: THREE.Object3D): {
   b.collide(10.35, .125, 3.3, 2.9, 2.55, .44);
   mark('lockedReplicaCabinet', [10.35, 1.4, 3.3], { locked: true, decorativeOnly: true, replicaNames: ['AK47', 'MosinNagant', 'MP5K'], orangeMuzzleTips: true });
 
-  // Nine original garden-club girls, sculpted here from primitives. No IP references.
-  // Oversized rounded heads, cheerful faces, full sleeves and ankle coverage.
-  const figureNames: string[] = [];
-  const chibiDesigns = [
-    { name: 'Hazel / seed keeper', hair: wood, style: 'bob', outfit: green, clothing: 'long dress and cardigan', pose: 'seed pouch' },
-    { name: 'Alba / cloud reader', hair: white, style: 'side bun', outfit: blue, clothing: 'overalls and long-sleeve shirt', pose: 'wave' },
-    { name: 'Poppy / picnic planner', hair: villaMaterial('#ad543b', .7), style: 'braid', outfit: pink, clothing: 'long dress and cardigan', pose: 'book' },
-    { name: 'Violet / letter writer', hair: villaMaterial('#7e6b98', .7), style: 'bob', outfit: white, clothing: 'cardigan and trousers', pose: 'wave' },
-    { name: 'Maren / pebble finder', hair: black, style: 'side bun', outfit: grey, clothing: 'overalls and long-sleeve shirt', pose: 'seed pouch' },
-    { name: 'Saffron / morning baker', hair: villaMaterial('#d9ae63', .7), style: 'curls', outfit: orange, clothing: 'long dress and cardigan', pose: 'book' },
-    { name: 'Fern / kite maker', hair: villaMaterial('#547464', .7), style: 'braid', outfit: white, clothing: 'cardigan and trousers', pose: 'wave' },
-    { name: 'Rosie / berry gardener', hair: pink, style: 'curls', outfit: green, clothing: 'overalls and long-sleeve shirt', pose: 'seed pouch' },
-    { name: 'Dove / little painter', hair: grey, style: 'bob', outfit: red, clothing: 'long dress and cardigan', pose: 'book' },
-  ];
-  const chibiGirl = (x: number, y: number, index: number) => b.at(x, y, -.006, 0, () => {
-    const design = chibiDesigns[index]!, dress = design.clothing.startsWith('long dress'), overalls = design.clothing.startsWith('overalls');
-    b.cylinder(0, .023, 0, .145, .145, .035, walnut, [0, 0, 0], 18);
-    ring(0, .042, 0, .124, .004, design.outfit, [Math.PI / 2, 0, 0]);
-    for (const side of [-1, 1]) {
-      // Opaque leggings/trousers run into substantial closed sneakers.
-      b.cylinder(side * .043, .17, 0, .031, .029, .22, overalls ? design.outfit : grey, [0, 0, 0], 10);
-      b.ellipsoid(side * .044, .064, .025, .039, .025, .056, white);
-      b.box(side * .044, .047, .027, .078, .012, .102, rubber, .004);
-      b.box(side * .044, .084, .041, .044, .009, .025, design.outfit, .003);
-    }
-    if (dress) b.cylinder(0, .232, 0, .059, .099, .29, design.outfit, [0, 0, 0], 16);
-    b.cylinder(0, .355, 0, .071, .066, .17, overalls ? white : design.outfit, [0, 0, 0], 14);
-    if (overalls) {
-      b.box(0, .322, .06, .093, .113, .026, design.outfit, .006);
-      for (const side of [-1, 1]) b.beam([side * .038, .427, .046], [side * .033, .328, .079], .009, design.outfit, 6);
-      b.box(0, .319, .079, .046, .032, .009, white, .003);
-    } else {
-      b.beam([0, .422, .068], [0, .307, .068], .0035, white, 6);
-      for (const yy of [.33, .365, .4]) b.ellipsoid(.012, yy, .071, .005, .005, .003, walnut);
-    }
-    // High round collar: no exposed torso, shoulders or neckline.
-    b.cylinder(0, .435, 0, .035, .047, .023, white, [0, 0, 0], 12);
-    b.ellipsoid(0, .535, -.019, .111, .11, .087, design.hair);
-    b.ellipsoid(0, .527, .02, .102, .096, .079, skin);
-    b.ellipsoid(0, .596, -.006, .109, .051, .084, design.hair);
-    for (let i = 0; i < 4; i++) b.ellipsoid(-.071 + i * .044, .577 + Math.sin(i) * .006, .073, .032, .032, .021, design.hair);
-    for (const side of [-1, 1]) {
-      b.ellipsoid(side * .095, .538, -.012, .024, .059, .064, design.hair);
-      b.ellipsoid(side * .034, .53, .095, .014, .019, .006, black);
-      b.ellipsoid(side * .034 - .004, .536, .101, .0045, .006, .0015, white);
-      b.ellipsoid(side * .066, .508, .083, .014, .006, .003, pink);
-      const waving = design.pose === 'wave' && side === 1;
-      const elbow: V3 = [side * .106, waving ? .423 : .338, .018];
-      const hand: V3 = [side * (waving ? .142 : .065), waving ? .484 : .305, .09];
-      b.beam([side * .063, .407, 0], elbow, .028, overalls ? white : design.outfit);
-      b.beam(elbow, hand, .025, overalls ? white : design.outfit);
-      b.ellipsoid(...hand, .022, .022, .019, skin);
-    }
-    // A tiny curved smile, rather than an idol microphone or headset.
-    b.geometry(new THREE.TorusGeometry(.014, .0025, 5, 10, Math.PI), walnut, [0, .507, .098], [0, 0, Math.PI]);
-    if (design.style === 'side bun') b.ellipsoid(.106, .609, -.029, .046, .043, .043, design.hair);
-    if (design.style === 'braid') for (let i = 0; i < 4; i++) b.ellipsoid(-.109 + (i % 2) * .01, .489 - i * .03, -.021, .024, .024, .029, design.hair);
-    if (design.style === 'curls') for (const side of [-1, 1]) for (let i = 0; i < 3; i++) b.ellipsoid(side * .1, .562 - i * .032, -.003, .026, .025, .043, design.hair);
-    if (design.pose === 'book') {
-      b.box(0, .307, .101, .115, .084, .023, walnut, .003);
-      b.box(0, .307, .115, .104, .072, .009, white, .002);
-      b.beam([0, .275, .122], [0, .34, .122], .002, design.outfit, 6);
-    }
-    if (design.pose === 'seed pouch') {
-      b.ellipsoid(0, .293, .099, .047, .045, .025, walnut);
-      b.ellipsoid(0, .297, .123, .009, .015, .004, green);
-    }
-    figureNames.push(design.name);
-    mark(`originalChibiGirl-${index}`, [2.32, y, 6.45 - x], { character: design.name, authored3D: true, originalDesigns: true, modestClothing: true, hairstyle: design.style, clothing: design.clothing, pose: design.pose });
-  });
-  b.at(2.32, 0, 6.45, Math.PI / 2, () => {
-    b.box(0, 1.27, -.207, 3.7, 2.5, .045, walnut);
-    b.box(0, 1.27, -.18, 3.6, 2.4, .015, rubber);
-    for (const x of [-1.825, 1.825]) b.box(x, 1.27, 0, .05, 2.5, .48, walnut);
-    for (const y of [.035, .85, 1.67, 2.515]) b.box(0, y, 0, 3.7, .037, .48, walnut);
-    for (const x of [-.61, .61]) b.box(x, 1.27, 0, .025, 2.46, .44, walnut);
-    for (const y of [.81, 1.63, 2.47]) b.box(0, y, -.135, 3.58, .015, .018, warm, .002);
-    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) chibiGirl((col - 1) * 1.22, .065 + row * .82, row * 3 + col);
-    for (let i = 0; i < 3; i++) b.box((i - 1) * 1.22, 1.275, .241, 1.19, 2.43, .006, glass, 0);
-  });
-  b.collide(2.32, 0, 6.45, .49, 2.52, 3.7);
-  mark('originalChibiGirlWall', [2.32, 0, 6.45], { figureNames, compartments: 9, variants: 9, originalDesigns: true, modestClothing: true, facing: '+X', frontMaxX: 2.564 });
+  const figureDisplay = createVillaAnimeFigureDisplay(b.root, warm);
+  const figureNames = figureDisplay.figureNames;
+  b.colliders.push(...figureDisplay.colliders);
 
   // Independent aluminium-profile FFB simulator; central seating reference is shared.
   const sx = VILLA_RACING.seat.x, sz = VILLA_RACING.seat.z;
@@ -404,7 +534,9 @@ export function createVillaGaming(parent: THREE.Object3D): {
   b.beam([10.5, .78, 6.72], [10.5, .94, 6.72], .012, steel);
   b.ellipsoid(10.5, .96, 6.72, .035, .037, .035, black);
   b.collide(9.8, 0, 6.86, 1.16, 1.28, 2.48);
+  registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'racing');
   b.collide(10.5, 0, 6.72, .33, .99, .31);
+  registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'racing');
   mark('racingCockpit', [sx, 0, sz], { seat: VILLA_RACING.seat, exit: VILLA_RACING.exit, forward: '+Z', bounds: { minX: 9.22, maxX: 10.665, minZ: 5.55, maxZ: 8.1 }, pedals: 3, paddleShifters: 2, gearShifter: true });
 
   // Freestanding large display in front of glazing, with actual device silhouettes below.

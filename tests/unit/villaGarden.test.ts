@@ -154,7 +154,7 @@ describe('authored villa garden', () => {
     expect(VILLA_ROOF_PLANTERS.map(p => p.species)).toEqual(VILLA_FLOWER_SPECIES);
     const markers = root.children.filter(n => n.userData.kind === 'flower-planter');
     expect(markers).toHaveLength(6);
-    const keepClear = [STAIR_HOLE, rect(-1.1, 1.1, -7.5, -5.1), rect(1.7, 6.7, -7.5, 1.5),
+    const keepClear = [STAIR_HOLE, rect(3.45, 5.65, -7.0, -4.6), rect(1.7, 6.7, -7.5, 1.5),
       rect(-9.9, -4.1, 2.1, 6.5), // Seating, rug and old tea hotspot.
       rect(-7.7, -4.3, -6.2, -2.8), rect(7.15, 9.85, -6.5, -5.5), // Dining and BBQ.
       ...[-10.3, -3.1].flatMap(x => [1.3, 7].map(z => rect(x - 0.08, x + 0.08, z - 0.08, z + 0.08))),

@@ -126,20 +126,21 @@ test('villa life: crouching slows walking, jumping moves feet, and low stairs pr
       let peak = airborne, falling = false;
       for (let i = 0; i < 30; i++) { const oldY = game.position.y; tick(1); peak = Math.max(peak, game.position.y - base); falling ||= game.position.y < oldY; }
       const landed = game.position.y === base && game.motion.offset === 0 && game.motion.velocity === 0;
-      press('h'); walk(0, 1.3); walk(5.2, 1.3); walk(5.2, -4);
-      press('c'); tick(20); walk(5.2, -6.2);
-      const underLanding = { ...game.position }; press('c'); tick(2);
-      const blockedStanding = game.motion.crouched && game.motion.stance === 1;
-      walk(5.2, -4); press('c'); tick(20);
+      press('h'); press('c'); tick(20);
+      // Crouch-walk onto the swapped lower flight, where the flight above is the ceiling.
+      walk(0.04, -3.2);
+      const underLanding = { ...game.position }, crouchedUnderFlight = game.motion.crouched && game.motion.stance === 1 && game.canFit(1.05);
+      // Leave the stair and stand in the clear south hall.
+      walk(0.04, 1.5); press('c'); tick(20);
       const stoodOutside = !game.motion.crouched && game.motion.stance === 0;
-      return { standingDistance, crouchedDistance, partialStance, crouchEye, airborne, offset, noDoubleJump, peak, falling, landed, underLanding, blockedStanding, stoodOutside };
+      return { standingDistance, crouchedDistance, partialStance, crouchEye, airborne, offset, noDoubleJump, peak, falling, landed, underLanding, crouchedUnderFlight, stoodOutside };
     });
     expect(result.partialStance).toBeGreaterThan(0); expect(result.partialStance).toBeLessThan(1);
     expect(result.crouchedDistance / result.standingDistance).toBeCloseTo(.48, 2); expect(result.crouchEye).toBeCloseTo(.9);
     expect(result.airborne).toBeGreaterThan(.4); expect(result.airborne).toBeCloseTo(result.offset);
     expect(result.peak).toBeGreaterThan(.95); expect(result.peak).toBeLessThan(1);
-    expect(result.underLanding.y).toBe(0); expect(result.underLanding.z).toBeCloseTo(-6.2);
-    for (const flag of ['noDoubleJump', 'falling', 'landed', 'blockedStanding', 'stoodOutside'] as const) expect(result[flag], flag).toBe(true);
+    expect(result.underLanding.y).toBeGreaterThan(.9); expect(result.underLanding.z).toBeCloseTo(-3.2, 1);
+    for (const flag of ['noDoubleJump', 'falling', 'landed', 'crouchedUnderFlight', 'stoodOutside'] as const) expect(result[flag], flag).toBe(true);
   } finally { await dispose(page); }
 });
 
@@ -149,10 +150,12 @@ test('villa life: immersive HUD contains only floor/room and an occupied lift st
     const result = await page.evaluate(() => {
       const { game, press, tick, walk } = (window as any).villaLife;
       const context = game.canvas.getContext('2d') as CanvasRenderingContext2D;
-      const original = context.fillText;
+      const original = context.fillText; let footerText: string[] = [];
       const hudText = () => {
-        const texts: string[] = [];
-        context.fillText = (text: string) => { texts.push(text); };
+        const texts: string[] = []; footerText = [];
+        context.fillText = (text: string, _x: number, y: number) => {
+          texts.push(text); if (y >= game.height - 90) footerText.push(text);
+        };
         try { game.drawHud(context); } finally { context.fillText = original; }
         return texts;
       };
@@ -160,17 +163,19 @@ test('villa life: immersive HUD contains only floor/room and an occupied lift st
       const promptHidden = game.canvas.dataset.villaPrompt === '';
       const onlyImmersionControl = game.buttons().length === 1 && game.buttons()[0].id === 'immersion';
       press('i'); const normalText = hudText(), restored = game.canvas.dataset.villaImmersive === 'false' && game.buttons().some((b: any) => b.id === 'map');
-      walk(0, -4.3); press('e'); tick(18); walk(0, -6.2); tick(140);
+      walk(0, 1.4); walk(4.55, 1.4); walk(4.55, -3.8); press('e'); tick(18); walk(4.55, -5.8); tick(140);
       const heldOpen = game.state.elevator.phase === 'open' && game.state.elevator.door === 1 && game.state.elevator.idleFor === 0;
-      walk(0, -4.3); tick(60); const beforeTimeout = game.state.elevator.phase === 'open';
+      walk(4.55, -3.8); tick(60); const beforeTimeout = game.state.elevator.phase === 'open';
       const y = game.state.elevator.y; let noTravel = true;
       for (let i = 0; i < 50; i++) { tick(1); noTravel &&= game.state.elevator.phase !== 'moving' && game.state.elevator.y === y; }
       const closed = game.state.elevator.phase === 'closed' && game.state.elevator.door === 0;
       press('e'); tick(18); const reopened = game.state.elevator.phase === 'open' && game.state.elevator.y === y;
-      return { immersiveText, immersive, promptHidden, onlyImmersionControl, normalText, restored, heldOpen, beforeTimeout, noTravel, closed, reopened };
+      return { immersiveText, immersive, promptHidden, onlyImmersionControl, normalText, footerText, restored, heldOpen, beforeTimeout, noTravel, closed, reopened };
     });
     expect(result.immersive).toBe('true'); expect(result.immersiveText).toEqual(['1F · Welcome home']);
     expect(result.normalText.length).toBeGreaterThan(1); expect(result.normalText).toContain('M  Floor plan');
+    expect(result.normalText).toContain('P  Smart home');
+    expect(result.footerText).toEqual([]); // Top activity buttons stay; no persistent shortcut footer.
     for (const flag of ['promptHidden', 'onlyImmersionControl', 'restored', 'heldOpen', 'beforeTimeout', 'noTravel', 'closed', 'reopened'] as const) expect(result[flag], flag).toBe(true);
   } finally { await dispose(page); }
 });
@@ -192,7 +197,7 @@ test('villa life: nearby badges attach to visible props and disappear behind obs
       return { visible, occluded, behind, distant, image };
     });
     expect(result.visible).toBe('figures'); expect(result.occluded).toBe(''); expect(result.behind).toBe(''); expect(result.distant).toBe('');
-    await test.info().attach('original-chibi-interaction-badge', { body: Buffer.from(result.image.split(',')[1], 'base64'), contentType: 'image/png' });
+    await test.info().attach('original-anime-figure-interaction-badge', { body: Buffer.from(result.image.split(',')[1], 'base64'), contentType: 'image/png' });
   } finally { await dispose(page); }
 });
 

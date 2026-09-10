@@ -34,14 +34,18 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
     const r = c.getBoundingClientRect();
     const w = Number(c.dataset.logicalWidth), h = Number(c.dataset.logicalHeight);
     const p = { x: 12, y: 68, w: w - 24, h: h - 80 };
-    const tabW = (p.w - 64) / 3 - 4;
+    // Four tabs now: floor 0/1/2 plus the South estate tab (id -1). The
+    // compact row uses (panel - 64) / 4 with 8px insets, matching villa.ts.
+    const tabW = (p.w - 64) / 4 - 4;
     const client = (x: number, y: number) => ({ x: r.x + x * r.width / w, y: r.y + y * r.height / h });
-    const start = w - 12 - 4 * 44 - 3 * 6;
+    // Activity row: five 44px entries, 6px gaps, 8px from the right edge.
+    const start = w - 12 - 5 * 44 - 4 * 6, entry = (i: number) => start + i * 50 + 22;
     return {
       // The activity row is below the location badge and shell menu on phones.
-      map: client(start + 22, 90),
-      home: client(start + 2 * 50 + 22, 90),
+      map: client(entry(1), 90),
+      home: client(entry(3), 90),
       thirdFloor: client(p.x + 8 + 2 * (tabW + 4) + tabW / 2, p.y + 28),
+      estate: client(p.x + 8 + 3 * (tabW + 4) + tabW / 2, p.y + 28),
       close: client(p.x + p.w - 28, p.y + 28),
       tabHeight: 44 * r.height / h,
       closeWidth: 44 * r.width / w,
@@ -55,6 +59,9 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   await expect(canvas).toHaveAttribute('data-villa-map', 'true');
   await page.touchscreen.tap(geometry.thirdFloor.x, geometry.thirdFloor.y);
   await expect(canvas).toHaveAttribute('data-villa-map-floor', '3');
+  // The new South estate tab is a real, hittable target in the same compact row.
+  await page.touchscreen.tap(geometry.estate.x, geometry.estate.y);
+  await expect(canvas).toHaveAttribute('data-villa-map-floor', '0');
   expect(await canvas.getAttribute('data-villa-position')).toBe(beforeMap);
   await canvas.screenshot({ path: 'test-results/villa-mobile-map.png' });
   await page.touchscreen.tap(geometry.close.x, geometry.close.y);

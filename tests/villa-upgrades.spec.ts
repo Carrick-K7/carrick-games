@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { VILLA_ANIME_FIGURES } from '../src/games/villaGaming';
 
 test('villa upgrades are physical models with reachable car seats, simulator inputs and safe running', async ({ page }) => {
   test.setTimeout(90_000);
@@ -49,9 +50,10 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     let invalidVertices = 0, meshCount = 0, tv: HTMLCanvasElement | null = null;
     world.traverse((o: any) => {
       if (o.userData.keyboardKeys && o.userData.consoleSources) modelData.gaming = o.userData;
-      if (/^originalChibiGirl-\d+$/.test(o.name)) figures.push(o.userData);
-      if (/miku/i.test(o.name) || /miku/i.test(JSON.stringify(o.userData))) legacyFigureNames.push(o.name);
-      if (o.name === 'originalChibiGirlWall') modelData.figureWall = o.userData;
+      if (/^originalAnimeFigure-\d+$/.test(o.name)) figures.push(o.userData);
+      if (/^originalChibiGirl-\d+$/.test(o.name) || /miku/i.test(o.name) || /miku/i.test(JSON.stringify(o.userData))) legacyFigureNames.push(o.name);
+      if (o.name === 'originalAnimeFigureWall') modelData.figureWall = o.userData;
+      if (o.name === 'originalChibiGirlWall') modelData.legacyFigureAnchor = { mesh: !!o.isMesh, children: o.children.length };
       if (o.name === 'interactiveRacingWheel') {
         const meshes = o.children.filter((child: any) => child.isMesh);
         const marker = o.getObjectByName('racingWheelTopMarker');
@@ -187,14 +189,23 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
   expect(result.modelData.gaming.figureNames).toHaveLength(9);
   expect(new Set(result.modelData.gaming.figureNames).size).toBe(9);
   expect(result.legacyFigureNames).toEqual([]);
-  expect(result.modelData.figureWall).toMatchObject({ compartments: 9, variants: 9, originalDesigns: true, modestClothing: true, facing: '+X', frontMaxX: 2.564 });
+  expect(result.modelData.figureWall).toMatchObject({ compartments: 9, variants: 9, originalDesigns: true, adultFigures: true,
+    modestClothing: true, facing: '+X', frontMaxX: 2.564, proportions: '5.2 heads including hair' });
+  expect(result.modelData.legacyFigureAnchor).toEqual({ mesh: false, children: 0 });
   expect(result.figures).toHaveLength(9);
   expect(result.figures.map((figure: any) => figure.character).sort()).toEqual([...result.modelData.gaming.figureNames].sort());
+  expect(result.figures.map((figure: any) => figure.character).sort()).toEqual(VILLA_ANIME_FIGURES.map(figure => figure.name).sort());
   expect(new Set(result.figures.map((figure: any) => figure.hairstyle)).size).toBeGreaterThanOrEqual(3);
+  expect(new Set(result.figures.map((figure: any) => figure.pose)).size).toBeGreaterThanOrEqual(5);
   for (const figure of result.figures) {
-    expect(figure).toMatchObject({ authored3D: true, originalDesigns: true, modestClothing: true });
-    expect(figure.clothing).toMatch(/long dress and cardigan|overalls and long-sleeve shirt|cardigan and trousers/);
-    expect(figure.pose).toMatch(/^(wave|book|seed pouch)$/);
+    const design = VILLA_ANIME_FIGURES.find(expected => expected.name === figure.character)!;
+    expect(figure).toMatchObject({ authored3D: true, originalDesigns: true, modestClothing: true, style: 'adult anime bishoujo',
+      characterAge: design.age, hairstyle: design.hairstyle, clothing: design.clothing, pose: design.pose, baseOnShelf: true });
+    expect(figure.characterAge).toBeGreaterThanOrEqual(18);
+    expect(figure.bodyHeight).toBeCloseTo(.65, 6); expect(figure.headHeight).toBeCloseTo(.124, 6);
+    expect(figure.headsTall).toBeCloseTo(figure.bodyHeight / figure.headHeight, 6);
+    expect(figure.headsTall).toBeGreaterThanOrEqual(5.2); expect(figure.headsTall).toBeLessThan(5.3);
+    expect(figure.soleHeight).toBe(figure.baseHeight);
   }
   expect(result.modelData.wheel).toEqual({ batches: 3, castsShadow: false, markerExists: true });
   expect(result.modelData.snooker).toMatchObject({ ballCount: 22, redCount: 15, pocketCount: 6 });
@@ -216,7 +227,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     sBrakes: true, spaceStops: true, clearInputStops: true, staysStoppedUntilThrottle: true, freshThrottleRestarts: true,
     consoleFreezesRace: true, switchFreezesRace: true, seatedDoesNotWalk: true, exitFreezesRace: true,
     reset: { speed: 0, distance: 0, lane: 0, laps: 0, crashes: 0 } });
-  expect(result.racingExit).toMatchObject({ seat: null, x: 8.15, y: 0, z: 6.2 });
+  expect(result.racingExit.seat).toBeNull(); expect(result.racingExit.x).toBeCloseTo(8.15, 9); expect(result.racingExit.y).toBeCloseTo(0, 9); expect(result.racingExit.z).toBeCloseTo(6.2, 9);
   expect(result.lightsOff).toBe(true); expect(result.pcOff).toBe(true); expect(result.scores).toBe(0); expect(errors).toEqual([]);
   for (const [name, image] of [['sedan-driver-seat', result.carImage], ['simulator-screen', result.screenImage], ['rally-gravel-stage', result.rallyTexture]]) {
     const path = test.info().outputPath(name + '.png'); writeFileSync(path, Buffer.from(image.split(',')[1], 'base64'));

@@ -1,6 +1,8 @@
 import { VILLA_SNOOKER } from './villaActivities.js';
 
 export const VILLA_SNOOKER_BALL_RADIUS = 0.02625;
+/** Physics captures the ball centre here; the leather aperture is wider. */
+export const VILLA_SNOOKER_POCKET_CAPTURE_RADIUS = 0.064;
 const R = VILLA_SNOOKER_BALL_RADIUS;
 const X = VILLA_SNOOKER.playingWidth / 2;
 const Z = VILLA_SNOOKER.playingLength / 2;
@@ -27,6 +29,8 @@ export interface VillaSnookerState {
   balls: VillaSnookerBall[];
   /** Radians: 0 = north (-Z), PI/2 = east (+X). Positions are table-local metres. */
   aim: number;
+  /** Default-on visual assistance; never changes the shot, rules or score. */
+  aimAssist: boolean;
   power: number;
   moving: boolean;
   score: number;
@@ -52,7 +56,99 @@ export function createVillaSnooker(): VillaSnookerState {
   }
   const spots = [[0.292, baulk], [-0.292, baulk], [0, baulk], [0, 0], [0, -Z / 2], [0, -Z + 0.324]];
   COLORS.forEach((kind, i) => add(kind, kind, i + 2, spots[i][0], spots[i][1]));
-  return { balls, aim: 0, power: 0.65, moving: false, score: 0, shots: 0, target: 'red', phase: 'aiming', foul: null, message: 'Pot a red', shot: null };
+  return { balls, aim: 0, aimAssist: true, power: 0.65, moving: false, score: 0, shots: 0, target: 'red', phase: 'aiming', foul: null, message: 'Pot a red', shot: null };
+}
+
+export interface VillaSnookerPoint { x: number; z: number }
+export interface VillaSnookerSegment { from: VillaSnookerPoint; to: VillaSnookerPoint }
+export type VillaSnookerCollision =
+  | { kind: 'ball'; ballId: string }
+  | { kind: 'cushion'; normal: VillaSnookerPoint }
+  | { kind: 'pocket'; pocketIndex: number };
+export interface VillaSnookerTrajectory {
+  /** Centre path, ending at the FIRST ball, cushion or pocket capture boundary. */
+  cue: VillaSnookerSegment;
+  collision: VillaSnookerCollision;
+  ghost: VillaSnookerPoint | null;
+  object: VillaSnookerSegment | null;
+  bank: VillaSnookerSegment | null;
+}
+const GUIDE_EPSILON = 1e-9;
+
+/** Pure, deterministic centre-ray preview of the same no-spin shot as shootVillaSnooker.
+ * Ball contacts use the sum of both radii; cushions use the same centre limits as
+ * advanceVillaSnooker. Pocket capture precedes a rail, so mouths never show a bank.
+ * Only one short secondary segment is allowed, also clipped at its FIRST collider.
+ * No dt, randomness, mutation, scoring prediction, or unbounded bounce recursion.
+ */
+export function getVillaSnookerTrajectory(state: VillaSnookerState, active = true): VillaSnookerTrajectory | null {
+  if (!active || state.aimAssist === false || state.moving || state.phase !== 'aiming' || !Number.isFinite(state.aim)) return null;
+  const live = state.balls.filter(b => !b.potted);
+  if (live.some(b => ![b.x, b.z, b.vx, b.vz].every(Number.isFinite) || Math.hypot(b.vx, b.vz) > 0.008)) return null;
+  const white = live.find(b => b.kind === 'white');
+  const halfX = X - R, halfZ = Z - R;
+  if (!white || Math.abs(white.x) > halfX || Math.abs(white.z) > halfZ || VILLA_SNOOKER_POCKETS.some(p => Math.hypot(white.x - p.x, white.z - p.z) < VILLA_SNOOKER_POCKET_CAPTURE_RADIUS)) return null;
+  const point = (origin: VillaSnookerPoint, direction: VillaSnookerPoint, distance: number): VillaSnookerPoint => ({
+    x: Math.max(-halfX, Math.min(halfX, origin.x + direction.x * distance)),
+    z: Math.max(-halfZ, Math.min(halfZ, origin.z + direction.z * distance)),
+  });
+  const circleDistance = (origin: VillaSnookerPoint, direction: VillaSnookerPoint, center: VillaSnookerPoint, radius: number): number => {
+    const x = center.x - origin.x, z = center.z - origin.z;
+    // Corrupted/overlapping rests cannot authorize a line through an existing
+    // contact, even when that collider's centre lies behind the aim direction.
+    if (x * x + z * z < radius * radius) return 0;
+    const along = x * direction.x + z * direction.z, across = x * direction.z - z * direction.x;
+    const discriminant = radius * radius - across * across;
+    if (along < 0 || discriminant < -GUIDE_EPSILON) return Infinity;
+    return Math.max(0, along - Math.sqrt(Math.max(0, discriminant)));
+  };
+  const trace = (origin: VillaSnookerPoint, direction: VillaSnookerPoint, ignored: readonly string[]) => {
+    const tx = Math.abs(direction.x) < GUIDE_EPSILON ? Infinity : Math.max(0, (Math.sign(direction.x) * halfX - origin.x) / direction.x);
+    const tz = Math.abs(direction.z) < GUIDE_EPSILON ? Infinity : Math.max(0, (Math.sign(direction.z) * halfZ - origin.z) / direction.z);
+    let distance = Math.min(tx, tz);
+    let collision: VillaSnookerCollision = { kind: 'cushion', normal: {
+      x: tx <= tz + GUIDE_EPSILON ? -Math.sign(direction.x) : 0,
+      z: tz <= tx + GUIDE_EPSILON ? -Math.sign(direction.z) : 0,
+    } };
+    for (let i = 0; i < VILLA_SNOOKER_POCKETS.length; i++) {
+      const d = circleDistance(origin, direction, VILLA_SNOOKER_POCKETS[i], VILLA_SNOOKER_POCKET_CAPTURE_RADIUS);
+      if (d <= distance) { distance = d; collision = { kind: 'pocket', pocketIndex: i }; }
+    }
+    for (const ball of live) {
+      if (ignored.includes(ball.id)) continue;
+      const d = circleDistance(origin, direction, ball, R * 2);
+      if (d < distance - GUIDE_EPSILON || (Math.abs(d - distance) <= GUIDE_EPSILON && collision.kind === 'ball' && ball.id < collision.ballId)) {
+        distance = d; collision = { kind: 'ball', ballId: ball.id };
+      }
+    }
+    return { distance, collision };
+  };
+  const origin = { x: white.x, z: white.z };
+  const direction = { x: Math.sin(state.aim), z: -Math.cos(state.aim) };
+  const hit = trace(origin, direction, [white.id]);
+  const contact = point(origin, direction, hit.distance);
+  const result: VillaSnookerTrajectory = { cue: { from: origin, to: contact }, collision: hit.collision, ghost: null, object: null, bank: null };
+  if (hit.collision.kind === 'ball') {
+    const ballId = hit.collision.ballId;
+    const ball = live.find(b => b.id === ballId)!;
+    const dx = ball.x - contact.x, dz = ball.z - contact.z, distance = Math.hypot(dx, dz);
+    result.ghost = { ...contact };
+    if (distance > GUIDE_EPSILON) {
+      // Equal masses transfer velocity along the line of centres, not the aim ray.
+      const normal = { x: dx / distance, z: dz / distance };
+      const transfer = Math.max(0, direction.x * normal.x + direction.z * normal.z);
+      const secondary = trace(ball, normal, [white.id, ball.id]);
+      const length = Math.min(0.7 * transfer, secondary.distance);
+      if (length > GUIDE_EPSILON) result.object = { from: { x: ball.x, z: ball.z }, to: point(ball, normal, length) };
+    }
+  } else if (hit.collision.kind === 'cushion' && hit.distance > GUIDE_EPSILON) {
+    const normal = hit.collision.normal;
+    const reflected = { x: normal.x ? -direction.x : direction.x, z: normal.z ? -direction.z : direction.z };
+    const secondary = trace(contact, reflected, [white.id]);
+    const length = Math.min(0.55, secondary.distance);
+    if (length > GUIDE_EPSILON) result.bank = { from: { ...contact }, to: point(contact, reflected, length) };
+  }
+  return result;
 }
 
 export function shootVillaSnooker(state: VillaSnookerState): boolean {
@@ -157,7 +253,7 @@ export function advanceVillaSnooker(state: VillaSnookerState, dt: number): void 
       if (b.potted) continue;
       b.x += b.vx * step; b.z += b.vz * step;
       // Ball centre crossing the aperture's safe inner radius falls into the pocket.
-      if (VILLA_SNOOKER_POCKETS.some(p => Math.hypot(b.x - p.x, b.z - p.z) < 0.064)) {
+      if (VILLA_SNOOKER_POCKETS.some(p => Math.hypot(b.x - p.x, b.z - p.z) < VILLA_SNOOKER_POCKET_CAPTURE_RADIUS)) {
         b.potted = true; b.vx = b.vz = 0;
         if (state.shot && !state.shot.pots.includes(b.id)) state.shot.pots.push(b.id);
         continue;

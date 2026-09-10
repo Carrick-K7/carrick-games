@@ -1,17 +1,13 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import type { VillaCollider } from './villaWorld.js';
-
-/** Metres / seconds. Approach is on the kitchen side, clear of the dining chairs. */
-export const VILLA_TEA_BAR = {
-  x: -6.7, z: -0.6, width: 2.2, depth: 0.8, height: 0.95,
-  approach: { x: -6.7, y: 0, z: -1.65 },
-  anchor: { x: -6.7, y: 1.22, z: -0.79 },
-  duration: 10,
-} as const;
+import { VILLA_TEA_BAR } from './villaLivingLayout.js';
+import { createVillaTea, villaTeaCupPose, type VillaTeaState } from './villaTea.js';
+export { VILLA_TEA_BAR } from './villaLivingLayout.js';
 export interface VillaTeaBar {
   colliders: VillaCollider[];
-  update(time: number, brewing: boolean): void;
+  /** State is advanced by the controller; boolean remains a legacy steam-only bridge. */
+  update(time: number, state: VillaTeaState | boolean): void;
 }
 
 /** Static material batches + one subtle steam instance batch; all scene-owned. */
@@ -23,13 +19,13 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
   const dark = villaMaterial(0x393b35, 0.58), tea = villaMaterial(0x795325, 0.31);
   const named = (name: string, x: number, y: number, z: number, details: Record<string, unknown> = {}) => {
     const marker = new THREE.Object3D(); marker.name = `tea-bar/${name}`;
-    marker.position.set(VILLA_TEA_BAR.x + x, y, VILLA_TEA_BAR.z + z);
+    marker.position.set(VILLA_TEA_BAR.x - x, y, VILLA_TEA_BAR.z - z);
     marker.userData = { component: name, ...details }; b.root.add(marker);
   };
   const ring = (x: number, y: number, z: number, radius: number, tube: number, material: THREE.Material, flat = false) => {
     b.geometry(new THREE.TorusGeometry(radius, tube, 6, 18), material, [x, y, z], flat ? [Math.PI / 2, 0, 0] : [0, 0, 0]);
   };
-  b.at(VILLA_TEA_BAR.x, 0, VILLA_TEA_BAR.z, 0, () => {
+  b.at(VILLA_TEA_BAR.x, 0, VILLA_TEA_BAR.z, VILLA_TEA_BAR.yaw, () => {
     // Slightly recessed plinth and fronts keep pulls inside the stone footprint.
     b.box(0, 0.06, 0, 1.98, 0.12, 0.62, walnut);
     b.box(0, 0.5, 0, 2.12, 0.78, 0.7, oak);
@@ -84,9 +80,9 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
     for (const [i, x] of [0.25, 0.5].entries()) {
       b.cylinder(x, 1.006, -0.205, 0.071, 0.067, 0.014, ceramic);
       const profile = [[0, 0], [0.033, 0], [0.047, 0.056], [0.041, 0.056], [0.028, 0.013], [0, 0.013]].map(([r, y]) => new THREE.Vector2(r, y));
-      b.geometry(new THREE.LatheGeometry(profile, 18), ceramic, [x, 1.013, -0.205]);
-      b.cylinder(x, 1.057, -0.205, 0.039, 0.039, 0.002, tea);
-      named(`cup-${i + 1}`, x, 1.069, -0.205, { openRim: true, teaSurface: true });
+      // The first cup is animated below. The companion cup stays visibly empty.
+      if (i) b.geometry(new THREE.LatheGeometry(profile, 18), ceramic, [x, 1.013, -0.205]);
+      named(`cup-${i + 1}`, x, 1.069, -0.205, { openRim: true, teaSurface: i === 0, initiallyEmpty: true });
     }
     // Tea tins sit behind/right of the tray, never in the approach aisle.
     for (const [i, x] of [0.46, 0.77].entries()) {
@@ -108,6 +104,18 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
   const root = b.finish();
   root.userData = { activity: 'tea-brewing', duration: VILLA_TEA_BAR.duration, approach: { ...VILLA_TEA_BAR.approach }, anchor: { ...VILLA_TEA_BAR.anchor }, stool: false };
 
+  const cup = new THREE.Group(); cup.name = 'tea-bar/drinking-cup'; root.add(cup);
+  const profile = [[0, 0], [0.033, 0], [0.047, 0.056], [0.041, 0.056], [0.028, 0.013], [0, 0.013]].map(([r, y]) => new THREE.Vector2(r, y));
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(profile, 18), ceramic); cup.add(shell);
+  const liquid = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.002, 18), tea);
+  liquid.name = 'tea-bar/liquid'; cup.add(liquid);
+  const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6), tea);
+  stream.name = 'tea-bar/pour'; root.add(stream);
+  const spout = new THREE.Vector3(VILLA_TEA_BAR.x - 0.17, 1.16, VILLA_TEA_BAR.z + 0.018);
+  stream.position.copy(spout); stream.scale.y = 0.01;
+  const pourEnd = new THREE.Vector3(), pourDelta = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const empty = createVillaTea();
+
   const steamMaterial = new THREE.MeshBasicMaterial({ color: 0xe9eee7, transparent: true, opacity: 0.14, depthWrite: false });
   const steam = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 7, 5), steamMaterial, 12);
   steam.name = 'tea-bar/steam'; steam.userData = { effect: 'steam', sources: ['teapot', 'cup-1', 'cup-2'] };
@@ -115,15 +123,31 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
   steam.instanceMatrix.setUsage(THREE.DynamicDrawUsage); root.add(steam);
   const dummy = new THREE.Object3D();
   const sources = [[-0.065, 1.21, -0.018], [0.25, 1.076, -0.205], [0.5, 1.076, -0.205]] as const;
-  const update = (time: number, brewing: boolean): void => {
+  const update = (time: number, state: VillaTeaState | boolean): void => {
+    const current = typeof state === 'boolean' ? empty : state;
+    const brewing = typeof state === 'boolean' ? state : state.phase === 'brewing';
+    const pose = villaTeaCupPose(current);
+    cup.position.set(VILLA_TEA_BAR.x - 0.25, 1.013 + pose.lift, VILLA_TEA_BAR.z + 0.205 + pose.forward);
+    cup.rotation.x = pose.tilt;
+    liquid.visible = pose.fill > 0.001;
+    const radius = 0.028 + pose.fill * 0.011;
+    liquid.scale.set(radius, 1, radius); liquid.position.y = 0.015 + pose.fill * 0.029;
+    stream.visible = brewing && current.fill > 0;
+    if (stream.visible) {
+      pourEnd.set(cup.position.x, 1.013 + liquid.position.y, cup.position.z);
+      pourDelta.subVectors(pourEnd, spout);
+      stream.position.copy(spout).add(pourEnd).multiplyScalar(0.5);
+      stream.scale.y = pourDelta.length(); stream.quaternion.setFromUnitVectors(up, pourDelta.normalize());
+    }
+    cup.userData.phase = current.phase; cup.userData.fill = pose.fill;
     steam.visible = brewing;
     if (!brewing) return;
     const t = Number.isFinite(time) ? ((time % 6.6) + 6.6) % 6.6 : 0;
     for (let i = 0; i < steam.count; i++) {
       const source = sources[i % sources.length], phase = (t / 2.2 + Math.floor(i / 3) / 4) % 1;
       const envelope = Math.sin(phase * Math.PI), scale = 0.012 + envelope * 0.026;
-      dummy.position.set(VILLA_TEA_BAR.x + source[0] + Math.sin(phase * 5 + i) * 0.027 * envelope,
-        source[1] + phase * 0.32, VILLA_TEA_BAR.z + source[2] + Math.cos(phase * 4 + i) * 0.018 * envelope);
+      dummy.position.set(VILLA_TEA_BAR.x - source[0] + Math.sin(phase * 5 + i) * 0.027 * envelope,
+        source[1] + phase * 0.32, VILLA_TEA_BAR.z - source[2] + Math.cos(phase * 4 + i) * 0.018 * envelope);
       dummy.scale.set(scale * envelope, scale * 1.8 * envelope, scale * envelope); dummy.updateMatrix();
       steam.setMatrixAt(i, dummy.matrix);
     }

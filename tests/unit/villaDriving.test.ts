@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaActivities, VILLA_CAR } from '../../src/games/villaActivities.js';
-import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from '../../src/games/villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD, VILLA_DRIVING_BOUNDS } from '../../src/games/villaDriving.js';
+import { VILLA_GARAGE_EXTENT } from '../../src/games/villaEstateLayout.js';
 import { createVillaVehicle } from '../../src/games/villaVehicle.js';
 import { createVillaDrivingCourse } from '../../src/games/villaDrivingCourse.js';
 import { moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, type VillaCollider } from '../../src/games/villaWorld.js';
@@ -76,8 +77,10 @@ describe('Villa driving physics', () => {
     tick(state, { ...idle, throttle: -1 }, 1, [wall]); expect(state.contact).toBe(false); expect(state.z).toBeLessThan(23 - 2.36 - 0.5);
   });
   it('contains the entire vehicle in world bounds and excludes the pool', () => {
-    expect(villaDrivingPoseBlocked({ x: 26.5, z: 30, yaw: 0 }, [])).toBe(true);
-    expect(villaDrivingPoseBlocked({ x: 0, z: 54, yaw: 0 }, [])).toBe(true);
+    expect(villaDrivingPoseBlocked({ x: VILLA_DRIVING_BOUNDS.maxX - .5, z: 30, yaw: 0 }, [])).toBe(true);
+    expect(villaDrivingPoseBlocked({ x: 0, z: VILLA_DRIVING_BOUNDS.maxZ - 1, yaw: 0 }, [])).toBe(true);
+    expect(villaDrivingPoseBlocked({ x: 26.5, z: 30, yaw: 0 }, [])).toBe(false); // retired internal east edge
+    expect(villaDrivingPoseBlocked({ x: 0, z: 54, yaw: 0 }, [])).toBe(false); // new southern land
     expect(villaDrivingPoseBlocked({ x: -18, z: 0, yaw: 0 }, [])).toBe(true);
   });
   it('ignores invalid time and sanitizes inputs', () => {
@@ -140,6 +143,19 @@ describe('Villa scenic road and vehicle transforms', () => {
     expect(driving.steering).toBe(0); expect(wheel.rotation.z).toBe(0); expect(released.x).toBeCloseTo(neutral.x); expect(released.y).toBeCloseTo(neutral.y);
     expect(mount.matrixWorld.equals(shaftMatrix)).toBe(true); expect(car.matrixWorld.equals(bodyMatrix)).toBe(true);
   });
+  it('fits refreshed sedan instruments and dual phone pads inside the existing hollow cabin without moving the wheel', () => {
+    const scene = new THREE.Group(), model = createVillaVehicle(scene);
+    const car = scene.getObjectByName('villa-vehicle')!, cabin = scene.getObjectByName('vehicle-cabin')!, instruments = scene.getObjectByName('vehicle-driver-instruments')!, pads = scene.getObjectByName('vehicle-dual-phone-chargers')!, steering = scene.getObjectByName('vehicle-steering')!;
+    expect(cabin.userData).toMatchObject({ inspiration: 'refreshed-Model-S', driverInstrumentCluster: true, dualPhoneChargers: true });
+    expect(pads.userData.count).toBe(2); expect(instruments.userData.behindSteeringWheel).toBe(true);
+    scene.updateMatrixWorld(true); const inv = car.matrixWorld.clone().invert();
+    const cluster = new THREE.Box3().setFromObject(instruments).applyMatrix4(inv), chargers = new THREE.Box3().setFromObject(pads).applyMatrix4(inv);
+    expect(cluster.min.x).toBeGreaterThan(.25); expect(cluster.max.x).toBeLessThan(.63); expect(cluster.min.z).toBeGreaterThan(.71); expect(cluster.max.z).toBeLessThan(.80); expect(cluster.max.y).toBeLessThan(1.08);
+    expect(chargers.min.x).toBeGreaterThan(-.14); expect(chargers.max.x).toBeLessThan(.14); expect(chargers.min.y).toBeGreaterThan(.62); expect(chargers.max.y).toBeLessThan(.75);
+    expect(steering.position.toArray()).toEqual([.43, .935, .62]); expect(steering.rotation.x).toBe(.30);
+    expect(model.update(0, createVillaActivities())).toBe(false); expect(model.update(100, createVillaActivities())).toBe(false);
+    const materials = new Set<THREE.Material>(); scene.traverse(n => { if (n instanceof THREE.Mesh) { n.geometry.dispose(); (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => materials.add(m)); } }); materials.forEach(m => m.dispose());
+  });
   it.each([30, 45, 60])('allows walking to and exiting an angled car at %s degrees', degrees => {
     const root = new THREE.Group(), vehicle = createVillaVehicle(root);
     const state = { ...createVillaDriving(), x: 0, z: 30, yaw: degrees * Math.PI / 180 };
@@ -148,6 +164,10 @@ describe('Villa scenic road and vehicle transforms', () => {
     expect(villaCollides(exit, vehicle.colliders, 1.75)).toBe(false);
     expect(villaCollides(seat, [vehicle.colliders[0]], 1.75)).toBe(true);
     expect(villaCarExitClear(state, vehicle.colliders)).toBe(true);
+    const alternate = villaCarAnchors(state).exits[1];
+    expect(villaCarExitClear(state, vehicle.colliders, undefined, -1)).toBe(true);
+    expect(villaCollides(alternate, vehicle.colliders, 1.75)).toBe(false);
+    expect(root.getObjectByName('vehicle-passenger-door')!.rotation.y).toBeCloseTo(1.1);
     const start = { x: exit.x + Math.cos(state.yaw), y: 0, z: exit.z - Math.sin(state.yaw) };
     const walked = moveVillaPlayer(start, exit.x - start.x, exit.z - start.z, vehicle.colliders);
     expect(walked.x).toBeCloseTo(exit.x); expect(walked.z).toBeCloseTo(exit.z);
@@ -163,7 +183,7 @@ describe('Villa scenic road and vehicle transforms', () => {
   });
   it('rejects a garage-wall crossing despite a supported and unobstructed endpoint', () => {
     const vehicle = createVillaVehicle(new THREE.Group());
-    const state = { ...createVillaDriving(), x: 18.5, z: -0.8 };
+    const state = { ...createVillaDriving(), x: VILLA_GARAGE_EXTENT.maxX - 1.5, z: -0.8 };
     vehicle.update(0, { ...createVillaActivities(), carDoorOpen: true, driving: state });
     const obstacles = [...VILLA_WALL_COLLIDERS, ...vehicle.colliders], exit = villaCarAnchors(state).exit;
     expect(villaDrivingPoseBlocked(state, obstacles)).toBe(false);
@@ -181,7 +201,7 @@ describe('Villa scenic road and vehicle transforms', () => {
     expect(villaCarExitClear(state, [box(1.5, 1.6, 30.1, 30.4, 2, 2.1)])).toBe(true);
     expect(villaCarExitClear(state, [box(1.5, 1.6, 30.1, 30.4, -0.1, 0)])).toBe(true);
     expect(villaCarExitClear({ ...state, x: -13, z: 0, yaw: Math.PI }, [])).toBe(false); // pool
-    expect(villaCarExitClear({ ...state, x: 29 }, [])).toBe(false); // property edge
+    expect(villaCarExitClear({ ...state, x: VILLA_DRIVING_BOUNDS.maxX - 1 }, [])).toBe(false); // property edge
     expect(villaCarExitClear({ ...state, yaw: NaN }, [])).toBe(false);
   });
   it('provides a clear driveway and a wide continuous oval with only three island-tree colliders', () => {
