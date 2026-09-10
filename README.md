@@ -68,7 +68,7 @@ Carrick Games currently ships 28 playable games:
 - Bilingual interface: English and Chinese.
 - Searchable game list with grouped navigation.
 - Keyboard, mouse, and touch input where appropriate.
-- Full-viewport game windows with two floating controls: `?` for help and a compact game/settings menu. Browser fullscreen stays browser-owned (F11).
+- Full-viewport game windows with a small teal-gamepad **Carrick Games** button that opens the existing game library, plus `?` for help and a compact game/settings menu. Branding floats at the top-left for fixed games and beside the top-right utilities for CS, CS Kimi and Villa; all hide during pointer capture. There is no large page header. Browser fullscreen stays browser-owned (F11).
 - Enter a game and play right away: no start prompt is shown, and pointer capture follows the browser gesture rules (first canvas click).
 - One-click Controls for every game: the panel drops below the `?` button with readable key/gesture labels and a scrollable body; never shrinks the game. The settings menu leads with an explicit Choose a game entry.
 - Help pauses play and timers; closing continues without restarting or clearing a manual gameplay pause. Keyboard focus returns directly to play.
@@ -76,6 +76,14 @@ Carrick Games currently ships 28 playable games:
 - Responsive 3D cameras and HUDs for CS, CS Kimi and Villa; fixed boards maximize at their original proportions.
 - Bounded HiDPI Canvas rendering and consistent pointer coordinates across resizing and rotation.
 - Local score records stored in the browser.
+
+## Branding and Browser Installation
+
+The page button, game menu and library header keep the full **Carrick Games** name on phones and desktops, paired with the original teal gamepad. The favicon and installation icons share the geometry in `public/brand/logo.svg`.
+
+`index.html` links external SVG/PNG favicon assets and `/app.webmanifest`. The Web App Manifest supplies the Carrick Games name, root app identity and URLs, standalone display, teal theme color, and 192px/512px PNG icons plus a separately safe-padded 512px maskable icon. `/manifest.json` is deployment metadata, **not** the Web App Manifest, and must remain separate.
+
+Where supported, use Edge's browser menu to install the site as an app. An existing installation may retain its old icon until Edge's icon cache refreshes or the app is reinstalled. Native Windows Edge installation has not yet been tested; this metadata does not provide offline support or a service worker.
 
 ## Tech Stack
 

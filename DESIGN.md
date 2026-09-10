@@ -21,7 +21,8 @@ Do not add a separate visual-style document. Put durable visual decisions here.
 The page is a game window, not a webpage containing a canvas card:
 
 - `#gameApp` and its game stage fill the visible browser viewport by default, including short landscape screens. No header, margins, bezel, corner radius, input strip, or side rail reserves game space.
-- Two 44px utilities float at the top-right safe area: a direct `?` guide left of the game menu, separated by 8px with a 12px outer margin. Both hide while pointer lock owns the canvas; `?` on the keyboard opens help directly from captured play. Touch keeps both utilities available.
+- Two 44px utilities float at the top-right safe area: a direct `?` guide left of the game menu, separated by 8px with a 12px outer margin. A lightweight 96×44px `#siteBrand` button pairs a 22px original teal gamepad with the full name stacked as “Carrick” / “Games”. It floats at top/left 12px plus safe-area insets for fixed games. For responsive `cs`, `cs-kimi` and `villa`, it moves beside the utility row at top 12px/right 116px plus safe-area insets. Clicking it opens the existing game library, not a home screen or start gate; it never reserves a page header.
+- The brand and both utilities hide while pointer lock owns the canvas; `?` on the keyboard opens help directly from captured play. Touch keeps these actions available. The menu wordmark and library header also pair the same logo with the full “Carrick Games” name at every screen size.
 - The menu opens with an explicit **Choose a game** section (localized label + accent-bordered current-game trigger), then wordmark, restart, settings and applicable utilities. Do not add browser-fullscreen, Return-to-game, or duplicate Controls entries. The game library stays a modal command palette on desktop and a bottom sheet on mobile.
 - Controls open as a protected reading panel that drops down below the utility row. Parking's level selector stays in the menu. Opening either never resizes the game.
 - Every menu, loading state and native game accessibility target lives inside the persistent `#gameApp` root. Descriptions, records, and statistics must not become permanent sidebars.
@@ -36,7 +37,7 @@ The current game name is visible in the startup state and game menu, where it is
 
 The picker:
 
-- opens only on demand from the current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop trigger;
+- opens only on demand from the site-brand button, current-game trigger or Command/Ctrl+K; show the platform-appropriate shortcut in the desktop current-game trigger;
 - shows all 28 games in one screen without scrolling, paging, or category switching at ordinary desktop and phone sizes; retain overflow only as an accessibility fallback for extreme zoom or an open software keyboard;
 - uses a desktop dialog up to 1040px wide, with the heading, search, and close action in one compact toolbar;
 - matches both English and Chinese names and descriptions; descriptions remain available to assistive technology and search but do not occupy visible rows;
@@ -61,7 +62,8 @@ The canvas is the only dominant visual object on the page.
 - The game stage fills the visible viewport edge to edge; canvas has no page-level frame, shadow or rounded corners.
 - Fixed-layout games use the largest complete, uniformly scaled board within the safe area. Necessary aspect-ratio margins use the quiet stage background; never stretch, crop, change board dimensions, or invent extra panels to fill them.
 - CS, CS Kimi and Villa opt into responsive logical drawing dimensions. Their camera aspect follows the actual viewport, rather than enlarging a fixed 16:9 image. Preserve gameplay coordinates and the baseline vertical field of view.
-- HUD coordinates, rendering resolution and world coordinates are separate. HUD anchors respect safe areas and the complete floating help/menu cluster; narrow/short menus reflow or scroll internally, with readable text and 44px touch actions.
+- HUD coordinates, rendering resolution and world coordinates are separate. Responsive HUD anchors reserve 200×44px for the complete floating brand/help/menu cluster inside the top-right safe area; the content clearance below it remains 64px. Narrow/short menus reflow or scroll internally, with readable text and 44px touch actions.
+- Preserve Gacha's top progress display rather than deleting it to fit the brand. Its counters sit to the right of the fixed-game brand; below 360px they stack in Gacha's own 112px top band instead of the normal 80px band. This game-owned accommodation is not a global page header or a change to the shared 64px clearance.
 - Keep HiDPI backing stores sharp but bounded (DPR at most 2, shared canvas at most 8,294,400 pixels). Individual 3D renderers may use a lower quality budget without shrinking their CSS viewport.
 - Entering a game starts it immediately: there is no start overlay to dismiss. Loading, failure/retry and startup occupy the stage; switching games remains reachable above them. Mouse capture and audio still follow browser gesture rules (pointer lock engages on the first canvas click).
 
@@ -73,7 +75,7 @@ Every game uses the same floating **? / Controls / 操作指南** trigger and sh
 
 - The panel drops from the utility row: top edge 64px inside the safe area (12px margin + 44px button + 8px gap), right-aligned at 12px, at most 560px wide. Narrow or short screens use the same anchored panel at most 720px wide. No frame of the game is reserved: reading is modal with a protective backdrop.
 - One restrained light/dark style: game-name subtitle, 15px title, consistent read-only keycaps/action rows and gesture labels. The 44px `×` stays in the fixed header; only the body scrolls. No Return button or redundant footer.
-- Close with `×`, the same `?` trigger/key, Escape, or the backdrop. The dialog traps focus across its close action, scrollable body and both utility triggers (included with `aria-owns`); the stage is inert. The menu trigger switches directly from help to navigation without an extra close step. On coarse pointers, show touch instructions rather than the physical keyboard.
+- Close with `×`, the same `?` trigger/key, Escape, or the backdrop. The dialog traps focus across its close action, scrollable body, site-brand button and both utility triggers (included with `aria-owns`); the stage is inert. The brand opens the library and the menu trigger opens navigation directly from help, without an extra close step or stacked overlays. On coarse pointers, show touch instructions rather than the physical keyboard.
 - Reading pauses simulation and managed delays for every game, including fixed boards. Gameplay wall clocks exclude reading time. Opening clears held keys/fire/touches; closing resumes only presentation-owned pauses, preserving an intentional gameplay pause.
 - Dismissal returns focus to the canvas, so the next movement key works immediately. A trusted click or `?` dismissal may restore capture previously owned by the same game. Escape leaves the cursor free; internal closes and game switching never recapture it.
 - Opening another overlay or switching games closes the guide rather than stacking panels. Rotation preserves the game and readable guide; language/theme changes update the shared presentation.
@@ -125,7 +127,7 @@ Rules:
 
 Use the system UI stack for the shell and canvases unless a symbol font is necessary.
 
-- Preserve the original text-only wordmark: “Carrick Games” at 15px, 650 weight, and -0.015em tracking; mobile shows “Carrick” at 14px. No added monogram or brand icon. Preserve the original teal gamepad favicon.
+- Keep the full “Carrick Games” identity with the original `#0d9488` gamepad on all sizes: compact stacked text in the floating site-brand button, full wordmark in the menu and library header. Never hide “Games” on mobile or substitute a monogram. The brand teal is fixed across themes and does not replace the shell's semantic accent tokens.
 - Current game: 14px medium (13px mobile), with truncation for long names.
 - Dialog heading: 22px semibold with tight tracking; desktop support copy: 12px.
 - Game button name: 13px medium; section labels: 12px. Keep full names readable, including English two-line labels on phones.
@@ -135,8 +137,8 @@ Use the system UI stack for the shell and canvases unless a symbol font is neces
 
 ### Geometry, Spacing, and Elevation
 
-- Use `--header-height` consistently for viewport calculations: 64px desktop and 60px at widths up to 720px.
-- Desktop header side padding uses `clamp(24px, 4vw, 48px)`; mobile uses 12px, reducing to 8px at 360px and below.
+- Branding and utility actions float over the stage; never subtract a page-header height from viewport calculations. Their top inset is 12px plus the safe area and their height is 44px. Shared HUD/guide content clearance remains 64px.
+- Keep the site-brand button at 96×44px, with a 22px gamepad and stacked full name. Use the fixed-game left 12px or responsive-game right 116px anchor plus safe-area insets, rather than introducing a full-width header.
 - Current-game trigger: subtly filled, outlined, at least 40px high, 8px radius, small grid icon, name, chevron, and desktop shortcut keycap.
 - Overflow and close buttons: 40×40px. Settings menu: 264px wide, 12px radius, subtle dividers, 12px section padding, and segmented text theme/language options at least 40px tall.
 - Canvas radius: 8px, 1px bezel, near-flat shadow only.
@@ -148,6 +150,13 @@ Use the system UI stack for the shell and canvases unless a symbol font is neces
 - Keycaps have a quiet raised fill, 6px radius, and a 2px bottom inset edge; pressed state moves down 1px and uses a crisp accent border. Mouse feedback is a crisp accent, not a glow.
 - Ordinary components have no floating shadow; only menus and dialogs use noticeable elevation.
 - Avoid pill shapes except where semantics genuinely require them.
+
+### Favicon and Installation Identity
+
+- `public/brand/logo.svg` is the source of truth: retain the exact original 24×24 gamepad path and `#0d9488` fill. `index.html` links the external SVG favicon, PNG fallback and `/app.webmanifest`; page logos use the same SVG.
+- Generate genuine 192×192 and 512×512 PNG icons for `purpose: any`, and a separate opaque 512×512 `purpose: maskable` icon. All use the same geometry on `#f6f7f5`; the regular mark is centered at 88% source scale, and the maskable mark at 72%, safely within the central 40%-radius circle. Do not mark an unpadded regular icon as maskable.
+- The Web App Manifest names the app “Carrick Games” for both `name` and `short_name`, uses `/` for `id`, `start_url` and `scope`, `standalone` display, theme color `#0d9488`, and background color `#f6f7f5`. Keep icon sizes, MIME types and purposes accurate.
+- `/manifest.json` remains separate deployment metadata, never the Web App Manifest. Do not add a service worker or claim offline support as part of branding. Existing Edge installations may require icon-cache refresh or reinstallation; native Windows Edge installation has not yet been tested.
 
 ### Motion
 
@@ -185,12 +194,7 @@ Game visuals branch with `this.isDarkTheme()` and use `getRetroPalette()` from `
 
 Terminal win/loss/completion states use `BaseGame.drawResultOverlay()`; Gacha and Warm Villa have no terminal state and do not need a result overlay.
 
-Start overlays contain only:
-
-- the game name;
-- one concise click/tap-to-start instruction.
-
-The title and hint sit on a restrained dark translucent canvas-sized backing with subtle 2px blur. A small CSS play triangle accompanies the hint, not a separate start control. Hover lightens the backing; keyboard focus gets a clearly visible inset outline. Do not duplicate control teaching or large external start buttons.
+Games start automatically when prepared. Do not add a start overlay, click-to-start gate, branded landing screen or large external start button. The site-brand button opens only the existing game library; pointer capture and audio still obey browser gesture requirements.
 
 Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.isRestartInput()` unless the game's continuation semantics require otherwise.
 
@@ -198,14 +202,14 @@ Restart uses the shared Space, Enter, click, or tap behavior through `BaseGame.i
 
 ### Desktop
 
-- Keep the header thin and the canvas centered.
+- Keep branding lightweight and floating, not a page header; the canvas remains the dominant full-viewport content.
 - Keep the full shell inside the viewport on wide fine-pointer layouts; do not require page-level vertical scrolling.
 - Put the compact keyboard/mouse mapping in the right gutter and necessary game context in the left gutter.
 - Open game switching in a centered modal.
 
 ### Mobile and coarse pointer
 
-- Keep wordmark, current-game switcher, and overflow menu in one row.
+- Keep the full logo-and-name brand visible at its fixed-game left or responsive-game right anchor; the current-game switcher stays inside the menu. Do not turn these controls into a mobile page header.
 - Let the canvas use nearly the full viewport width.
 - Hide keyboard/mouse mapping completely.
 - Open game switching as a bottom sheet.

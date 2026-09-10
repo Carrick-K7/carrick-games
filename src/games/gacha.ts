@@ -183,8 +183,9 @@ export class GachaGame extends BaseGame {
    * refit converges); landscape keeps the classic 4:3.
    */
   override setViewport(viewport: GameViewport) {
-    // Reserve a quiet top row for progress and shell utilities on every device.
-    super.setViewport({ ...viewport, safeArea: { ...viewport.safeArea, top: viewport.safeArea.top + 80 } });
+    // Brand + counters + utilities share the top band; narrow phones stack counters.
+    const headerHeight = viewport.width - viewport.safeArea.left - viewport.safeArea.right < 360 ? 112 : 80;
+    super.setViewport({ ...viewport, safeArea: { ...viewport.safeArea, top: viewport.safeArea.top + headerHeight } });
   }
 
   override setDisplayScale(cssWidth: number) {

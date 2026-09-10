@@ -23,7 +23,10 @@ import {
   ellipsize,
   healthPanelRect,
   HudScroll,
+  menuHeaderLayout,
   normalizeSafeArea,
+  scoreboardRect,
+  scoreStripRect,
   TOUCH_TARGET,
   weaponPanelRect,
   type HudLayout,
@@ -419,12 +422,16 @@ export class CsHud {
     const x = Lyt.left, top = Lyt.top;
     const panelW = Math.min(500, Lyt.availW);
 
-    // Brand + status line (clear of the shell's top-right button).
-    this.text(ctx, '✣ CS', x, top + 14, 28, C.amber);
-    ctx.font = '11px system-ui, sans-serif';
-    const brandRoom = Math.max(0, Lyt.shellReserve.x - 12 - (x + 80));
-    this.text(ctx, ellipsize(ctx, this.L('浏览器战术射击', 'BROWSER TACTICAL FPS'), Math.min(190, brandRoom)), x + 80, top + 16, 11, C.dim);
-    if (Lyt.availW >= 500) this.text(ctx, `${e.hud.fps} FPS · 5 VS 5`, Lyt.shellReserve.x - 12, top + 10, 10, C.faint, 'right', false);
+    // Brand + status line share only the space left of the brand/help/menu row.
+    const status = `${e.hud.fps} FPS · 5 VS 5`;
+    const font = '"Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif';
+    ctx.font = `10px ${font}`;
+    const header = menuHeaderLayout(Lyt, ctx.measureText(status).width);
+    ctx.font = `bold 28px ${font}`;
+    this.text(ctx, ellipsize(ctx, '✣ CS', header.titleWidth), x, top + 14, 28, C.amber);
+    ctx.font = `bold 11px ${font}`;
+    if (header.subtitleWidth >= ctx.measureText('…').width) this.text(ctx, ellipsize(ctx, this.L('浏览器战术射击', 'BROWSER TACTICAL FPS'), header.subtitleWidth), header.subtitleX, top + 16, 11, C.dim);
+    if (header.showStatus) this.text(ctx, status, header.statusX, top + 10, 10, C.faint, 'right', false);
 
     const panelY = top + 40;
     const panelH = Math.max(160, Lyt.bottom - panelY);
@@ -570,18 +577,8 @@ export class CsHud {
     ctx.stroke();
     if (hud.location) this.text(ctx, hud.location, rx + rs / 2, ry + rs + 16, 11, C.dim, 'center');
 
-    // Top score strip — centered on wide screens, docked under the radar on
-    // compact ones so it never collides with the radar or the shell button.
-    let sx: number, sy: number, sw: number;
-    if (Lyt.compact) {
-      sx = m + sa.left;
-      sy = ry + rs + 30;
-      sw = W - sx - m - sa.right;
-    } else {
-      sw = Math.min(300, Lyt.availW);
-      sx = W / 2 - sw / 2;
-      sy = top - 4;
-    }
+    // Center when space permits; phones dock under the radar, never under chrome.
+    const { x: sx, y: sy, w: sw } = scoreStripRect(Lyt, rs);
     this.panel(ctx, sx, sy, sw, 46, true);
     this.text(ctx, String(hud.ctScore), sx + 34, sy + 23, 20, C.blue);
     this.text(ctx, String(hud.tScore), sx + sw - 34, sy + 23, 20, C.amber);
@@ -867,10 +864,8 @@ export class CsHud {
     const e = this.engine;
     const { W, H } = Lyt;
     const map = (MAPS as Record<string, any>)[e.selectedMap];
-    const w = Math.min(620, Lyt.availW), x = W / 2 - w / 2;
+    const { x, y, w, h } = scoreboardRect(Lyt, e.all.length);
     const rows = [...e.all].sort((a, b) => b.kills - a.kills);
-    const h = Math.min(120 + e.all.length * 26 + 60, Lyt.availH);
-    const y = Math.max(Lyt.top, H / 2 - h / 2);
     this.dimScreen(ctx, W, H);
     this.panel(ctx, x, y, w, h);
     this.text(ctx, ellipsize(ctx, (this.L(map.name, MAP_EN[e.selectedMap]?.name || map.name)) + ' · ' + e.modeName() + ' · 5 VS 5', w - 48), x + 24, y + 26, 11, C.amber);

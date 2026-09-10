@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Carrick Games</title>
   <meta name="description" content="A little space to play. Discover 28 thoughtfully crafted browser games at Carrick Games. 简单好玩的在线游戏，随时开始。">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%230d9488' d='M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z'/%3E%3C/svg%3E">
+  <meta name="application-name" content="Carrick Games">
+  <meta name="theme-color" content="#0d9488">
+  <link rel="icon" href="/brand/logo.svg" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/brand/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="manifest" href="/app.webmanifest">
   <link rel="stylesheet" href="/src/styles/app.css">
 </head>
 <body>
@@ -28,6 +32,10 @@
     </main>
 
     <div class="header-actions">
+      <button class="site-brand" id="siteBrand" type="button" aria-label="Carrick Games — Choose a game" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" title="Carrick Games — Choose a game">
+        <img src="/brand/logo.svg" width="22" height="22" alt="">
+        <span class="site-brand-name">Carrick<span> Games</span></span>
+      </button>
       <button class="game-menu-trigger game-help-trigger" id="helpBtn" type="button" aria-label="Controls" title="Controls (?)" aria-controls="helpOverlay" aria-expanded="false" aria-keyshortcuts="Shift+/"><span aria-hidden="true">?</span></button>
       <button class="game-menu-trigger" id="overflowBtn" type="button" aria-label="Game menu" aria-haspopup="dialog" aria-controls="overflowMenu" aria-expanded="false">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg>
@@ -35,7 +43,7 @@
       <button class="shell-backdrop" id="shellBackdrop" type="button" tabindex="-1" aria-label="Close game menu" hidden></button>
       <section class="overflow-menu" id="overflowMenu" role="dialog" aria-modal="true" aria-labelledby="gameMenuTitle" tabindex="-1" hidden>
         <header class="app-header">
-          <span class="wordmark" id="gameMenuTitle">Carrick<span class="wordmark-secondary"> Games</span></span>
+          <span class="wordmark" id="gameMenuTitle"><img src="/brand/logo.svg" width="24" height="24" alt=""><span>Carrick<span class="wordmark-secondary"> Games</span></span></span>
           <button class="dialog-close" id="menuCloseBtn" type="button" aria-label="Close menu"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
         </header>
         <div class="menu-section menu-game-switch">
@@ -85,7 +93,10 @@
       <section class="library-dialog" role="dialog" aria-modal="true" aria-labelledby="libraryHeadingTitle" tabindex="-1">
         <div class="library-dialog-header">
           <div class="library-title">
-            <h1 id="libraryHeadingTitle">Games</h1>
+            <div class="library-title-row">
+              <span class="library-brand"><img src="/brand/logo.svg" width="22" height="22" alt="">Carrick Games</span>
+              <h1 id="libraryHeadingTitle">Games</h1>
+            </div>
             <p id="librarySummary">Choose what to play.</p>
           </div>
           <label class="search-wrap">

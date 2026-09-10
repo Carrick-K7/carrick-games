@@ -3,8 +3,10 @@
 // Pure helpers (no DOM access) so the display rules stay unit-testable:
 // the 1280x720 baseline, aspect-preserving FOV for the software raycaster,
 // the WebGL backing budget, HUD/panel scaling, safe-area-aware touch
-// controls, and space for the shared help/menu utilities. Game state, physics, AI,
+// controls, and space for the shared brand/help/menu row. Game state, physics, AI,
 // and weapon simulation never read these values — display only.
+
+import { SHELL_BUTTON_MARGIN, SHELL_BUTTON_SIZE, SHELL_CLUSTER_WIDTH } from './csHudLayout.js';
 
 export interface ViewportInsets {
   top: number;
@@ -20,15 +22,19 @@ export const CS_BASE_ASPECT = CS_BASE_WIDTH / CS_BASE_HEIGHT;
 export const CS_HALF_FOV_TAN = Math.tan(((66 * Math.PI) / 180) / 2);
 /** WebGL backing-store budget in pixels (memory/fill-rate guard). */
 export const SCENE_MAX_BACKING_PIXELS = 4_500_000;
-/** Vertical clearance for the top-right 44px help/menu row + 12px margin. */
-export const SHELL_MENU_RESERVE = 44 + 12;
+/** Vertical clearance stays 56px: the wider brand/help/menu row is still 44px tall. */
+export const SHELL_MENU_RESERVE = SHELL_BUTTON_SIZE + SHELL_BUTTON_MARGIN;
 /** Minimum touch target edge in CSS px. */
 export const MIN_TOUCH_TARGET = 44;
 
 /** On phones, dock round information below the radar and shared utilities. */
 export function roundHeaderY(width: number, height: number, insets?: Partial<ViewportInsets> | null): number {
   const safe = sanitizeInsets(insets), s = hudScale(width, height);
-  return safe.top + (width - safe.left - safe.right < 500 ? Math.max(88, 10 * s + Math.max(64, 100 * s) + 12) : 14 * s);
+  const usableW = width - safe.left - safe.right;
+  const headerRight = safe.left + usableW / 2 + 140 * s;
+  const shellLeft = width - safe.right - SHELL_BUTTON_MARGIN - SHELL_CLUSTER_WIDTH;
+  const dock = usableW < 500 || headerRight + 8 > shellLeft;
+  return safe.top + (dock ? Math.max(88, 10 * s + Math.max(64, 100 * s) + 12) : 14 * s);
 }
 
 const clampNum = (value: number, min: number, max: number): number =>
@@ -260,16 +266,22 @@ export function centeredPanelLayout(
   const safe = sanitizeInsets(insets);
   const availW = Math.max(120, positive(width, CS_BASE_WIDTH) - safe.left - safe.right - 16);
   const availH = Math.max(120, positive(height, CS_BASE_HEIGHT) - safe.top - safe.bottom - 16);
-  const scale = clampNum(Math.min(1, availW / baseW, availH / baseH), 0.3, 1);
-  const w = baseW * scale;
-  const h = baseH * scale;
-  return {
-    x: safe.left + 8 + (availW - w) / 2,
-    y: safe.top + 8 + (availH - h) * 0.28,
-    w,
-    h,
-    scale,
-  };
+  let scale = clampNum(Math.min(1, availW / baseW, availH / baseH), 0.3, 1);
+  let w = baseW * scale, h = baseH * scale;
+  let x = safe.left + 8 + (availW - w) / 2;
+  let y = safe.top + 8 + (availH - h) * 0.28;
+  const shellLeft = positive(width, CS_BASE_WIDTH) - safe.right - SHELL_BUTTON_MARGIN - SHELL_CLUSTER_WIDTH;
+  if (y < safe.top + SHELL_MENU_RESERVE && x + w > shellLeft) {
+    // Prefer a small horizontal shift on landscape; no extra vertical reserve.
+    if (shellLeft - 8 - w >= safe.left + 8) x = shellLeft - 8 - w;
+    else {
+      y = safe.top + SHELL_MENU_RESERVE + 8;
+      scale = Math.min(scale, Math.max(0, positive(height, CS_BASE_HEIGHT) - safe.bottom - 8 - y) / baseH);
+      w = baseW * scale; h = baseH * scale;
+      x = safe.left + 8 + (availW - w) / 2;
+    }
+  }
+  return { x, y, w, h, scale };
 }
 
 export interface TouchButton {

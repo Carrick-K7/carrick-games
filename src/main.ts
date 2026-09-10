@@ -39,6 +39,10 @@ const isGuideSheet = () => window.matchMedia(guideSheetQuery).matches;
 
 function updatePresentationControls() {
   const zh = isZhLang();
+  const brandLabel = `Carrick Games — ${zh ? '选择游戏' : 'Choose a game'}`;
+  const brand = document.getElementById('siteBrand');
+  brand?.setAttribute('aria-label', brandLabel);
+  brand?.setAttribute('title', brandLabel);
   const helpTrigger = document.getElementById('helpBtn');
   const helpLabel = isHelpOpen() ? (zh ? '收起操作指南' : 'Close controls') : (zh ? '操作指南' : 'Controls');
   helpTrigger?.setAttribute('aria-label', helpLabel);
@@ -71,6 +75,8 @@ function syncShellOverlayState() {
   if (actions) actions.inert = library;
   const helpTrigger = document.getElementById('helpBtn');
   if (helpTrigger) helpTrigger.inert = menu;
+  const brand = document.getElementById('siteBrand');
+  if (brand) brand.inert = menu;
   shellOverlayOpen = open;
   if (open !== gameOverlayOpen) {
     if (open) releaseHeldInputs(); else overlayCaptureOwner = null;
@@ -654,6 +660,7 @@ function setGameLibraryOpen(open: boolean) {
   if (wasOpen === open) return;
   library.classList.toggle('open', open);
   trigger.setAttribute('aria-expanded', String(open));
+  document.getElementById('siteBrand')?.setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('library-open', open);
   syncShellOverlayState();
   if (open) {
@@ -704,7 +711,7 @@ function updateGuidePresentation() {
   help.setAttribute('role', 'dialog');
   help.setAttribute('aria-modal', 'true');
   // Keep the visible toggle in the modal's accessibility and keyboard scope.
-  if (isHelpOpen()) help.setAttribute('aria-owns', 'helpBtn overflowBtn'); else help.removeAttribute('aria-owns');
+  if (isHelpOpen()) help.setAttribute('aria-owns', 'siteBrand helpBtn overflowBtn'); else help.removeAttribute('aria-owns');
   const backdrop = document.getElementById('guideBackdrop');
   if (backdrop) backdrop.hidden = !isHelpOpen();
   syncShellOverlayState();
@@ -915,10 +922,12 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
   });
   fitGameCanvas();
 
-  document.getElementById('gamePickerBtn')?.addEventListener('click', () => {
-    const open = !document.getElementById('gameLibrary')?.classList.contains('open');
-    setGameLibraryOpen(open);
-  });
+  for (const id of ['siteBrand', 'gamePickerBtn']) {
+    document.getElementById(id)?.addEventListener('click', () => {
+      const open = !document.getElementById('gameLibrary')?.classList.contains('open');
+      setGameLibraryOpen(open);
+    });
+  }
   document.getElementById('libraryCloseBtn')?.addEventListener('click', event => closeUiFromUser(closeGameLibrary, event));
   document.querySelector('[data-library-close]')?.addEventListener('click', event => closeUiFromUser(closeGameLibrary, event));
   document.getElementById('overflowBtn')?.addEventListener('click', (event) => {
@@ -1006,7 +1015,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
       event.stopPropagation();
       if (event.key === 'Tab') {
         const help = document.getElementById('helpOverlay')!;
-        const targets = [...help.querySelectorAll<HTMLElement>('button, [tabindex="0"]'), document.getElementById('helpBtn')!, document.getElementById('overflowBtn')!].filter(el => el.getClientRects().length > 0);
+        const targets = [...help.querySelectorAll<HTMLElement>('button, [tabindex="0"]'), document.getElementById('siteBrand')!, document.getElementById('helpBtn')!, document.getElementById('overflowBtn')!].filter(el => el.getClientRects().length > 0);
         const index = targets.indexOf(document.activeElement as HTMLElement);
         event.preventDefault();
         targets[(index + (event.shiftKey ? -1 : 1) + targets.length) % targets.length]?.focus({ preventScroll: true });

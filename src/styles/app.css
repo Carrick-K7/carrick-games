@@ -480,7 +480,7 @@ main { width: 100%; min-width: 0; padding: 24px; }
   :root { --header-height: 60px; }
   .app-header { grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; padding: 0 12px; }
   .wordmark { font-size: 14px; }
-  .wordmark-secondary, .picker-shortcut { display: none; }
+  .picker-shortcut { display: none; }
   .game-picker-trigger { max-width: 100%; gap: 6px; padding: 8px; }
   .game-picker-trigger .picker-grid { width: 15px; height: 15px; }
   .selected-game-label { max-width: 200px; font-size: 13px; }
@@ -595,6 +595,41 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
   padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left));
 }
 .game-app .header-actions { position: static; }
+/* A small game-library entry restores site identity without a page header. */
+.site-brand {
+  position: absolute;
+  z-index: 45;
+  top: calc(12px + var(--safe-top));
+  left: calc(12px + var(--safe-left));
+  width: 96px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+.site-brand-name { display: flex; flex-direction: column; align-items: flex-start; font: 650 13px/1.15 var(--font-ui); letter-spacing: -.015em; }
+.site-brand-name > span { font-size: 11px; font-weight: 500; }
+/* Keep the newly added Gacha progress counters visible beside the brand. */
+.game-app:has(#siteBrand) .gacha-progress-hud { left: calc(116px + var(--safe-left)); width: min(320px, calc(100% - 236px - var(--safe-left) - var(--safe-right))); }
+@media (max-width: 359px) {
+  .game-app:has(#siteBrand) .gacha-progress-hud { grid-template-columns: 1fr; gap: 2px; padding: 4px 8px; }
+  .game-app:has(#siteBrand) .gacha-progress-metric + .gacha-progress-metric { border-left: 0; padding-left: 0; }
+}
+.site-brand:hover { background: var(--surface); }
+.site-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Keep the left radar/location clear; responsive HUDs reserve this entire row. */
+.game-app:has(#gameCanvas[data-viewport-mode="responsive"]) .site-brand { left: auto; right: calc(116px + var(--safe-right)); }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; }
+.library-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.library-brand { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 14px; font-weight: 650; }
+.library-title-row h1 { font-size: 15px; }
 .game-menu-trigger {
   position: absolute;
   z-index: 45;
@@ -615,7 +650,8 @@ html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscr
 .game-menu-trigger:hover, .game-menu-trigger:focus-visible { background: #202b24; }
 .game-help-trigger { right: calc(64px + var(--safe-right)); font: 600 21px/1 var(--font-ui); }
 .game-help-trigger[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--page); }
-.game-app.pointer-locked:not(.controls-open) .game-menu-trigger { visibility: hidden; pointer-events: none; }
+.game-app.pointer-locked:not(.controls-open) .game-menu-trigger,
+.game-app.pointer-locked:not(.controls-open) .site-brand { visibility: hidden; pointer-events: none; }
 .shell-backdrop { position: absolute; inset: 0; z-index: 49; width: 100%; height: 100%; border: 0; background: rgba(4,9,6,.42); }
 .game-app .overflow-menu {
   position: absolute;

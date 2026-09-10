@@ -4,7 +4,7 @@
 // canvas at the live CSS viewport size delivered through BaseGame.setViewport.
 // This module keeps all viewport-shape decisions in pure functions so the
 // layout can be unit-tested without a DOM: safe-area insets, the reserved
-// top-right help/menu buttons (44px each, 8px gap), compact/short breakpoints and
+// top-right brand/help/menu row (96/44/44px, 8px gaps), compact/short breakpoints and
 // internal scroll state for menus that do not fit short screens.
 
 export interface HudSafeArea {
@@ -29,6 +29,7 @@ export function normalizeSafeArea(sa?: Partial<HudSafeArea> | null): HudSafeArea
 /** Shell chrome that floats over the top-right corner of the game canvas. */
 export const SHELL_BUTTON_SIZE = 44;
 export const SHELL_BUTTON_MARGIN = 12;
+export const SHELL_CLUSTER_WIDTH = 96 + 8 + SHELL_BUTTON_SIZE * 2 + 8;
 
 export interface HudLayout {
   W: number;
@@ -47,7 +48,7 @@ export interface HudLayout {
   short: boolean;
   /** W >= 1100 && H >= 640: the original two-column 1280x720 menu layout. */
   classicMenu: boolean;
-  /** Rectangle reserved for the two top-right 44px utility buttons. */
+  /** Rectangle reserved for the 200x44px brand/help/menu row. */
   shellReserve: { x: number; y: number; w: number; h: number };
   /** First y that is guaranteed clear of the shell reserve. */
   contentTop: number;
@@ -65,9 +66,9 @@ export function computeHudLayout(W: number, H: number, safe?: Partial<HudSafeAre
   const right = W - margin - s.right;
   const bottom = H - margin - s.bottom;
   const shellReserve = {
-    x: W - s.right - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8),
+    x: W - s.right - SHELL_BUTTON_MARGIN - SHELL_CLUSTER_WIDTH,
     y: s.top + SHELL_BUTTON_MARGIN,
-    w: SHELL_BUTTON_SIZE * 2 + 8,
+    w: SHELL_CLUSTER_WIDTH,
     h: SHELL_BUTTON_SIZE,
   };
   return {
@@ -152,6 +153,39 @@ export interface HudRect {
 
 export function rectsOverlap(a: HudRect, b: HudRect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Menu title/subtitle and optional right-aligned FPS share the space left of chrome. */
+export function menuHeaderLayout(L: HudLayout, statusWidth: number) {
+  const statusX = L.shellReserve.x - 12;
+  const titleWidth = Math.max(0, Math.min(80, statusX - L.left));
+  const subtitleX = L.left + 80;
+  const showStatus = L.availW >= 500 && statusX - statusWidth >= subtitleX + 12;
+  const subtitleRight = showStatus ? statusX - statusWidth - 12 : statusX;
+  return { titleWidth, subtitleX, subtitleWidth: Math.max(0, Math.min(190, subtitleRight - subtitleX)), statusX, showStatus };
+}
+
+/** Score strip stays below the radar on phones, left of shell chrome otherwise. */
+export function scoreStripRect(L: HudLayout, radarSize: number): HudRect {
+  const radarRight = L.left + radarSize + 12;
+  const w = L.compact ? L.availW : Math.min(300, L.availW, L.shellReserve.x - 8 - radarRight);
+  return {
+    x: L.compact ? L.left : Math.max(radarRight, Math.min(L.W / 2 - w / 2, L.shellReserve.x - 8 - w)),
+    y: L.compact ? L.top + radarSize + 30 : L.top - 4,
+    w,
+    h: 46,
+  };
+}
+
+/** Only panels intersecting the utility row dock below its unchanged 64px edge. */
+export function scoreboardRect(L: HudLayout, rowCount: number): HudRect {
+  const w = Math.min(620, L.availW), h = Math.min(180 + rowCount * 26, L.availH);
+  const rect = { x: L.left + (L.availW - w) / 2, y: Math.max(L.top, L.H / 2 - h / 2), w, h };
+  if (rectsOverlap(rect, L.shellReserve)) {
+    rect.y = L.contentTop;
+    rect.h = Math.min(h, L.bottom - rect.y);
+  }
+  return rect;
 }
 
 /** Bottom-left health/armor/money panel. */

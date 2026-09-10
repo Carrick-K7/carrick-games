@@ -22,6 +22,7 @@ import { VILLA_TEA_BAR } from './villaTeaBar.js';
 import { VILLA_VEGETABLE_BEDS } from './villaGarden.js';
 import { createVillaUseButton } from './villaUseButton.js';
 import { villaUseCircle, wrapVillaTouchHint } from './villaTouchUi.js';
+import { SHELL_BUTTON_MARGIN, SHELL_CLUSTER_WIDTH } from './csHudLayout.js';
 
 interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
@@ -403,25 +404,28 @@ export class VillaGame extends BaseGame {
   /** Narrow or coarse-pointer HUD switches to icon buttons so the row always fits. */
   private compactHud() {
     const safe = this.safe();
-    return this.touchMode || this.width - safe.left - safe.right < 960 || this.height - safe.top - safe.bottom < 600;
+    // The wider shell row needs another 104px beside the full location/activity HUD.
+    return this.touchMode || this.width - safe.left - safe.right < 1064 || this.height - safe.top - safe.bottom < 600;
   }
 
   private buttons(): Button[] {
     const s = this.uiScale(), size = 44 * s, zh = this.isZhLang(), safe = this.safe();
     const compact = this.compactHud(), top = (compact ? 12 : 22) + safe.top;
-    if (this.immersive) return [{ id: 'immersion', x: 16 + safe.left, y: top, w: Math.min(compact ? (this.state.snookerActive ? 114 : 190) * s : 294, this.width - safe.left - safe.right - 136), h: size, label: '' }];
+    const shellLeft = this.width - safe.right - SHELL_BUTTON_MARGIN - SHELL_CLUSTER_WIDTH;
+    if (this.immersive) return [{ id: 'immersion', x: 16 + safe.left, y: top, w: Math.min(compact ? (this.state.snookerActive ? 114 : 190) * s : 294, shellLeft - safe.left - 24), h: size, label: '' }];
     const entries: Array<{ id: string; label: string; short: string }> = [
       { id: 'map', label: zh ? 'M  导览图' : 'M  Floor plan', short: zh ? '图' : 'M' },
       { id: 'time', label: this.state.evening ? (zh ? 'T  日光' : 'T  Daylight') : (zh ? 'T  黄昏' : 'T  Sunset'), short: this.state.evening ? '☀' : '☾' },
       { id: 'home', label: zh ? 'H  回门口' : 'H  Entrance', short: '⌂' },
       { id: 'immersion', label: zh ? 'I  沉浸' : 'I  Immersive', short: zh ? '简' : 'I' },
     ];
-    // The shared ? guide and game menu sit above the activity row.
-    // A narrow HUD puts its activity row below the location and shell trigger.
+    // Activities end 12px before the brand/help/menu row; narrow HUDs keep
+    // their existing second row (the wider shell cluster is not any taller).
     const secondRow = this.width - safe.left - safe.right < 500;
     const gap = (compact ? 6 : 9) * s;
     const w = compact ? size : 118;
-    const start = this.width - (secondRow ? 12 : 120) - safe.right - entries.length * w - (entries.length - 1) * gap;
+    const rowRight = secondRow ? this.width - 12 - safe.right : shellLeft - 12;
+    const start = rowRight - entries.length * w - (entries.length - 1) * gap;
     const buttons = entries.map((entry, i) => ({ id: entry.id, x: start + i * (w + gap), y: top + (secondRow ? 56 : 0), w, h: size, label: compact ? entry.short : entry.label }));
     const target = this.hotspot()?.id;
     if (this.touchMode && this.state.snookerActive) {

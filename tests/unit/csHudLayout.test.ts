@@ -8,10 +8,14 @@ import {
   computeTouchControls,
   healthPanelRect,
   HudScroll,
+  menuHeaderLayout,
   normalizeSafeArea,
+  scoreboardRect,
+  scoreStripRect,
   rectsOverlap,
   SHELL_BUTTON_MARGIN,
   SHELL_BUTTON_SIZE,
+  SHELL_CLUSTER_WIDTH,
   TOUCH_TARGET,
   weaponPanelRect,
   type HudRect,
@@ -39,12 +43,14 @@ describe('csHudLayout: computeHudLayout', () => {
     }
   });
 
-  it('reserves both top-right utilities (44px each, 8px gap, 12px margin)', () => {
+  it('reserves the 200x44 brand/help/menu row without increasing vertical clearance)', () => {
     for (const { width, height } of VIEWPORTS) {
       const L = computeHudLayout(width, height);
-      expect(L.shellReserve.w).toBe(SHELL_BUTTON_SIZE * 2 + 8);
+      expect(SHELL_CLUSTER_WIDTH).toBe(200);
+      expect(L.shellReserve.w).toBe(200);
+      expect(L.contentTop).toBe(64);
       expect(L.shellReserve.h).toBe(SHELL_BUTTON_SIZE);
-      expect(L.shellReserve.x).toBe(width - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8));
+      expect(L.shellReserve.x).toBe(width - SHELL_BUTTON_MARGIN - (SHELL_CLUSTER_WIDTH));
       expect(L.shellReserve.y).toBe(SHELL_BUTTON_MARGIN);
       expect(L.contentTop).toBe(L.shellReserve.y + L.shellReserve.h + 8);
     }
@@ -57,7 +63,7 @@ describe('csHudLayout: computeHudLayout', () => {
     expect(L.left).toBe(L.margin + 48);
     expect(L.right).toBe(390 - L.margin - 12);
     expect(L.bottom).toBe(844 - L.margin - 16);
-    expect(L.shellReserve.x).toBe(390 - 12 - SHELL_BUTTON_MARGIN - (SHELL_BUTTON_SIZE * 2 + 8));
+    expect(L.shellReserve.x).toBe(390 - 12 - SHELL_BUTTON_MARGIN - (SHELL_CLUSTER_WIDTH));
     expect(L.shellReserve.y).toBe(24 + SHELL_BUTTON_MARGIN);
     expect(L.availW).toBe(L.right - L.left);
     expect(L.availH).toBe(L.bottom - L.top);
@@ -81,6 +87,46 @@ describe('csHudLayout: computeHudLayout', () => {
     expect(normalizeSafeArea(null)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
     expect(normalizeSafeArea({ top: -5, right: Number.NaN, bottom: 10, left: Infinity }))
       .toEqual({ top: 0, right: 0, bottom: 10, left: 0 });
+  });
+});
+
+describe('csHudLayout: header and scoreboard clear the brand cluster', () => {
+  for (const { width, height } of [...VIEWPORTS, { width: 524, height: 720 }, { width: 700, height: 720 }]) {
+    for (const safe of [undefined, { top: 24, right: 20, bottom: 21, left: 24 }]) {
+      const L = computeHudLayout(width, height, safe);
+      const tag = `${width}x${height}${safe ? '+safe' : ''}`;
+      it(`${tag}: score strip and scoreboard avoid shell chrome`, () => {
+        const radarSize = L.short ? 96 : L.compact ? Math.max(88, Math.min(148, Math.round(Math.min(width, height) * 0.28))) : 148;
+        const strip = scoreStripRect(L, radarSize);
+        expect(rectsOverlap(strip, { x: L.left, y: L.top, w: radarSize, h: radarSize })).toBe(false);
+        for (const rect of [strip, scoreboardRect(L, 10)]) {
+          expect(rectsOverlap(rect, L.shellReserve)).toBe(false);
+          expect(rect.x).toBeGreaterThanOrEqual(L.left);
+          expect(rect.x + rect.w).toBeLessThanOrEqual(L.right);
+          expect(rect.y + rect.h).toBeLessThanOrEqual(L.bottom);
+        }
+        expect(L.contentTop).toBe((safe?.top ?? 0) + 64);
+      });
+      it(`${tag}: menu title/FPS/subtitle occupy disjoint horizontal slots`, () => {
+        const statusWidth = 110, header = menuHeaderLayout(L, statusWidth);
+        expect(L.left + header.titleWidth).toBeLessThanOrEqual(L.shellReserve.x - 12);
+        if (header.subtitleWidth > 0) {
+          expect(header.subtitleX).toBeGreaterThanOrEqual(L.left + header.titleWidth);
+          expect(header.subtitleX + header.subtitleWidth).toBeLessThanOrEqual(L.shellReserve.x - 12);
+          if (header.showStatus) expect(header.subtitleX + header.subtitleWidth + 12).toBeLessThanOrEqual(header.statusX - statusWidth);
+        }
+        if (header.showStatus) {
+          expect(header.statusX - statusWidth).toBeGreaterThanOrEqual(L.left + header.titleWidth + 12);
+          expect(header.statusX).toBe(L.shellReserve.x - 12);
+        }
+      });
+    }
+  }
+
+  it('preserves established desktop and portrait score-strip positions', () => {
+    expect(scoreStripRect(computeHudLayout(1280, 720), 148)).toEqual({ x: 490, y: 14, w: 300, h: 46 });
+    expect(scoreStripRect(computeHudLayout(390, 844), 109)).toEqual({ x: 12, y: 151, w: 366, h: 46 });
+    expect(scoreboardRect(computeHudLayout(844, 390), 10)).toEqual({ x: 112, y: 64, w: 620, h: 314 });
   });
 });
 

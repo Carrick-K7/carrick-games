@@ -17,6 +17,7 @@ import {
   sceneBackingRatio,
   touchControlsLayout,
 } from '../../src/games/counterstrikeViewport';
+import { computeHudLayout, rectsOverlap } from '../../src/games/csHudLayout';
 
 // The viewport matrix from the responsive-fullscreen spec, plus a notched
 // phone landscape variant exercising safe-area insets.
@@ -228,6 +229,29 @@ describe('counterstrike viewport helpers', () => {
         expect(panel.w).toBeCloseTo(440 * panel.scale, 6);
         expect(panel.h).toBeCloseTo(320 * panel.scale, 6);
       }
+    });
+  });
+
+  describe('brand/help/menu collision matrix', () => {
+    for (const { width, height } of [...VIEWPORTS, { width: 540, height: 390 }, { width: 600, height: 390 }]) {
+      for (const safe of [sanitizeInsets(null), { top: 24, right: 44, bottom: 21, left: 44 }]) {
+        it(`${width}x${height} safeTop=${safe.top}: round header/scoreboard avoid the 200x44 cluster`, () => {
+          const shell = computeHudLayout(width, height, safe).shellReserve;
+          const s = hudScale(width, height), cx = safe.left + (width - safe.left - safe.right) / 2;
+          const header = { x: cx - 140 * s, y: roundHeaderY(width, height, safe), w: 280 * s, h: 46 * s };
+          const panel = centeredPanelLayout(width, height, safe, 440, 320);
+          expect(rectsOverlap(header, shell)).toBe(false);
+          expect(rectsOverlap(panel, shell)).toBe(false);
+          expect(panel.x).toBeGreaterThanOrEqual(safe.left + 8);
+          expect(panel.y + panel.h).toBeLessThanOrEqual(height - safe.bottom - 8);
+        });
+      }
+    }
+
+    it('shifts the landscape scoreboard horizontally, not vertically or in size', () => {
+      const panel = centeredPanelLayout(844, 390, null, 440, 320);
+      expect(panel).toEqual({ x: 184, y: 23.12, w: 440, h: 320, scale: 1 });
+      expect(SHELL_MENU_RESERVE).toBe(56);
     });
   });
 

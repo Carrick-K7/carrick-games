@@ -101,16 +101,16 @@ for (const viewport of viewports) {
   test.describe(`single-screen picker ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport, hasTouch: mobile, isMobile: mobile });
 
-    test('all 28 complete labels fit in English and Chinese with text-only branding', async ({ page }) => {
+    test('all 28 complete labels fit in English and Chinese with complete branding', async ({ page }) => {
       await openShell(page);
       expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(mobile);
       await page.locator('#overflowBtn').click();
       const wordmark = page.locator('.wordmark');
-      await expect(wordmark.locator('svg, .brand-mark')).toHaveCount(0);
-      await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', /viewBox='0 0 24 24'.*%230d9488/);
+      await expect(wordmark.locator('img')).toHaveAttribute('src', '/brand/logo.svg');
+      await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute('href', '/brand/logo.svg');
       await expect(wordmark).toHaveText('Carrick Games');
       const visibleBrand = (await wordmark.innerText()).replace(/\s+/g, ' ').trim();
-      expect(visibleBrand).toBe(mobile ? 'Carrick' : 'Carrick Games');
+      expect(visibleBrand).toBe('Carrick Games');
       await page.locator('#menuCloseBtn').click();
 
       for (const lang of ['en', 'zh'] as const) {
