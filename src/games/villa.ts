@@ -516,8 +516,9 @@ export class VillaGame extends BaseGame {
   /** Narrow or coarse-pointer HUD switches to icon buttons so the row always fits. */
   private compactHud() {
     const safe = this.safe();
-    // The full location/activity row needs 1080px plus the 104px wider shell cluster.
-    return this.touchMode || this.width - safe.left - safe.right < 1184 || this.height - safe.top - safe.bottom < 600;
+    // The full location card, the 626px activity row and the 200px shell cluster
+    // need 1110px at the tight 104px row width; below that the row uses icons.
+    return this.touchMode || this.width - safe.left - safe.right < 1110 || this.height - safe.top - safe.bottom < 600;
   }
 
   private buttons(): Button[] {
@@ -536,7 +537,9 @@ export class VillaGame extends BaseGame {
     // their existing second row (the wider shell cluster is not any taller).
     const secondRow = this.width - safe.left - safe.right < 640;
     const gap = (compact ? 6 : 9) * s;
-    const w = compact ? size : 118;
+    // Full labels are worth keeping: tighten the row before switching to icons.
+    const roomy = this.width - safe.left - safe.right >= 1180;
+    const w = compact ? size : (roomy ? 118 : 104);
     const rowRight = secondRow ? this.width - 12 - safe.right : shellLeft - 12;
     const start = rowRight - entries.length * w - (entries.length - 1) * gap;
     const buttons = entries.map((entry, i) => ({ id: entry.id, x: start + i * (w + gap), y: top + (secondRow ? 56 : 0), w, h: size, label: compact ? entry.short : entry.label }));

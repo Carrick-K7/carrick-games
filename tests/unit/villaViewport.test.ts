@@ -43,7 +43,7 @@ describe('Villa HUD clears the brand/help/menu cluster', () => {
     }) as { buttons(): (HudRect & { id: string })[]; compactHud(): boolean };
   }
 
-  for (const { width, height, safe } of [...VIEWPORTS, { width: 1024, height: 768, safe: VIEWPORTS[0].safe }]) {
+  for (const { width, height, safe } of [...VIEWPORTS, { width: 1024, height: 768, safe: VIEWPORTS[0].safe }, { width: 1120, height: 700, safe: VIEWPORTS[0].safe }]) {
     for (const touch of [false, true]) {
       for (const immersive of [false, true]) {
         it(`${width}x${height} touch=${touch} immersive=${immersive}: controls stay clear and ≥44px`, () => {
