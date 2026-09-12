@@ -2,11 +2,10 @@ import * as THREE from 'three';
 import { VILLA_SNOOKER } from './villaActivities.js';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import {
-  createVillaSnooker, getVillaSnookerTrajectory, VILLA_SNOOKER_BALL_RADIUS,
+  createVillaSnooker, getVillaSnookerTrajectory, VILLA_SNOOKER_APERTURE_RADIUS, VILLA_SNOOKER_BALL_RADIUS,
   VILLA_SNOOKER_POCKETS, type VillaSnookerSegment, type VillaSnookerState,
 } from './villaSnooker.js';
 
-export const VILLA_SNOOKER_APERTURE_RADIUS = 0.078;
 export const VILLA_SNOOKER_GUIDE_HEIGHT = VILLA_SNOOKER.height + 0.007;
 
 /** Scene-owned static table, separated from the room so its actual geometry can

@@ -63,6 +63,10 @@ export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
     origin: p(x, 0, 9), width: 0.97, depth: 2.7, seat: p(x, 0, 9.55),
     approach: p(x + (i ? 1.05 : -1.05), 0, 9.5), exits: [p(x + (i ? 1.05 : -1.05), 0, 9.5), p(x, 0, 10.85), p(x + (i ? -1.05 : 1.05), 0, 9.5)],
     yaw: 0, pitch: 0.08, eyeHeight: 0.94, freeLook: true })),
+  // 1.1.0 east wing: the widened reading bay and roof lounge are real seats.
+  sofa('sofa-library-bay', 13.4, 3.6, 6.9, 1.3, 0.5, [p(13.85, 3.6, 8.05), p(14.85, 3.6, 7.05), p(12.35, 3.6, 8.15)]),
+  small('chair-roof-east-1', 'chair', 14.4, 7.2, 2.85, 0, 0.52, 0.52, 1.2, [p(14.4, 7.2, 1.75), p(15.5, 7.2, 2.85)]),
+  small('chair-roof-east-2', 'chair', 14.4, 7.2, 5.75, Math.PI, 0.52, 0.52, 1.2, [p(14.4, 7.2, 6.85), p(13.3, 7.2, 5.75)]),
   ...[-9.33, -7.67].flatMap((x, col) => [-3.88, -1.72].map((z, row) =>
     small(`chair-dining-${col * 2 + row + 1}`, 'chair', x, 0, z, row ? 0 : Math.PI, 0.65, 0.68, 1.08,
       [p(x + (col ? 0.68 : -0.68), 0, z), p(x, 0, z + (row ? 0.8 : -0.8))]))),

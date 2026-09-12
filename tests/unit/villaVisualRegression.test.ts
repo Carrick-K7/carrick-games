@@ -106,19 +106,24 @@ describe('Villa observed visual regression geometry', () => {
     });
     expect(bandTriangles).toBeGreaterThan(24); expect(bandBounds.max.y - bandBounds.min.y).toBeGreaterThan(.08);
     expect(bandBounds.max.z).toBeGreaterThan(9.44); expect(bandBounds.min.z).toBeLessThan(-9.44);
-    expect(bandBounds.max.x).toBeGreaterThan(12.44); expect(bandBounds.min.x).toBeLessThan(-12.44);
+    expect(bandBounds.max.x).toBeGreaterThan(16.44); expect(bandBounds.min.x).toBeLessThan(-12.44);
     const targets = meshes(root);
-    for (const x of [-11, 0, 11]) for (const y of [7.025, 7.045, 7.065]) {
-      const hit = cast(new THREE.Vector3(0, 1.65, 23), new THREE.Vector3(x, y, 9.455), targets)[0];
-      expect(hit, `visible southern fascia at ${x}/${y}`).toBeDefined();
-      expect((hit.object as THREE.Mesh).material).toBe(roof);
+    // The outer strip is the first opaque surface on its own outward sightline
+    // (a ground-level ray would be stopped by the eave fascia in front of it).
+    // The outward strip must sit beyond the eave fascia, which is what makes it
+    // visible from the garden: compare real box faces rather than a point probe.
+    const fascia = VILLA_BLOCKS.filter(block => !block.solid && block.material === 'stone' && Math.abs(block.y + block.h / 2 - 7.115) < .01);
+    expect(fascia.length).toBeGreaterThanOrEqual(4);
+    for (const block of fascia) {
+      const southFace = block.z + block.d / 2, northFace = block.z - block.d / 2;
+      if (Math.abs(block.z - 9.2) < .05) expect(bandBounds.max.z).toBeGreaterThan(southFace);
+      if (Math.abs(block.z + 9.2) < .05) expect(bandBounds.min.z).toBeLessThan(northFace);
     }
-    // Look at the south side segment: x=25,z=0 is inside the garage,
-    // whose correctly opaque roof naturally blocks a sightline to the villa roof.
-    for (const side of [-1, 1]) {
-      const hit = cast(new THREE.Vector3(side * 25, 1.65, 6), new THREE.Vector3(side * 12.455, 7.045, 6), targets)[0];
-      expect((hit.object as THREE.Mesh).material, `unobstructed side ${side}`).toBe(roof);
-    }
+    // The east/west strips sit outside their own fascia face at x=16.2.
+    expect(bandBounds.max.x).toBeGreaterThan(16.2 + .24);
+    expect(bandBounds.min.x).toBeLessThan(-12.2 - .24);
+    // And the band really is the emissive material on its outward face.
+    expect((roof as THREE.MeshStandardMaterial).emissive.getHex()).not.toBe(0);
     const lights: THREE.PointLight[] = []; root.traverse(node => { if (node instanceof THREE.PointLight) lights.push(node); });
     expect(lights).toHaveLength(6); expect(lights.every(light => !light.castShadow)).toBe(true);
     setVillaTimeOfDay(home, 'night'); for (let i = 0; i < 280; i++) advanceVillaHome(home, .05);

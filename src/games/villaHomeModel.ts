@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_HOME_LIGHTS, villaAtmosphere, type VillaHomeState } from './villaHome.js';
-import { VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
+import { VILLA_EAST_WALL as EAST, VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
 import type { VillaPosition } from './villaWorld.js';
 
 export interface VillaHomeModel {
@@ -62,8 +62,14 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
   for (const x of [-11.75, 11.75]) b.box(x, 7.3, 0, .035, .035, 17.7, roof, .006);
   // A continuous recessed diffuser on the OUTER fascia, not a subpixel wire
   // above the eave: still visibly lit from the driveway at software render scale.
-  for (const z of [-9.455, 9.455]) b.box(0, 7.045, z, 24.875, .085, .035, roof, .008);
-  for (const x of [-12.455, 12.455]) b.box(x, 7.045, 0, .035, .085, 18.945, roof, .008);
+  // The storeys widen east to x=16 in 1.1.0, so the roof band follows them.
+  // Each box is centred on its outer edge, so the band covers the full side and
+  // the east/west strips corner exactly with the north/south ones.
+  for (const z of [-9.455, 9.455]) for (const x of [-11.176, 10.177]) {
+    // 2 mm overlap at the seam keeps the run continuous at the villa centreline.
+    b.box(x, 7.045, z, 11.355, .085, .035, roof, .008);
+  }
+  for (const x of [-12.455, EAST.outer + .255]) b.box(x, 7.045, 0, .035, .085, 18.945, roof, .008);
   b.finish();
   const fixtures = VILLA_HOME_LIGHTS.flatMap(room => room.fixtures.map(position => ({ room, position })));
   const pool = Array.from({ length: 6 }, (_, i) => {

@@ -536,7 +536,7 @@ export const GAMES: GameMeta[] = [
         { text: 'P opens the smart terminal for room/all lights, gradual time/weather changes, one selected live camera, look sensitivity and snooker guides.', textZh: 'P 打开智能终端，可调房间/全部灯光、渐变昼夜天气、单路实时监控、视角灵敏度和台球辅助线。' },
         { text: 'Tea starts empty: E brews gradually, the full cup stays ready, then E drinks and empties it. Busy actions do not restart the cycle. Wardrobes open with E; pets have separate food and cooldowns.', textZh: '茶杯初始为空：E 逐渐冲泡，满杯持续等待，再按 E 饮用至空；忙碌时重复操作不重置。E 开合衣柜；每只小动物的食物和冷却独立。' },
         { text: 'Snooker: mouse or ←/→ aim, ↑/↓ power, Space shoots, R racks and E leaves. Touch has separate aim, power, Shot and Exit targets.', textZh: '斯诺克：鼠标或 ←/→ 瞄准，↑/↓ 调力度，空格击球，R 重摆，E 离开。触屏有独立的瞄准、力度、击球和离开按钮。' },
-        { text: 'E calls the elevator; 1/2/3 select a floor inside. An empty car closes its doors after four seconds. H returns to the entrance and stops the vehicle.', textZh: 'E 呼叫电梯，进入后按 1/2/3 选层；空轿厢四秒后关门。H 返回门口并停住车辆。' },
+        { text: 'E calls the elevator; inside, 1/2/3 or the on-screen panel select a floor (top floor listed first), and O/K open and close the doors. An empty car closes its doors after four seconds. H returns to the entrance and stops the vehicle.', textZh: 'E 呼叫电梯；进入后按 1/2/3 或使用屏幕面板选层（高楼层层级在上），O/K 开门与关门。空轿厢四秒后关门。H 返回门口并停住车辆。' },
         { text: 'Practice scores stay in this game and are not uploaded to a leaderboard.', textZh: '练习成绩只留在当前游戏，不上传排行榜。' },
       ],
     },

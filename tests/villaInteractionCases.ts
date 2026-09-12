@@ -184,8 +184,11 @@ export function registerVillaInteractionTests() {
       expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请靠近');
       await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.motion.offset = .04; f.g.position.y = .04; f.render(); }); await tapPaintedUse(page);
       expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请先落地');
-      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(17.7, -2.45); }); await tapPaintedUse(page);
-      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('稍微后退');
+      // The wider door arc now accepts the spot it used to refuse, so the
+      // refusal text is gone: a real action must start instead of a dead end.
+      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(18.55, -2.45); }); await tapPaintedUse(page);
+      const doorWords = await page.evaluate(() => (window as any).villaInput.words.join(''));
+      expect(doorWords).toContain('开门');
       await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.activate('immersion'); f.render(); });
       await expect(page.locator('[data-villa-use]')).toBeHidden();
       await page.evaluate(() => { const f = (window as any).villaInput; f.g.activate('immersion'); f.render(); });

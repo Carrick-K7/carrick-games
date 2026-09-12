@@ -1,5 +1,6 @@
 import { VILLA_CAR, VILLA_RACING, VILLA_SCOOTER } from './villaActivities.js';
 import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
+import { VILLA_EAST_WALL as EAST } from './villaEstateLayout.js';
 import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition } from './villaSeating.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import type { VillaPetId } from './villaPets.js';
@@ -50,15 +51,15 @@ export function villaTreadLayers(top: number) {
 export const VILLA_ROOMS: VillaRoom[] = [
   { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
-  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: 12, minZ: 3, maxZ: 9 },
+  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: EAST.inner, minZ: 3, maxZ: 9 },
+  { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 8, maxX: 12, minZ: -9, maxZ: 1 },
   { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, ...VILLA_GARAGE_EXTENT },
-  { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 6.7, maxX: 12, minZ: -9, maxZ: 1 },
   { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
   { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
-  { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 6.5, maxX: 12, minZ: -9, maxZ: 1 },
-  { id: 'library', name: 'Reading lounge', zh: '书房 · 阅读角', floor: 1, minX: 2, maxX: 12, minZ: 3, maxZ: 9 },
+  { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 8, maxX: EAST.inner, minZ: -9, maxZ: 1 },
+  { id: 'library', name: 'Reading lounge', zh: '书房 · 阅读角', floor: 1, minX: 2, maxX: EAST.inner, minZ: 3, maxZ: 9 },
   { id: 'balcony', name: 'Bedroom balcony', zh: '卧室阳台', floor: 1, minX: -11.5, maxX: 1.5, minZ: 9, maxZ: 11.5 },
-  { id: 'terrace', name: 'Roof garden', zh: '天台 · 空中花园', floor: 2, minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
+  { id: 'terrace', name: 'Roof garden', zh: '天台 · 空中花园', floor: 2, minX: -12, maxX: EAST.inner, minZ: -9, maxZ: 9 },
 ];
 
 const blocks: VillaBlock[] = [];
@@ -108,16 +109,17 @@ wall('z', 12, -9, 9, 0, [{ from: -7, to: -3 }, { from: -0.8, to: 1.8, door: true
 wall('x', 3, 2, 12, 0, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, 0);
 // Two private bedrooms, a bathroom and a library off the upstairs gallery.
-wall('x', 9, -12, 12, STOREY, [{ from: -11, to: -8.8 }, { from: -8.5, to: -6.2, door: true }, { from: -5.9, to: 1 }, { from: 3, to: 11 }]);
-wall('x', -9, -12, 12, STOREY, [{ from: -11, to: -3 }, { from: -1.3, to: 1.3 }, { from: 7, to: 11 }]);
+wall('x', 9, -12, EAST.inner, STOREY, [{ from: -11, to: -8.8 }, { from: -8.5, to: -6.2, door: true }, { from: -5.9, to: 1 }, { from: 3, to: 15 }]);
+wall('x', -9, -12, EAST.inner, STOREY, [{ from: -11, to: -3 }, { from: -1.3, to: 1.3 }, { from: 7, to: 11 }]);
 wall('z', -12, -9, 9, STOREY, [{ from: -8, to: -1 }, { from: 1, to: 8 }]);
-wall('z', 12, -9, 9, STOREY, [{ from: -8, to: -2 }, { from: 4, to: 8 }]);
+wall('z', EAST.inner, -9, 9, STOREY, [{ from: -8, to: -2 }, { from: 4, to: 8 }]);
 wall('z', -2, -9, 9, STOREY, [{ from: -4.8, to: -2.5, door: true }, { from: 1.5, to: 3.8, door: true }]);
 wall('x', 0, -12, -2, STOREY);
 wall('x', 3, 2, 12, STOREY, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, STOREY);
-wall('z', 6.5, -9, 1, STOREY);
-wall('x', 1, 6.5, 12, STOREY, [{ from: 7.3, to: 9.4, door: true }]);
+// The bathroom door faces the widened lift lobby, as in the original plan.
+wall('z', 8, -9, 1, STOREY, [{ from: -6.2, to: -3.4, door: true }]);
+wall('x', 1, 8, EAST.inner, STOREY, [{ from: 9.2, to: 11.3, door: true }]);
 // Four south-facing bays: sedan, pickup, and two genuinely empty spare spaces.
 const garage = VILLA_GARAGE_EXTENT;
 wall('z', garage.maxX, garage.minZ, garage.maxZ, 0, [{ from: -6.5, to: -3 }]);
@@ -138,7 +140,7 @@ for (const y of [STOREY, STOREY * 2]) {
   add(3.275, cy, 0, 0.35, 0.2, 18.4, finish, false);
   add(4.55, cy, -8.1, 2.2, 0.2, 2.2, 'stone', false);
   add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false);
-  add(8.925, cy, 0, 6.55, 0.2, 18.4, finish, false);
+  add(10.925, cy, 0, 10.55, 0.2, 18.4, finish, false);
 }
 add(-4.375, -0.13, 0, 15.65, 0.26, 18.4, 'oak', false);
 add(8.925, -0.13, 0, 6.55, 0.26, 18.4, 'oak', false);
@@ -150,7 +152,7 @@ for (const y of [3.42, 7.02]) {
   add(0, y, 9.2, 24.8, 0.19, 0.48, 'stone', false);
   add(0, y, -9.2, 24.8, 0.19, 0.48, 'stone', false);
   add(-12.2, y, 0, 0.48, 0.19, 18.4, 'stone', false);
-  add(12.2, y, 0, 0.48, 0.19, 18.4, 'stone', false);
+  add(EAST.outer, y, 0, 0.48, 0.19, 18.4, 'stone', false);
 }
 for (let x = -2.65; x <= -1.65; x += 0.16) add(x, 3.5, 9.17, 0.07, 6.9, 0.14, 'oak', false);
 add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false);
@@ -187,10 +189,10 @@ for (const y of [3.6, 7.2]) {
   rail(1.2, 0.51, 0.16, 0.12, y);
 }
 // Rooftop and bedroom balcony glass balustrades.
-rail(0, 8.95, 24, 0.12, 7.2, 1.1);
-rail(0, -8.95, 24, 0.12, 7.2, 1.1);
+rail(2, 8.95, 28, 0.12, 7.2, 1.1);
+rail(2, -8.95, 28, 0.12, 7.2, 1.1);
 rail(-11.95, 0, 0.12, 18, 7.2, 1.1);
-rail(11.95, 0, 0.12, 18, 7.2, 1.1);
+rail(15.95, 0, 0.12, 18, 7.2, 1.1);
 rail(-5, 11.45, 13, 0.12, 3.6, 1.1);
 rail(-11.45, 10.2, 0.12, 2.5, 3.6, 1.1);
 rail(1.45, 10.2, 0.12, 2.5, 3.6, 1.1);
@@ -221,7 +223,7 @@ export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: s
   if (inRect(p.x, p.z, STAIR_HOLE)) return { id: 'stairs', name: 'Oak staircase', zh: '橡木楼梯' };
   const room = VILLA_ROOMS.find(r => r.floor === floor && inRect(p.x, p.z, r));
   if (room) return room;
-  if (floor === 0 && !inRect(p.x, p.z, { minX: -12.2, maxX: 12.2, minZ: -9.2, maxZ: 9.2 })) {
+  if (floor === 0 && !inRect(p.x, p.z, { minX: -12.2, maxX: EAST.outer, minZ: -9.2, maxZ: 9.2 })) {
     return p.x < -12 ? { id: 'garden', name: 'Pool garden', zh: '花园 · 泳池' } : { id: 'garden', name: 'Welcome home', zh: '庭院 · 欢迎回家' };
   }
   return { id: 'gallery', name: 'Sunlit gallery', zh: '采光走廊' };
@@ -241,7 +243,7 @@ export function villaSupportAt(x: number, z: number, previousY: number, headHeig
   const heights: number[] = [villaTerrainHeight(x, z)];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {
-    if (inRect(x, z, { minX: -12.1, maxX: 12.1, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) {
+    if (inRect(x, z, { minX: -12.1, maxX: EAST.outer, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) {
       heights.push(y); overhead.push({ top: y, thickness: .2 });
     }
   }

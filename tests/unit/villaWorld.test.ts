@@ -120,12 +120,12 @@ describe('Villa doors and furniture-free room reachability', () => {
     { name: 'rear garden entrance', from: [0, 0, -10.5], to: [0, -8] },
     { name: 'pool garden entrance', from: [-13, 0, 3.8], to: [-10.5, 3.8] },
     { name: 'internal garage entrance', from: [10.5, 0, 0.5], to: [13.5, 0.5] },
-    { name: 'garage rolling door', from: [16, 0, 3.5], to: [16, 0.5] },
+    { name: 'garage rolling door', from: [16, 0, 3.5], to: [16, 0] },
     { name: 'gaming room', from: [4.2, 0, 1.5], to: [4.2, 4.5] },
     { name: 'primary bedroom', from: [-0.5, STOREY, 2.6], to: [-3.5, 2.6] },
     { name: 'guest bedroom', from: [-1.5, STOREY, -3.6], to: [-3.5, -3.6] },
     { name: 'library', from: [4.2, STOREY, 1.5], to: [4.2, 4.5] },
-    { name: 'bathroom', from: [8.3, STOREY, 2], to: [8.3, -0.5] },
+    { name: 'bathroom', from: [9.5, STOREY, 2], to: [9.5, -0.5] },
     { name: 'bedroom balcony', from: [-7.3, STOREY, 7.5], to: [-7.3, 10] },
   ];
   it.each(doors)('$name is passable in both directions', ({ from, to }) => {
@@ -150,7 +150,7 @@ describe('Villa doors and furniture-free room reachability', () => {
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-5, 2.6]], room: 'master' },
       { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -3.6], [-5, -3.6]], room: 'guest' },
       // Clear the bathroom wall's 0.11m half-thickness plus player radius before turning east.
-      { route: [[2.06, 1.3], [5.2, 1.6], [8.3, 1.6], [8.3, -3]], room: 'bath' },
+      { route: [[2.06, 1.3], [6.4, 1.6], [9.5, 1.6], [9.5, -3]], room: 'bath' },
       { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5]], room: 'library' },
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-7.3, 2.6], [-7.3, 10]], room: 'balcony' },
     ];
@@ -259,7 +259,7 @@ describe('Villa collision, support and safe boundaries', () => {
       { p: { x: 0, y: 7.2, z: 7 }, dx: 0, dz: 8, axis: 'z', min: 6, max: 8.95 },
       { p: { x: -3, y: 7.2, z: -7 }, dx: 0, dz: -8, axis: 'z', min: -8.95, max: -6 },
       { p: { x: -10, y: 7.2, z: 3 }, dx: -8, dz: 0, axis: 'x', min: -11.95, max: -9 },
-      { p: { x: 10, y: 7.2, z: 3 }, dx: 8, dz: 0, axis: 'x', min: 9, max: 11.95 },
+      { p: { x: 14, y: 7.2, z: 3 }, dx: 8, dz: 0, axis: 'x', min: 13, max: 15.95 },
     ] as const;
     for (const { p, dx, dz, axis, min, max } of edges) {
       const next = moveVillaPlayer(p, dx, dz, architecture);
@@ -268,7 +268,9 @@ describe('Villa collision, support and safe boundaries', () => {
       expect(next.y).toBe(p.y);
       expect(villaCollides(next, architecture)).toBe(false);
     }
-    expect(villaSupportAt(13, 4, 7.2)).toBeNull();
+    // The storeys now reach x=16, so probe past the new east edge instead.
+    expect(villaSupportAt(17, 4, 7.2)).toBeNull();
+    expect(villaSupportAt(15.5, 4, 7.2)).toBe(7.2);
     expect(villaSupportAt(0, 12, STOREY)).toBeNull();
   });
   const furniture: VillaCollider = { minX: -6, maxX: -5, minZ: 1, maxZ: 4, minY: 0, maxY: 1 };

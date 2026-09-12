@@ -106,8 +106,8 @@ test.describe('Warm Villa', () => {
       // The stairwell now sits on the north hall: reach the guest door by the
       // west aisle instead of stepping onto the lower flight at x=0.
       walk(0, 2.6); walk(-1.5, 2.6); walk(-1.5, -3.5); walk(-3.4, -3.5); // guest entry
-      walk(-1.5, -3.5); walk(-1.5, 1.7); walk(8.2, 1.7); walk(8.2, -0.5); // bath entry
-      walk(8.2, 1.7); walk(4.2, 1.7); walk(4.2, 4); // reading room entry
+      walk(-1.5, -3.5); walk(-1.5, 1.7); walk(9.6, 2.4); walk(9.6, -0.5); // bath entry through the widened lobby
+      walk(9.6, 2.4); walk(4.5, 2.4); walk(4.5, 4.5); // reading room entry
       walk(4.2, 1.4); walk(2.06, 1.4); ascend();
       game.renderFrame();
       const roofImage = canvas.toDataURL('image/png');

@@ -64,18 +64,18 @@ describe('Villa pickup model identities, automatic doors and terrain posing', ()
       expect(villaPickupOverlaps(pose, { ...pickup.colliders[0] })).toBe(true);
     } finally { dispose(scene); }
   });
-  it('keeps an open bed and hollow cabin within dimensions and opens both doors without moving the shell', () => {
+  it('keeps an open bed and hollow cabin within dimensions and opens only the driver door without moving the shell', () => {
     const scene = new THREE.Group(), model = createVillaPickupModel(scene), state = createVillaPickup(), root = scene.getObjectByName('villa-pickup')!, body = scene.getObjectByName('pickup-body')!, driver = scene.getObjectByName('pickup-driver-door')!, passenger = scene.getObjectByName('pickup-passenger-door')!;
     try {
       const references = [...model.colliders], bodyMatrix = body.matrixWorld.clone(); expect(root.userData.openCargoBed).toBe(true); expect(root.userData.hollowCabin).toBe(true);
       const closed = new THREE.Box3().setFromObject(root), bounds = model.colliders[0]; expect(closed.min.x).toBeGreaterThanOrEqual(bounds.minX); expect(closed.max.x).toBeLessThanOrEqual(bounds.maxX); expect(closed.max.y).toBeLessThanOrEqual(bounds.maxY + .001);
       expect(model.update(.3, { pickup: state, pickupDoorOpen: true })).toBe(true); expect(model.doorProgress).toBeGreaterThan(0); expect(model.doorProgress).toBeLessThan(1);
-      model.update(1, { pickup: state, pickupDoorOpen: true }); expect(model.doorProgress).toBe(1); expect(driver.rotation.y).toBeLessThan(-1); expect(passenger.rotation.y).toBeGreaterThan(1);
+      model.update(1, { pickup: state, pickupDoorOpen: true }); expect(model.doorProgress).toBe(1); expect(driver.rotation.y).toBeLessThan(-1); expect(passenger.rotation.y).toBeCloseTo(0, 12);
       expect(body.matrixWorld.equals(bodyMatrix)).toBe(true); expect(model.colliders.every((c, i) => c === references[i])).toBe(true);
       expect(villaCollides(villaPickupAnchors(state).exit, model.colliders, 1.75)).toBe(false);
       expect(villaPickupExitClear(state, model.colliders)).toBe(true); expect(villaPickupExitClear(state, model.colliders, -1)).toBe(true);
       expect(model.update(100, { pickup: state, pickupDoorOpen: true })).toBe(false);
-      model.update(0, { pickup: state }); expect(model.doorProgress).toBe(0); expect(driver.rotation.y).toBe(0); expect(passenger.rotation.y).toBe(0);
+      model.update(0, { pickup: state }); expect(model.doorProgress).toBe(0); expect(driver.rotation.y).toBeCloseTo(0, 12); expect(passenger.rotation.y).toBeCloseTo(0, 12);
     } finally { dispose(scene); }
   });
   it('tilts to the shared terrain while live body/door colliders and seated anchors follow the same height', () => {

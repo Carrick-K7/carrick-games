@@ -101,3 +101,4 @@ describe('villaRendererSize', () => {
     expect(h).toBe(Math.round(1080 * 0.55));
   });
 });
+

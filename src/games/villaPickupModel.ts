@@ -147,7 +147,9 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     }
     previousTime = time;
     if (!moved && before === progress) return false;
-    for (const door of doors) door.root.rotation.y = -door.root.userData.side * 1.13 * smooth(progress) || 0;
+    // Only the driver's door is used: one person gets in and out on their own
+    // side, so the passenger door stays shut instead of opening both at once.
+    for (const door of doors) door.root.rotation.y = door.root.userData.side === 1 ? -1.13 * smooth(progress) : 0;
     updateColliders(); return true;
   };
   update(0, {});

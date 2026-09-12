@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ELEVATOR_IDLE_SECONDS, VILLA_ELEVATOR, advanceVillaElevator, createVillaElevator, createVillaElevatorColliders, idleVillaElevator,
-  requestVillaElevator, villaElevatorCabinContains, villaElevatorDoorwayObstructed,
+  requestVillaElevator, requestVillaElevatorDoor, villaElevatorCabinContains, villaElevatorDoorwayObstructed,
   villaElevatorShaftContains, villaElevatorSupportAt, type VillaElevatorState,
 } from '../../src/games/villaElevator';
 import {
@@ -285,6 +285,27 @@ describe('Villa elevator support and safety gates', () => {
     for (const p of [{ x: 4.55, y: floors[1], z: -5.8 }, { x: 5.55, y: floors[1], z: -4.6 }, { x: 4.55, y: 0, z: -4.6 }]) {
       expect(villaElevatorDoorwayObstructed(p, state)).toBe(false);
     }
+  });
+});
+
+describe('Villa elevator car door buttons and manual floor panel', () => {
+  it('opens, closes and refuses impossible door commands without changing the floor', () => {
+    const state = atFloor(1, true);
+    expect(requestVillaElevatorDoor(state, false)).toBe(true);
+    expect(state.phase).toBe('closing'); expect(state.target).toBe(1); expect(state.floor).toBe(1);
+    expect(requestVillaElevatorDoor(state, false)).toBe(false);
+    expect(requestVillaElevatorDoor(state, true)).toBe(true);
+    expect(state.phase).toBe('opening');
+    state.phase = 'open'; state.door = 1;
+    expect(requestVillaElevatorDoor(state, true)).toBe(true);
+    expect(state.target).toBe(state.floor);
+    // A moving car ignores both buttons.
+    state.phase = 'moving';
+    expect(requestVillaElevatorDoor(state, true)).toBe(false);
+    expect(requestVillaElevatorDoor(state, false)).toBe(false);
+    const closed = { ...atFloor(0), phase: 'closed' as const };
+    expect(requestVillaElevatorDoor(closed, false)).toBe(false);
+    expect(requestVillaElevatorDoor(closed, true)).toBe(true);
   });
 });
 

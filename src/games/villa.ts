@@ -2,12 +2,12 @@ import { BaseGame, createDefaultGameHost, type GameHost, type GameViewport } fro
 import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.js';
 import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen } from './villaActivities.js';
 import {
-  advanceVillaElevator, createVillaElevator, idleVillaElevator, requestVillaElevator, VILLA_ELEVATOR,
+  advanceVillaElevator, createVillaElevator, idleVillaElevator, requestVillaElevator, requestVillaElevatorDoor, VILLA_ELEVATOR,
   villaElevatorCabinContains, villaElevatorDoorwayObstructed, villaElevatorShaftContains, villaElevatorSupportAt,
 } from './villaElevator.js';
 import {
   moveVillaPlayer, nearestVillaHotspot, villaFloor, villaRoomAt, villaSupportAt, villaCollides,
-  VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_ROOMS, VILLA_SPAWN, POOL, STAIR_HOLE,
+  VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_ROOMS, VILLA_SPAWN, POOL, STAIR_HOLE, PLAYER_RADIUS,
   EYE_HEIGHT, type VillaPosition, type VillaHotspot,
 } from './villaWorld.js';
 import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrouch, villaBodyHeight, villaEyeHeight } from './villaMotion.js';
@@ -84,6 +84,12 @@ export class VillaGame extends BaseGame {
   private toast = '';
   private toastUntil = 0;
   private toastTarget = '';
+  /** A blocked door swings only after the player backs off to a clear spot. */
+  private doorStepBack: { from: VillaPosition; to: VillaPosition; at: number; seconds: number } | null = null;
+  private doorStepBackVehicle: VillaRoadVehicle = 'car';
+  private doorStepBackLeaving = false;
+  /** Set once a step-back has cleared this vehicle's door for the current access. */
+  private doorClearedVehicle: VillaRoadVehicle | null = null;
   private visited = new Set<string>();
   private lastLang: boolean | null = null;
   private oldAriaLabel: string | null = null;
@@ -154,7 +160,7 @@ export class VillaGame extends BaseGame {
     this.terminal?.hide(); this.accessVehicle = 'car';
     try { const value = window.localStorage.getItem('carrick:villa:look-sensitivity'); if (value?.trim()) setVillaLookSensitivity(this.state.home, Number(value)); } catch { /* Optional, Villa-only preference. */ }
     this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
-    this.toast = ''; this.toastUntil = 0; this.toastTarget = ''; this.usePressedUntil = 0; this.visited = new Set(['garden']);
+    this.toast = ''; this.toastUntil = 0; this.toastTarget = ''; this.doorStepBack = null; this.usePressedUntil = 0; this.visited = new Set(['garden']);
     this.touchMode = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     if (!this.scene) {
       try { this.scene = new VillaScene(); this.unavailable = false; }
@@ -247,6 +253,7 @@ export class VillaGame extends BaseGame {
 
   private cancelCarAccess() {
     if (this.enterCarAt !== Infinity || this.exitCarAt !== Infinity || this.closeCarAt !== Infinity) this.setRoadDoor(this.accessVehicle, false);
+    this.doorStepBack = null; this.doorClearedVehicle = null;
     this.enterCarAt = this.exitCarAt = this.closeCarAt = Infinity;
   }
 
@@ -310,11 +317,34 @@ export class VillaGame extends BaseGame {
     if (this.shellOpen() || document.hidden) { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
     if (this.mapOpen || this.terminal?.visible || this.helpOpen) this.cancelCarAccess();
     if (this.transition && this.time - this.transition.at >= 0.45) this.transition = null;
+    // Blocked door: glide the player clear, then open on the frame it arrives.
+    if (this.doorStepBack) {
+      const step = this.doorStepBack, progress = Math.min(1, (this.time - step.at) / step.seconds);
+      const eased = progress * progress * (3 - 2 * progress);
+      const x = step.from.x + (step.to.x - step.from.x) * eased, z = step.from.z + (step.to.z - step.from.z) * eased;
+      this.position = { x, y: step.from.y + (step.to.y - step.from.y) * eased, z };
+      this.eyeY = this.position.y;
+      const vehicle = this.doorStepBackVehicle, leaving = this.doorStepBackLeaving;
+      if (progress >= 1) {
+        this.doorStepBack = null;
+        this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
+        // Stand back at the doorway so the normal automatic entry continues.
+        const stance = this.driverDoorStance(vehicle);
+        if (stance) { this.position = { ...stance }; this.eyeY = stance.y; }
+        else this.doorClearedVehicle = vehicle;
+        this.accessVehicle = vehicle; this.closeCarAt = Infinity; this.setRoadDoor(vehicle, true);
+        this.doorReadyAt = this.time + Math.max(.02, (1 - this.roadDoorProgress(vehicle)) * CAR_DOOR_SECONDS);
+        if (leaving) this.exitCarAt = this.doorReadyAt; else this.enterCarAt = this.doorReadyAt;
+        this.message(this.isZhLang() ? (leaving ? '位置让开了，正在开门下车…' : '位置让开了，正在开门…')
+          : (leaving ? 'Clear now. Opening the door…' : 'Clear now. Opening the door…'));
+      }
+      this.publishState();
+    }
     const access = this.accessVehicle;
     if (this.time >= this.closeCarAt) { this.setRoadDoor(access, false); this.closeCarAt = Infinity; }
     if (this.time >= this.enterCarAt && this.roadDoorProgress(access) === 1) {
       this.enterCarAt = Infinity;
-      if (!this.state.seated && this.atDriverDoor(access) && this.roadExitClear(access)) this.takeSeat(access);
+      if (!this.state.seated && (this.atDriverDoor(access) || this.doorClearedVehicle === access) && this.roadExitClear(access)) this.takeSeat(access);
       else { this.setRoadDoor(access, false); this.message(this.isZhLang() ? '上车通道被挡住了，请重新靠近驾驶位。' : 'The entry is obstructed. Approach the driver door again.'); }
     }
     if (this.time >= this.exitCarAt && this.roadDoorProgress(access) === 1) { this.exitCarAt = Infinity; this.leaveSeat(); }
@@ -567,9 +597,15 @@ export class VillaGame extends BaseGame {
     }
     if (this.inElevator()) {
       const w = (this.touchMode ? 46 : 64) * s, gap = 8 * s;
-      for (let floor = 0; floor < 3; floor++) buttons.push({ id: `elevator-${floor}`, label: `${floor + 1}F`,
-        x: (this.width - 3 * w - 2 * gap) / 2 + floor * (w + gap),
-        y: this.touchMode ? top + (secondRow ? 108 : 52) * s : this.height - 124 - safe.bottom, w, h: 44 * s });
+      // Two rows: floor buttons with the highest floor on top, then the door
+      // open/close buttons, so the panel reads like a real car operating panel.
+      const rowY = this.touchMode ? top + (secondRow ? 108 : 52) * s : this.height - 180 - safe.bottom;
+      const floors = [2, 1, 0];
+      floors.forEach((floor, column) => buttons.push({ id: `elevator-${floor}`, label: `${floor + 1}F`,
+        x: (this.width - 3 * w - 2 * gap) / 2 + column * (w + gap), y: rowY, w, h: 44 * s }));
+      const doorY = rowY + 50 * s;
+      buttons.push({ id: 'elevator-open', label: zh ? '开门' : 'Open', x: this.width / 2 - w - gap / 2, y: doorY, w, h: 44 * s });
+      buttons.push({ id: 'elevator-close', label: zh ? '关门' : 'Close', x: this.width / 2 + gap / 2, y: doorY, w, h: 44 * s });
     }
     return buttons;
   }
@@ -597,6 +633,8 @@ export class VillaGame extends BaseGame {
   }
 
   private activate(id: string) {
+    if (id === 'elevator-open') { this.controlElevatorDoor(true); return; }
+    if (id === 'elevator-close') { this.controlElevatorDoor(false); return; }
     if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
     switch (id) {
       case 'terminal': this.setTerminal(!this.terminal?.visible); break;
@@ -753,12 +791,104 @@ export class VillaGame extends BaseGame {
     this.publishState();
   }
 
-  private atDriverDoor(id: VillaRoadVehicle = 'car'): boolean {
-    // Stand outside the complete door swing, not beside the fender or B-pillar.
-    const car = this.roadState(id), dx = this.position.x - car.x, dz = this.position.z - car.z;
+  private controlElevatorDoor(open: boolean) {
+    const zh = this.isZhLang(), lift = this.state.elevator;
+    if (this.state.seated || this.transition || this.motion.offset > .001 || this.motion.velocity) return;
+    if (open && villaElevatorDoorwayObstructed(this.position, lift)) {
+      this.message(zh ? '门口有人，暂时无法关门。' : 'Someone is in the doorway.'); return;
+    }
+    if (!requestVillaElevatorDoor(lift, open)) {
+      this.message(zh ? (lift.phase === 'moving' ? '电梯运行中，请稍候。' : '门已经关好了。') : (lift.phase === 'moving' ? 'Please wait for the elevator.' : 'The doors are already closed.'));
+      this.publishState(); return;
+    }
+    this.clearInput();
+    this.message(zh ? (open ? '正在开门。' : '正在关门。') : (open ? 'Opening the doors.' : 'Closing the doors.'));
+    this.publishState();
+  }
+
+  /** How far the player is from the driver door, and how far along its face. */
+  private driverDoorOffset(id: VillaRoadVehicle, at?: VillaPosition): { along: number; lateral: number; height: number } {
+    const from = at ?? this.position;
+    const car = this.roadState(id), dx = from.x - car.x, dz = from.z - car.z;
     const x = dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw), z = dx * Math.sin(car.yaw) + dz * Math.cos(car.yaw);
-    return x >= (id === 'pickup' ? 2.68 : 2.28) && x <= 3.35 && Math.abs(z - (id === 'pickup' ? -.3 : .15)) <= .48
-      && Math.abs(this.groundPosition().y - this.roadAnchors(id).exit.y) < .3;
+    // VILLA_CAR.door is a world anchor while the pickup's is already an offset
+    // from its bay centre, so compare in the vehicle's own local frame.
+    const hinge = id === 'pickup'
+      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
+      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    return { along: z - hinge.z, lateral: x - hinge.x,
+      height: Math.abs(this.groundPosition().y - this.roadAnchors(id).exit.y) };
+  }
+  /** Standing anywhere in front of the driver door counts, so the player does
+   * not have to hunt for one exact spot. A door that would be blocked first
+   * moves the player back to a clear spot instead of refusing outright. */
+  private atDriverDoor(id: VillaRoadVehicle = 'car', at?: VillaPosition): boolean {
+    const offset = this.driverDoorOffset(id, at);
+    // The arc starts just inside the body and must reach the vehicle's own
+    // standing exit, which the wider pickup places further from its hinge.
+    return offset.lateral >= -.35 && offset.lateral <= 2.9 && Math.abs(offset.along) <= 1.6 && offset.height < .4;
+  }
+  /** The nearest spot that still counts as standing at the driver doorway, so a
+   * blocked swing only needs the shortest possible step before the door opens. */
+  private driverDoorStance(id: VillaRoadVehicle): VillaPosition | null {
+    const anchors = this.roadAnchors(id), car = this.roadState(id), offset = this.driverDoorOffset(id);
+    const cos = Math.cos(car.yaw), sin = Math.sin(car.yaw);
+    const local = (x: number, z: number): VillaPosition => ({
+      x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
+    });
+    const hinge = id === 'pickup'
+      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
+      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    const candidates: VillaPosition[] = [];
+    if (anchors.exits[0]) candidates.push(anchors.exits[0]);
+    // Offsets are from the vehicle centre, so the hinge offset is added here.
+    for (const out of [0, .25, .5, .8, 1.1, 1.5]) for (const slide of [offset.along, 0, .35, -.35, .7, -.7, 1.05, -1.05])
+      candidates.push(local(hinge.x + offset.lateral + out, hinge.z + slide));
+    for (const candidate of candidates) if (this.atDriverDoor(id, candidate) && this.canFit(1.75, candidate)) return { ...candidate };
+    return null;
+  }
+  /** Where the driver can stand so the door misses them: a real probe of the
+   * scene and the vehicle boxes, searched outward from wherever they already are. */
+  private stepBackFromDriverDoor(id: VillaRoadVehicle): VillaPosition | null {
+    if (!this.scene) return null;
+    const anchors = this.roadAnchors(id), offset = this.driverDoorOffset(id);
+    const car = this.roadState(id), cos = Math.cos(car.yaw), sin = Math.sin(car.yaw);
+    const local = (x: number, z: number): VillaPosition => ({
+      x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
+    });
+    const hinge = id === 'pickup'
+      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
+      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    const nearest = Math.max(0, offset.lateral), along = Math.max(-1.5, Math.min(1.5, offset.along));
+    const candidates: VillaPosition[] = [];
+    // Straight out from the car's side first: it is the shortest clear move and
+    // it never crosses the very obstruction that made the door blocked.
+    for (const out of [nearest, nearest + .25, nearest + .55, nearest + .9, .5, 1, 1.5, 2.1, 2.7])
+      candidates.push(local(out, hinge.z + along));
+    for (const out of [nearest + .2, nearest + .6, 1, 1.5, 2.1])
+      for (const slide of [along + .45, along - .45, 0, .8, -.8, 1.3, -1.3])
+        candidates.push(local(out, hinge.z + slide));
+    if (anchors.exits[0]) candidates.push(anchors.exits[0]);
+    if (anchors.exits[1]) candidates.push(anchors.exits[1]);
+    const height = 1.75, obstacles = this.roadObstacles(id);
+    const standing = (p: VillaPosition) => {
+      if (Math.abs(p.y - anchors.exit.y) > .3) return false;
+      const support = this.supportAt(p.x, p.z, p.y, height);
+      return support != null && Math.abs(support - p.y) <= .12 && this.canFit(height, p);
+    };
+    // The door swings out and forward from its hinge; standing beyond the tip
+    // clears the whole arc even when the exact route has been walled in.
+    const clearOfSwing = (p: VillaPosition) => {
+      const tip = local(hinge.x + .82, hinge.z + .34);
+      return Math.hypot(p.x - tip.x, p.z - tip.z) > .5;
+    };
+    let best: VillaPosition | null = null, bestDistance = Infinity;
+    for (const candidate of candidates) {
+      if (!standing(candidate) || !clearOfSwing(candidate)) continue;
+      const distance = Math.hypot(candidate.x - this.position.x, candidate.z - this.position.z);
+      if (distance < bestDistance) { best = candidate; bestDistance = distance; }
+    }
+    return best ? { ...best } : null;
   }
 
   /** Exempt only the selected cushion; walls, tables and other chairs still block entry. */
@@ -781,11 +911,18 @@ export class VillaGame extends BaseGame {
     if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
     if (this.state.outdoor.camping.carried) { this.message(zh ? '请先放下露营椅。' : 'Put the camping chair down first.'); return; }
     if (Math.abs(this.roadState(id).speed) > .12) { this.message(zh ? '请先刹停，再打开车门。' : 'Stop the car before opening the door.'); return; }
-    if (!leaving && (!this.atDriverDoor(id) || !this.approachClear(this.roadAnchors(id).exit))) {
-      this.message(zh ? '请稍微后退，站到驾驶位车门外侧再互动。' : 'Step back to the outside of the driver doorway before entering.'); return;
+    if (!leaving && !this.atDriverDoor(id)) {
+      this.message(zh ? '请走到驾驶位车门旁再上车。' : 'Walk up to the driver door to get in.'); return;
     }
     if (!(leaving ? this.roadSafeExit(id) : this.roadExitClear(id))) {
-      this.message(zh ? '车门通道被挡住了，请换个空旷位置。' : 'The doorway is obstructed. Reposition in a clear space.'); return;
+      // The swing is blocked: back the player off to a clear spot first, then
+      // open. Only a genuinely sealed bay has no such spot.
+      const spot = this.stepBackFromDriverDoor(id);
+      if (!spot) {
+        this.message(zh ? '车门完全被挡住了，请把车挪到空旷位置。' : 'The door has no room to open. Move the vehicle to a clear space.'); return;
+      }
+      this.beginDoorStepBack(spot, id, leaving);
+      return;
     }
     if (this.accessVehicle !== id) this.cancelCarAccess();
     this.clearInput(); this.accessVehicle = id; this.closeCarAt = Infinity; this.setRoadDoor(id, true);
@@ -794,6 +931,17 @@ export class VillaGame extends BaseGame {
     this.message(zh ? (leaving ? '正在开门，下车后会自动关门…' : '正在开门，随后自动坐进驾驶位…')
       : (leaving ? 'Opening the door. Step out, then it closes automatically…' : 'Opening the door, then taking the driver seat automatically…'));
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw); this.publishState();
+  }
+
+  /** Glide the player clear of the blocked swing, then run the normal door
+   * sequence, so the player sees the character step back instead of a refusal. */
+  private beginDoorStepBack(spot: VillaPosition, id: VillaRoadVehicle, leaving: boolean) {
+    const from = this.groundPosition();
+    this.clearInput(); this.transition = null;
+    this.doorStepBack = { from: { ...from }, to: { ...spot }, at: this.time, seconds: .45 };
+    this.doorStepBackLeaving = leaving; this.doorStepBackVehicle = id;
+    this.message(this.isZhLang() ? '车门会挡住，先退开一点再开门。' : 'The door would be blocked, so step back first.');
+    this.publishState();
   }
 
   private toggleCampingCarry() {
@@ -993,6 +1141,7 @@ export class VillaGame extends BaseGame {
       }
       else if (this.mapOpen && ['1', '2', '3'].includes(key)) this.mapFloor = Number(key) - 1;
       else if (!this.helpOpen && ['1', '2', '3'].includes(key) && this.inElevator()) this.selectElevatorFloor(Number(key) - 1);
+      else if (!this.helpOpen && (key === 'o' || key === 'k') && this.inElevator()) this.controlElevatorDoor(key === 'o');
       else if (key === 'p') { e.preventDefault(); this.activate('terminal'); }
       else if (key === 'm') this.activate('map');
       else if (key === 't') this.activate('time');

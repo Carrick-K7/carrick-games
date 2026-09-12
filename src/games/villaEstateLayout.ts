@@ -25,6 +25,14 @@ export const VILLA_ESTATE_BUILDINGS = [
   { id: 'house', minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
   { id: 'garage', ...VILLA_GARAGE_EXTENT },
 ] as const;
+/** One convex rectangle covering the house and the garage plus the 0.2 m slab
+ * overhang. The lawn mesh is cut away here so the interior floor slabs and the
+ * lift car floor never share a plane with the terrain (z-fighting). */
+export const VILLA_BUILDING_FOOTPRINT = { minX: -12.2, maxX: 34.8, minZ: -9.2, maxZ: 9.2 } as const;
+/** The core (stairs + lift) was widened east in 1.1.0: the interior east wall
+ * moved from x=12 to x=16 so the stair aisle, the lift lobby and every east
+ * room gained real walking clearance. Shared datum for world, rooms and decor. */
+export const VILLA_EAST_WALL = { inner: 16, outer: 16.2 } as const;
 /** Fence runs live just beyond support bounds, so they never bisect the old
  * garden or expanded garage. Parent samples rail/post Y with terrainHeight. */
 export const VILLA_ESTATE_FENCE_SEGMENTS = [

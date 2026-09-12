@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaEstateFence, createVillaTerrainGeometry } from '../../src/games/villaTerrainModel.js';
-import { VILLA_ESTATE_BOUNDS as BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, villaTerrainHeight, villaTerrainNormal } from '../../src/games/villaEstateLayout.js';
+import { VILLA_BUILDING_FOOTPRINT, VILLA_ESTATE_BOUNDS as BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, villaTerrainHeight, villaTerrainNormal } from '../../src/games/villaEstateLayout.js';
 import { POOL } from '../../src/games/villaWorld.js';
 
 type P = { x: number; y: number; z: number };
@@ -84,9 +84,19 @@ describe('Villa sampled terrain mesh and exact water openings', () => {
     expect(closest, `normalized squared pond clearance=${closest}; triangle=${JSON.stringify(worst)}`).toBeGreaterThanOrEqual(1 - 2e-6);
     expect(at(VILLA_POND.x, VILLA_POND.z)).toHaveLength(0);
   });
+  it('keeps the lawn completely out of the building footprint', () => {
+    // A flat lawn under the house shares a plane with the interior slabs and the
+    // lift car floor, which flickers at thresholds and makes the lift look grassy.
+    const inside = (x: number, z: number) => x > VILLA_BUILDING_FOOTPRINT.minX + 1e-6 && x < VILLA_BUILDING_FOOTPRINT.maxX - 1e-6
+      && z > VILLA_BUILDING_FOOTPRINT.minZ + 1e-6 && z < VILLA_BUILDING_FOOTPRINT.maxZ - 1e-6;
+    expect(triangles.filter(t => t.every(p => inside(p.x, p.z)))).toEqual([]);
+    // Lift car, lift sill, gaming threshold, garage bay and workshop: no lawn.
+    for (const [x, z] of [[0, 0], [4.55, -5.8], [3.0, 4.4], [16.2, -2.6], [30, -4]]) expect(at(x, z)).toHaveLength(0);
+  });
   it('retains outside support across estate bounds, grid seams and right up to the water margins', () => {
     const samples: [number, number][] = [];
-    for (let x = BOUNDS.minX + 0.123; x <= BOUNDS.maxX; x += 2.13) for (let z = BOUNDS.minZ + 0.217; z <= BOUNDS.maxZ; z += 3.17) if (!inPool(x, z) && !inPond(x, z)) samples.push([x, z]);
+    const inBuilding = (x: number, z: number) => x > VILLA_BUILDING_FOOTPRINT.minX && x < VILLA_BUILDING_FOOTPRINT.maxX && z > VILLA_BUILDING_FOOTPRINT.minZ && z < VILLA_BUILDING_FOOTPRINT.maxZ;
+    for (let x = BOUNDS.minX + 0.123; x <= BOUNDS.maxX; x += 2.13) for (let z = BOUNDS.minZ + 0.217; z <= BOUNDS.maxZ; z += 3.17) if (!inPool(x, z) && !inPond(x, z) && !inBuilding(x, z)) samples.push([x, z]);
     for (const x of [BOUNDS.minX + 0.001, BOUNDS.maxX - 0.001]) for (const z of [BOUNDS.minZ + 0.001, 0, 61.5, 121, BOUNDS.maxZ - 0.001]) samples.push([x, z]);
     for (const x of [POOL.minX - 0.01, POOL.maxX + 0.01]) for (let z = POOL.minZ; z <= POOL.maxZ; z += 0.7) samples.push([x, z]);
     for (const z of [POOL.minZ - 0.01, POOL.maxZ + 0.01]) for (let x = POOL.minX; x <= POOL.maxX; x += 0.7) samples.push([x, z]);

@@ -91,6 +91,23 @@ export function villaElevatorSupportAt(state: VillaElevatorState, x: number, z: 
     && x >= e.carMinX && x <= e.carMaxX && z >= e.carMinZ && z <= e.carMaxZ ? state.y : null;
 }
 
+/**
+ * Car-panel door buttons. Opening a set of doors never changes the destination;
+ * closing shuts them early without cancelling the selected floor.
+ */
+export function requestVillaElevatorDoor(state: VillaElevatorState, open: boolean): boolean {
+  if (state.phase === 'moving') return false;
+  if (open) {
+    state.target = state.floor;
+    if (state.phase !== 'opening' && state.phase !== 'open') state.phase = 'opening';
+    state.idleFor = 0;
+    return true;
+  }
+  if (state.phase === 'closing' || state.phase === 'closed') return false;
+  state.riding = false; state.phase = 'closing'; state.idleFor = 0;
+  return true;
+}
+
 /** Permanent enclosure plus three mutable safety gates; never expose an empty shaft. */
 export function createVillaElevatorColliders(): { colliders: VillaCollider[]; update(state: VillaElevatorState): void } {
   const e = VILLA_ELEVATOR, colliders: VillaCollider[] = [];

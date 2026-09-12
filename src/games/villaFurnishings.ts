@@ -352,18 +352,25 @@ export function furnishVilla(scene: THREE.Scene): {
   at(-4.05, 3.6, -5.65, 0, () => chair(sage, 'chair-guest')); at(-9.8, 3.6, -0.55, Math.PI, () => shelf(2.4)); plant(-3, 3.6, -8.1, 1.1);
   at(10.7, 3.6, 3.45, 0, () => shelf(1.9)); at(11.48, 3.6, 6.4, -Math.PI / 2, () => shelf(2.8)); at(6.9, 3.6, 6.9, -0.4, () => sofa(1.5, terra, false, 'sofa-library-east')); at(4.2, 3.6, 6.4, 0.4, () => sofa(1.4, linen, false, 'sofa-library-west'));
   at(5.5, 3.6, 5.6, 0, () => { table(1.25, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(5.7, 3.617, 6.3, 4.6, 0.028, 3.5, rugMat, 0); plant(3, 3.6, 8.1, 1.55); at(8.45, 3.6, 7.6, 0, () => lamp(true));
+  // 1.1.0 widened the reading wing east over the garage: a second study bay and
+  // a run of low bookcases fill the new floor rather than leaving a bare strip.
+  at(14.4, 3.6, 5.6, 0, () => { table(1.15, 0.75, 0.46); tea(0.3, 0.47, 0); books(-0.36, 0.47, 0, 3); });
+  at(13.4, 3.6, 6.9, 0.5, () => sofa(1.3, linen, false, 'sofa-library-bay'));
+  box(14.2, 3.617, 6.2, 3.1, 0.028, 3, rugMat, 0);
+  at(15.4, 3.6, 3.6, -Math.PI / 2, () => shelf(2.2)); at(15.4, 3.6, 7.9, -Math.PI / 2, () => shelf(2.2));
+  plant(12.6, 3.6, 8.1, 1.4); at(12.4, 3.6, 4.1, 0, () => lamp(true));
 
   // Bathroom/laundry, with an open tub basin and a metallic (non-render-target) mirror.
-  at(10, 3.6, -5.8, 0, () => {
+  at(10.6, 3.6, -5.8, 0, () => {
     box(0, 0.17, 0, 1.6, 0.34, 2.9, white, 0.16); for (const x of [-0.7, 0.7]) box(x, 0.44, 0, 0.2, 0.6, 2.8, white, 0.09); for (const z of [-1.3, 1.3]) box(0, 0.44, z, 1.38, 0.6, 0.2, white, 0.09);
     box(0, 0.24, 0, 1.32, 0.04, 2.43, water, 0.02); cyl(0.6, 0.88, -1.12, 0.025, 0.025, 0.6, brass); cyl(0.43, 1.17, -1.12, 0.025, 0.025, 0.34, brass, 0, Math.PI / 2); box(0, 0.77, 0.48, 1.63, 0.055, 0.3, oak); tea(0.25, 0.8, 0.48); hit(0, 0, 0, 1.65, 0.8, 2.95);
   });
-  at(11.35, 3.6, -1.65, -Math.PI / 2, () => {
+  at(14.2, 3.6, -1.65, -Math.PI / 2, () => {
     box(0, 0.42, 0, 1.9, 0.84, 0.85, oak); box(0, 0.89, 0, 2, 0.1, 0.94, white); cyl(0, 1.015, 0, 0.31, 0.23, 0.2, white); cyl(0, 1.12, 0, 0.24, 0.24, 0.007, stone); cyl(0, 1.13, -0.32, 0.022, 0.022, 0.42, brass); cyl(0, 1.34, -0.22, 0.022, 0.022, 0.2, brass, Math.PI / 2);
     box(0, 1.96, -0.39, 1.48, 1.38, 0.05, brass); box(0, 1.96, -0.355, 1.37, 1.27, 0.018, steel, 0.01);
     for (let i = 0; i < 3; i++) cyl(-0.7, 1 + i * 0.105, 0.06, 0.06, 0.06, 0.3, linen, Math.PI / 2); hit(0, 0, 0, 2, 0.97, 0.94);
   });
-  at(7.45, 3.6, -8.08, 0, () => {
+  at(9.4, 3.6, -8.08, 0, () => {
     box(0, 0.47, 0, 1.1, 0.94, 1, white); cyl(0, 0.44, 0.516, 0.34, 0.34, 0.05, steel, Math.PI / 2); cyl(0, 0.44, 0.548, 0.26, 0.26, 0.025, black, Math.PI / 2); box(0, 1.01, 0, 1.22, 0.09, 1.08, oak); for (let i = 0; i < 3; i++) box(0.1, 1.1 + i * 0.09, 0, 0.64, 0.085, 0.5, i % 2 ? sage : linen, 0.03); hit(0, 0, 0, 1.22, 1.06, 1.1);
   });
 
@@ -377,6 +384,15 @@ export function furnishVilla(scene: THREE.Scene): {
     legs(1.65, 0.85, 0.77, black, 0.045); box(0, 0.63, 0, 1.5, 0.45, 0.78, black, 0.06); box(0, 1.04, 0, 1.6, 0.42, 0.86, steel, 0.17); box(0, 1.1, 0.47, 0.67, 0.035, 0.055, black);
     for (const x of [-0.5, 0, 0.5]) cyl(x, 0.77, 0.42, 0.045, 0.045, 0.04, brass, Math.PI / 2); for (const x of [-1.06, 1.06]) box(x, 0.86, 0, 0.5, 0.07, 0.76, oak); hit(0, 0, 0, 2.62, 1.27, 0.93);
   });
+  // East roof lounge: the table sits against the south parapet so the walking
+  // route from the pavilion to the lounge stays open.
+  at(14.4, 7.2, 4.3, 0, () => {
+    table(1.5, 0.95, 0.43); tea(0.4, 0.44, 0); tea(-0.4, 0.44, 0); plant(0, 0.44, 0.18, 0.38, true);
+    at(0, 0, -1.45, 0, () => chair(sage, 'chair-roof-east-1'));
+    at(0, 0, 1.45, Math.PI, () => chair(sage, 'chair-roof-east-2'));
+    hit(0, 0, 0, 1.35, 0.9, 1.35);
+  });
+  box(14, 7.217, 7.4, 3.4, 0.028, 2.8, rugMat, 0);
   for (const [x, z] of [[-10.8, 7.9], [-3, 7.9], [10.7, 7.9], [10.7, -8], [-10.6, -7.9], [-3, -7.9]]) plant(x, 7.2, z, 1.3, true);
 
   // Garage workshop; the hollow, opening-door sedan lives in villaVehicle.

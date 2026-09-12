@@ -1,8 +1,10 @@
 import { VILLA_SNOOKER } from './villaActivities.js';
 
+/** Leather aperture radius: the mouth a ball falls through, in metres. */
+export const VILLA_SNOOKER_APERTURE_RADIUS = 0.078;
 export const VILLA_SNOOKER_BALL_RADIUS = 0.02625;
-/** Physics captures the ball centre here; the leather aperture is wider. */
-export const VILLA_SNOOKER_POCKET_CAPTURE_RADIUS = 0.064;
+/** Legacy alias: the physics capture radius is now the real leather aperture. */
+export const VILLA_SNOOKER_POCKET_CAPTURE_RADIUS = VILLA_SNOOKER_APERTURE_RADIUS;
 const R = VILLA_SNOOKER_BALL_RADIUS;
 const X = VILLA_SNOOKER.playingWidth / 2;
 const Z = VILLA_SNOOKER.playingLength / 2;
@@ -10,6 +12,20 @@ export const VILLA_SNOOKER_POCKETS = [
   { x: -X, z: -Z }, { x: X, z: -Z }, { x: -0.9, z: 0 },
   { x: 0.9, z: 0 }, { x: -X, z: Z }, { x: X, z: Z },
 ] as const;
+/** True when a ball centre at (x, z) is inside a pocket's mouth. The leather
+ * aperture is wider than one capture circle, and a cushion pocket's mouth also
+ * extends just behind the cushion line, so a ball arriving at an angle is
+ * swallowed instead of rebounding off the jaw. Physics and the aim guide share
+ * this single test. */
+export function villaSnookerPocketContains(x: number, z: number): boolean {
+  for (const p of VILLA_SNOOKER_POCKETS) {
+    const dx = x - p.x, dz = z - p.z;
+    if (Math.hypot(dx, dz) < VILLA_SNOOKER_APERTURE_RADIUS) return true;
+    if (p.z === 0 ? Math.abs(dx) < VILLA_SNOOKER_APERTURE_RADIUS && Math.abs(dz) < R * 2
+      : Math.abs(dz) < VILLA_SNOOKER_APERTURE_RADIUS && Math.abs(dx) < R * 2) return true;
+  }
+  return false;
+}
 export type VillaSnookerColor = 'yellow' | 'green' | 'brown' | 'blue' | 'pink' | 'black';
 export type VillaSnookerTarget = 'red' | 'color' | VillaSnookerColor;
 export interface VillaSnookerBall {
@@ -111,7 +127,13 @@ export function getVillaSnookerTrajectory(state: VillaSnookerState, active = tru
       z: tz <= tx + GUIDE_EPSILON ? -Math.sign(direction.z) : 0,
     } };
     for (let i = 0; i < VILLA_SNOOKER_POCKETS.length; i++) {
-      const d = circleDistance(origin, direction, VILLA_SNOOKER_POCKETS[i], VILLA_SNOOKER_POCKET_CAPTURE_RADIUS);
+      const p = VILLA_SNOOKER_POCKETS[i];
+      // The guide must reach the same mouth the physics swallows: a cushion
+      // pocket is entered along its cushion line, so that leg of the cross uses
+      // the full ball width instead of the aperture circle alone.
+      const alongCushion = p.z === 0 ? Math.abs(direction.z) > Math.abs(direction.x) : Math.abs(direction.x) > Math.abs(direction.z);
+      const radius = alongCushion ? R * 2 : VILLA_SNOOKER_APERTURE_RADIUS;
+      const d = circleDistance(origin, direction, p, radius);
       if (d <= distance) { distance = d; collision = { kind: 'pocket', pocketIndex: i }; }
     }
     for (const ball of live) {
@@ -252,8 +274,10 @@ export function advanceVillaSnooker(state: VillaSnookerState, dt: number): void 
     for (const b of state.balls) {
       if (b.potted) continue;
       b.x += b.vx * step; b.z += b.vz * step;
-      // Ball centre crossing the aperture's safe inner radius falls into the pocket.
-      if (VILLA_SNOOKER_POCKETS.some(p => Math.hypot(b.x - p.x, b.z - p.z) < VILLA_SNOOKER_POCKET_CAPTURE_RADIUS)) {
+      // A pocket swallows the ball as soon as its centre reaches the mouth: the
+      // leather opening is wider than a single capture circle, so a ball arriving
+      // at an angle must never rebound off the cushion jaw before it is captured.
+      if (villaSnookerPocketContains(b.x, b.z)) {
         b.potted = true; b.vx = b.vz = 0;
         if (state.shot && !state.shot.pots.includes(b.id)) state.shot.pots.push(b.id);
         continue;

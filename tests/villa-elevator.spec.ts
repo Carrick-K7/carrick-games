@@ -83,6 +83,43 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
   await test.info().attach('elevator-roof-cabin', { body: Buffer.from(result.cabinImage.split(',')[1], 'base64'), contentType: 'image/png' });
 });
 
+test('villa car panel lists floors top-first and drives real open/close buttons', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/#/snake');
+  const url = '/' + JSON.parse(readFileSync(join(process.cwd(), 'dist/.vite/manifest.json'), 'utf8'))['src/games/villa.ts'].file;
+  const result = await page.evaluate(async url => {
+    const { VillaGame } = await import(url);
+    const canvas = document.createElement('canvas'); document.body.append(canvas);
+    const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
+      isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;
+    game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
+    const panel = () => game.buttons().filter((b: any) => b.id.startsWith('elevator-'));
+    game.state.elevator.riding = true; game.state.elevator.phase = 'open'; game.state.elevator.door = 1;
+    game.position = { x: 4.55, y: 0, z: -5.8 }; game.eyeY = 0;
+    const buttons = panel().map((b: any) => ({ id: b.id, label: b.label, x: b.x, y: b.y, w: b.w, h: b.h }));
+    const floors = buttons.slice(0, 3), doors = buttons.slice(3);
+    const topFirst = buttons.map((b: any) => b.id).join(',') === 'elevator-2,elevator-1,elevator-0,elevator-open,elevator-close';
+    const oneRow = floors.every((b: any) => b.y === floors[0].y) && doors[0].y > floors[0].y;
+    const ordered = floors.map((b: any) => b.x).every((x: number, i: number) => i === 0 || x > floors[i - 1].x);
+    const bigEnough = buttons.every((b: any) => Math.min(b.w, b.h) >= 44);
+    // Real clicks on the painted panel: a manual floor starts a trip, Close shuts the doors early.
+    const hit = (id: string) => { const b = panel().find((x: any) => x.id === id); game.activate(id); return !!b; };
+    hit('elevator-2');
+    const called = game.state.elevator.target === 2;
+    game.state.elevator.phase = 'open'; game.state.elevator.door = 1; game.state.elevator.target = game.state.elevator.floor;
+    hit('elevator-close');
+    const closed = game.state.elevator.phase === 'closing';
+    hit('elevator-open');
+    const opened = game.state.elevator.phase === 'opening' || game.state.elevator.phase === 'open';
+    game.destroy(); canvas.remove();
+    return { topFirst, oneRow, ordered, bigEnough, called, closed, opened, labels: buttons.map((b: any) => b.label) };
+  }, url);
+  expect(result.labels).toEqual(['3F', '2F', '1F', 'Open', 'Close']);
+  for (const flag of ['topFirst', 'oneRow', 'ordered', 'bigEnough', 'called', 'closed', 'opened'] as const) expect(result[flag], flag).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {
   test.setTimeout(60_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

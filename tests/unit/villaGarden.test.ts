@@ -163,7 +163,7 @@ describe('authored villa garden', () => {
       expect(markers[i].position.y).toBe(7.2);
       const c = colliders[10 + i];
       expect(c.minY).toBe(7.2); expect(c.maxY).toBeCloseTo(7.63);
-      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(11.9);
+      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(15.9);
       expect(c.minZ).toBeGreaterThan(-8.9); expect(c.maxZ).toBeLessThan(8.9);
       expect(Math.abs(p.x) > 10 || Math.abs(p.z) > 7.7).toBe(true);
       keepClear.forEach(r => expect(overlaps(c, r, 0.23)).toBe(false));

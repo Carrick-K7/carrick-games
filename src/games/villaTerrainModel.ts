@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
 import { POOL, type VillaCollider } from './villaWorld.js';
-import { VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, VILLA_POND_BOUNDS, villaTerrainHeight, villaTerrainNormal } from './villaEstateLayout.js';
+import { VILLA_BUILDING_FOOTPRINT, VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, VILLA_POND_BOUNDS, villaTerrainHeight, villaTerrainNormal } from './villaEstateLayout.js';
 
 type Point = { x: number; z: number };
 function halfPlane(points: readonly Point[], a: Point, b: Point, inside: boolean): Point[] {
@@ -42,9 +42,13 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
     return { x: VILLA_POND.x + Math.cos(angle) * VILLA_POND.radiusX * scale, z: VILLA_POND.z + Math.sin(angle) * VILLA_POND.radiusZ * scale };
   });
   const pool = rect(POOL);
+  // The lawn must not run under the house or garage: its flat interior surface
+  // is exactly coplanar with the interior slabs and the lift car floor, which
+  // z-fights (a flickering threshold and a grass-looking lift floor).
+  const buildings = rect(VILLA_BUILDING_FOOTPRINT);
   const grid = (min: number, max: number, extra: number[]) => [...new Set([min, max, ...Array.from({ length: Math.ceil(max - min) }, (_, i) => min + i), ...extra])].filter(v => v >= min && v <= max).sort((a, b) => a - b);
-  const xs = grid(bounds.minX, bounds.maxX, [POOL.minX, POOL.maxX]);
-  const zs = grid(bounds.minZ, bounds.maxZ, [POOL.minZ, POOL.maxZ]);
+  const xs = grid(bounds.minX, bounds.maxX, [POOL.minX, POOL.maxX, VILLA_BUILDING_FOOTPRINT.minX, VILLA_BUILDING_FOOTPRINT.maxX]);
+  const zs = grid(bounds.minZ, bounds.maxZ, [POOL.minZ, POOL.maxZ, VILLA_BUILDING_FOOTPRINT.minZ, VILLA_BUILDING_FOOTPRINT.maxZ]);
   const append = (p: Point) => {
     const normal = villaTerrainNormal(p.x, p.z);
     positions.push(p.x, villaTerrainHeight(p.x, p.z) - .022, p.z);
@@ -53,7 +57,7 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   for (let x = 0; x + 1 < xs.length; x++) for (let z = 0; z + 1 < zs.length; z++) {
     const cell = { minX: xs[x]!, maxX: xs[x + 1]!, minZ: zs[z]!, maxZ: zs[z + 1]! };
     let polygons = [rect(cell)];
-    for (const [hole, r] of [[pool, POOL], [pond, VILLA_POND_BOUNDS]] as const) {
+    for (const [hole, r] of [[buildings, VILLA_BUILDING_FOOTPRINT], [pool, POOL], [pond, VILLA_POND_BOUNDS]] as const) {
       if (cell.maxX <= r.minX || cell.minX >= r.maxX || cell.maxZ <= r.minZ || cell.minZ >= r.maxZ) continue;
       polygons = polygons.flatMap(polygon => subtract(polygon, hole));
     }
@@ -70,7 +74,7 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(Array.from({ length: positions.length / 3 }, (_, i) => i));
   geometry.computeBoundingBox(); geometry.computeBoundingSphere();
-  geometry.userData = { gridMetres: 1, openings: ['pool', 'pond'], south: '+Z', north: '-Z' };
+  geometry.userData = { gridMetres: 1, openings: ['building', 'pool', 'pond'], south: '+Z', north: '-Z' };
   return geometry;
 }
 export function createVillaEstateFence(parent: THREE.Object3D, wood: THREE.Material): { colliders: VillaCollider[] } {

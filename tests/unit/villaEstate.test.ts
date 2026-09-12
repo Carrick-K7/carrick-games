@@ -65,7 +65,7 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
   it('integrates a single terrain lawn with genuine water holes and fence chunks outside the support boundary', () => {
     const geometry = createVillaTerrainGeometry(), scene = new THREE.Group(), wood = new THREE.MeshStandardMaterial(), fence = createVillaEstateFence(scene, wood);
     try {
-      expect(geometry.userData).toMatchObject({ gridMetres: 1, openings: ['pool', 'pond'] });
+      expect(geometry.userData).toMatchObject({ gridMetres: 1, openings: ['building', 'pool', 'pond'] });
       const positions = geometry.getAttribute('position');
       for (let i = 0; i < positions.count; i += 3) {
         let x = 0, z = 0;

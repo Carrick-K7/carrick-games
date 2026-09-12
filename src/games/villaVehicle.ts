@@ -447,7 +447,8 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       const target = state.carDoorOpen ? 1 : 0;
       if (time === 0 || (previousTime !== undefined && time < previousTime)) {
         const changed = moved || progress !== target;
-        progress = target; previousTime = time; doorPivot.rotation.y = -1.1 * smooth(progress); passengerPivot.rotation.y = 1.1 * smooth(progress); updateCollider(); return changed;
+        // Only the driver's door moves; the passenger door stays closed.
+        progress = target; previousTime = time; doorPivot.rotation.y = -1.1 * smooth(progress); passengerPivot.rotation.y = 0; updateCollider(); return changed;
       }
       const elapsed = previousTime === undefined ? 0 : Math.max(0, time - previousTime);
       previousTime = time;
@@ -458,7 +459,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       progress = next;
       const angle = -1.1 * smooth(progress);
       if (doorPivot.rotation.y === angle) return moved;
-      doorPivot.rotation.y = angle; passengerPivot.rotation.y = -angle;
+      doorPivot.rotation.y = angle; passengerPivot.rotation.y = 0;
       updateCollider();
       return true;
     },

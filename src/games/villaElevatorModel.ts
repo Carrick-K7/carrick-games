@@ -18,6 +18,8 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   const oak = villaMaterial('#b18a60', .64);
   const grain = villaMaterial('#95724f', .7);
   const stone = villaMaterial('#e3dacb', .57);
+  // Warm ceramic tile for the car floor, with a slightly darker grout tone.
+  const tile = villaMaterial('#d8cfc0', .42);
   const dark = villaMaterial('#302b26', .55, .3);
   const glass = new THREE.MeshStandardMaterial({
     color: '#dce7df', transparent: true, opacity: .12, roughness: .16,
@@ -35,17 +37,16 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const labels = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
-  // One atlas: top half is the dynamic floor display, lower eighths are button legends.
+  // One atlas: cell (0,0) is the dynamic floor display; the rest are button legends.
   const label = (b: VillaModelBuilder, row: number, x: number, y: number, z: number,
     width: number, height: number, yaw = 0) => {
     const g = new THREE.PlaneGeometry(width, height);
     const uv = g.getAttribute('uv');
-    const top = row === 0 ? 24 / 256 : .5 + (row - 1) / 8;
-    const span = row === 0 ? 80 / 256 : .125;
+    const top = row === 0 ? 0 : 32 / 256 + (row - 1) * 32 / 256;
+    const span = 32 / 256;
     for (let i = 0; i < uv.count; i++) {
-      // Crop each atlas cell around its text, retaining natural digit proportions
-      // and legibility without oversized font literals or extra textures.
-      uv.setX(i, .5 + (uv.getX(i) - .5) * (row === 0 ? 160 : 48) / 256);
+      // Crop each square atlas cell around its glyph, keeping natural proportions.
+      uv.setX(i, .5 + (uv.getX(i) - .5) * 12 / 256);
       uv.setY(i, 1 - top - (1 - uv.getY(i)) * span);
     }
     b.geometry(g, labels, [x, y, z], [0, yaw, 0]);
@@ -134,11 +135,28 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   // Rear-facing control station on the right front return, visible from inside.
   car.box(.823, 1.26, -5.17, .17, .59, .027, brushed, .006);
   label(car, 0, .823, 1.48, -5.184, .132, .063, Math.PI);
-  for (let floor = 0; floor < 3; floor++) {
-    const y = 1.31 - floor * .12;
-    car.cylinder(.823, y, -5.19, .037, .037, .018, bronze, [Math.PI / 2, 0, 0], 12);
-    label(car, floor + 1, .823, y, -5.2, .052, .04, Math.PI);
+  // Manual call panel: the top floor sits at the top, and the door buttons sit
+  // under the numbers, exactly like a real car operating panel.
+  for (let row = 0; row < 3; row++) {
+    const floor = 2 - row, y = 1.335 - row * .105;
+    car.cylinder(.823, y, -5.19, .034, .034, .018, bronze, [Math.PI / 2, 0, 0], 12);
+    label(car, floor + 1, .823, y, -5.2, .05, .038, Math.PI);
   }
+  // Door buttons: open (left arrow) and close (right arrow) under the numbers.
+  for (const [index, cell] of [[0, 5], [1, 6]] as const) {
+    const x = .823 + (index === 0 ? -.035 : .035);
+    car.cylinder(x, 1.02, -5.19, .027, .027, .016, brushed, [Math.PI / 2, 0, 0], 12);
+    label(car, cell, x, 1.02, -5.198, .038, .032, Math.PI);
+  }
+  // Tiled car floor: warm stone tiles with visible grout and a bronze threshold
+  // strip, so the cabin reads as a finished interior rather than bare ground.
+  const tiles = [1.86, .42, .42, .42, .42], tileDepth = 2.3 / 4;
+  for (let depth = 0; depth < 4; depth++) for (let across = 0; across < 5; across++) {
+    const x = -.93 + tiles[0] / 2 + (across === 0 ? 0 : tiles.slice(0, across).reduce((a, b) => a + b, 0) + across * .012);
+    const width = across === 0 ? tiles[0] : tiles[across];
+    car.box(x, .003, -6.25 - 1.15 + tileDepth / 2 + depth * tileDepth, width, .008, tileDepth - .012, tile, .0015);
+  }
+  car.box(0, .012, -5.155, 1.9, .006, .05, bronze, .002);
   const carDoors = makeDoors(car.root, 'elevator-car-door', 0, -5.114);
   car.finish();
 
@@ -155,15 +173,15 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     displayKey = key;
     ctx.fillStyle = '#302b26'; ctx.fillRect(0, 0, 256, 256);
     ctx.fillStyle = '#ffe9bc'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '500 56px Arial, sans-serif';
-    const arrow = state.phase === 'moving' ? (state.target > state.floor ? ' ↑' : ' ↓') : '';
-    ctx.fillText(`${state.floor + 1}${arrow}`, 128, 65);
-    ctx.font = '500 29px Arial, sans-serif';
-    for (let floor = 0; floor < 3; floor++) {
-      ctx.fillStyle = state.target === floor && state.phase !== 'closed' ? '#ffe0a0' : '#dfd4c1';
-      ctx.fillText(String(floor + 1), 128, 144 + floor * 32);
-    }
-    ctx.fillStyle = '#dfd4c1'; ctx.fillText('•', 128, 240);
+    ctx.font = '600 24px Arial, sans-serif';
+    const arrow = state.phase === 'moving' ? (state.target > state.floor ? '↑' : '↓') : '';
+    ctx.fillText(`${state.floor + 1}${arrow}`, 16, 17);
+    // Static button legends: floors 1..3, the call dot, and the door arrows.
+    ctx.font = '600 22px Arial, sans-serif';
+    const cell = (row: number, glyph: string) => ctx.fillText(glyph, 16 + (row % 8) * 32, 33 + Math.floor(row / 8) * 32 + 16);
+    for (let floor = 1; floor <= 3; floor++) cell(floor, String(floor));
+    ctx.fillStyle = '#ffd08a'; cell(4, '●');
+    ctx.fillStyle = '#9fdcb4'; cell(5, '◀'); cell(6, '▶');
     texture.needsUpdate = true;
   };
   return {

@@ -167,7 +167,7 @@ describe('Villa scenic road and vehicle transforms', () => {
     const alternate = villaCarAnchors(state).exits[1];
     expect(villaCarExitClear(state, vehicle.colliders, undefined, -1)).toBe(true);
     expect(villaCollides(alternate, vehicle.colliders, 1.75)).toBe(false);
-    expect(root.getObjectByName('vehicle-passenger-door')!.rotation.y).toBeCloseTo(1.1);
+    expect(root.getObjectByName('vehicle-passenger-door')!.rotation.y).toBe(0);
     const start = { x: exit.x + Math.cos(state.yaw), y: 0, z: exit.z - Math.sin(state.yaw) };
     const walked = moveVillaPlayer(start, exit.x - start.x, exit.z - start.z, vehicle.colliders);
     expect(walked.x).toBeCloseTo(exit.x); expect(walked.z).toBeCloseTo(exit.z);

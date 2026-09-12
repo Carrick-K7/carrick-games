@@ -31,9 +31,9 @@ export const VILLA_FLOWER_SPECIES = ['rose', 'lavender', 'daisy', 'tulip', 'hydr
 export const VILLA_ROOF_PLANTERS = [
   { x: -11, z: -5, y: 7.2, w: 0.72, d: 2.2, species: 'rose' },
   { x: -11, z: -1, y: 7.2, w: 0.72, d: 2.2, species: 'lavender' },
-  { x: 11, z: -3, y: 7.2, w: 0.72, d: 2.2, species: 'daisy' },
-  { x: 11, z: 1.5, y: 7.2, w: 0.72, d: 2.2, species: 'tulip' },
-  { x: 11, z: 5, y: 7.2, w: 0.72, d: 2.2, species: 'hydrangea' },
+  { x: 15, z: -3, y: 7.2, w: 0.72, d: 2.2, species: 'daisy' },
+  { x: 15, z: 1.5, y: 7.2, w: 0.72, d: 2.2, species: 'tulip' },
+  { x: 15, z: 5, y: 7.2, w: 0.72, d: 2.2, species: 'hydrangea' },
   { x: 0, z: 8.1, y: 7.2, w: 2.2, d: 0.72, species: 'sunflower' },
 ] as const;
 export const VILLA_VEGETABLE_SPECIES = ['tomato', 'lettuce', 'carrot', 'eggplant'] as const;

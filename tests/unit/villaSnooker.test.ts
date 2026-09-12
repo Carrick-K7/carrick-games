@@ -250,6 +250,27 @@ describe('Villa deterministic snooker assistance', () => {
     expect(Math.hypot(guide.bank!.to.x - guide.bank!.from.x, guide.bank!.to.z - guide.bank!.from.z)).toBeCloseTo(0.22 - R * 2);
     expect(Math.hypot(guide.bank!.to.x - s.balls[1].x, guide.bank!.to.z - s.balls[1].z)).toBeCloseTo(R * 2);
   });
+  it('swallows an angled pot at the mouth instead of rebounding off the jaw', () => {
+    const X = 1.778 / 2, Z = 3.569 / 2;
+    const cases: Array<[number, number, number, number, number]> = [
+      [0.9, -0.5, -X, -Z, 2.5], [0.5, -Z + R, -X, -Z + R, 1.6], [-0.2, -1.6, -X, -Z, 3.0], [0.2, -Z + R * 0.6, -X, -Z, 2.2],
+    ];
+    for (const [sx, sz, tx, tz, speed] of cases) {
+      const s = isolated('white', 'red-1');
+      const red = s.balls.find(b => b.id === 'red-1')!;
+      red.x = sx; red.z = sz;
+      const dx = tx - sx, dz = tz - sz, length = Math.hypot(dx, dz);
+      red.vx = dx / length * speed; red.vz = dz / length * speed;
+      s.shot = { target: 'red', first: null, pots: [], elapsed: 0 };
+      let potted = false;
+      for (let i = 0; i < 4000 && !potted; i++) {
+        advanceVillaSnooker(s, 1 / 120);
+        potted = red.potted;
+        if (!potted && red.vx === 0 && red.vz === 0) break;
+      }
+      expect(potted, `angled pot from ${sx},${sz}`).toBe(true);
+    }
+  });
   it('uses every actual pocket capture boundary without inventing cushion bounces at mouths', () => {
     for (const [i, p] of VILLA_SNOOKER_POCKETS.entries()) {
       const s = isolated('white'); s.balls[0].x = s.balls[0].z = 0; s.aim = Math.atan2(p.x, -p.z);

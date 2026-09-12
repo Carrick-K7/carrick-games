@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { VILLA_SNOOKER } from '../../src/games/villaActivities.js';
 import { createVillaSnooker, getVillaSnookerTrajectory, VILLA_SNOOKER_BALL_RADIUS as R, VILLA_SNOOKER_POCKETS } from '../../src/games/villaSnooker.js';
-import { createVillaSnookerModel, createVillaSnookerTable, VILLA_SNOOKER_APERTURE_RADIUS, VILLA_SNOOKER_GUIDE_HEIGHT } from '../../src/games/villaSnookerModel.js';
+import { createVillaSnookerModel, createVillaSnookerTable, VILLA_SNOOKER_GUIDE_HEIGHT } from '../../src/games/villaSnookerModel.js';
+import { VILLA_SNOOKER_APERTURE_RADIUS } from '../../src/games/villaSnooker.js';
 
 function dispose(root: THREE.Object3D) {
   const materials = new Set<THREE.Material>();
