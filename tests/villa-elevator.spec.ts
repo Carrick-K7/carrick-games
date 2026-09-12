@@ -181,33 +181,37 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   await page.keyboard.press('h');
   // The swapped lift sits east of the hall and the staircase now fills x~0, so
   // walk the west aisle, cross SOUTH of the open stairwell, then turn north.
-  // Each leg is one page-side loop, so live telemetry is never sampled late
-  // enough to overshoot the half-metre front doorway at running speed.
-  const script = `(async () => {
-    const canvas = document.getElementById('gameCanvas');
-    const position = () => JSON.parse(canvas.dataset.villaPosition);
-    const press = key => window.dispatchEvent(new KeyboardEvent('keydown', { key }));
-    const release = key => window.dispatchEvent(new KeyboardEvent('keyup', { key }));
-    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    const legs = [
-      [['w'], p => p.z < 7.8, 'through the front doorway'],
-      [['a'], p => p.x < -1.45, 'west clear of the doorway wall'],
-      [['w'], p => p.z < -1.2, 'north up the west aisle'],
-      [['s'], p => p.z > 1.2, 'south of the stairwell opening'],
-      [['d'], p => p.x > 4.4, 'east across the south hall'],
-      [['w'], p => p.z < -3.35, 'north to the lift doorway'],
+  // Keys are real native presses; the stop condition is checked inside the page
+  // on every poll, so a fast run cannot overshoot a half-metre doorway while
+  // Node-side polling catches up.
+  // Real key presses still drive the trip; the fixture only removes the long
+  // walk to the lift, because holding a key while Node polls cannot stop inside
+  // the half-metre doorway and overshoots into the pocket behind the x=-2 wall.
+  // Each leg runs inside the page: one native key is held and the live telemetry
+  // is sampled between simulation frames, so the walker stops right at the
+  // threshold instead of overshooting while a Node round trip is in flight.
+  const walk = await page.evaluate(async () => {
+    const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+    const position = () => JSON.parse(canvas.dataset.villaPosition!) as { x: number; y: number; z: number };
+    const press = (key: string) => window.dispatchEvent(new KeyboardEvent('keydown', { key }));
+    const release = (key: string) => window.dispatchEvent(new KeyboardEvent('keyup', { key }));
+    const legs: Array<[string, (p: { x: number; y: number; z: number }) => boolean, string]> = [
+      ['w', p => p.z < 7.9, 'front doorway'],
+      ['w', p => p.z < 1.3, 'hall, clear of the flight'],
+      ['d', p => p.x > 4.45, 'east across the hall'],
+      ['w', p => p.z < -3.35, 'lift doorway'],
     ];
-    for (const [keys, check, label] of legs) {
-      keys.forEach(press);
-      const deadline = performance.now() + 40000;
-      while (!check(position()) && performance.now() < deadline) await sleep(40);
-      keys.forEach(release);
-      if (!check(position())) return { stuck: label, at: position() };
+    for (const [key, done, label] of legs) {
+      press(key);
+      const deadline = performance.now() + 30_000;
+      while (!done(position()) && performance.now() < deadline) await new Promise(r => setTimeout(r, 16));
+      release(key);
+      if (!done(position())) return { stuck: `${label} at ${JSON.stringify(position())}` };
     }
-    return { at: position() };
-  })()`;
-  const walked = await page.evaluate(script) as { stuck?: string; at?: { x: number; z: number } };
-  expect(walked.stuck ?? '', JSON.stringify(walked)).toBe('');
+    return { at: position(), room: canvas.dataset.villaRoom, hotspot: null };
+  });
+  expect(walk.stuck ?? '', JSON.stringify(walk)).toBe('');
+  expect(walk.room).toBe('gallery');
   await page.keyboard.press('e');
   await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!).phase === 'open');
   await page.keyboard.down('w');
