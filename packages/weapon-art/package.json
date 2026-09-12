@@ -1,0 +1,10 @@
+{
+  "name": "@carrick/weapon-art",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./silhouettes": "./src/silhouettes.ts"
+  }
+}

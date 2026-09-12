@@ -1,0 +1,23 @@
+{
+  "id": "bubbleshooter",
+  "group": "puzzle",
+  "order": 13,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Bubble Shooter",
+  "nameZh": "泡泡龙",
+  "desc": "Aim from the bottom, match colors, and stop the bubble wall from reaching you.",
+  "descZh": "从底部瞄准发射,消除同色泡泡,阻止泡泡墙压到底部。",
+  "canvasSize": { "width": 420, "height": 620 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→"], "action": "Adjust aim", "actionZh": "调整瞄准" },
+      { "keys": ["A", "D"], "action": "Adjust aim", "actionZh": "调整瞄准" },
+      { "keys": ["Space", "Enter"], "action": "Fire / Restart", "actionZh": "发射 / 重新开始" }
+    ],
+    "touch": [
+      { "icon": "swipe", "action": "Drag to aim", "actionZh": "拖动瞄准" },
+      { "icon": "tap", "action": "Tap to fire / restart", "actionZh": "点击发射 / 重开" }
+    ]
+  }
+}

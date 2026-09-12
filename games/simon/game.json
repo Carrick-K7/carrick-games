@@ -1,0 +1,29 @@
+{
+  "id": "simon",
+  "group": "puzzle",
+  "order": 16,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Simon Says",
+  "nameZh": "西蒙记忆",
+  "desc": "Memorize the color sequence, repeat it, and keep up as the playback speeds up.",
+  "descZh": "记住颜色序列并快速重复,随着关卡提升节奏会越来越快。",
+  "canvasSize": { "width": 400, "height": 500 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["1", "R"], "action": "Red pad", "actionZh": "红色按键" },
+      { "keys": ["2", "B"], "action": "Blue pad", "actionZh": "蓝色按键" },
+      { "keys": ["3", "G"], "action": "Green pad", "actionZh": "绿色按键" },
+      { "keys": ["4", "Y"], "action": "Yellow pad", "actionZh": "黄色按键" }
+    ],
+    "keyboardPanel": [
+      { "label": "1", "key": "1", "aliases": ["r"], "classes": "simon-red", "hint": "R" },
+      { "label": "2", "key": "2", "aliases": ["b"], "classes": "simon-blue", "hint": "B" },
+      { "label": "3", "key": "3", "aliases": ["g"], "classes": "simon-green", "hint": "G" },
+      { "label": "4", "key": "4", "aliases": ["y"], "classes": "simon-yellow", "hint": "Y" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap a colored pad", "actionZh": "点击颜色按键" }
+    ]
+  }
+}

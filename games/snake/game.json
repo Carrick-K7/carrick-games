@@ -1,0 +1,22 @@
+{
+  "id": "snake",
+  "group": "casual",
+  "order": 2,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Snake",
+  "nameZh": "贪吃蛇",
+  "desc": "Classic arcade snake. Eat, grow, and avoid the walls.",
+  "descZh": "经典街机贪吃蛇。吃东西、变长、别撞墙。",
+  "canvasSize": { "width": 400, "height": 400 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "↑", "→", "↓"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["W", "A", "S", "D"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap sides to turn", "actionZh": "点击边缘转向" }
+    ]
+  }
+}

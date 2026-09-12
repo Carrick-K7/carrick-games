@@ -1,0 +1,24 @@
+{
+  "id": "parking",
+  "group": "casual",
+  "order": 1,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Parking",
+  "nameZh": "停车",
+  "desc": "Top-down parking challenge. Steer into the spot without crashing.",
+  "descZh": "俯视停车挑战。操控汽车驶入车位,不要撞到障碍物。",
+  "canvasSize": { "width": 400, "height": 520 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["↑", "W"], "action": "Accelerate", "actionZh": "加速" },
+      { "keys": ["↓", "S"], "action": "Brake / Reverse", "actionZh": "刹车 / 倒车" },
+      { "keys": ["←", "A"], "action": "Steer left", "actionZh": "向左转" },
+      { "keys": ["→", "D"], "action": "Steer right", "actionZh": "向右转" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap top/bottom/left/right zones to drive", "actionZh": "点击上/下/左/右区域驾驶" }
+    ]
+  }
+}

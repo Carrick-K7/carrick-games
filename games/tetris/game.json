@@ -1,0 +1,28 @@
+{
+  "id": "tetris",
+  "group": "puzzle",
+  "order": 14,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Tetris",
+  "nameZh": "俄罗斯方块",
+  "desc": "The legendary falling blocks puzzle.",
+  "descZh": "传奇下落方块益智游戏。",
+  "canvasSize": { "width": 420, "height": 600 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["↓"], "action": "Soft drop", "actionZh": "软降" },
+      { "keys": ["↑", "X"], "action": "Rotate CW", "actionZh": "顺时针旋转" },
+      { "keys": ["Z"], "action": "Rotate CCW", "actionZh": "逆时针旋转" },
+      { "keys": ["P"], "action": "Pause / resume", "actionZh": "暂停 / 继续" },
+      { "keys": ["Space"], "action": "Hard drop / Restart", "actionZh": "硬降 / 重新开始" }
+    ],
+    "touch": [
+      { "icon": "swipe-left", "action": "Swipe left / right", "actionZh": "左右滑动移动" },
+      { "icon": "swipe-up", "action": "Swipe up", "actionZh": "上滑硬降" },
+      { "icon": "swipe-down", "action": "Swipe down", "actionZh": "下滑软降" },
+      { "icon": "tap", "action": "Tap to rotate", "actionZh": "点击旋转" }
+    ]
+  }
+}

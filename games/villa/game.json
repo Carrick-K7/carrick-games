@@ -1,0 +1,138 @@
+{
+  "id": "villa",
+  "group": "casual",
+  "order": 1.5,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Warm Villa",
+  "nameZh": "暖居别墅",
+  "desc": "Villa 1.1.0: a cozy 3D home with tea, pets, smart controls and a drivable country estate.",
+  "descZh": "别墅 1.1.0：品茶、陪伴小动物、操控智能家居，驾车探索温馨的三层住宅与乡间庄园。",
+  "canvasSize": { "width": 1120, "height": 700 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["W", "A", "S", "D"], "action": "Walk / drive; A/D steers", "actionZh": "行走 / 驾驶；A/D 转向" },
+      { "keys": ["Mouse"], "action": "Look around", "actionZh": "环顾四周" },
+      { "keys": ["E"], "action": "Follow the nearby prompt: use, feed, sit, lie or leave", "actionZh": "按附近提示互动、投喂、入座、躺下或离开" }
+    ],
+    "touch": [
+      { "icon": "swipe", "action": "Left stick: walk/drive; right drag: look", "actionZh": "左杆行走/驾驶，右侧拖动环顾" },
+      { "icon": "tap", "action": "Use follows the nearby prompt; Exit leaves your seat or activity", "actionZh": "点互动执行附近提示；点离开退出座位或玩法" }
+    ],
+    "notes": [
+      { "audience": "all", "text": "Play starts automatically. Practice scores stay in this game and are not uploaded to a leaderboard.", "textZh": "进入后自动开始。练习成绩只留在当前游戏，不上传排行榜。" }
+    ],
+    "sections": [
+      {
+        "id": "movement",
+        "title": "Movement and view",
+        "titleZh": "移动与视角",
+        "keyboard": [
+          { "keys": ["↑", "↓", "←", "→"], "action": "Walk forward/back; turn left/right", "actionZh": "前后行走；左右转向" },
+          { "keys": ["Shift"], "action": "Run", "actionZh": "跑步" },
+          { "keys": ["C"], "action": "Crouch / stand", "actionZh": "蹲下 / 站起" },
+          { "keys": ["Space"], "action": "Jump on foot", "actionZh": "步行时跳跃" },
+          { "keys": ["L"], "action": "Capture the mouse again", "actionZh": "重新捕获鼠标" },
+          { "keys": ["Esc"], "action": "Free the cursor / close the map or terminal", "actionZh": "释放光标 / 关闭导览图或终端" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Crouch and Jump buttons remain beside Use", "actionZh": "互动旁保留蹲下与跳跃按钮" }
+        ],
+        "notes": [
+          { "audience": "keyboard", "text": "Click the Villa scene to capture the mouse; Esc releases it. Browser fullscreen remains F11, with no in-game fullscreen action.", "textZh": "点击别墅画面捕获鼠标，Esc 释放；全屏由浏览器 F11 管理，游戏不提供全屏操作。" }
+        ]
+      },
+      {
+        "id": "utilities",
+        "title": "Map, smart home and menu",
+        "titleZh": "导览图、智能家居与菜单",
+        "keyboard": [
+          { "keys": ["M"], "action": "Open / close the floor plan", "actionZh": "打开 / 关闭导览图" },
+          { "keys": ["P"], "action": "Open / close the smart terminal", "actionZh": "打开 / 关闭智能终端" },
+          { "keys": ["T"], "action": "Cycle day / evening / night", "actionZh": "切换白天 / 傍晚 / 夜晚" },
+          { "keys": ["H"], "action": "Return to the entrance and stop the vehicle", "actionZh": "返回门口并停住车辆" },
+          { "keys": ["I"], "action": "Toggle immersive mode", "actionZh": "切换沉浸模式" },
+          { "keys": ["?", "/"], "action": "Toggle the shared controls guide", "actionZh": "展开 / 收起统一操作指南" },
+          { "keys": ["1", "2", "3"], "action": "Select a floor while the map is open", "actionZh": "导览图内选择楼层" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Tap the location badge for the map, including in immersive mode", "actionZh": "点位置信息打开导览图，沉浸模式下也可使用" },
+          { "icon": "tap", "action": "Tap Terminal for smart-home controls", "actionZh": "点终端打开智能家居控制" },
+          { "icon": "tap", "action": "The game menu contains Return to entrance and Immersive mode; ? opens this guide", "actionZh": "游戏菜单内可回到门口、切换沉浸模式；点 ? 打开本指南" },
+          { "icon": "tap", "action": "Map tabs select floors or the estate; × or the backdrop closes the map or terminal", "actionZh": "导览图页签选择楼层或庭院；点 × 或背景关闭导览图或终端" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "Terminal pages control room/all lights, fireplace, aquarium lighting, gradual time/weather changes, one selected live camera, look sensitivity and snooker guides. Opening the map or terminal leaves immersive mode.", "textZh": "终端各页可调房间/全部灯光、壁炉、鱼缸灯、渐变昼夜天气、单路实时监控、视角灵敏度和台球辅助线。打开导览图或终端会退出沉浸模式。" },
+          { "audience": "touch", "text": "In an older or isolated host without game-menu actions, Return to entrance and Immersive mode are in Terminal → Settings.", "textZh": "若旧版或独立运行环境没有游戏菜单操作，可在终端 → 设置内回到门口、进入沉浸模式。" }
+        ]
+      },
+      {
+        "id": "interactions",
+        "title": "Life at home",
+        "titleZh": "居家互动",
+        "keyboard": [
+          { "keys": ["Q"], "action": "Carry/place the camping chair; contextual door, screen input or computer power", "actionZh": "搬放露营椅；按场景操作车门、大屏信号或电脑电源" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Use operates fixtures, brews/drinks tea, feeds pets, opens wardrobes, sits/lies down or uses the swing", "actionZh": "点互动使用设备、泡茶喝茶、投喂、开合衣柜、坐下躺下或坐秋千" },
+          { "icon": "tap", "action": "Nearby Carry/Place, Door, Input and Power buttons provide secondary actions", "actionZh": "附近的搬起/放下、车门、信号与电源按钮执行辅助操作" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "Tea starts empty: brew gradually, wait for a full cup, then drink it. Busy actions do not restart the cycle. Each pet has its own food and cooldown. Camping chairs can be placed on clear ground.", "textZh": "茶杯初始为空：逐渐冲泡，满杯等待，再饮用至空；忙碌时重复操作不重置。每只小动物的食物和冷却独立。露营椅需放在空地。" }
+        ]
+      },
+      {
+        "id": "driving",
+        "title": "Vehicles and rally practice",
+        "titleZh": "车辆与拉力练习",
+        "keyboard": [
+          { "keys": ["W", "S"], "action": "Accelerate / brake first, then reverse when stopped", "actionZh": "前进 / 先刹停再倒车" },
+          { "keys": ["A", "D"], "action": "Steer", "actionZh": "转向" },
+          { "keys": ["Space"], "action": "Handbrake", "actionZh": "手刹" },
+          { "keys": ["R"], "action": "Safely reset the current vehicle / rally practice", "actionZh": "安全复位当前车辆 / 拉力练习" },
+          { "keys": ["E"], "action": "Enter / leave when stopped", "actionZh": "上车 / 停稳后下车" }
+        ],
+        "touch": [
+          { "icon": "swipe", "action": "Stick forward accelerates; back brakes then reverses; left/right steers", "actionZh": "推杆向前加速，向后先刹停再倒车，左右转向" },
+          { "icon": "hold", "action": "Hold HB for the handbrake", "actionZh": "按住手刹按钮制动" },
+          { "icon": "tap", "action": "Reset safely resets; Use enters and Exit leaves when stopped", "actionZh": "点复位安全重置；点互动上车，停稳后点离开下车" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "Sedan, pickup and scooter can reverse after stopping. The rally rig only brakes, with no reverse. Stop completely before opening road-vehicle doors or getting out.", "textZh": "轿车、皮卡与电动车刹停后可倒车；拉力模拟器仅刹车，不倒车。完全停稳后才能打开车辆车门或下车。" }
+        ]
+      },
+      {
+        "id": "elevator",
+        "title": "Elevator",
+        "titleZh": "电梯",
+        "keyboard": [
+          { "keys": ["E"], "action": "Call the elevator", "actionZh": "呼叫电梯" },
+          { "keys": ["1", "2", "3"], "action": "Select a floor inside the cabin", "actionZh": "轿厢内选择楼层" },
+          { "keys": ["O", "K"], "action": "Open / close the doors", "actionZh": "开门 / 关门" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Use calls the elevator; inside, tap a floor or Open/Close", "actionZh": "点互动呼叫电梯；进入后点楼层或开门/关门" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "The highest floor is listed first. An empty car closes its doors after four seconds.", "textZh": "高楼层层级在上。空轿厢四秒后关门。" }
+        ]
+      },
+      {
+        "id": "snooker",
+        "title": "Snooker practice",
+        "titleZh": "斯诺克练习",
+        "keyboard": [
+          { "keys": ["Mouse", "←", "→"], "action": "Aim", "actionZh": "瞄准" },
+          { "keys": ["↑", "↓"], "action": "Adjust shot power", "actionZh": "调整击球力度" },
+          { "keys": ["Space"], "action": "Shoot", "actionZh": "击球" },
+          { "keys": ["R"], "action": "Rack again", "actionZh": "重摆" },
+          { "keys": ["E"], "action": "Leave the table", "actionZh": "离开球桌" }
+        ],
+        "touch": [
+          { "icon": "swipe", "action": "Drag to aim / adjust power, or hold the aim arrows and −/+ targets", "actionZh": "拖动瞄准/调力度，或按住瞄准箭头和 −/+ 按钮" },
+          { "icon": "tap", "action": "Shot shoots, Reset racks again, Exit leaves the table", "actionZh": "点击球出杆，点重摆开新局，点离开退出球桌" }
+        ]
+      }
+    ]
+  }
+}

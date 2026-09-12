@@ -1,0 +1,21 @@
+{
+  "id": "connectfour",
+  "group": "tabletop",
+  "order": 22,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Connect Four",
+  "nameZh": "四子连珠",
+  "desc": "Drop discs and connect four in a row before the computer does.",
+  "descZh": "在电脑之前将四个棋子连成一线。",
+  "canvasSize": { "width": 440, "height": 420 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["1", "2", "3", "4", "5", "6", "7"], "action": "Drop in column", "actionZh": "在对应列落子" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap column to drop", "actionZh": "点击列落子" }
+    ]
+  }
+}

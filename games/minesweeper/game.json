@@ -1,0 +1,25 @@
+{
+  "id": "minesweeper",
+  "group": "puzzle",
+  "order": 17,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Minesweeper",
+  "nameZh": "扫雷",
+  "desc": "Classic puzzle. Reveal cells, avoid mines, and use numbers to deduce safe paths.",
+  "descZh": "经典益智游戏。翻开格子,避免地雷,用数字推理安全路径。",
+  "canvasSize": { "width": 328, "height": 376 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "↑", "→", "↓"], "action": "Move cursor", "actionZh": "移动光标" },
+      { "keys": ["W", "A", "S", "D"], "action": "Move cursor", "actionZh": "移动光标" },
+      { "keys": ["Space", "Enter"], "action": "Reveal cell", "actionZh": "翻开格子" },
+      { "keys": ["F", "X"], "action": "Flag / unflag", "actionZh": "标记 / 取消标记" },
+      { "keys": ["R"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap to reveal", "actionZh": "点击翻开" },
+      { "icon": "hold", "action": "Long press to flag", "actionZh": "长按标记" }
+    ]
+  }
+}

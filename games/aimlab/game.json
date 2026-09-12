@@ -1,0 +1,18 @@
+{
+  "id": "aimlab",
+  "group": "action",
+  "order": 12,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Aim Lab",
+  "nameZh": "AimLab",
+  "desc": "Test your reaction speed. Click targets as fast and accurately as possible.",
+  "descZh": "测试你的反应速度。尽可能快速准确地点击目标。",
+  "canvasSize": { "width": 500, "height": 400 },
+  "controls": {
+    "keyboard": [],
+    "touch": [
+      { "icon": "tap", "action": "Tap target", "actionZh": "点击目标" }
+    ]
+  }
+}

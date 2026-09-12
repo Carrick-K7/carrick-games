@@ -1,0 +1,25 @@
+{
+  "id": "iwanna",
+  "group": "action",
+  "order": 8,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "I Wanna",
+  "nameZh": "I Wanna",
+  "desc": "Pure precision platforming. Climb increasingly brutal jump chains with no trick traps.",
+  "descZh": "纯技术向平台跳跃。没有阴人机关,只有逐步升级的跳跃难度。",
+  "canvasSize": { "width": 480, "height": 560 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→"], "action": "Move left/right", "actionZh": "左右移动" },
+      { "keys": ["A", "D"], "action": "Move left/right", "actionZh": "左右移动" },
+      { "keys": ["Space", "Z", "↑"], "action": "Jump / Restart", "actionZh": "跳跃 / 重开" },
+      { "keys": ["R"], "action": "Restart after death", "actionZh": "死亡后重开" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap to jump / restart", "actionZh": "点击跳跃 / 重开" },
+      { "icon": "swipe-left", "action": "Swipe left", "actionZh": "向左滑" },
+      { "icon": "swipe-right", "action": "Swipe right", "actionZh": "向右滑" }
+    ]
+  }
+}

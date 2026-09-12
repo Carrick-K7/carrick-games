@@ -1,0 +1,65 @@
+.gacha-progress-hud {
+  position: absolute;
+  top: calc(12px + var(--safe-top, 0px));
+  left: calc(12px + var(--safe-left, 0px));
+  z-index: 30;
+  box-sizing: border-box;
+  width: min(320px, calc(100% - 132px - var(--safe-left, 0px) - var(--safe-right, 0px)));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, rgba(125,145,155,.22));
+  border-radius: 12px;
+  background: var(--page, #111827);
+  color: var(--text, #e5e7eb);
+  box-shadow: 0 2px 12px rgba(0,0,0,.05);
+  pointer-events: none;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.gacha-progress-metric { min-width: 0; position: relative; }
+.gacha-progress-metric + .gacha-progress-metric { border-left: 1px solid var(--border, rgba(125,145,155,.22)); padding-left: 12px; }
+.gacha-progress-metric > span { display: block; opacity: .62; font-size: 10px; line-height: 14px; white-space: nowrap; }
+.gacha-progress-metric > strong { display: block; font-size: 18px; line-height: 24px; font-weight: 650; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.gacha-progress-track { height: 2px; background: rgba(125,145,155,.2); border-radius: 2px; overflow: hidden; }
+.gacha-progress-track > i { display: block; height: 100%; background: #38a8cb; border-radius: inherit; transition: width .25s ease; }
+@media (max-width: 420px) {
+  .gacha-progress-hud { gap: 8px; padding: 7px 8px; }
+  .gacha-progress-metric + .gacha-progress-metric { padding-left: 8px; }
+  .gacha-progress-metric > span { font-size: 9px; }
+  .gacha-progress-metric > strong { font-size: 15px; line-height: 22px; }
+}
+/* Preserve the existing brand clearance inside the game's own stylesheet. */
+.game-app:has(#siteBrand) .gacha-progress-hud { left: calc(116px + var(--safe-left)); width: min(320px, calc(100% - 236px - var(--safe-left) - var(--safe-right))); }
+@media (max-width: 359px) {
+  .game-app:has(#siteBrand) .gacha-progress-hud { grid-template-columns: 1fr; gap: 2px; padding: 4px 8px; }
+  .game-app:has(#siteBrand) .gacha-progress-metric + .gacha-progress-metric { border-left: 0; padding-left: 0; }
+}
+/* Game navigation is a sibling of the fitted canvas, never a scaled overlay. */
+.gacha-navigation {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.gacha-nav-button {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border, rgba(125,145,155,.22));
+  border-radius: 22px;
+  background: var(--page, #111827);
+  color: var(--text, #e5e7eb);
+  font: 600 12px/1.2 system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  pointer-events: auto;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.gacha-nav-button:hover { border-color: #38a8cb; }
+.gacha-nav-button:focus-visible { outline: 2px solid #38a8cb; outline-offset: 2px; }
+.gacha-nav-button:disabled { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .gacha-progress-track > i { transition: none; } }

@@ -1,0 +1,21 @@
+{
+  "id": "stacker",
+  "group": "casual",
+  "order": 7,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Stacker",
+  "nameZh": "堆叠方块",
+  "desc": "Classic arcade Stacker. Time your locks perfectly to stack all the way to the top!",
+  "descZh": "经典街机堆叠方块。精准时机,一路堆到顶端!",
+  "canvasSize": { "width": 320, "height": 480 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→", "A", "D", "Space"], "action": "Lock block", "actionZh": "锁定方块" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap to lock block", "actionZh": "点击锁定方块" },
+      { "icon": "swipe-left", "action": "Swipe left / right", "actionZh": "左右滑动" }
+    ]
+  }
+}

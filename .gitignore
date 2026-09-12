@@ -8,3 +8,4 @@ playwright-report/
 .kimi_session
 .codex
 *.patch
+.ci/

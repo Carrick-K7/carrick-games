@@ -1,0 +1,20 @@
+{
+  "id": "checkers",
+  "group": "tabletop",
+  "order": 20,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Checkers",
+  "nameZh": "跳棋",
+  "desc": "Classic checkers against AI. Capture all enemy pieces or block their moves to win.",
+  "descZh": "经典跳棋对战 AI。吃掉所有敌方棋子或让其无路可走即可获胜。",
+  "canvasSize": { "width": 500, "height": 540 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap piece to select, tap square to move", "actionZh": "点击棋子选择,点击格子移动" }
+    ]
+  }
+}

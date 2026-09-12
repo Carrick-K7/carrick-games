@@ -9,106 +9,218 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: carrick-games-${{ github.ref }}
-  cancel-in-progress: false
+env:
+  CI: true
+  RELEASE_SHA: ${{ github.sha }}
 
+defaults:
+  run:
+    shell: bash
+
+# There is deliberately no workflow-wide concurrency or all-games-success gate.
+# Only the same component queues behind itself; the server provides final CAS.
 jobs:
-  verify-and-deploy:
-    name: Verify and Deploy
+  plan:
+    name: Select affected releases
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      games: ${{ steps.plan.outputs.games }}
+      shell: ${{ steps.plan.outputs.shell }}
+      shell_publish: ${{ steps.plan.outputs.shell_publish }}
+      bootstrap: ${{ steps.plan.outputs.bootstrap }}
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Verify release selection and contracts
+        run: node --test tests/release/*.test.mjs
+      - name: Pin production state and select workspaces
+        id: plan
+        run: node scripts/ci.mjs plan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plan
+          path: .ci/plan.json
+          overwrite: true
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  common:
+    name: Verify actual shared changes or initial source store
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
-          registry-url: "https://registry.npmjs.org"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+          path: .ci
+      - run: npm ci --include=dev
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Typecheck, build, unit and full browser suite
+        run: node scripts/ci.mjs verify all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-source-store
+          path: |
+            dist/
+            .ci/full-verified.json
+          overwrite: true
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium webkit
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Run unit tests
-        run: npm run test:unit
-
-      - name: Build
-        run: npm run build
-
-      - name: Run e2e tests
-        run: npm run test:e2e
-
-      - name: Package release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          RELEASE_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          mkdir -p release
-          cp -R dist/. release/
-          entry_path="$(grep -oE 'src="[^"]+\.js"' dist/index.html | head -1 | cut -d'"' -f2)"
-          test -n "$entry_path"
-          mkdir -p release/dist
-          cp "dist/${entry_path#/}" release/dist/main.js
-          node -e 'require("fs").writeFileSync("release/manifest.json", JSON.stringify({ schemaVersion: 1, revision: process.env.RELEASE_SHA }, null, 2) + "\n")'
-          test "$(node -p 'require("./release/manifest.json").revision')" = "$RELEASE_SHA"
-          tar -C release -czf release.tar.gz .
-          tar -tzf release.tar.gz
-
-      - name: Verify deployment secrets
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+  games:
+    name: Game ${{ matrix.id }}
+    needs: [plan, common]
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
+      (needs.common.result == 'success' || needs.common.result == 'skipped')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    concurrency:
+      group: carrick-games-${{ github.ref }}-${{ matrix.id }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+          path: .ci
+      - if: needs.plan.outputs.full == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-source-store
+          path: .
+      - run: npm ci --include=dev
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Verify candidate with pinned published counterparts
+        run: node scripts/ci.mjs verify '${{ matrix.id }}'
+      - name: Publish only this verified game
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.publish
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          test -n "$SSH_KEY"
-          test -n "$SSH_HOST"
-          test -n "$SSH_USER"
-          test -n "$DEPLOY_URL"
-          test -n "$DEPLOY_KNOWN_HOSTS"
-
-      - name: Deploy release atomically
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          RELEASE_ID: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          install -d -m 0700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-          ssh -i ~/.ssh/deploy_key \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$SSH_HOST" \
-            "deploy $RELEASE_ID" < release.tar.gz
-
-          curl --fail --silent --show-error --location "$DEPLOY_URL/" --output /tmp/carrick-games-index.html
-          asset_path="$(grep -oE 'src="[^"]+\.js"' /tmp/carrick-games-index.html | head -1 | cut -d'"' -f2)"
-          test -n "$asset_path"
-          curl --fail --silent --show-error --location "$DEPLOY_URL$asset_path" --output /dev/null
-
-      - name: Cleanup SSH key
+        run: node scripts/ci.mjs publish '${{ matrix.id }}'
+      - name: Cleanup ephemeral deployment credentials
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+      - name: Preserve failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-${{ matrix.id }}-attempt-${{ github.run_attempt }}-failure
+          path: test-results/
+          retention-days: 1
+          if-no-files-found: ignore
+
+  shell:
+    name: Shell with currently published games
+    needs: [plan, common]
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.shell == 'true' &&
+      needs.plan.outputs.bootstrap != 'true' &&
+      (needs.common.result == 'success' || needs.common.result == 'skipped')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: carrick-games-${{ github.ref }}-shell
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+          path: .ci
+      - if: needs.plan.outputs.full == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-source-store
+          path: .
+      - run: npm ci --include=dev
+      - run: npx playwright install --with-deps chromium webkit
+      - run: node scripts/ci.mjs verify shell
+      - name: Publish only the verified shell
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/ci.mjs publish shell
+      - name: Cleanup ephemeral deployment credentials
+        if: always()
+        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+
+  bootstrap-shell:
+    name: Initial shell cutover after every game is seeded
+    needs: [plan, common, games]
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.bootstrap == 'true' &&
+      needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
+      (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
+    runs-on: ubuntu-latest
+    concurrency:
+      group: carrick-games-${{ github.ref }}-shell
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+          path: .ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-source-store
+          path: .
+      - run: npm ci --include=dev
+      - run: npx playwright install --with-deps chromium webkit
+      - run: node scripts/ci.mjs verify shell
+      - name: Activate the modern shell last
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/ci.mjs publish shell
+      - name: Cleanup ephemeral deployment credentials
+        if: always()
+        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*

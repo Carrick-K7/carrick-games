@@ -1,0 +1,22 @@
+{
+  "id": "doodlejump",
+  "group": "casual",
+  "order": 4,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Doodle Jump",
+  "nameZh": "涂鸦跳跃",
+  "desc": "Bounce higher and higher on platforms. Avoid falling!",
+  "descZh": "在平台上越跳越高,千万别掉下去!",
+  "canvasSize": { "width": 400, "height": 600 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→"], "action": "Move left/right", "actionZh": "左右移动" },
+      { "keys": ["A", "D"], "action": "Move left/right", "actionZh": "左右移动" },
+      { "keys": ["Space", "↑", "W"], "action": "Jump / Restart", "actionZh": "跳跃 / 重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap left/right to move, tap to jump", "actionZh": "点击左右移动,点击跳跃" }
+    ]
+  }
+}

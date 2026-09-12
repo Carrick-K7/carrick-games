@@ -1,0 +1,22 @@
+{
+  "id": "pong",
+  "group": "casual",
+  "order": 6,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Pong",
+  "nameZh": "乒乓",
+  "desc": "Classic arcade table tennis against AI.",
+  "descZh": "经典街机乒乓球对战 AI。",
+  "canvasSize": { "width": 600, "height": 400 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["↑", "W"], "action": "Move up", "actionZh": "上移" },
+      { "keys": ["↓", "S"], "action": "Move down", "actionZh": "下移" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap upper/lower half to move", "actionZh": "点击上半/下半屏移动" }
+    ]
+  }
+}

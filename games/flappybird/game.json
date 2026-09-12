@@ -1,0 +1,21 @@
+{
+  "id": "flappybird",
+  "group": "casual",
+  "order": 3,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Flappy Bird",
+  "nameZh": "像素鸟",
+  "desc": "Tap to flap. Dodge the pipes and survive.",
+  "descZh": "点击飞翔,躲避管道,尽可能存活。",
+  "canvasSize": { "width": 400, "height": 560 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["Space"], "action": "Flap / Restart", "actionZh": "飞翔 / 重新开始" },
+      { "keys": ["↑", "W"], "action": "Flap", "actionZh": "飞翔" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap to flap", "actionZh": "点击飞翔" }
+    ]
+  }
+}

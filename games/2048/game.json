@@ -1,0 +1,22 @@
+{
+  "id": "2048",
+  "group": "puzzle",
+  "order": 15,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "2048",
+  "nameZh": "2048",
+  "desc": "Slide and merge tiles to reach 2048.",
+  "descZh": "滑动合并数字方块,挑战 2048!",
+  "canvasSize": { "width": 400, "height": 400 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "↑", "→", "↓"], "action": "Slide tiles", "actionZh": "滑动方块" },
+      { "keys": ["W", "A", "S", "D"], "action": "Slide tiles", "actionZh": "滑动方块" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "swipe", "action": "Swipe to slide tiles", "actionZh": "滑动方向合并" }
+    ]
+  }
+}

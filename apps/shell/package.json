@@ -1,0 +1,13 @@
+{
+  "name": "@carrick/shell",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build.mjs shell",
+    "typecheck": "node ../../scripts/check.mjs types shell"
+  },
+  "dependencies": {
+    "@carrick/game-sdk": "*"
+  }
+}

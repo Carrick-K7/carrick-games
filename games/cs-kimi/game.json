@@ -1,0 +1,45 @@
+{
+  "id": "cs-kimi",
+  "group": "action",
+  "order": 7.5,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "CS Kimi",
+  "nameZh": "反恐精英 Kimi 版",
+  "desc": "First-person CS 1.6 rounds on fy_iceworld. Grab the gun under your spawn, buy at the exposed center buyzone, and win the match.",
+  "descZh": "第一人称 CS 1.6 警匪回合对战,战场是经典 fy_iceworld。捡起出生点的枪,在中央购买区补给,率先赢下比赛。",
+  "canvasSize": { "width": 1280, "height": 720 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["W", "A", "S", "D"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["↑", "←", "↓", "→"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["Mouse"], "action": "Look / Fire", "actionZh": "瞄准 / 射击" },
+      { "keys": ["R"], "action": "Reload", "actionZh": "换弹" },
+      { "keys": ["B"], "action": "Buy menu (center buyzone)", "actionZh": "购买菜单(中央购买区)" },
+      { "keys": ["Tab"], "action": "Scoreboard", "actionZh": "记分板" },
+      { "keys": ["1", "2", "3", "4"], "action": "Primary / Pistol / Knife / Grenade", "actionZh": "主武器 / 手枪 / 刀 / 手雷" },
+      { "keys": ["G"], "action": "Drop weapon", "actionZh": "丢弃武器" },
+      { "keys": ["E"], "action": "Swap weapon", "actionZh": "交换武器" },
+      { "keys": ["Shift", "Ctrl"], "action": "Walk / Crouch", "actionZh": "静步 / 蹲下" },
+      { "keys": ["P", "M"], "action": "Pause / Mute", "actionZh": "暂停 / 静音" }
+    ],
+    "keyboardPanel": [
+      { "label": "W", "key": "w", "aliases": ["ArrowUp"] },
+      { "label": "A", "key": "a", "aliases": ["ArrowLeft"] },
+      { "label": "S", "key": "s", "aliases": ["ArrowDown"] },
+      { "label": "D", "key": "d", "aliases": ["ArrowRight"] },
+      { "label": "R", "key": "r" },
+      { "label": "B", "key": "b" },
+      { "label": "Q", "key": "q", "hint": "last" },
+      { "label": "1", "key": "1" },
+      { "label": "2", "key": "2" },
+      { "label": "3", "key": "3" },
+      { "label": "4", "key": "4" },
+      { "label": "G", "key": "g" }
+    ],
+    "touch": [
+      { "icon": "swipe", "action": "Left: move stick, right: look", "actionZh": "左侧移动摇杆,右侧转视角" },
+      { "icon": "tap", "action": "Tap fire / reload / buy buttons", "actionZh": "点击开火 / 换弹 / 购买按钮" }
+    ]
+  }
+}

@@ -1,10 +1,10 @@
 # Carrick Games
 
-A browser-based collection of retro-inspired HTML5 Canvas games.
+28 browser games in a quiet, modern interface, with independently versioned static releases.
 
 Live site: https://games.carrick7.com/
 
-Current release line: `0.1.x`.
+**Release identities:** each component has its own version. Live deployment identities are reported by `/manifest.json` and `/games/index.json`; repository documentation is not a deployment receipt. The former monolith's `0.1.x` version is historical, not a shared version for all games.
 
 ## Games
 
@@ -43,14 +43,14 @@ Carrick Games currently ships 28 playable games:
 
 ## 3D Exploration: Warm Villa
 
-[Play Warm Villa / 暖居别墅](https://games.carrick7.com/#/villa): a cozy three-story 3D home with continuous stairs, interactive furnishings, six peaceful pets and a drivable country estate. The entrance faces south (**+Z**); east is **+X**, toward the expanded garage. Explore the living room, kitchen, aquarium, gaming/snooker rooms and pool; upstairs bedrooms, bathroom and library; the roof garden; and the rolling southern landscape, fields and pond.
+[Play Warm Villa / 暖居别墅](https://games.carrick7.com/#villa): a cozy three-story 3D home with continuous stairs, interactive furnishings, six peaceful pets and a drivable country estate. The entrance faces south (**+Z**); east is **+X**, toward the expanded garage. Explore the living room, kitchen, aquarium, gaming/snooker rooms and pool; upstairs bedrooms, bathroom and library; the roof garden; and the rolling southern landscape, fields and pond.
 
-The features below describe Villa's independent **1.1.0 source version**, `VILLA_VERSION` in `src/games/villaVersion.ts`, not a deployment announcement. The shared collection's `0.1.x` release line is unchanged.
+The features below describe Villa's independent **1.1.0 source version**, not a deployment announcement. `games/villa/package.json` is the version source of truth; `games/villa/src/villaVersion.ts` and the release entry read it. The shell and other games have their own versions.
 
 - **Desktop:** WASD moves; Shift runs, C crouches, and Space jumps with gravity and head clearance. Mouse movement looks without holding a button; Esc frees the cursor, and a scene click captures it. ↑/↓ walks and ←/→ turns. E performs the current action, sits/lies down or leaves. Q carries/places a camping chair or operates the relevant vehicle-door/screen secondary action. P opens the smart terminal, M the floor plan, T cycles day/evening/night, and H returns to the entrance. Getting into the car is forgiving: standing anywhere at the driver's door counts, and if the door's swing is blocked the character steps back out of the way and then opens it.
 - **Game window:** play starts automatically and the villa fills the webpage, adapting its camera and HUD to the screen's aspect ratio. Pointer capture still needs the first scene click. Use the browser's own F11 command for fullscreen; there is no app fullscreen button, F shortcut or persistent instruction footer.
 - **Help:** click the floating `?`, or press `?` even while the mouse is captured. Read at your own pace, then close with `×`, `?`, Esc or the backdrop; no extra Return button is needed. Esc leaves the cursor free.
-- **Quiet view:** I toggles immersive mode: the HUD shows only the current floor and location. Tap that location to restore controls on touchscreens. In normal mode, a small nearby interaction badge fades in on visible objects; it does not show through walls.
+- **Quiet view:** I toggles immersive mode: the HUD shows only the current floor and location. Tap that location to restore controls on touchscreens. The modern utility layout keeps only map/location and terminal access in the Villa HUD; Home and Immersive live in the game menu, with time/weather in the terminal. In normal mode, a small nearby interaction badge fades in on visible objects; it does not show through walls.
 - **Smart home:** P opens a game-local terminal for individual/all room lights, fireplace and aquarium lighting, roof LEDs, gradual day/evening/night and clear/rain transitions, snooker aiming guides and mouse/touch look sensitivity. Night stays readable with lights off. A reusable six-point-light budget serves the visible rooms rather than adding an expensive light for every fixture. Select one actual live CCTV view at a time from around the villa and estate; these are rendered scene views, not decorative photos. The terminal is separate from the shell's read-only `?` guide.
 - **Touch:** left joystick walks or drives; drag on the right to look. Context buttons provide crouch/jump, held braking, resets, elevator floors and interactions. The Use/Exit circle has a native accessible touch target for Safari, with one action per press and visible feedback when the target is too far away or an action must wait. Snooker has separate aim, power and shot buttons outside the table view, with its Exit target separated from Shot on narrow phones.
 - **Elevator:** the lift and the staircase swapped places in 1.1.0, so the shaft now stands in the north end of the former stairwell and the oak switchback stair fills the old shaft bay. The upper storeys also extend east to x=16, which widened the stair aisle and the lift lobby. Press E (or tap Use) at the lift doorway, then use the on-screen car panel — 3F/2F/1F listed top floor first, with separate Open and Close buttons — or press 1/2/3 for a floor and O/K for the doors. All three floors are connected by continuous travel, with the stairs retained. Doors stay open while occupied or the sill is obstructed; an empty car closes after four seconds. Calling it again reopens the doors. The car floor is tiled, not lawn.
@@ -66,54 +66,84 @@ The features below describe Villa's independent **1.1.0 source version**, `VILLA
 - **Master bedroom:** E opens/closes the north-wall wardrobe's ten animated doors, revealing nine women's compartments with everyday garments, hats, bags and shoes; only the rightmost small compartment contains men's clothing. The cabinet is genuinely open inside, and live door collisions preserve safe approaches. The dressing table retains drawers, open knee space, a sittable stool, lit-edge polished mirror and cosmetics. The bedroom entrance, bed and balcony remain reachable.
 - **At home:** nine from-scratch original adult anime collector figures have adult, non-chibi proportions, varied hairstyles/poses and modest full-coverage clothing. No licensed characters or downloaded character skins are reused. The replica-weapon cabinet, detailed PC, fitted kitchen and all existing rooms remain. Room names are not painted onto the scenery; they appear in the optional map and location-only immersive HUD. Static details remain batched and scene-owned, while aquarium animals use conservative instanced geometry.
 
-## Features
+## Interface and Play
 
-- Bilingual interface: English and Chinese.
-- Searchable game list with grouped navigation.
-- Keyboard, mouse, and touch input where appropriate.
-- Full-viewport game windows with a small teal-gamepad **Carrick Games** button that opens the existing game library, plus `?` for help and a compact game/settings menu. Branding floats at the top-left for fixed games and beside the top-right utilities for CS, CS Kimi and Villa; all hide during pointer capture. There is no large page header. Browser fullscreen stays browser-owned (F11).
-- Enter a game and play right away: no start prompt is shown, and pointer capture follows the browser gesture rules (first canvas click).
-- One-click Controls for every game: the panel drops below the `?` button with readable key/gesture labels and a scrollable body; never shrinks the game. The settings menu leads with an explicit Choose a game entry.
-- Help pauses play and timers; closing continues without restarting or clearing a manual gameplay pause. Keyboard focus returns directly to play.
-- Light, dark, and system theme modes.
-- Responsive 3D cameras and HUDs for CS, CS Kimi and Villa; fixed boards maximize at their original proportions.
-- Bounded HiDPI Canvas rendering and consistent pointer coordinates across resizing and rotation.
-- Local score records stored in the browser.
+- English/Chinese search and **All** plus four category filters in an on-demand game library. Unknown categories fall back to **Other** only when needed.
+- Real 16:10 game-frame cover cards with full, wrapping names and one Play/Continue target. The desktop dialog grows to 1120px; phones use a near-full-height bottom sheet with one internal scroll area. Covers are captured from actual built games; game-owned input recipes keep gameplay and artwork updates independent.
+- A full-viewport game stage with exactly three permanent shell actions: the small **Carrick Games** library button, `?` help and the game/settings menu. No sidebar, hero, start gate or app fullscreen toggle. Browser fullscreen stays browser-owned (F11).
+- Games start automatically after preparation; a game's own arena/mode menu is allowed. Keyboard, mouse and touch input, pointer capture and audio retain browser gesture rules.
+- Help shows up to three essentials for the current device, then expandable details. Reading pauses simulation and managed timers without clearing an intentional gameplay pause. Escape never recaptures the pointer.
+- The menu leads with **Choose a game**, then contextual actions, restart/demo/level controls where supported, language/theme and subtle version information. Language and theme changes keep the menu open.
+- Gacha keeps Draw and one native Collection control; statistics and sound move to its menu. Villa keeps map/location and terminal utilities rather than a row of permanent shortcuts.
+- Light, dark and system themes, system typography and a modern shared result panel. Existing game worlds, palettes and mechanics are not globally restyled.
+- Responsive 3D cameras/HUDs for CS, CS Kimi and Villa; complete fixed boards at their original proportions, bounded HiDPI rendering and consistent pointer coordinates during resize/rotation.
+- Existing browser score storage and hash links remain. Selection prefers a direct `#id` link, otherwise the last successfully loaded game, otherwise Gacha or the first available game.
+
+Opening the library refreshes the catalog without swapping a running release. **Continue** returns to the existing instance even when a new version is listed; **Update … (restart)** is an explicit choice. A switch preflights JavaScript and CSS while preserving the paused old instance. A pre-teardown failure can resume it; after teardown, recovery honestly offers a restart rather than claiming a lost session can be restored. Retry, resume-or-restart, choose another game and reload remain reachable.
+
+## Independent Static Releases
+
+```text
+apps/shell/           Thin host: navigation, loading, preferences and shell UI
+  src/ public/ tests/
+games/<id>/          28 independent @carrick/game-<id> packages
+  package.json       Own SemVer and declared dependencies
+  game.json          Localized metadata, controls, icon and cover references
+  src/index.ts       id, version, apiVersion: 1, create(host)
+  src/ public/ tests/  Own mechanics, resources and fixtures
+packages/game-sdk/   Shared ABI, lifecycle, renderer and geometry; own unit tests
+packages/weapon-art/ Pure shared weapon icons used by Gacha and CS Kimi
+scripts/             Workspace validation, builds and release orchestration
+tests/               Generic shell/release contracts and reusable support
+```
+
+This is an npm-workspaces monorepo with **one root lockfile** and **Node.js ≥22.18.0**. It uses TypeScript, Vite, Canvas 2D, Vitest and Playwright. The existing `three` dependency is limited to CS, CS Kimi and Villa; no new runtime dependency is introduced.
+
+- `/games/index.json` is the permanent API-1 discovery endpoint.
+- Each game owns `/games/<id>/<SemVer>/<40-character-sha>/entry.js` and its CSS, chunks, bundled SDK/dependencies, assets, icon and `cover.webp` in the same immutable release.
+- Shell releases remain reachable at `/shell/<40-character-sha>/`; `/` serves the current shell.
+- Descriptor `schemaVersion`, runtime API epoch, package SemVer, activation `generation` and CI deployment `sequence` are distinct. Runtime API 1 requires an exact match, not “game API ≤ host version”.
+- The shell discovers data rather than importing game implementations. Adding a game requires no central registry, loader or icon-map edit. Games cannot import other games; game assets resolve through the instance's `host.assetUrl(relative)` rather than a mutable global base.
 
 ## Branding and Browser Installation
 
-The page button, game menu and library header keep the full **Carrick Games** name on phones and desktops, paired with the original teal gamepad. The favicon and installation icons share the geometry in `public/brand/logo.svg`.
+The floating button, game menu and library retain the full **Carrick Games** name at every size and the exact original `#0d9488` gamepad in `apps/shell/public/brand/logo.svg`. Installation icons are genuine 192px/512px PNGs plus a separately safe-padded 512px maskable icon.
 
-`index.html` links external SVG/PNG favicon assets and `/app.webmanifest`. The Web App Manifest supplies the Carrick Games name, root app identity and URLs, standalone display, teal theme color, and 192px/512px PNG icons plus a separately safe-padded 512px maskable icon. `/manifest.json` is deployment metadata, **not** the Web App Manifest, and must remain separate.
+`apps/shell/index.html` links the Web App Manifest. Its app `id`, `start_url` and `scope` remain `/`, with standalone display. The build rewrites icon URLs to `/shell/<sha>/brand/...`, so modern installs do not depend on the pinned legacy `/brand/` namespace. `/manifest.json` is deployment metadata, **not** the Web App Manifest.
 
-Where supported, use Edge's browser menu to install the site as an app. An existing installation may retain its old icon until Edge's icon cache refreshes or the app is reinstalled. Native Windows Edge installation has not yet been tested; this metadata does not provide offline support or a service worker.
-
-## Tech Stack
-
-- TypeScript, Vite, and browser ES modules.
-- HTML5 Canvas 2D rendering; the existing Three.js dependency supports shooter-family real 3D and the user-requested Warm Villa exploration experience within the same canvas shell.
-- CSS custom properties for theming.
-- Playwright end-to-end tests.
-- Vitest unit tests.
-- GitHub Actions and Caddy for production deployment.
-
-Game metadata and dynamic loaders live in `src/games/catalog.ts`; `GameHost` and lifecycle code live in `src/core/game.ts`; shell behavior and rendering helpers are split across `src/app/`, `src/ui/`, and `src/main.ts`.
+Where supported, use Edge's browser menu to install the site. Existing installations may retain old icons until an icon-cache refresh or reinstall. **Native Windows Edge installation remains untested. There is no service worker or offline support.**
 
 ## Local Development
 
+Use Node.js ≥22.18.0 from the repository root:
+
 ```bash
 npm ci
-npm run typecheck
-npm run test:unit
-npm run build
-npm run test:e2e
-npm run preview -- --host 127.0.0.1 --port 8080
+npm run dev
 ```
 
-Then open `http://localhost:8080`.
+For the complete local build and browser checks:
 
-## Deployment
+```bash
+npm run typecheck
+npm run test:unit
+npm run test:release
+npm run build
+npm run test:e2e
+```
 
-Pushes to `main` run the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow type-checks, runs Vitest and Playwright, packages the Vite `dist/` output, then switches Caddy to a new release under `/var/www/games.carrick7.com/current`.
+Playwright uses the built preview at `http://localhost:8080`; install its browsers when needed with `npx playwright install chromium webkit`. For manual preview after building, run `npm run preview -- --host 127.0.0.1 --port 8080`.
 
-Development and deployment rules are documented in `AGENTS.md`. Visual design rules are documented in `DESIGN.md`.
+Focused iteration can use `npm run typecheck -- snake` and `npm run build:game -- snake`; `npm run build:shell` builds only the shell. A targeted build is not a release qualification and does not recreate the pinned published counterparts. The actual scoped verification orchestrator and bootstrap requirements are in `AGENTS.md`.
+
+## Deployment and Operations
+
+One `.github/workflows/deploy.yml` DAG checks pull requests and plans independent publications on `main`. In steady state, each game candidate is tested with a **pinned published shell**; a shell candidate is tested with **pinned published games**. An unrelated game's failure does not block an independent game release. Docs/test-only changes do not themselves publish runtime artifacts; pending, unhandled runtime changes are still evaluated separately.
+
+The first migration is a special full-suite gate: seed all tested game identities first, then activate the modern shell last. Repeated bootstrap attempts reuse unchanged, already-seeded identities. This bootstrap still requires full typecheck, unit tests, build and all E2E before an application commit, followed by exact-SHA Actions monitoring and public smoke tests.
+
+The private `Carrick-K7/carrick-ops` repository owns the restricted publisher, Caddy mounts, rollback wrappers and read-only doctor. Publication validates complete immutable inventories and promotes only one target under generation/sequence/counterpart fences. It never restores a whole catalog over another game's release. All immutable releases are retained—no automatic garbage collection; monitor disk and inodes.
+
+The first cutover pins one validated copy of the in-service legacy release so existing `/assets/`, `/cs/`, `/gacha/`, `/fonts/` and `/brand/` URLs keep serving those bytes. Missing pinned resources return 404, not modern files or SPA HTML. Prior modern immutable URLs also remain reachable. Rollbacks must use the ops wrappers, never a manual symlink switch.
+
+Development, secrets, operations and release closure: `AGENTS.md`. Visual and interaction authority: `DESIGN.md`. Only these three root project documents are maintained.

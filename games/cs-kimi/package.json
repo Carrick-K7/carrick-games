@@ -1,0 +1,12 @@
+{
+  "name": "@carrick/game-cs-kimi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@carrick/game-sdk": "*",
+    "@carrick/weapon-art": "*",
+    "three": "^0.185.1"
+  }
+}

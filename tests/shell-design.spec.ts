@@ -19,9 +19,18 @@ async function noOverflow(page: Page) {
 }
 async function target(locator: Locator) {
   const box = await bounds(locator);
-  expect(box.width).toBeGreaterThanOrEqual(39.999); expect(box.height).toBeGreaterThanOrEqual(39.999);
+  expect(box.width).toBeGreaterThanOrEqual(43.999); expect(box.height).toBeGreaterThanOrEqual(43.999);
 }
-async function openMenu(page: Page) { await page.locator('#overflowBtn').click(); await expect(page.locator('#overflowMenu')).toBeVisible(); }
+async function settleAnimations(locator: Locator) {
+  await locator.evaluate(async element => Promise.all(element.getAnimations({ subtree: true })
+    .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => undefined))));
+}
+async function openMenu(page: Page) {
+  if (!await page.locator('#overflowMenu').isVisible()) await page.locator('#overflowBtn').click();
+  await expect(page.locator('#overflowMenu')).toBeVisible();
+  await settleAnimations(page.locator('#overflowMenu'));
+}
 async function openPicker(page: Page) { await page.keyboard.press('Control+k'); await expect(page.locator('.library-dialog')).toBeVisible(); }
 
 test.describe('game-window shell design contracts', () => {
@@ -65,7 +74,7 @@ test.describe('game-window shell design contracts', () => {
         const dialog = page.locator('.library-dialog');
         await expect(dialog).toHaveAccessibleName(/Choose a game|选择游戏/);
         await expect(page.locator('#searchInput')).toBeFocused();
-        await dialog.evaluate(async el => { await Promise.all(el.getAnimations().map(a => a.finished)); });
+        await settleAnimations(dialog);
         const box = await bounds(dialog);
         expect(box.x).toBeGreaterThanOrEqual(0); expect(box.y).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -88,8 +97,10 @@ test.describe('game-window shell design contracts', () => {
       await expect(page.locator('.header-actions')).toHaveAttribute('inert', '');
       await expect(page.locator('main')).toHaveAttribute('inert', '');
       await search.press('ArrowDown'); const rows = page.locator('.game-list-item');
-      await expect(rows.nth(0)).toBeFocused(); await page.keyboard.press('ArrowDown'); await expect(rows.nth(1)).toBeFocused();
+      const columns = await page.locator('#gameList').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+      await expect(rows.nth(0)).toBeFocused(); await page.keyboard.press('ArrowDown'); await expect(rows.nth(columns)).toBeFocused();
       await page.keyboard.press('ArrowUp'); await expect(rows.nth(0)).toBeFocused();
+      await page.keyboard.press('ArrowRight'); await expect(rows.nth(1)).toBeFocused();
       await rows.last().focus(); await page.keyboard.press('Tab');
       expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
       await page.locator('#libraryCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
@@ -106,10 +117,14 @@ test.describe('game-window shell design contracts', () => {
   test('game menu traps focus and releases it on dismissal', async ({ page }) => {
     await openShell(page); await openMenu(page);
     const menu = page.locator('#overflowMenu');
-    await menu.locator('button').last().focus(); await page.keyboard.press('Tab');
-    expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    await menu.locator('button:visible').last().focus(); await page.keyboard.press('Tab');
+    await expect(page.locator('#siteBrand')).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(page.locator('#helpBtn')).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(page.locator('#overflowBtn')).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(page.locator('#menuCloseBtn')).toBeFocused();
     await page.locator('#menuCloseBtn').focus(); await page.keyboard.press('Shift+Tab');
-    expect(await menu.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    await expect(page.locator('#overflowBtn')).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(page.locator('#menuCloseBtn')).toBeFocused();
     await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
   });
 
@@ -168,9 +183,14 @@ test.describe('game-window shell design contracts', () => {
   test('long input mappings are usable in an optional overlay and never resize the game', async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 720 }); await openShell(page);
     for (const id of ['wordle', 'sudoku', 'connectfour', 'solitaire']) {
-      await page.goto(`/#/${id}`); await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      await page.goto(`/#/${id}`);
+      // Hash navigation keeps the previous game intact during preflight.
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/);
       const before = await bounds(page.locator('#gameCanvas'));
       await page.locator('#helpBtn').click();
+      await settleAnimations(page.locator('#helpOverlay'));
       const panel = page.locator('#keyboardPanel'); await expect(panel).toBeVisible();
       const box = await bounds(panel), keys = panel.locator('.vkey:visible');
       expect(await keys.count()).toBeGreaterThan(0);
@@ -190,11 +210,11 @@ test.describe('game-window shell design contracts', () => {
     for (const lang of ['zh', 'en'] as const) {
       await openMenu(page); await page.locator(`.lang-btn[data-lang="${lang}"]`).click();
       await expect(root).toHaveAttribute('data-lang', lang); await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? '贪吃蛇' : 'Snake');
-      await expect(page.locator('#overflowMenu')).toBeHidden(); expect(await page.evaluate(() => localStorage.getItem('cg-lang'))).toBe(lang);
+      await expect(page.locator('#overflowMenu')).toBeVisible(); expect(await page.evaluate(() => localStorage.getItem('cg-lang'))).toBe(lang);
     }
     for (const theme of ['light', 'dark', 'system'] as const) {
       await openMenu(page); await page.locator(`.theme-btn[data-set="${theme}"]`).click();
-      await expect(page.locator('#overflowMenu')).toBeHidden(); await expect(page.locator(`.theme-btn[data-set="${theme}"]`)).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#overflowMenu')).toBeVisible(); await expect(page.locator(`.theme-btn[data-set="${theme}"]`)).toHaveAttribute('aria-pressed', 'true');
       expect(await page.evaluate(() => localStorage.getItem('cg-theme'))).toBe(theme);
       if (theme === 'system') {
         await expect(root).not.toHaveAttribute('data-theme');

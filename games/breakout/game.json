@@ -1,0 +1,23 @@
+{
+  "id": "breakout",
+  "group": "casual",
+  "order": 5,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Breakout",
+  "nameZh": "打砖块",
+  "desc": "Bounce the ball and break all bricks.",
+  "descZh": "弹球击碎所有砖块。",
+  "canvasSize": { "width": 480, "height": 360 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["←", "→"], "action": "Move paddle", "actionZh": "移动挡板" },
+      { "keys": ["A", "D"], "action": "Move paddle", "actionZh": "移动挡板" },
+      { "keys": ["Space"], "action": "Restart", "actionZh": "重新开始" }
+    ],
+    "touch": [
+      { "icon": "swipe-left", "action": "Swipe left / right", "actionZh": "左右滑动" },
+      { "icon": "tap", "action": "Tap to restart", "actionZh": "点击重新开始" }
+    ]
+  }
+}

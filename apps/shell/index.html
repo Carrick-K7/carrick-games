@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Carrick Games</title>
+  <meta name="description" content="A little space to play. Discover thoughtfully crafted browser games at Carrick Games. 简单好玩的在线游戏，随时开始。">
+  <meta name="application-name" content="Carrick Games">
+  <meta name="theme-color" content="#0d9488">
+  <link rel="icon" href="/brand/logo.svg" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/brand/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="manifest" href="/app.webmanifest">
+  <link rel="stylesheet" href="/src/styles/app.css">
+</head>
+<body>
+  <div id="gameApp" class="game-app">
+    <main>
+      <div class="game-layout" id="gameLayout">
+        <div class="game-center">
+          <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="gameCanvas" width="400" height="500">Your browser does not support the game canvas. / 当前浏览器不支持游戏画布。</canvas>
+            <div class="loading-overlay" id="loadingOverlay">
+              <div class="spinner" id="loadingSpinner" aria-hidden="true"></div>
+              <p id="loadingStatus" role="status" aria-live="polite"></p>
+              <div class="load-error" id="loadError" hidden>
+                <div id="loadErrorMessage" role="alert"></div>
+                <div class="load-error-actions">
+                  <button class="quiet-button" id="retryLoadBtn" type="button">Retry</button>
+                  <button class="quiet-button" id="resumePreviousBtn" type="button" hidden>Resume previous game</button>
+                  <button class="quiet-button" id="chooseAnotherBtn" type="button" hidden>Choose another game</button>
+                  <button class="quiet-button" id="reloadAppBtn" type="button" hidden>Reload application</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="header-actions">
+      <button class="site-brand" id="siteBrand" type="button" aria-label="Carrick Games — Choose a game" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" title="Carrick Games — Choose a game">
+        <img src="/brand/logo.svg" width="22" height="22" alt="">
+        <span class="site-brand-name">Carrick<span> Games</span></span>
+      </button>
+      <button class="game-menu-trigger game-help-trigger" id="helpBtn" type="button" aria-label="Controls" title="Controls (?)" aria-controls="helpOverlay" aria-expanded="false" aria-keyshortcuts="Shift+/"><span aria-hidden="true">?</span></button>
+      <button class="game-menu-trigger" id="overflowBtn" type="button" aria-label="Game menu" aria-haspopup="dialog" aria-controls="overflowMenu" aria-expanded="false">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1"/><circle cx="10" cy="10" r="1"/><circle cx="16" cy="10" r="1"/></svg>
+      </button>
+      <button class="shell-backdrop" id="shellBackdrop" type="button" tabindex="-1" aria-label="Close game menu" hidden></button>
+      <section class="overflow-menu" id="overflowMenu" role="dialog" aria-modal="true" aria-labelledby="gameMenuTitle" tabindex="-1" hidden>
+        <header class="app-header">
+          <span class="wordmark" id="gameMenuTitle"><img src="/brand/logo.svg" width="24" height="24" alt=""><span>Carrick<span class="wordmark-secondary"> Games</span></span></span>
+          <button class="dialog-close" id="menuCloseBtn" type="button" aria-label="Close menu"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+        </header>
+        <div class="menu-body">
+          <div class="menu-section menu-game-switch">
+            <div class="menu-label" id="pickerMenuLabel">Choose a game</div>
+            <button class="game-picker-trigger" id="gamePickerBtn" type="button" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" aria-keyshortcuts="Control+k Meta+k">
+              <svg class="picker-grid" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg>
+              <span class="selected-game-label" id="selectedGameLabel">Select a game</span>
+              <kbd class="picker-shortcut" id="pickerShortcut" aria-hidden="true">Ctrl K</kbd>
+            </button>
+          </div>
+          <div class="menu-section menu-current-game">
+            <button class="menu-action" id="restartBtn" type="button" hidden>Restart</button>
+            <button class="menu-action" id="demoBtn" type="button" hidden>Demo</button>
+            <button class="menu-action" id="updateGameBtn" type="button" hidden>Update game</button>
+            <div id="currentGameActions" class="current-game-actions" hidden></div>
+            <aside class="game-context" id="statsPanel" hidden></aside>
+          </div>
+          <div class="menu-section">
+            <div class="menu-label" id="languageMenuLabel">Language</div>
+            <div class="menu-options" aria-labelledby="languageMenuLabel">
+              <button class="lang-btn" data-lang="en" type="button">English</button>
+              <button class="lang-btn" data-lang="zh" type="button">中文</button>
+            </div>
+          </div>
+          <div class="menu-section">
+            <div class="menu-label" id="themeMenuLabel">Theme</div>
+            <div class="menu-options" aria-labelledby="themeMenuLabel">
+              <button class="theme-btn" data-set="light" type="button">Light</button>
+              <button class="theme-btn" data-set="dark" type="button">Dark</button>
+              <button class="theme-btn" data-set="system" type="button">System</button>
+            </div>
+          </div>
+          <footer class="menu-versions" id="menuVersions"><span id="menuGameVersion" hidden></span><span id="shellVersion" hidden></span></footer>
+        </div>
+      </section>
+    </div>
+
+    <button class="guide-backdrop" id="guideBackdrop" type="button" tabindex="-1" aria-label="Close controls" hidden></button>
+    <aside class="help-overlay" id="helpOverlay" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpGameName" hidden>
+      <div class="help-heading">
+        <div><h2 id="helpTitle">Controls</h2><p><span id="helpGameName"></span><span class="game-version" id="helpGameVersion" hidden></span></p></div>
+        <button class="dialog-close" id="helpCloseBtn" type="button" aria-label="Close controls"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+      </div>
+      <div class="guide-body" id="guideBody" tabindex="0">
+        <div class="guide-modes" id="guideModes" role="group" aria-label="Input method">
+          <button type="button" data-guide-mode="keyboard" aria-pressed="true" aria-controls="keyboardPanel">Keyboard &amp; mouse</button>
+          <button type="button" data-guide-mode="touch" aria-pressed="false" aria-controls="touchHelp">Touch</button>
+        </div>
+        <div class="input-map" id="keyboardPanel" aria-label="Keyboard and mouse mapping"></div>
+        <div id="touchHelp"></div>
+        <div class="guide-notes" id="guideNotes"></div>
+      </div>
+    </aside>
+
+    <div class="game-library" id="gameLibrary" aria-hidden="true">
+      <button class="library-backdrop" type="button" data-library-close aria-label="Close game library" tabindex="-1"></button>
+      <section class="library-dialog" role="dialog" aria-modal="true" aria-labelledby="libraryHeadingTitle" tabindex="-1">
+        <div class="library-dialog-header">
+          <div class="library-title">
+            <span class="library-brand"><img src="/brand/logo.svg" width="22" height="22" alt="">Carrick Games</span>
+            <h1 id="libraryHeadingTitle">Choose a game</h1>
+            <p id="librarySummary">A little space to play.</p>
+          </div>
+          <label class="search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="search" id="searchInput" aria-label="Search games / 搜索游戏" placeholder="Find your next game…" autocomplete="off" spellcheck="false" aria-controls="gameList">
+          </label>
+          <button class="dialog-close" id="libraryCloseBtn" type="button" aria-label="Close"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+        </div>
+        <div class="library-content">
+          <div class="library-filters" id="libraryFilters" role="group" aria-label="Game category"></div>
+          <div class="game-list" id="gameList"></div>
+        </div>
+        <footer class="library-footer">
+          <span class="library-result-count" id="libraryResultCount" role="status" aria-live="polite" aria-atomic="true"></span>
+          <span class="library-keyboard-hints" id="libraryKeyboardHints"></span>
+        </footer>
+      </section>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

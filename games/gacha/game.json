@@ -1,0 +1,70 @@
+{
+  "id": "gacha",
+  "group": "casual",
+  "order": 0,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Gacha",
+  "nameZh": "抽卡",
+  "desc": "CS:GO-grade case opening. Official odds, strip spin reveal, and pull statistics.",
+  "descZh": "CSGO 分级开箱:官方概率、转轮揭晓动画与抽取统计。",
+  "canvasSize": { "width": 640, "height": 480 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["Space"], "action": "Open / draw again", "actionZh": "开箱 / 再抽一次" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Tap the case to draw; tap Draw Again on the result to draw again", "actionZh": "点击箱子抽取；结果页点击「再抽一次」继续抽取" }
+    ],
+    "sections": [
+      {
+        "id": "collection",
+        "title": "Collection",
+        "titleZh": "收藏册",
+        "keyboard": [
+          { "keys": ["C"], "action": "Open Collection", "actionZh": "打开收藏册" },
+          { "keys": ["←", "→", "↑", "↓"], "action": "Browse rarity tiers in Collection", "actionZh": "在收藏册中切换稀有度" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Open Collection, then tap a rarity tier to browse its items", "actionZh": "打开「收藏册」，点击稀有度查看对应物品" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "Each draw is recorded once when opening begins. Browsing Collection or returning to Gacha during the reveal keeps that draw.", "textZh": "每次抽取在开箱开始时记录一次。揭晓期间浏览收藏册或返回抽卡，不会丢失本次抽取。" }
+        ]
+      },
+      {
+        "id": "stats-sound",
+        "title": "Stats and sound",
+        "titleZh": "统计与音效",
+        "keyboard": [
+          { "keys": ["S"], "action": "Open Stats", "actionZh": "打开抽取统计" },
+          { "keys": ["M"], "action": "Toggle sound", "actionZh": "音效开关" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Open the game menu for Stats or Sound; checked Sound means enabled", "actionZh": "打开游戏菜单，选择「抽取统计」或「音效」；音效勾选表示已开启" }
+        ],
+        "notes": [
+          { "audience": "all", "text": "Stats is unavailable while a case is unlocking or spinning; Sound can still be changed in the menu.", "textZh": "解锁或转轮揭晓期间无法打开统计；仍可在菜单中切换音效。" },
+          { "audience": "keyboard", "text": "In an isolated host without game-menu actions, S and M still provide Stats and Sound.", "textZh": "在没有游戏菜单操作的独立环境中，仍可用 S 查看统计、M 切换音效。" }
+        ]
+      },
+      {
+        "id": "return-reset",
+        "title": "Return and reset",
+        "titleZh": "返回与重置",
+        "keyboard": [
+          { "keys": ["Escape"], "action": "Back to Gacha", "actionZh": "返回抽卡" },
+          { "keys": ["R"], "action": "Back to Gacha", "actionZh": "返回抽卡" },
+          { "keys": ["Shift", "R"], "action": "Reset stats and collection outside an opening", "actionZh": "非开箱期间重置统计与收藏进度" }
+        ],
+        "touch": [
+          { "icon": "tap", "action": "Use Back to Gacha in Collection, Stats, or during an opening", "actionZh": "在收藏册、统计页或开箱期间点击「返回抽卡」" },
+          { "icon": "tap", "action": "Use the selector beneath the case when multiple opening animations are available", "actionZh": "有多种开箱动画时，可点击箱子下方的选择器切换" }
+        ],
+        "notes": [
+          { "audience": "keyboard", "text": "Shift+R clears saved pulls and collection progress. Returning with Escape or R never resets them.", "textZh": "Shift+R 会清除已保存的抽取记录与收藏进度；Escape 或 R 返回不会重置进度。" }
+        ]
+      }
+    ]
+  }
+}

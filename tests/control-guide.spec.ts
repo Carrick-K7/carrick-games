@@ -2,12 +2,18 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function openGuide(page: Page, id: string) {
   await page.goto(`/#/${id}`);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id, { timeout: 45_000 });
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
+  await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/, { timeout: 45_000 });
   if (id === 'cs') await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__?.info()?.ready), { timeout: 60_000 }).toBe(true);
   // The shared ? shortcut works in every shell state, including pointer capture.
   await page.keyboard.press('Shift+Slash');
   await expect(page.locator('#helpOverlay')).toBeVisible();
   await expect(page.locator('#overflowMenu')).toBeHidden();
+  await page.evaluate(() => document.fonts.ready);
+  await page.locator('#helpOverlay').evaluate(async element => Promise.all(element.getAnimations({ subtree: true })
+    .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => undefined))));
 }
 
 test.describe('unified operation guides', () => {
@@ -20,10 +26,14 @@ test.describe('unified operation guides', () => {
       const guide = page.locator('#helpOverlay'), canvas = page.locator('#gameCanvas');
       const before = await canvas.boundingBox();
       const g = (await guide.boundingBox())!;
-      expect(g.x).toBe(708); // 1280 - 12 margin - 560 width
+      expect(g.x).toBe(848); // 1280 - 12 margin - 420 width
       expect(g.y).toBe(64); // under the 44px utility row
-      expect(g.width).toBe(560);
-      expect((await page.locator('#keyboardPanel .vkey').first().boundingBox())!.x).toBe(g.x + 17);
+      expect(g.width).toBe(420);
+      expect((await page.locator('#keyboardPanel .vkey').first().boundingBox())!.x).toBe(g.x + 21);
+      expect((await page.locator('#keyboardPanel .vkey').first().boundingBox())!.height).toBe(28);
+      expect(await page.locator('#keyboardPanel .guide-basics .input-map-row').count()).toBeLessThanOrEqual(3);
+      await expect(page.locator('#keyboardPanel button, #keyboardPanel .compact-mouse, #keyboardPanel #vmouse')).toHaveCount(0);
+      await expect(page.locator('#keyboardPanel .vkey').first()).toHaveJSProperty('tagName', 'KBD');
       expect(g.y + g.height).toBeLessThanOrEqual(708);
       await expect(page.locator('#helpGameName')).toHaveText(await page.locator('#selectedGameLabel').innerText());
       await expect(guide).toHaveAttribute('role', 'dialog');
@@ -53,22 +63,28 @@ test.describe('unified operation guides', () => {
     }
   });
 
-  test('rotation keeps a scrollable guide anchored under the utilities', async ({ page }) => {
+  test('rotation turns the protected guide into a bounded bottom sheet without resetting play', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 }); await openGuide(page, 'villa');
     const count = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
     for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 667, height: 375 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(size);
       await expect(page.locator('#helpOverlay')).toHaveAttribute('role', 'dialog');
       await expect(page.locator('main')).toHaveAttribute('inert', '');
-      // Narrow/short screens widen the panel to 720px; roomy desktops cap at 560.
-      const wide = size.width > 720 && size.height > 480;
-      const width = Math.min(wide ? 560 : 720, size.width - 24);
-      // The shell coalesces VisualViewport refits onto the next animation frame.
-      // A dialog role is already present before rotation, so it is not a resize signal.
+      const width = size.width > 720 ? 420 : size.width;
+      // Root dimensions follow visualViewport; short sheets leave the utility row clear.
       await expect.poll(async () => {
         const b = (await page.locator('#helpOverlay').boundingBox())!;
-        return { x: b.x, y: b.y, width: b.width };
-      }).toEqual({ x: size.width - 12 - width, y: 64, width });
+        return { x: Math.round(b.x), bottom: Math.round(b.y + b.height), width: Math.round(b.width) };
+      }).toEqual({ x: size.width > 720 ? size.width - 12 - width : 0, bottom: size.height, width });
+      await page.locator('#helpOverlay').evaluate(async el => Promise.all(el.getAnimations({ subtree: true })
+        .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => undefined))));
+      const box = (await page.locator('#helpOverlay').boundingBox())!;
+      const visualHeight = await page.evaluate(() => window.visualViewport?.height ?? innerHeight);
+      expect(box.height).toBeLessThanOrEqual(visualHeight * .88 + 1);
+      expect(box.y).toBeGreaterThanOrEqual(63);
+      const notes = page.locator('#guideNotes details');
+      if (await notes.count() && !await notes.evaluate(el => (el as HTMLDetailsElement).open)) await notes.locator('summary').click();
       await page.locator('#guideBody').evaluate(el => el.scrollTop = el.scrollHeight);
       await expect(page.locator('#guideNotes p').last()).toBeInViewport();
       await expect(page.locator('#helpCloseBtn')).toBeInViewport();
@@ -114,12 +130,19 @@ test('read help mid-game without losing a life, then continue immediately from t
 test.describe('touch control guide', () => {
   test.setTimeout(120_000);
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
-  test('one top sheet replaces keyboard keys, blocks touch-through, and dismisses safely', async ({ page }, testInfo) => {
+  test('one bottom sheet defaults to touch, blocks touch-through, and supports hardware-keyboard help', async ({ page }, testInfo) => {
     for (const id of ['snake', 'cs', 'villa']) {
       await openGuide(page, id);
       await expect(page.locator('#helpOverlay')).toHaveAttribute('aria-modal', 'true');
       await expect(page.locator('#keyboardPanel')).toBeHidden();
-      await expect(page.locator('.guide-touch-rows')).toBeVisible();
+      await expect(page.locator('#touchHelp .guide-basics .guide-touch-rows')).toBeVisible();
+      expect(await page.locator('#touchHelp .guide-basics .guide-touch-row').count()).toBeLessThanOrEqual(3);
+      await expect(page.locator('#guideBody [data-guide-mode="touch"]')).toHaveAttribute('aria-pressed', 'true');
+      await page.locator('#guideBody [data-guide-mode="keyboard"]').tap();
+      await expect(page.locator('#keyboardPanel')).toBeVisible();
+      await expect(page.locator('#touchHelp')).toBeHidden();
+      await expect(page.locator('#guideBody [data-guide-mode="keyboard"]')).toHaveAttribute('aria-pressed', 'true');
+      await page.locator('#guideBody [data-guide-mode="touch"]').tap();
       await expect(page.locator('main')).toHaveAttribute('inert', '');
       await expect(page.locator('#guideBackdrop')).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`guide-${id}-touch.png`) });

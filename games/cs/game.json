@@ -1,0 +1,47 @@
+{
+  "id": "cs",
+  "group": "action",
+  "order": 7.4,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "CS",
+  "nameZh": "反恐精英",
+  "desc": "Browser tactical FPS on real CS maps — fy_snow elimination, Dust II bomb defusal and team deathmatch, 5v5 against bots.",
+  "descZh": "浏览器战术射击:雪地竞技场歼灭、炙热沙城Ⅱ双包点爆破与团队竞技,5v5 机器人对战。",
+  "canvasSize": { "width": 1280, "height": 720 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["W", "A", "S", "D"], "action": "Move", "actionZh": "移动" },
+      { "keys": ["Mouse"], "action": "Look / Fire (pointer lock)", "actionZh": "瞄准 / 射击(指针锁定)" },
+      { "keys": ["Right click"], "action": "Scope / secondary", "actionZh": "开镜 / 辅助攻击" },
+      { "keys": ["R"], "action": "Reload", "actionZh": "换弹" },
+      { "keys": ["E"], "action": "Pick up / plant / defuse", "actionZh": "拾取 / 安放 / 拆除" },
+      { "keys": ["B"], "action": "Buy menu (Dust II)", "actionZh": "购买菜单(沙城)" },
+      { "keys": ["Tab"], "action": "Scoreboard", "actionZh": "记分板" },
+      { "keys": ["M"], "action": "Tactical map", "actionZh": "战术地图" },
+      { "keys": ["1", "2", "3", "4", "5"], "action": "Primary / Pistol / Knife / Grenade / C4", "actionZh": "主武器 / 手枪 / 刀 / 手雷 / C4" },
+      { "keys": ["G", "Q", "F"], "action": "Drop / last weapon / inspect", "actionZh": "丢枪 / 上一武器 / 检视" },
+      { "keys": ["Z", "X", "C"], "action": "Radio menus", "actionZh": "无线电菜单" },
+      { "keys": ["Shift", "Ctrl", "Space"], "action": "Walk / Crouch / Jump", "actionZh": "静步 / 蹲下 / 跳跃" },
+      { "keys": ["Esc"], "action": "Pause", "actionZh": "暂停" }
+    ],
+    "keyboardPanel": [
+      { "label": "W", "key": "w", "aliases": ["ArrowUp"] },
+      { "label": "A", "key": "a", "aliases": ["ArrowLeft"] },
+      { "label": "S", "key": "s", "aliases": ["ArrowDown"] },
+      { "label": "D", "key": "d", "aliases": ["ArrowRight"] },
+      { "label": "R", "key": "r" },
+      { "label": "E", "key": "e" },
+      { "label": "B", "key": "b" },
+      { "label": "Q", "key": "q" },
+      { "label": "1", "key": "1" },
+      { "label": "2", "key": "2" },
+      { "label": "3", "key": "3" },
+      { "label": "4", "key": "4" }
+    ],
+    "touch": [
+      { "icon": "swipe", "action": "Left: move stick, right: look", "actionZh": "左侧移动摇杆,右侧转视角" },
+      { "icon": "tap", "action": "Fire / reload / jump / use buttons", "actionZh": "开火 / 换弹 / 跳 / 拾取按钮" }
+    ]
+  }
+}

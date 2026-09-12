@@ -1,0 +1,11 @@
+{
+  "name": "@carrick/game-gacha",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@carrick/game-sdk": "*",
+    "@carrick/weapon-art": "*"
+  }
+}

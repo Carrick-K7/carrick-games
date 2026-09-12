@@ -1,0 +1,11 @@
+{
+  "name": "@carrick/game-cs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@carrick/game-sdk": "*",
+    "three": "^0.185.1"
+  }
+}

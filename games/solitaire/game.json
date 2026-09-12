@@ -1,0 +1,23 @@
+{
+  "id": "solitaire",
+  "group": "tabletop",
+  "order": 23,
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "name": "Solitaire",
+  "nameZh": "纸牌",
+  "desc": "Classic Klondike Solitaire. Move cards, build foundations, and clear the table.",
+  "descZh": "经典纸牌游戏。将所有纸牌移到王牌堆即可通关。",
+  "canvasSize": { "width": 480, "height": 640 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["1", "2", "3", "4", "5", "6", "7"], "action": "Select column", "actionZh": "选择列" },
+      { "keys": ["Space"], "action": "Draw card", "actionZh": "发牌" },
+      { "keys": ["Escape"], "action": "Deselect", "actionZh": "取消选择" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Select / move card", "actionZh": "选择 / 移动牌" },
+      { "icon": "tap", "action": "Double-click / double-tap: auto-move", "actionZh": "双击 / 双击触屏:自动放牌" }
+    ]
+  }
+}
