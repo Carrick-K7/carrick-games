@@ -222,8 +222,10 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   }).toMatchObject({ target: 2, riding: true });
   await page.waitForFunction(() => { const e = JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!); return e.floor === 2 && e.phase === 'open'; }, null, { timeout: 60_000 });
   await expect(canvas).toHaveAttribute('data-villa-floor', '2');
+  // Walk out of the car and keep going until the room really changes, rather
+  // than a fixed distance that can leave the player still inside the lift zone.
   await page.keyboard.down('s');
-  await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPosition!).z > -4.7);
+  await page.waitForFunction(() => (document.getElementById('gameCanvas') as HTMLCanvasElement).dataset.villaRoom !== 'elevator', null, { timeout: 30_000 });
   await page.keyboard.up('s'); await page.keyboard.press('Escape');
   expect(JSON.parse((await canvas.getAttribute('data-villa-position'))!).y).toBe(3.6);
   await expect(canvas).not.toHaveAttribute('data-villa-room', 'elevator');
