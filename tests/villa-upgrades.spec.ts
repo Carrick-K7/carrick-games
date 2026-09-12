@@ -82,11 +82,16 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     const panelClearsMovement = JSON.stringify(game.position) === beforePanel && game.keys.size === 0;
 
     // Actual walking through furnished rooms; only the documented H action resets position.
-    key('h'); walk(0, 1.4); walk(7.1, 1.4); walk(7.1, -3.8);
+    // 1.1.0 moved the snooker lounge's west wall east to x=8, so the route now
+    // runs north up the middle and turns east past that wall.
+    key('h'); walk(0, 1.4); walk(0, 2.6); walk(4.5, 2.6); walk(4.5, 0.5); walk(8.2, 0.5);
     const snookerVisited = game.visited.has('snooker');
-    game.yaw = -Math.PI / 2; key('Shift'); key('w'); tick(12); key('w', 'keyup'); key('Shift', 'keyup');
-    const tableBlocksRun = game.position.x < 7.86 && game.position.x > 7.5;
-    walk(7.1, -3.8); walk(7.1, 1.4); walk(13.4, 1.4); walk(18.55, 1.4); walk(18.55, -2.45);
+    // Run at the table from the apron in front of it; the rack must stop the run.
+    // (The alcove west of the table is narrower than the player, by design.)
+    walk(8.2, 0.0);
+    game.yaw = 0; key('Shift'); key('w'); tick(12); key('w', 'keyup'); key('Shift', 'keyup');
+    const tableBlocksRun = game.position.z > -1.83 && game.position.z <= -1.2;
+    walk(8.2, 0.5); walk(8.2, 2.6); walk(4.5, 2.6); walk(4.5, 1.4); walk(13.4, 1.4); walk(18.55, 1.4); walk(18.55, -2.45);
     key('e'); tick(14); const openAngle = door.rotation.y;
     const doorHasGlazing = door.children.some((o: any) => o.userData.kind === 'glazing');
     const doorStaysOpenDuringEntry = game.state.carDoorOpen;

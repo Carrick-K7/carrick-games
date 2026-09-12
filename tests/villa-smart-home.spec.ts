@@ -139,9 +139,14 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
   test.setTimeout(120_000); await mount(page);
   try {
     const otherSettings = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => /sensitivity/i.test(key) && key !== 'carrick:villa:look-sensitivity')));
+    // The look listener only reads relative deltas while the canvas owns pointer
+    // lock, so take the lock with a genuine click first, then feed raw deltas.
+    await canvas(page).click();
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('villa-smart-home-test');
     const mouseSweep = async () => {
-      await page.mouse.move(450, 300); const before = await page.evaluate(() => (window as any).__villaSmart.g.yaw);
-      await page.mouse.move(470, 300); return Math.abs(await page.evaluate(() => (window as any).__villaSmart.g.yaw) - before);
+      const before = await page.evaluate(() => (window as any).__villaSmart.g.yaw);
+      await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 20, movementY: 0, bubbles: true })));
+      return Math.abs(await page.evaluate(() => (window as any).__villaSmart.g.yaw) - before);
     };
     const normalLook = await mouseSweep(); expect(normalLook).toBeGreaterThan(.01);
     await page.keyboard.press('p'); await page.locator('[data-villa-terminal-tab="settings"]').click();
@@ -157,6 +162,10 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
     // Focus stays within the native dialog and Escape returns focus without pointer capture.
     await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-terminal-close]')).toBeFocused(); await page.keyboard.press('Shift+Tab'); await expect(page.locator('[data-villa-aim-guide]')).toBeFocused();
     await page.keyboard.press('Escape'); await expect(canvas(page)).toBeFocused(); expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+    // The terminal deliberately disables look, so the ratio is measured after it
+    // closes and a fresh trusted click hands the canvas pointer lock again.
+    await canvas(page).click();
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('villa-smart-home-test');
     expect((await mouseSweep()) / normalLook).toBeCloseTo(2.5, 2);
     expect(await page.evaluate(() => localStorage.getItem('carrick:villa:look-sensitivity'))).toBe('2.5');
     expect(await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => /sensitivity/i.test(key) && key !== 'carrick:villa:look-sensitivity')))).toEqual(otherSettings);

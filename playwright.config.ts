@@ -6,7 +6,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  workers: 1,
+  // Every spec owns its own page and the preview server is static, so CI can
+  // shard across files instead of running all 211 browser cases one at a time.
+  // Kept at 1 locally so the software renderer is not competing with itself.
+  workers: process.env.CI ? 4 : 1,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:8080',
