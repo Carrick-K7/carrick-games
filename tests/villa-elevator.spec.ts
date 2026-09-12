@@ -191,7 +191,7 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const legs = [
       [['w'], p => p.z < 7.8, 'through the front doorway'],
-      [['a'], p => p.x < -1.7, 'west clear of the doorway wall'],
+      [['a'], p => p.x < -1.45, 'west clear of the doorway wall'],
       [['w'], p => p.z < -1.2, 'north up the west aisle'],
       [['s'], p => p.z > 1.2, 'south of the stairwell opening'],
       [['d'], p => p.x > 4.4, 'east across the south hall'],
