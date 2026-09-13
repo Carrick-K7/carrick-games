@@ -89,6 +89,12 @@ function verificationPath(path) {
     || path.startsWith('.github/');
 }
 
+// Developer tooling that neither the build nor any test consumes. Its only output
+// is tracked game assets, which are classified on their own, so changing it alone
+// cannot alter a published byte or a verification result. Treating such a file as
+// a shared build input used to force every component through a version bump.
+const RELEASE_NEUTRAL = new Set(['scripts/capture-covers.mjs']);
+
 function addImpact(targets, id, runtime, reason) {
   if (!targets.has(id)) targets.set(id, { runtime: false, test: true, reasons: new Set() });
   const target = targets.get(id);
@@ -96,7 +102,7 @@ function addImpact(targets, id, runtime, reason) {
   target.reasons.add(reason);
 }
 
-function pathImpact(paths, index, lockChanges, runtimeOnly = false) {
+function pathImpact(paths, index, lockChanges, runtimeOnly = false, manifestChanges = null) {
   if (!Array.isArray(paths)) throw new TypeError('paths must be an array');
   const targets = new Map();
   let full = false;
@@ -115,7 +121,7 @@ function pathImpact(paths, index, lockChanges, runtimeOnly = false) {
     // Vite copies the whole public tree. Served bytes stay runtime inputs even
     // when named tests, fixtures, README.md or foo.test.json; not test sources.
     const publicAsset = !!dir && (local === 'public' || local.startsWith('public/'));
-    if (!publicAsset && ignoredPath(local)) continue;
+    if (!publicAsset && (ignoredPath(local) || RELEASE_NEUTRAL.has(path))) continue;
     if (dir) {
       const owner = index.byDir.get(dir);
       const runtime = publicAsset || !testPath(local);
@@ -126,6 +132,11 @@ function pathImpact(paths, index, lockChanges, runtimeOnly = false) {
         && Array.isArray(lockChanges.owners) && lockChanges.owners.every(id => index.byId.has(id));
       if (!valid || lockChanges.global) all(true, `shared-lock:${path}`);
       else for (const id of new Set(lockChanges.owners)) ownerImpact(id, true, `workspace-lock:${id}`);
+    } else if (path === 'package.json') {
+      // Only the fields a manifest summary proves non-runtime drop to verification.
+      const valid = object(manifestChanges) && typeof manifestChanges.runtime === 'boolean';
+      if (!valid || manifestChanges.runtime) all(true, `shared-runtime:${path}`);
+      else all(false, `verification:${path}`);
     } else if (verificationPath(path)) {
       all(false, `verification:${path}`);
     } else {
@@ -146,9 +157,9 @@ function pathImpact(paths, index, lockChanges, runtimeOnly = false) {
  * or a library's consumers. Workspace public/ always means runtime bytes, ahead
  * of test/docs naming rules. Root verification infrastructure never changes runtime.
  */
-export function impactOfPaths(paths, { components, libraries = [], lockChanges = null }) {
+export function impactOfPaths(paths, { components, libraries = [], lockChanges = null, manifestChanges = null }) {
   const index = workspaceIndex(components, libraries);
-  const impact = pathImpact(paths, index, lockChanges);
+  const impact = pathImpact(paths, index, lockChanges, false, manifestChanges);
   return {
     targets: Object.fromEntries(components.filter(({ id }) => impact.targets.has(id)).map(({ id }) => {
       const target = impact.targets.get(id);
@@ -241,9 +252,27 @@ export function classifyLockChanges(beforeLock, afterLock, { components, librari
 }
 
 /**
+ * classifyManifestChanges(beforeManifest, afterManifest) -> {runtime:boolean}
+ * The root package.json is a build-toolchain input: its dependencies, engines,
+ * workspaces and any field a future npm honours can change what every component
+ * builds, so an unrecognized or unreadable manifest stays runtime. The `scripts`
+ * block cannot: CI installs with `npm ci` and builds with `node scripts/build.mjs`,
+ * and runs Vitest and Playwright through their own CLIs, so a scripts-only edit is
+ * at most a verification change. Inputs are never mutated.
+ */
+export function classifyManifestChanges(beforeManifest, afterManifest) {
+  if (!object(beforeManifest) || !object(afterManifest)) return { runtime: true };
+  for (const key of new Set([...Object.keys(beforeManifest), ...Object.keys(afterManifest)])) {
+    if (key === 'scripts') continue;
+    if (!isDeepStrictEqual(beforeManifest[key], afterManifest[key])) return { runtime: true };
+  }
+  return { runtime: false };
+}
+
+/**
  * selectAffected({components, libraries=[], pendingPathsById={}, triggerPaths=[],
- *   lockChangesById={}, triggerLockChanges=null, unknownBaseIds=[], bootstrap=false,
- *   mode='main'})
+ *   lockChangesById={}, triggerLockChanges=null, manifestChangesById={},
+ *   triggerManifestChanges=null, unknownBaseIds=[], bootstrap=false, mode='main'})
  * -> {targets:[{id, runtime, test, publish, full, error?, reasons:string[]}], full}
  *
  * Main: inspect EACH component's own handledRevision..HEAD paths for runtime only;
@@ -260,10 +289,11 @@ export function classifyLockChanges(beforeLock, afterLock, { components, librari
 export function selectAffected({
   components, libraries = [], pendingPathsById = {}, triggerPaths = [],
   lockChangesById = {}, triggerLockChanges = null, unknownBaseIds = [],
+  manifestChangesById = {}, triggerManifestChanges = null,
   bootstrap = false, mode = 'main',
 }) {
   if (!['main', 'pr'].includes(mode)) throw new TypeError(`Unknown selection mode: ${mode}`);
-  if (!object(pendingPathsById) || !object(lockChangesById) || !Array.isArray(unknownBaseIds)) throw new TypeError('Invalid baseline inputs');
+  if (!object(pendingPathsById) || !object(lockChangesById) || !object(manifestChangesById) || !Array.isArray(unknownBaseIds)) throw new TypeError('Invalid baseline inputs');
   const index = workspaceIndex(components, libraries);
   const targets = new Map();
   let full = false;
@@ -274,12 +304,14 @@ export function selectAffected({
   const merge = (id, target, prefix, runtime) => {
     for (const reason of target.reasons) addImpact(targets, id, runtime, `${prefix}:${reason}`);
   };
-  const trigger = pathImpact(triggerPaths, index, triggerLockChanges);
+  const trigger = pathImpact(triggerPaths, index, triggerLockChanges, false, triggerManifestChanges);
   full ||= trigger.full;
   for (const [id, target] of trigger.targets) merge(id, target, 'trigger', mode === 'pr' && target.runtime);
   if (mode === 'main') {
     for (const { id } of components) {
-      const pending = pathImpact(own(pendingPathsById, id) ? pendingPathsById[id] : [], index, own(lockChangesById, id) ? lockChangesById[id] : null, true);
+      const pending = pathImpact(own(pendingPathsById, id) ? pendingPathsById[id] : [], index,
+        own(lockChangesById, id) ? lockChangesById[id] : null, true,
+        own(manifestChangesById, id) ? manifestChangesById[id] : null);
       const target = pending.targets.get(id);
       if (!target?.runtime) continue;
       merge(id, target, 'pending', true);

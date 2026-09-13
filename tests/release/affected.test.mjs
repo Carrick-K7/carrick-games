@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyLockChanges, compareSemver, impactOfPaths, selectAffected } from '../../scripts/affected.mjs';
+import { classifyLockChanges, classifyManifestChanges, compareSemver, impactOfPaths, selectAffected } from '../../scripts/affected.mjs';
 
 // Tiny data-only fixtures: deliberately no application parser, Git, filesystem or cache.
 const workspace = (id, dir, dependencies = {}) => ({ id, dir, pkg: { name: `@fixture/${id}`, version: '1.0.0', dependencies } });
@@ -149,6 +149,58 @@ for (const path of [
     assert.deepEqual(flags(select({ pendingPathsById: pendingForAll([path]), triggerPaths: [path] })), expected(ids, false, false, true));
   });
 }
+
+for (const path of ['scripts/capture-covers.mjs']) {
+  test(`tooling no build or test consumes is release neutral: ${path}`, () => {
+    assert.deepEqual(impact([path]), { targets: {}, full: false });
+    assert.deepEqual(flags(select({ pendingPathsById: pendingForAll([path]) })), []);
+  });
+}
+
+function manifest(overrides = {}) {
+  return {
+    name: 'carrick-games', private: true, type: 'module', engines: { node: '>=22.18.0' },
+    workspaces: ['apps/*', 'games/*', 'packages/*'],
+    scripts: { build: 'node scripts/build.mjs', 'test:e2e': 'playwright test' },
+    devDependencies: { vite: '^7.1.1' },
+    ...overrides,
+  };
+}
+const manifestChange = (after, before = manifest()) => classifyManifestChanges(before, after);
+
+test('a scripts-only root manifest edit is verification, never a runtime input', () => {
+  const change = manifestChange(manifest({ scripts: { build: 'node scripts/build.mjs', 'test:e2e': 'npm run build && playwright test' } }));
+  assert.deepEqual(change, { runtime: false });
+  assertImpact(impact(['package.json'], { manifestChanges: change }), ids, false, true);
+  const byId = Object.fromEntries(ids.map(id => [id, change]));
+  assert.deepEqual(flags(select({
+    pendingPathsById: pendingForAll(['package.json']), triggerPaths: ['package.json'],
+    triggerManifestChanges: change, manifestChangesById: byId,
+  })), expected(ids, false, false, true));
+});
+
+test('anything a manifest field could build differently stays a runtime input', () => {
+  for (const after of [
+    manifest({ devDependencies: { vite: '^8.0.0' } }),
+    manifest({ engines: { node: '>=24.0.0' } }),
+    manifest({ workspaces: ['apps/*', 'games/*'] }),
+    manifest({ type: 'commonjs' }),
+    manifest({ scripts: { build: 'node scripts/build.mjs --minify' }, devDependencies: { vite: '^8.0.0' } }),
+    manifest({ someFutureNpmField: true }),
+  ]) {
+    assert.deepEqual(manifestChange(after), { runtime: true });
+    assertImpact(impact(['package.json'], { manifestChanges: manifestChange(after) }), ids, true, true);
+  }
+});
+
+test('an unreadable or absent manifest summary stays conservative', () => {
+  assert.deepEqual(classifyManifestChanges(null, manifest()), { runtime: true });
+  assert.deepEqual(classifyManifestChanges(manifest(), undefined), { runtime: true });
+  assert.deepEqual(classifyManifestChanges('root', manifest()), { runtime: true });
+  for (const manifestChanges of [null, { runtime: 'yes' }, {}]) {
+    assertImpact(impact(['package.json'], { manifestChanges }), ids, true, true);
+  }
+});
 
 test('unchanged locks and JSON key reordering do not select', () => {
   const before = lock();

@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { ROOT, DIST, fileDigests, filesUnder, gameIds, gameWorkspace, json, posix, shellWorkspace } from './workspaces.mjs';
-import { classifyLockChanges, compareSemver, impactOfPaths, selectAffected } from './affected.mjs';
+import { classifyLockChanges, classifyManifestChanges, compareSemver, impactOfPaths, selectAffected } from './affected.mjs';
 import { canonical, fetchProductionSnapshot, fetchReleaseJSON, installPublishedArtifact, RELEASE_ORIGIN } from './release-store.mjs';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -86,12 +86,22 @@ export async function discoverComponents() {
 function lockChanges(base, head, records) {
   return classifyLockChanges(jsonAt(base, 'package-lock.json'), jsonAt(head, 'package-lock.json'), records);
 }
+function manifestChanges(base, head) {
+  return classifyManifestChanges(jsonAt(base, 'package.json'), jsonAt(head, 'package.json'));
+}
 export function requireVersionBump(target, component, previousPackage) {
   if (component.discoveryError) return `${component.id}: ${component.discoveryError}`;
   try {
     compareSemver(component.pkg.version, component.pkg.version);
     if (target.runtime && previousPackage?.version && compareSemver(component.pkg.version, previousPackage.version) <= 0) {
-      return `${component.id}: runtime publication requires version > ${previousPackage.version}; found ${component.pkg.version}`;
+      // Name the shared inputs that widened this target. A root manifest or
+      // toolchain change otherwise looks like a demand that the component's own
+      // unchanged source take a version it does not need.
+      const reasons = target.reasons ?? [];
+      const shared = reasons.filter(reason => reason.includes('shared-'));
+      const causes = (shared.length ? shared : reasons).slice(0, 3);
+      return `${component.id}: runtime publication requires version > ${previousPackage.version}; found ${component.pkg.version}`
+        + (causes.length ? ` [affected by ${causes.join('; ')}]` : '');
     }
   } catch (error) { return `${component.id}: ${error.message}`; }
   return null;
@@ -135,8 +145,10 @@ export async function createPlan({ environment = process.env, snapshot = null } 
   }
   const triggerPaths = triggerBase ? changedPaths(triggerBase, revision) : ['tsconfig.json'];
   const triggerLockChanges = triggerBase ? lockChanges(triggerBase, revision, records) : { global: true, owners: [] };
+  const triggerManifestChanges = triggerBase ? manifestChanges(triggerBase, revision) : { runtime: true };
   const pendingPathsById = {};
   const lockChangesById = {};
+  const manifestChangesById = {};
   const unknownBaseIds = [];
   const aheadIds = new Set();
   const bases = {};
@@ -157,9 +169,11 @@ export async function createPlan({ environment = process.env, snapshot = null } 
     } else {
       pendingPathsById[component.id] = changedPaths(base, revision);
       lockChangesById[component.id] = lockChanges(base, revision, records);
+      manifestChangesById[component.id] = manifestChanges(base, revision);
     }
   }
   const selection = selectAffected({ ...records, pendingPathsById, triggerPaths, lockChangesById, triggerLockChanges,
+    manifestChangesById, triggerManifestChanges,
     unknownBaseIds, bootstrap: snapshot.bootstrap && mode === 'main', mode });
   const targets = selection.targets.filter(target => snapshot.bootstrap || !aheadIds.has(target.id)).map(selected => {
     const target = { ...selected };
@@ -169,7 +183,7 @@ export async function createPlan({ environment = process.env, snapshot = null } 
     // Successful seeds survive an interrupted initial rollout. Reusing a seed
     // with identical runtime inputs does not invent another runtime release.
     if (snapshot.bootstrap && mode === 'main' && target.id !== 'shell' && state.handledRevision && !unknownBaseIds.includes(target.id)) {
-      const pending = impactOfPaths(pendingPathsById[target.id] ?? [], { ...records, lockChanges: lockChangesById[target.id] });
+      const pending = impactOfPaths(pendingPathsById[target.id] ?? [], { ...records, lockChanges: lockChangesById[target.id], manifestChanges: manifestChangesById[target.id] });
       if (!pending.targets[target.id]?.runtime) { target.runtime = false; target.publish = false; }
     }
     // Version validation is per cell, not a global gate that could block a
@@ -352,7 +366,7 @@ export async function requireFreshInputs(plan, id) {
   assert(ancestor(plan.revision, latest), 'main history changed; refusing stale publication');
   const records = { components: plan.components, libraries: plan.libraries };
   const paths = changedPaths(plan.revision, latest);
-  const impact = impactOfPaths(paths, { ...records, lockChanges: lockChanges(plan.revision, latest, records) });
+  const impact = impactOfPaths(paths, { ...records, lockChanges: lockChanges(plan.revision, latest, records), manifestChanges: manifestChanges(plan.revision, latest) });
   assert(!impact.targets[id]?.runtime && !impact.targets[id]?.test, 'Newer relevant source/dependency/test changes exist; refusing stale publication');
 }
 export async function publish(plan, id) {

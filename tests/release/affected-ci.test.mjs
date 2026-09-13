@@ -135,6 +135,18 @@ test('runtime changes require independent version bump; test-only and new packag
   assert.equal(requireVersionBump({ runtime: true }, component, null), null);
   assert.match(requireVersionBump({ runtime: true }, { ...component, discoveryError: 'bad metadata' }, null), /bad metadata/);
 });
+test('a blocked version bump names the shared input that widened the target', () => {
+  const blocked = requireVersionBump(
+    { runtime: true, reasons: ['pending:runtime:snake:games/snake/src/index.ts', 'pending:shared-runtime:package.json'] },
+    component, { version: '1.1.0' },
+  );
+  assert.match(blocked, /version > 1\.1\.0/);
+  assert.match(blocked, /shared-runtime:package\.json/);
+  assert.doesNotMatch(blocked, /games\/snake\/src\/index\.ts/, 'the owner-scoped reason is not the cause');
+  const owned = requireVersionBump({ runtime: true, reasons: ['pending:runtime:snake:games/snake/src/index.ts'] }, component, { version: '1.1.0' });
+  assert.match(owned, /games\/snake\/src\/index\.ts/, 'without a shared cause the target\'s own reason is shown');
+  assert.doesNotMatch(requireVersionBump({ runtime: true, reasons: [] }, component, { version: '1.1.0' }), /affected by/);
+});
 test('unchanged fence does not need to infer publication/rollback history', () => {
   const { plan, snapshot } = snapshotPlan();
   assert.equal(guardedTargetFence(plan, 'snake', snapshot, { sequence: 2001, isAncestor: () => false }), 1);
