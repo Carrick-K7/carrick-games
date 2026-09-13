@@ -840,9 +840,14 @@ export class VillaGame extends BaseGame {
   private movePanelCursor(dx: number, dy: number) {
     if (!this.panelCursor) return;
     const s = this.uiScale(), step = 1;
+    // Locking the pointer makes the browser emit one recentre move whose delta is
+    // far larger than real hand motion; clamping per event stops that jump from
+    // throwing the cursor into a corner before the player has moved at all.
+    const limit = 90;
+    const clamp = (v: number) => Math.max(-limit, Math.min(limit, v));
     this.panelCursor = {
-      x: Math.max(0, Math.min(this.width, this.panelCursor.x + dx * step * s)),
-      y: Math.max(0, Math.min(this.height, this.panelCursor.y + dy * step * s)),
+      x: Math.max(0, Math.min(this.width, this.panelCursor.x + clamp(dx) * step * s)),
+      y: Math.max(0, Math.min(this.height, this.panelCursor.y + clamp(dy) * step * s)),
     };
   }
 

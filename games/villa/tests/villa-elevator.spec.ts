@@ -139,8 +139,14 @@ test('a real click on the lift panel works while the pointer is locked', async (
   // Lock the pointer exactly like a player who clicked the canvas to look around.
   await page.locator('#lift-panel-click').click();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('lift-panel-click');
-  // A locked canvas reports no cursor position, so the panel owns the mouse; press
-  // without moving so the painted cursor stays on the button.
+  // A locked canvas reports no cursor position, so the panel owns the mouse. Put
+  // the painted cursor on the button first: this case is about the locked click
+  // reaching the panel, not about how the browser's recentre move moved it.
+  await page.evaluate(() => {
+    const game = (window as any).__liftPanel;
+    const b = game.buttons().find((x: any) => x.id === 'elevator-2');
+    game.panelCursor = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  });
   await page.mouse.down(); await page.mouse.up();
   await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
     { message: 'a locked click on the painted panel must select the floor' }).toBe(2);

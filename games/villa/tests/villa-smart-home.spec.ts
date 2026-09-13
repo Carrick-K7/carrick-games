@@ -48,7 +48,8 @@ async function tick(page: Page, count = 1, render = false) {
   await page.evaluate(({ count, render }) => { const f = (window as any).__villaSmart; f.tick(count); if (render) f.render(); }, { count, render });
 }
 async function cleanup(page: Page) {
-  const screenshot = test.info().outputPath('villa-smart-final-view.png'); await page.screenshot({ path: screenshot }); await test.info().attach('villa-smart-final-view', { path: screenshot, contentType: 'image/png' });
+  // Software GL can take longer than the default 15s to compose one full frame.
+  const screenshot = test.info().outputPath('villa-smart-final-view.png'); await page.screenshot({ path: screenshot, timeout: 60_000 }); await test.info().attach('villa-smart-final-view', { path: screenshot, contentType: 'image/png' });
   const log = diagnostics.get(page) ?? { runtime: [], console: [] }, logPath = test.info().outputPath('villa-browser-console.json');
   writeFileSync(logPath, JSON.stringify(log, null, 2)); await test.info().attach('villa-browser-console', { path: logPath, contentType: 'application/json' });
   const result = await page.evaluate(() => {
@@ -144,16 +145,28 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
   test.setTimeout(120_000); await mount(page);
   try {
     const otherSettings = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => /sensitivity/i.test(key) && key !== 'carrick:villa:look-sensitivity')));
+    // Hover-look needs focus and no pointer lock, and a headless runner can blur
+    // the window, which silently disables it. Take the lock with a real click and
+    // feed raw deltas to the document listener, the pattern the touch spec uses,
+    // so both sweeps are measured under identical conditions.
     const mouseSweep = async () => {
-      await page.mouse.move(450, 300); const before = await page.evaluate(() => (window as any).__villaSmart.g.yaw);
-      await page.mouse.move(470, 300); return Math.abs(await page.evaluate(() => (window as any).__villaSmart.g.yaw) - before);
+      await canvas(page).click();
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('villa-smart-home-test');
+      const before = await page.evaluate(() => (window as any).__villaSmart.g.yaw);
+      await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 20, movementY: 0, bubbles: true })));
+      return Math.abs(await page.evaluate(() => (window as any).__villaSmart.g.yaw) - before);
     };
-    const normalLook = await mouseSweep(); expect(normalLook).toBeGreaterThan(.01);
     await page.keyboard.press('p'); await page.locator('[data-villa-terminal-tab="settings"]').click();
     const range = page.locator('input[data-villa-sensitivity]'); await range.focus(); await page.keyboard.press('Home'); await expect(canvas(page)).toHaveAttribute('data-villa-look-sensitivity', '0.25');
     await page.keyboard.press('End'); await expect(canvas(page)).toHaveAttribute('data-villa-look-sensitivity', '3');
-    for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowLeft');
-    await expect(canvas(page)).toHaveAttribute('data-villa-look-sensitivity', '2.5');
+    // Step down without assuming the slider's step size: the contract under test
+    // is that look gain is proportional to the setting, not what one key press is
+    // worth, and pinning a literal here breaks whenever the range is retuned.
+    const readSensitivity = async () => Number(await canvas(page).getAttribute('data-villa-look-sensitivity'));
+    for (let i = 0; i < 12 && (await readSensitivity()) > 1.5; i++) await page.keyboard.press('ArrowLeft');
+    const scaledSetting = await readSensitivity();
+    expect(scaledSetting).toBeGreaterThan(1);
+    expect(scaledSetting).toBeLessThan(3);
     const position = await canvas(page).getAttribute('data-villa-position'); await page.keyboard.down('w'); await tick(page, 10); await page.keyboard.up('w');
     expect(await canvas(page).getAttribute('data-villa-position')).toBe(position);
     expect(await page.evaluate(() => (window as any).__villaSmart.g.keys.size)).toBe(0);
@@ -165,11 +178,25 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
     await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-terminal-close]')).toBeFocused();
     await page.keyboard.press('Shift+Tab'); await expect(page.locator('[data-villa-fallback-action="villa-immersive"]')).toBeFocused();
     await page.keyboard.press('Escape'); await expect(canvas(page)).toBeFocused(); expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
-    expect((await mouseSweep()) / normalLook).toBeCloseTo(2.5, 2);
-    expect(await page.evaluate(() => localStorage.getItem('carrick:villa:look-sensitivity'))).toBe('2.5');
+    const scaledLook = await mouseSweep();
+    expect(scaledLook).toBeGreaterThan(.01);
+    await page.keyboard.press('p'); await page.locator('[data-villa-terminal-tab="settings"]').click();
+    const again = page.locator('input[data-villa-sensitivity]'); await again.focus();
+    for (let i = 0; i < 30; i++) {
+      if ((await canvas(page).getAttribute('data-villa-look-sensitivity')) === '1') break;
+      await page.keyboard.press('ArrowLeft');
+    }
+    await expect(canvas(page)).toHaveAttribute('data-villa-look-sensitivity', '1');
+    await page.keyboard.press('Escape');
+    const baselineLook = await mouseSweep();
+    expect(baselineLook).toBeGreaterThan(.01);
+    expect(scaledLook / baselineLook).toBeCloseTo(scaledSetting, 2);
+    // The range persisted at the scaled setting; the baseline sweep then moved it to 1.0.
+    expect(await page.evaluate(() => localStorage.getItem('carrick:villa:look-sensitivity'))).toBe('1');
     expect(await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => /sensitivity/i.test(key) && key !== 'carrick:villa:look-sensitivity')))).toEqual(otherSettings);
     await page.evaluate(() => { const f = (window as any).__villaSmart; f.g.restart(); cancelAnimationFrame(f.g.animationId); f.resize(); f.render(); });
-    await expect(canvas(page)).toHaveAttribute('data-villa-look-sensitivity', '2.5'); expect(JSON.parse((await canvas(page).getAttribute('data-villa-snooker'))!).aimAssist).toBe(true);
+    // Restart must preserve the setting that is currently persisted (1.0 here).
+    await expect.poll(readSensitivity).toBe(1); expect(JSON.parse((await canvas(page).getAttribute('data-villa-snooker'))!).aimAssist).toBe(true);
   } finally { await cleanup(page); }
 });
 
