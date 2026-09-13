@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { VILLA_VERSION } from '../src/villaVersion';
 import { VILLA_RACING } from '../src/villaActivities';
 import { VILLA_HOME_LIGHTS } from '../src/villaHome';
 
@@ -35,7 +36,7 @@ async function mount(page: Page) {
     f.onKeydown = (event: KeyboardEvent) => { if (event.key.toLowerCase() === 'p') f.pRepeats.push(event.repeat); }; window.addEventListener('keydown', f.onKeydown, true);
     f.resize(); f.render(); canvas.focus(); (window as any).__villaSmart = f;
   }, moduleUrl());
-  await expect(canvas(page)).toHaveAttribute('data-villa-version', '1.2.0', { timeout: 60_000 });
+  await expect(canvas(page)).toHaveAttribute('data-villa-version', VILLA_VERSION, { timeout: 60_000 });
   await expect(canvas(page)).toHaveAttribute('data-villa-renderer', 'webgl');
   expect(await page.evaluate(() => (window as any).__villaSmart.g.running)).toBe(true);
 }
