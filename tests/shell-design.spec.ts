@@ -228,14 +228,22 @@ test.describe('game-window shell design contracts', () => {
       await page.setViewportSize({ width: 360, height: 800 }); await openShell(page); await page.goto(`/#/${id}`);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await page.setViewportSize({ width: 667, height: 375 });
-      await expect.poll(async () => { const b = await bounds(page.locator('#gameCanvas')); return b.y + b.height; }).toBeLessThanOrEqual(376);
+      // Gacha reserves 80px for its persistent progress HUD; maximize the remaining stage.
+      const stageHeight = id === 'gacha' ? 375 - 80 : 375;
+      // A vertical-fit wait is already satisfied by the frame before the game applies
+      // its own responsive stage, so wait for the geometry this test asserts. Reading
+      // that intermediate frame made the case flaky on slower runners.
+      await expect.poll(async () => {
+        const b = await bounds(page.locator('#gameCanvas'));
+        return {
+          fits: b.y + b.height <= 376,
+          maximized: Math.min(Math.abs(b.width - 667), Math.abs(b.height - stageHeight)) <= 1,
+          reserved: b.y >= (id === 'gacha' ? 79 : 0), // Subpixel canvas rounding.
+        };
+      }, { message: `${id} must settle into the rotated stage` }).toEqual({ fits: true, maximized: true, reserved: true });
       const b = await bounds(page.locator('#gameCanvas'));
       expect(b.width).toBeGreaterThan(100); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.y).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(668); expect(Math.abs(b.x + b.width / 2 - 667 / 2)).toBeLessThanOrEqual(2);
-      // Gacha reserves 80px for its persistent progress HUD; maximize the remaining stage.
-      const stageHeight = id === 'gacha' ? 375 - 80 : 375;
-      expect(Math.min(Math.abs(b.width - 667), Math.abs(b.height - stageHeight))).toBeLessThanOrEqual(1);
-      if (id === 'gacha') expect(b.y).toBeGreaterThanOrEqual(79); // Subpixel canvas rounding.
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await noOverflow(page);
     });
