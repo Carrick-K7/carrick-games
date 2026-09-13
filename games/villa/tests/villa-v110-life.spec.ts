@@ -40,7 +40,7 @@ async function mount(page: Page) {
     };
     f.render(); canvas.focus(); (window as any).__villaV110 = f;
   }, { url: moduleUrl(), layout: { tea: VILLA_TEA_BAR, aquarium: VILLA_AQUARIUM, fireplace: VILLA_FIREPLACE_WALL, wardrobe: VILLA_MASTER_WARDROBE, seats: VILLA_RELAX_SEATS, camping: VILLA_CAMPING_HOME, swing: VILLA_SWING, pickup: VILLA_PICKUP, scooter: VILLA_SCOOTER, pool: POOL } });
-  await expect(canvas(page)).toHaveAttribute('data-villa-version', '1.1.0', { timeout: 60_000 });
+  await expect(canvas(page)).toHaveAttribute('data-villa-version', '1.2.0', { timeout: 60_000 });
   await expect(canvas(page)).toHaveAttribute('data-villa-renderer', 'webgl'); expect(await page.evaluate(() => (window as any).__villaV110.g.running)).toBe(true);
 }
 async function tick(page: Page, count = 1, render = false) { await page.evaluate(({ count, render }) => { const f = (window as any).__villaV110; f.tick(count); if (render) f.render(); }, { count, render }); }

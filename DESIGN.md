@@ -152,7 +152,7 @@ Existing expressive game art and mechanics remain game-owned. Use `packages/game
 - Games use `this.isDarkTheme()` / `this.isZhLang()` and `getRetroPalette()` from `packages/game-sdk/src/render.ts`; shell tokens do not imply a global gameplay palette rewrite.
 - Existing `three` use is limited to CS, CS Kimi and Villa, rendered back into the shared 2D canvas contract. Preserve game-owned renderer/resource budgets and private QA fixtures, not shell knowledge of internal scenes.
 
-### Warm Villa 1.1.0 Source and Design
+### Warm Villa 1.2.0 Source and Design
 
 `games/villa/package.json` is Villa's independent version source; `games/villa/src/villaVersion.ts` reads it. The shell has its own version. The following retains the authored Villa design/audit constraints, **not a claim about deployment status**.
 
