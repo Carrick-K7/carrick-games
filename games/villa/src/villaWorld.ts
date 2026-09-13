@@ -134,7 +134,10 @@ add((garage.minX + garage.maxX) / 2, garage.roofY, (garage.minZ + garage.maxZ) /
 // Storeys 1 and 2 stop at the stairwell; the ground floor only needs the shaft.
 for (const y of [STOREY, STOREY * 2]) {
   const finish: VillaMaterial = y === STOREY ? 'oak' : 'stone', cy = y - 0.1;
-  add(-6.6, cy, 0, 11.2, 0.2, 18.4, finish, false);
+  // The west slab must meet the stair opening exactly: cutting it at x=-1.0
+  // while STAIR_HOLE.minX is -0.85 left a 15 cm slit down the full depth of the
+  // upper storeys, which read as a seam in the floor.
+  add(-6.5, cy, 0, 11.4, 0.2, 18.4, finish, false);
   add(1.125, cy, -8.1, 3.95, 0.2, 2.2, 'stone', false);
   add(1.125, cy, 4.85, 3.95, 0.2, 8.7, finish, false);
   add(3.275, cy, 0, 0.35, 0.2, 18.4, finish, false);
