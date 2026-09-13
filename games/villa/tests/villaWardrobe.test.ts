@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { advanceVillaWardrobes, createVillaWardrobe, createVillaWardrobes, toggleVillaWardrobe, VILLA_MASTER_WARDROBE, VILLA_WARDROBE_CONTENTS } from '../src/villaWardrobe';
+import { advanceVillaWardrobes, createVillaFridge, createVillaWardrobe, createVillaWardrobes, toggleVillaWardrobe, villaOpenableLabel, VILLA_FRIDGE_FREEZER, VILLA_MASTER_WARDROBE, VILLA_WARDROBE_CONTENTS } from '../src/villaWardrobe';
 import { villaCollides, VILLA_WALL_COLLIDERS } from '../src/villaWorld';
 const roots: THREE.Group[] = [];
 afterEach(() => roots.splice(0).forEach(root => {
@@ -50,5 +50,39 @@ describe('wardrobe hinge simulation and visible interior', () => {
     const batches: THREE.InstancedMesh[] = []; root.traverse(o => { if (o instanceof THREE.InstancedMesh) batches.push(o); });
     expect(batches).toHaveLength(3); expect(batches.every(b => b.count === 10)).toBe(true);
     const matrix = new THREE.Matrix4(); for (const batch of batches) for (let i = 0; i < batch.count; i++) { batch.getMatrixAt(i, matrix); expect(matrix.determinant()).toBeGreaterThan(0); }
+  });
+});
+describe('kitchen fridge-freezer is a real openable', () => {
+  function makeFridge() { const root = new THREE.Group(); roots.push(root); return { root, model: createVillaFridge(root) }; }
+  it('registers with the shared openable plumbing and reports fitting labels', () => {
+    const state = createVillaWardrobes();
+    expect(Object.keys(state.wardrobes)).toContain(VILLA_FRIDGE_FREEZER.id);
+    expect(state.wardrobes[VILLA_FRIDGE_FREEZER.id]).toEqual({ open: false, progress: 0 });
+    expect(villaOpenableLabel(VILLA_FRIDGE_FREEZER.id, false, false)).toBe('Open the fridge');
+    expect(villaOpenableLabel(VILLA_FRIDGE_FREEZER.id, true, true)).toBe('关闭冰箱');
+    expect(villaOpenableLabel(VILLA_MASTER_WARDROBE.id, false, false)).toBe('Open the wardrobe');
+    expect(villaOpenableLabel('sofa-living', false, false)).toBeNull();
+  });
+  it('swings both leaves open, lit inside, and returns them closed', () => {
+    const { root, model } = makeFridge(), state = createVillaWardrobes();
+    const chill = root.getObjectByName('Kitchen/fridge-door-chill')!, freezer = root.getObjectByName('Kitchen/fridge-door-freeze')!;
+    expect(chill.rotation.y).toBe(0); expect(freezer.rotation.y).toBe(0);
+    const leaf = chill.children[0] as THREE.Mesh;
+    root.updateMatrixWorld(true);
+    const closedBox = new THREE.Box3().setFromObject(leaf);
+    expect(toggleVillaWardrobe(state, VILLA_FRIDGE_FREEZER.id)).toBe(true);
+    expect(advanceVillaWardrobes(state, 2)).toBe(true);
+    expect(model.update(state)).toBe(true);
+    expect(state.wardrobes[VILLA_FRIDGE_FREEZER.id].progress).toBe(1);
+    expect(chill.rotation.y).toBeGreaterThan(1); expect(freezer.rotation.y).toBeGreaterThan(1);
+    root.updateMatrixWorld(true);
+    const openBox = new THREE.Box3().setFromObject(leaf);
+    // The leaf really sweeps out of the carcass rather than only rotating in place.
+    expect(openBox.max.z).toBeGreaterThan(closedBox.max.z + .2);
+    // Opening must not leave a solid invisible block across the doorway.
+    expect(villaCollides({ x: VILLA_FRIDGE_FREEZER.x, y: 0, z: VILLA_FRIDGE_FREEZER.z + .95 }, model.colliders)).toBe(false);
+    expect(villaCollides({ x: VILLA_FRIDGE_FREEZER.approach.x, y: 0, z: VILLA_FRIDGE_FREEZER.approach.z }, model.colliders)).toBe(false);
+    toggleVillaWardrobe(state, VILLA_FRIDGE_FREEZER.id); advanceVillaWardrobes(state, 2); model.update(state);
+    expect(chill.rotation.y).toBeCloseTo(0, 6); expect(freezer.rotation.y).toBeCloseTo(0, 6);
   });
 });

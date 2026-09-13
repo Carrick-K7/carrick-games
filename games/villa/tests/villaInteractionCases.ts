@@ -185,8 +185,13 @@ export function registerVillaInteractionTests() {
   test('failed actions remain readable and narrow Exit, rotation, cancellation and quiet-mode recovery remain usable', async ({ page }) => {
     test.setTimeout(120_000); await page.setViewportSize({ width: 360, height: 780 }); await mount(page);
     try {
-      await page.evaluate(() => { const f = (window as any).villaInput; f.g.activate('home'); f.tick(); f.render(); }); await tapPaintedUse(page);
-      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请靠近');
+      // Use with nothing in range is a silent no-op: the proximity badges already
+      // say what is reachable, so a toast here would only be noise.
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.activate('home'); f.tick(); f.render(); });
+      const quietBefore = await page.evaluate(() => (window as any).villaInput.words.join(''));
+      await tapPaintedUse(page);
+      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toBe(quietBefore);
+      expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).not.toContain('请靠近');
       await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.motion.offset = .04; f.g.position.y = .04; f.render(); }); await tapPaintedUse(page);
       expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请先落地');
       // The wider door arc now accepts the spot it used to refuse, so the

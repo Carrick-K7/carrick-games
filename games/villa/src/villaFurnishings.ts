@@ -13,6 +13,7 @@ import { createVillaAquariumLife } from './villaAquarium.js';
 import type { VillaTeaState } from './villaTea.js';
 import type { VillaWardrobeState } from './villaWardrobe.js';
 import type { VillaCollider } from './villaWorld.js';
+import { createVillaFridge } from './villaWardrobe.js';
 
 export interface VillaFurnishingState {
   evening: boolean;
@@ -238,6 +239,7 @@ export function furnishVilla(scene: THREE.Scene): {
   // cooker/hood and upper cabinetry attach only to the solid central pier.
   const tile = mat('#d5ded2', 0.25), ovenGlass = mat('#142023', 0.16, 0.3);
   const kitchenLed = mat('#fff1cd', 0.35); kitchenLed.emissive.set('#ffd497'); kitchenLed.emissiveIntensity = 0.75;
+  const fridge = createVillaFridge(root); colliders.push(...fridge.colliders);
   for (let i = 0; i < 6; i++) at(-10.55 + i * 1.22, 0, -8.35, 0, () => {
     box(0, 0.105, 0, 1.19, 0.17, 0.86, dark, 0);
     box(0, 0.5, 0, 1.19, 0.78, 1, sage);
@@ -450,7 +452,8 @@ export function furnishVilla(scene: THREE.Scene): {
     faucet.update(t, !!state.faucetOn); teaBar.update(t, state.tea ?? t < (state.teaUntil ?? 0));
     const dt = Math.max(0, t - previousTime); previousTime = t;
     aquariumLife.update(t, dt, feeding);
-    const shadowChanged = bedroom.update(state.wardrobes, state.roomLights?.master !== false);
+    const shadowChanged = bedroom.update(state.wardrobes, state.roomLights?.master !== false)
+      || fridge.update(state.wardrobes);
     for (let i = 0; i < flames.length; i++) { flames[i].visible = state.fireplace; flames[i].scale.y = 0.2 + 0.16 * (0.5 + Math.sin(t * 8 + i * 1.9) * 0.5); flames[i].position.y = 0.48 + flames[i].scale.y * 0.67; flames[i].rotation.z = Math.sin(t * 5 + i) * 0.16; }
     const night = state.nightFactor ?? (state.evening ? 1 : 0);
     fireLight.intensity = state.fireplace ? (1.8 + night * 1.7) * (0.9 + Math.sin(t * 11) * 0.06 + Math.sin(t * 7.3) * 0.04) : 0;

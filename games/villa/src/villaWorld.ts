@@ -299,7 +299,7 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'swing' | 'camping-chair' | 'wardrobe-master' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'swing' | 'camping-chair' | 'wardrobe-master' | 'fridge-freezer' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: VILLA_ELEVATOR.centerX, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },

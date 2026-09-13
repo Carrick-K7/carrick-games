@@ -9,10 +9,16 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   update(state: VillaElevatorState): boolean;
 } {
   const e = VILLA_ELEVATOR;
+  // This model authors its geometry in the shaft's own frame; the root below
+  // translates that frame onto the real shaft. Convert world coordinates with
+  // these rather than re-deriving offsets by hand.
+  const originX = e.centerX, originZ = e.centerZ + 6.3;
+  const localX = (worldX: number) => worldX - originX;
+  const localZ = (worldZ: number) => worldZ - originZ;
   const shaft = new VillaModelBuilder(parent, 'villa-elevator');
   // Authored around the original shaft centre (0, -6.3); one translation moves
   // the whole tower to its swapped location without rewriting ~40 literals.
-  shaft.root.position.set(e.centerX, 0, e.centerZ + 6.3);
+  shaft.root.position.set(originX, 0, originZ);
   const bronze = villaMaterial('#8d7051', .36, .72);
   const brushed = villaMaterial('#ac9b82', .48, .68);
   const oak = villaMaterial('#b18a60', .64);
@@ -116,7 +122,7 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   const car = new VillaModelBuilder(shaft.root, 'elevator-car');
   // Floor top is exactly state.y; the entire thickness travels below the passenger.
   // The car lives under the translated shaft root, so its floor uses local Z.
-  car.box(0, -.055, (e.carMinZ + e.carMaxZ) / 2 - e.centerZ,
+  car.box(localX((e.carMinX + e.carMaxX) / 2), -.055, localZ((e.carMinZ + e.carMaxZ) / 2),
     e.carMaxX - e.carMinX, .11, e.carMaxZ - e.carMinZ, stone, .004);
   car.box(0, -.125, -6.24, 1.89, .03, 2.25, bronze, 0);
   car.box(0, 2.395, -6.25, 1.96, .09, 2.3, stone, .005);
@@ -150,11 +156,15 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   }
   // Tiled car floor: warm stone tiles with visible grout and a bronze threshold
   // strip, so the cabin reads as a finished interior rather than bare ground.
-  const tiles = [1.86, .42, .42, .42, .42], tileDepth = 2.3 / 4;
-  for (let depth = 0; depth < 4; depth++) for (let across = 0; across < 5; across++) {
-    const x = -.93 + tiles[0] / 2 + (across === 0 ? 0 : tiles.slice(0, across).reduce((a, b) => a + b, 0) + across * .012);
-    const width = across === 0 ? tiles[0] : tiles[across];
-    car.box(x, .003, -6.25 - 1.15 + tileDepth / 2 + depth * tileDepth, width, .008, tileDepth - .012, tile, .0015);
+  // A 4x4 field inside the cabin only: the previous loop added its running
+  // offset twice, which pushed tiles out of the car and into the lobby floor.
+  const tileCols = 4, tileRows = 4, grout = .012, tileY = .003;
+  const fieldXSpan = e.carMaxX - e.carMinX - .06, fieldZ = e.carMaxZ - e.carMinZ - .12;
+  const tileW = (fieldXSpan - grout * (tileCols - 1)) / tileCols, tileD = (fieldZ - grout * (tileRows - 1)) / tileRows;
+  const fieldX = localX((e.carMinX + e.carMaxX) / 2), fieldZc = localZ((e.carMinZ + e.carMaxZ) / 2);
+  for (let row = 0; row < tileRows; row++) for (let col = 0; col < tileCols; col++) {
+    car.box(fieldX - fieldXSpan / 2 + tileW / 2 + col * (tileW + grout), tileY,
+      fieldZc - fieldZ / 2 + tileD / 2 + row * (tileD + grout), tileW, .008, tileD, tile, .0015);
   }
   car.box(0, .012, -5.155, 1.9, .006, .05, bronze, .002);
   const carDoors = makeDoors(car.root, 'elevator-car-door', 0, -5.114);

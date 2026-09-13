@@ -76,7 +76,14 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
   // unsafe ellipse. A sloping bank fills the ground cutout without covering water.
   const pondRoot = new THREE.Group(); pondRoot.name = 'estate-natural-pond'; root.add(pondRoot);
   pondRoot.userData = { waterY: VILLA_POND.waterY, unsupported: true, staticWater: true };
-  const water = new THREE.MeshStandardMaterial({ color: 0x698e87, roughness: .28, metalness: .18, transparent: true, opacity: .91 });
+  // Clear water needs something to be clear *through*: a silt bed and a basin
+  // wall so the terrain cutout never shows as a hole under the surface.
+  const water = new THREE.MeshStandardMaterial({ color: 0x9fd2d8, roughness: .05, metalness: .04, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide });
+  const bed = new THREE.MeshStandardMaterial({ color: 0xd8cba8, roughness: .93, metalness: 0 });
+  const silt = new THREE.MeshStandardMaterial({ color: 0xb0a480, roughness: .95, metalness: 0 });
+  const bedY = VILLA_POND.waterY - .62;
+  const bedPoints: number[] = [VILLA_POND.x, bedY, VILLA_POND.z], bedIndices: number[] = [];
+  const basinPoints: number[] = [], basinIndices: number[] = [];
   const waterPoints: number[] = [VILLA_POND.x, VILLA_POND.waterY, VILLA_POND.z], bankPoints: number[] = [], waterIndices: number[] = [], bankIndices: number[] = [], segments = 96;
   for (let i = 0; i <= segments; i++) {
     const a = i / segments * Math.PI * 2, radius = .943 + .02 * Math.sin(a * 3) + .012 * Math.cos(a * 5);
@@ -85,8 +92,13 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
     const ox = VILLA_POND.x + Math.cos(a) * (VILLA_POND.radiusX + 1.15), oz = VILLA_POND.z + Math.sin(a) * (VILLA_POND.radiusZ + 1.15);
     bankPoints.push(x, VILLA_POND.waterY - .014, z, ox, villaTerrainHeight(ox, oz) + .025, oz);
     if (i < segments) { waterIndices.push(0, i + 2, i + 1); const n = i * 2; bankIndices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
+    const bx = VILLA_POND.x + Math.cos(a) * VILLA_POND.radiusX * radius * .82, bz = VILLA_POND.z + Math.sin(a) * VILLA_POND.radiusZ * radius * .82;
+    bedPoints.push(bx, bedY, bz);
+    basinPoints.push(bx, bedY, bz, x, VILLA_POND.waterY, z);
+    if (i < segments) { bedIndices.push(0, i + 2, i + 1); const m = i * 2; basinIndices.push(m, m + 2, m + 1, m + 1, m + 2, m + 3); }
   }
-  for (const [vertices, indices, material, name] of [[waterPoints, waterIndices, water, 'estate-pond-water'], [bankPoints, bankIndices, bank, 'estate-pond-bank']] as const) {
+  for (const [vertices, indices, material, name] of [[waterPoints, waterIndices, water, 'estate-pond-water'], [bankPoints, bankIndices, bank, 'estate-pond-bank'],
+    [bedPoints, bedIndices, bed, 'estate-pond-bed'], [basinPoints, basinIndices, silt, 'estate-pond-basin']] as const) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); g.setIndex(indices); g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, material); mesh.name = name; mesh.receiveShadow = true; pondRoot.add(mesh);
   }
@@ -94,6 +106,16 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
     const a = i / 28 * Math.PI * 2, x = VILLA_POND.x + Math.cos(a) * 7.35, z = VILLA_POND.z + Math.sin(a) * 10.85, y = villaTerrainHeight(x, z);
     if (i % 4 === 0) model.ellipsoid(x, y + .11, z, .30, .15, .20, stone);
     else for (const dx of [-.10, .03, .11]) model.beam([x + dx, y, z], [x + dx + .03, y + .45 + (i % 3) * .12, z], .012, leaf, 5);
+  }
+  // Pebbles and silt patches on the bed, so clear water reads as shallow rather
+  // than as a tinted disc floating over a flat plate.
+  let seed = 20260912;
+  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < 54; i++) {
+    const a = random() * Math.PI * 2, r = Math.sqrt(random()) * .76;
+    const px = VILLA_POND.x + Math.cos(a) * VILLA_POND.radiusX * r, pz = VILLA_POND.z + Math.sin(a) * VILLA_POND.radiusZ * r;
+    const size = .10 + random() * .16;
+    model.ellipsoid(px, bedY + size * .32, pz, size, size * .34, size * (.8 + random() * .4), i % 3 === 0 ? stone : bed);
   }
   const v = VILLA_ESTATE_VIEWPOINT;
   const circle = Array.from({ length: 65 }, (_, i) => { const a = i / 64 * Math.PI * 2; return { x: v.x + Math.cos(a) * v.radius, z: v.z + Math.sin(a) * v.radius }; });

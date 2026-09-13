@@ -119,6 +119,33 @@ test('villa car panel lists floors top-first and drives real open/close buttons'
   expect(errors).toEqual([]);
 });
 
+test('a real click on the lift panel works while the pointer is locked', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1120, height: 700 });
+  await page.goto('/#/snake');
+  await page.evaluate(async url => {
+    const { VillaGame } = await import(url);
+    const canvas = document.createElement('canvas'); canvas.id = 'lift-panel-click'; canvas.tabIndex = 0;
+    Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' });
+    document.querySelector('#gameApp')!.append(canvas);
+    const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
+      isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;
+    game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
+    game.setViewport({ width: 1120, height: 700, dpr: 1, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
+    game.state.elevator.riding = true; game.state.elevator.phase = 'open'; game.state.elevator.door = 1;
+    game.position = { x: 4.55, y: 0, z: -5.8 }; game.eyeY = 0; game.renderFrame();
+    (window as any).__liftPanel = game;
+  }, moduleUrl());
+  // Lock the pointer exactly like a player who clicked the canvas to look around.
+  await page.locator('#lift-panel-click').click();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('lift-panel-click');
+  // A locked canvas reports no cursor position, so the panel owns the mouse; press
+  // without moving so the painted cursor stays on the button.
+  await page.mouse.down(); await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
+    { message: 'a locked click on the painted panel must select the floor' }).toBe(2);
+});
+
 test('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {
   test.setTimeout(60_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

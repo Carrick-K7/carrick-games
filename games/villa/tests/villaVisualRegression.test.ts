@@ -119,9 +119,15 @@ describe('Villa observed visual regression geometry', () => {
       if (Math.abs(block.z - 9.2) < .05) expect(bandBounds.max.z).toBeGreaterThan(southFace);
       if (Math.abs(block.z + 9.2) < .05) expect(bandBounds.min.z).toBeLessThan(northFace);
     }
-    // The east/west strips sit outside their own fascia face at x=16.2.
+    // The east/west strips sit just outside their own fascia face, and no part of
+    // the run may float past the building: a mis-centred segment used to stick
+    // 4.4 m into open air and read as a bright strip hanging above the lawn.
     expect(bandBounds.max.x).toBeGreaterThan(16.2 + .24);
+    expect(bandBounds.max.x).toBeLessThan(16.2 + .24 + .06);
     expect(bandBounds.min.x).toBeLessThan(-12.2 - .24);
+    expect(bandBounds.min.x).toBeGreaterThan(-12.2 - .24 - .06);
+    expect(bandBounds.max.z).toBeLessThan(9.2 + .24 + .06);
+    expect(bandBounds.min.z).toBeGreaterThan(-9.2 - .24 - .06);
     // And the band really is the emissive material on its outward face.
     expect((roof as THREE.MeshStandardMaterial).emissive.getHex()).not.toBe(0);
     const lights: THREE.PointLight[] = []; root.traverse(node => { if (node instanceof THREE.PointLight) lights.push(node); });

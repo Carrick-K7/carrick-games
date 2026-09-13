@@ -26,7 +26,7 @@ import { SHELL_BUTTON_MARGIN, SHELL_CLUSTER_WIDTH } from '@carrick/game-sdk/layo
 import { createVillaHome, advanceVillaHome, cycleVillaTimeOfDay, setVillaTimeOfDay, setVillaWeather, setVillaRoomLight, setVillaAllLights, setVillaLookSensitivity, type VillaHomeState } from './villaHome.js';
 import { createVillaTerminal, type VillaTerminal, type VillaTerminalSnapshot } from './villaTerminal.js';
 import { createVillaTea, advanceVillaTea, interactVillaTea, type VillaTeaState } from './villaTea.js';
-import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, VILLA_WARDROBES, type VillaWardrobeState } from './villaWardrobe.js';
+import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, villaOpenableLabel, VILLA_WARDROBES, VILLA_FRIDGE_FREEZER, type VillaWardrobeState } from './villaWardrobe.js';
 import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, isVillaCampingCollider, type VillaOutdoorState } from './villaOutdoor.js';
 import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
 import { villaCarSafeExit } from './villaDriving.js';
@@ -66,6 +66,10 @@ export class VillaGame extends BaseGame {
   private readonly touchActions = new Map<number, string>();
   private lastMouse: Point | null = null;
   private mouseLookEnabled = true;
+  /** While the lift's operating panel is up the mouse drives its cursor instead
+   * of the camera, because a pointer-locked canvas receives no click positions
+   * and the painted buttons would otherwise be unclickable. */
+  private panelCursor: Point | null = null;
   private wantPointerLock = false;
   private lockVersion = 0;
   private releasePending = false;
@@ -210,7 +214,10 @@ export class VillaGame extends BaseGame {
       const visibility = () => { if (document.hidden) blur(); };
       const leave = () => { this.lastMouse = null; };
       const pointerMove = (e: MouseEvent) => {
-        if (document.pointerLockElement === this.canvas && !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !this.shellOpen()) this.look(e.movementX, e.movementY, 0.0023);
+        if (document.pointerLockElement !== this.canvas || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
+        if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
+        if (this.panelCursor) { this.movePanelCursor(e.movementX, e.movementY); return; }
+        this.look(e.movementX, e.movementY, 0.0023);
       };
       const lockChange = () => {
         this.clearInput();
@@ -339,6 +346,7 @@ export class VillaGame extends BaseGame {
   update(dt: number) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 0;
     this.time += dt;
+    this.syncPanelCursor();
     advanceVillaHome(this.state.home, dt); this.state.evening = this.state.home.darkness > .2;
     advanceVillaTea(this.state.tea, dt);
     const wardrobeBefore = Object.fromEntries(Object.entries(this.state.wardrobes.wardrobes).map(([id, wardrobe]) => [id, wardrobe.progress]));
@@ -484,8 +492,8 @@ export class VillaGame extends BaseGame {
       { id: 'camping-chair', ...camping.seat, radius: 1.65, name: 'Sit · Q pick up chair', zh: '坐下 · Q 搬起露营椅' },
       ...VILLA_WARDROBES.map(wardrobe => ({ id: wardrobe.id, ...wardrobe.approach,
         x: Math.max(wardrobe.x - wardrobe.width / 2 + .2, Math.min(wardrobe.x + wardrobe.width / 2 - .2, p.x)), radius: 1.35,
-        name: this.state.wardrobes.wardrobes[wardrobe.id]?.open ? 'Close the wardrobe' : 'Open the wardrobe',
-        zh: this.state.wardrobes.wardrobes[wardrobe.id]?.open ? '关闭衣柜' : '打开衣柜' })),
+        name: villaOpenableLabel(wardrobe.id, !!this.state.wardrobes.wardrobes[wardrobe.id]?.open, false)!,
+        zh: villaOpenableLabel(wardrobe.id, !!this.state.wardrobes.wardrobes[wardrobe.id]?.open, true)! })),
     ];
     for (const candidate of extras) {
       const distance = Math.hypot(candidate.x - p.x, candidate.z - p.z);
@@ -814,6 +822,30 @@ export class VillaGame extends BaseGame {
       : (road ? 'Stepped outside. The door will close automatically.' : 'Back on your feet. Continue exploring.'));
   }
 
+  /** The lift panel is on screen: its buttons are the mouse's job right now. */
+  private panelFocused(): boolean {
+    return !this.state.seated && this.inElevator() && !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !this.shellOpen();
+  }
+
+  private syncPanelCursor() {
+    if (!this.panelFocused()) { this.panelCursor = null; return; }
+    if (this.panelCursor) return;
+    const buttons = this.buttons().filter(b => b.id.startsWith('elevator-'));
+    const row = buttons.length ? buttons[0] : null;
+    this.panelCursor = row
+      ? { x: row.x + row.w / 2, y: row.y + row.h / 2 }
+      : { x: this.width / 2, y: this.height / 2 };
+  }
+
+  private movePanelCursor(dx: number, dy: number) {
+    if (!this.panelCursor) return;
+    const s = this.uiScale(), step = 1;
+    this.panelCursor = {
+      x: Math.max(0, Math.min(this.width, this.panelCursor.x + dx * step * s)),
+      y: Math.max(0, Math.min(this.height, this.panelCursor.y + dy * step * s)),
+    };
+  }
+
   private inElevator(): boolean {
     return this.state.elevator.riding || villaElevatorCabinContains(this.groundPosition(), this.state.elevator);
   }
@@ -1052,10 +1084,9 @@ export class VillaGame extends BaseGame {
     if (this.state.outdoor.camping.carried) { this.toggleCampingCarry(); return; }
     if (this.state.seated === 'car' || this.state.seated === 'pickup') { this.requestCarAccess(this.state.seated); return; }
     if (this.state.seated) { this.leaveSeat(); this.publishState(); return; }
-    if (!hotspot) {
-      this.message(this.touchMode ? (zh ? '请靠近出现提示的物品或小动物，再点互动。' : 'Move closer until an action hint appears, then tap Use.')
-        : (zh ? '走近家具、水龙头、小动物或驾驶座，再按 E。' : 'Walk closer to a furnishing, tap, pet or driving seat, then press E.')); return;
-    }
+    // Pressing Use with nothing in range is a no-op, not an error: the proximity
+    // badges already say what is reachable, so a toast here is only noise.
+    if (!hotspot) return;
     const rest = villaOutdoorSeat(this.state.outdoor, hotspot.id) ?? villaRelaxSeat(hotspot.id);
     if (rest) {
       if (this.approachClear(resolveVillaSeatPosition(rest, this.groundPosition()), rest.id)) this.takeRelaxSeat(rest.id);
@@ -1196,8 +1227,17 @@ export class VillaGame extends BaseGame {
       else if (key === 'r' && !this.mapOpen && !this.terminal?.visible && !this.helpOpen) this.activate('reset-activity');
       this.publishState();
     } else if (e instanceof MouseEvent) {
-      if (document.pointerLockElement === this.canvas || this.shellOpen()) return;
+      if (this.shellOpen()) return;
       const point = this.canvasPoint(e.clientX, e.clientY);
+      if (document.pointerLockElement === this.canvas) {
+        // Locked: the browser reports no cursor position, so the lift panel's
+        // cursor is the only thing a click can land on.
+        if (e.type === 'mousedown' && e.button === 0) {
+          this.syncPanelCursor();
+          if (this.panelCursor) this.clickUi(this.panelCursor);
+        }
+        return;
+      }
       if (e.type === 'mousedown' && e.button === 0) {
         if (this.clickUi(point)) return;
         this.mouseLookEnabled = true; this.lastMouse = point; this.lockPointer();
@@ -1304,9 +1344,24 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = 'rgba(255,251,238,.65)'; ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, 2, 0, Math.PI * 2); ctx.fill();
     }
     this.drawActivityHud(ctx);
+    this.drawPanelCursor(ctx);
     this.drawInteractionPrompt(ctx); this.drawContextFeedback(ctx);
     // No bottom instruction bar: only proximity badges and actual activity HUDs.
     ctx.textBaseline = 'alphabetic';
+  }
+
+  /** The lift panel's own cursor, drawn only while it owns the mouse. */
+  private drawPanelCursor(ctx: CanvasRenderingContext2D) {
+    if (!this.panelCursor) return;
+    const s = this.uiScale();
+    const over = this.buttons().some(b => this.hit(this.panelCursor!, b));
+    ctx.save();
+    ctx.strokeStyle = over ? 'rgba(127,196,140,.98)' : 'rgba(255,251,236,.82)';
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath(); ctx.arc(this.panelCursor.x, this.panelCursor.y, 9 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = over ? 'rgba(127,196,140,.30)' : 'rgba(255,251,236,.16)';
+    ctx.beginPath(); ctx.arc(this.panelCursor.x, this.panelCursor.y, 9 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   /** A short-lived response to the player's own action, never a persistent
@@ -1382,6 +1437,7 @@ export class VillaGame extends BaseGame {
       fireplace: { x: -10, y: 1.35, z: .78 }, aquarium: { ...VILLA_AQUARIUM.anchor },
       scooter: { ...villaScooterAnchors(this.state.scooter).seat, y: villaScooterAnchors(this.state.scooter).seat.y + 1.15 },
       'wardrobe-master': { x: target.x, y: VILLA_WARDROBES[0].anchor.y, z: VILLA_WARDROBES[0].anchor.z },
+      'fridge-freezer': { x: VILLA_FRIDGE_FREEZER.anchor.x, y: VILLA_FRIDGE_FREEZER.anchor.y, z: VILLA_FRIDGE_FREEZER.anchor.z },
       elevator: { x: VILLA_ELEVATOR.centerX, y: target.y + 1.45, z: VILLA_ELEVATOR.frontZ + .06 },
       faucet: { ...VILLA_FAUCET.outlet, y: 1.4 }, 'tea-bar': VILLA_TEA_BAR.anchor,
     };

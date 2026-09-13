@@ -86,7 +86,9 @@ describe('Villa original adult anime collector display', () => {
   it('batches materials, contains finite normals and vertices, and uses no imported assets', () => {
     const scene = new THREE.Group(), light = new THREE.MeshStandardMaterial({ emissive: '#ffc575', emissiveIntensity: 0.8 });
     const display = createVillaAnimeFigureDisplay(scene, light), surfaces = meshes(display.root);
-    expect(surfaces.length).toBeLessThanOrEqual(18);
+    // 21 batches: the shelf now also carries three tinted display plinths, which
+    // stay separate materials so each figure's base keeps its own colour.
+    expect(surfaces.length).toBeLessThanOrEqual(21);
     expect(surfaces.reduce((sum, m) => sum + m.geometry.getAttribute('position').count / 3, 0)).toBeLessThan(100000);
     expect(surfaces.some(m => m.material === light)).toBe(true);
     for (const mesh of surfaces) {
@@ -114,6 +116,39 @@ describe('Villa gaming integration stays functional', () => {
     const cockpit = root.getObjectByName('racingCockpit')!;
     expect(cockpit.position.toArray()).toEqual([VILLA_RACING.seat.x, 0, VILLA_RACING.seat.z]);
     expect(root.getObjectByName('mechanicalKeyboard')!.userData.keyboardKeys).toBe(87);
+    // The showcase tower must actually contain a motherboard, not just claim one
+    // in its marker metadata: count the parts inside the case volume.
+    const pc = root.getObjectByName('panoramicGamingPC')!;
+    const caseBox = new THREE.Box3(new THREE.Vector3(8.12 - .17, .8 - .02, 3.84 - .21), new THREE.Vector3(8.12 + .17, .8 + .5, 3.84 + .21));
+    root.updateMatrixWorld(true);
+    const point = new THREE.Vector3(), colors = new Set<number>();
+    let inside = 0;
+    for (const mesh of meshes(root)) {
+      const position = mesh.geometry.getAttribute('position');
+      mesh.updateMatrixWorld(true);
+      for (let i = 0; i < position.count; i++) {
+        point.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+        if (!caseBox.containsPoint(point)) continue;
+        inside++; colors.add((mesh.material as THREE.MeshStandardMaterial).color?.getHex() ?? 0);
+      }
+    }
+    expect(pc.userData.components).toContain('motherboard');
+    expect(inside, 'motherboard assembly geometry inside the tower').toBeGreaterThan(400);
+    expect(colors.size, 'the board is more than one flat slab').toBeGreaterThan(3);
+    // Each display replica must carry real external detail - sights, trigger
+    // group, magazine - not just a receiver box. Count geometry per bay.
+    root.updateMatrixWorld(true);
+    const probe = new THREE.Vector3(), bays = [[-1.17, 2.22], [-1.28, 1.48], [-.63, .64]] as const;
+    const bayCounts = bays.map(([bx, by]) => {
+      const box = new THREE.Box3(new THREE.Vector3(10.35 + bx - .35, by - .55, 3.3 - .16), new THREE.Vector3(10.35 + bx + 3.0, by + .4, 3.3 + .14));
+      let count = 0;
+      for (const mesh of meshes(root)) {
+        const position = mesh.geometry.getAttribute('position');
+        for (let i = 0; i < position.count; i++) if (box.containsPoint(probe.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld))) count++;
+      }
+      return count;
+    });
+    for (const count of bayCounts) expect(count, 'replica detail geometry').toBeGreaterThan(700);
     expect(root.getObjectByName('lockedReplicaCabinet')!.userData.replicaNames).toEqual(['AK47', 'MosinNagant', 'MP5K']);
     expect(root.getObjectByName('consoleMediaShelf')!.userData.consoleSources).toEqual(['pc', 'ps', 'switch']);
     const display = root.getObjectByName('originalAnimeFigureWall')!;

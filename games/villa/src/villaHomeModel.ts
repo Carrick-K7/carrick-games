@@ -65,11 +65,16 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
   // The storeys widen east to x=16 in 1.1.0, so the roof band follows them.
   // Each box is centred on its outer edge, so the band covers the full side and
   // the east/west strips corner exactly with the north/south ones.
-  for (const z of [-9.455, 9.455]) for (const x of [-11.176, 10.177]) {
-    // 2 mm overlap at the seam keeps the run continuous at the villa centreline.
-    b.box(x, 7.045, z, 11.355, .085, .035, roof, .008);
+  // Segments run west edge -> centre -> east edge, with a 2 mm overlap at the
+  // seam. The centres are derived from the fascia faces, not guessed: the
+  // previous pair started 4.4 m west of the building and read as a floating strip.
+  const bandWest = -12.2 - .24 - .0175, bandEast = EAST.outer + .24 + .0175;
+  for (const z of [-9.455, 9.455]) {
+    const mid = 0;
+    b.box((bandWest + mid) / 2, 7.045, z, mid - bandWest + .002, .085, .035, roof, .008);
+    b.box((mid + bandEast) / 2, 7.045, z, bandEast - mid + .002, .085, .035, roof, .008);
   }
-  for (const x of [-12.455, EAST.outer + .255]) b.box(x, 7.045, 0, .035, .085, 18.945, roof, .008);
+  for (const x of [bandWest + .0175, bandEast - .0175]) b.box(x, 7.045, 0, .035, .085, 18.945, roof, .008);
   b.finish();
   const fixtures = VILLA_HOME_LIGHTS.flatMap(room => room.fixtures.map(position => ({ room, position })));
   const pool = Array.from({ length: 6 }, (_, i) => {

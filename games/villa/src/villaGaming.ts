@@ -38,17 +38,29 @@ export function createVillaRallyWheel(parent: THREE.Object3D, rubber = villaMate
   } };
 }
 
-export const VILLA_ANIME_FIGURES = [
-  { name: 'Hazel / seed curator', age: 28, hair: 'chestnut', hairstyle: 'layered bob', outfit: 'sage', clothing: 'ankle dress and cardigan', pose: 'contrapposto' },
-  { name: 'Alba / observatory guide', age: 27, hair: 'silver', hairstyle: 'side ponytail', outfit: 'navy', clothing: 'long coat and trousers', pose: 'greeting hand' },
-  { name: 'Poppy / botanical author', age: 31, hair: 'copper', hairstyle: 'low braid', outfit: 'rose', clothing: 'ankle dress and cardigan', pose: 'holding book' },
-  { name: 'Violet / city archivist', age: 29, hair: 'plum', hairstyle: 'swept bob', outfit: 'cream', clothing: 'long coat and trousers', pose: 'shoulder bag' },
-  { name: 'Maren / landscape architect', age: 32, hair: 'ink', hairstyle: 'swept bun', outfit: 'navy', clothing: 'high-collar dress and cape', pose: 'flowing cape' },
-  { name: 'Saffron / morning baker', age: 26, hair: 'gold', hairstyle: 'soft waves', outfit: 'ochre', clothing: 'ankle dress and cardigan', pose: 'holding book' },
-  { name: 'Fern / kite artisan', age: 30, hair: 'chestnut', hairstyle: 'short crop', outfit: 'cream', clothing: 'layered jacket and trousers', pose: 'greeting hand' },
-  { name: 'Rosie / garden designer', age: 28, hair: 'plum', hairstyle: 'long layers', outfit: 'sage', clothing: 'high-collar flowing dress', pose: 'flowing dress' },
-  { name: 'Dove / mural painter', age: 25, hair: 'silver', hairstyle: 'wind-swept layers', outfit: 'rose', clothing: 'long coat and trousers', pose: 'shoulder bag' },
-] as const;
+/** One original collector-sculpture design. `base` selects its tinted display
+ *  plinth, `hairVolume` adds swept twin-tails and `prop` a held instrument. */
+export interface VillaAnimeFigure {
+  name: string; age: number;
+  hair: 'chestnut' | 'silver' | 'copper' | 'plum' | 'ink' | 'gold';
+  hairstyle: string;
+  outfit: 'sage' | 'navy' | 'rose' | 'cream' | 'ochre';
+  clothing: string; pose: string;
+  base?: 'tealBase' | 'blueBase' | 'plumBase';
+  hairVolume?: 'twin-tails';
+  prop?: 'flute';
+}
+export const VILLA_ANIME_FIGURES: readonly VillaAnimeFigure[] = [
+  { name: 'Hazel / seed curator', age: 28, hair: 'chestnut', hairstyle: 'layered bob', outfit: 'sage', clothing: 'ankle dress and cardigan', pose: 'contrapposto', base: 'tealBase', hairVolume: 'twin-tails' },
+  { name: 'Alba / observatory guide', age: 27, hair: 'silver', hairstyle: 'side ponytail', outfit: 'navy', clothing: 'long coat and trousers', pose: 'greeting hand', base: 'blueBase' },
+  { name: 'Poppy / botanical author', age: 31, hair: 'copper', hairstyle: 'low braid', outfit: 'rose', clothing: 'ankle dress and cardigan', pose: 'holding book', base: 'plumBase', prop: 'flute' },
+  { name: 'Violet / city archivist', age: 29, hair: 'plum', hairstyle: 'swept bob', outfit: 'cream', clothing: 'long coat and trousers', pose: 'shoulder bag', base: 'plumBase' },
+  { name: 'Maren / landscape architect', age: 32, hair: 'ink', hairstyle: 'swept bun', outfit: 'navy', clothing: 'high-collar dress and cape', pose: 'flowing cape', base: 'blueBase', hairVolume: 'twin-tails' },
+  { name: 'Saffron / morning baker', age: 26, hair: 'gold', hairstyle: 'soft waves', outfit: 'ochre', clothing: 'ankle dress and cardigan', pose: 'holding book', base: 'tealBase' },
+  { name: 'Fern / kite artisan', age: 30, hair: 'chestnut', hairstyle: 'short crop', outfit: 'cream', clothing: 'layered jacket and trousers', pose: 'greeting hand', base: 'tealBase' },
+  { name: 'Rosie / garden designer', age: 28, hair: 'plum', hairstyle: 'long layers', outfit: 'sage', clothing: 'high-collar flowing dress', pose: 'flowing dress', base: 'blueBase', hairVolume: 'twin-tails' },
+  { name: 'Dove / mural painter', age: 25, hair: 'silver', hairstyle: 'wind-swept layers', outfit: 'rose', clothing: 'long coat and trousers', pose: 'shoulder bag', base: 'plumBase' },
+];
 
 /** Original adult anime collector sculptures, not licensed characters or chibi.
  * Research: https://bishoujoseries.com/about/ (Japanese-styled character statues),
@@ -65,6 +77,7 @@ export function createVillaAnimeFigureDisplay(parent: THREE.Object3D, sharedLigh
     walnut: '#584131', ink: '#242932', cream: '#ebe6db', skin: '#f2d2bb', blush: '#b87e79',
     sage: '#466759', navy: '#3f536f', rose: '#a87383', ochre: '#a4804e',
     chestnut: '#554038', copper: '#98644e', silver: '#bdc7ce', plum: '#695971', gold: '#c1a373', brass: '#ad926c',
+    tealBase: '#5fc8c2', blueBase: '#7fb2e8', plumBase: '#a98fc4',
   };
   const materials = Object.fromEntries(Object.entries(palette).map(([key, hex]) => {
     const material = villaMaterial(hex, key === 'brass' ? 0.4 : 0.65, key === 'brass' ? 0.5 : 0);
@@ -194,6 +207,43 @@ export function createVillaAnimeFigureDisplay(parent: THREE.Object3D, sharedLigh
         b.ellipsoid(headX + 0.037, 0.66, -0.035, 0.018, 0.018, 0.02, hair);
         for (let i = 0; i < 3; i++) lock([[headX + 0.04, 0.66, -0.035], [headX + 0.072 + i * 0.004, 0.623, -0.041], [headX + 0.085, 0.558, -0.045 - i * 0.009], [headX + 0.061, 0.524 + i * 0.009, -0.047]], 0.021, hair);
         b.box(headX + 0.055, 0.647, -0.025, 0.018, 0.01, 0.008, outfit, 0.002);
+      }
+      // Collector styling: a tinted display base, a ruffled skirt tier with a bow,
+      // detached sleeve cuffs and the swept hair volume that reads as a scale
+      // figure rather than a mannequin. All original geometry and colour.
+      const baseMat = design.base ?? 'tealBase';
+      b.cylinder(0, 0.008, 0, 0.168, 0.168, 0.016, materials[baseMat], [0, 0, 0], 6);
+      b.geometry(new THREE.TorusGeometry(0.156, 0.004, 5, 6), materials[baseMat], [0, 0.02, 0], [Math.PI / 2, 0, 0]);
+      lock([[0.052, 0.31, 0.03], [0.082, 0.262, 0.028], [0.07, 0.21, 0.02]], 0.019, hair);
+      lock([[-0.052, 0.31, 0.03], [-0.082, 0.262, 0.028], [-0.07, 0.21, 0.02]], 0.019, hair);
+      // Frilled skirt tier with a bow at the waist, over the dress only.
+      if (!trousers) {
+        loft([
+          { y: 0.322, rx: 0.063, rz: 0.049, pleat: 0.05 },
+          { y: 0.287, x: sway, rx: 0.093, rz: 0.069, pleat: 0.09, lift: 0.006 },
+          { y: 0.251, x: sway, rx: 0.105, rz: 0.077, pleat: 0.115, lift: 0.011 },
+        ], materials.cream, 16);
+        b.ellipsoid(sway, 0.326, 0.037, 0.016, 0.012, 0.008, materials.rose);
+        for (const side of [-1, 1]) b.ellipsoid(sway + side * 0.02, 0.325, 0.033, 0.014, 0.01, 0.006, materials.rose);
+        b.ellipsoid(sway, 0.325, 0.031, 0.006, 0.006, 0.005, materials.rose);
+      }
+      // Detached sleeve cuffs, the signature anime arm treatment.
+      for (const side of [-1, 1]) b.cylinder(side * 0.062, 0.452, 0, 0.026, 0.022, 0.03, materials.cream, undefined, 10);
+      // Twin-tails: the swept volume that makes a scale figure read at a glance.
+      if (design.hairVolume === 'twin-tails') for (const side of [-1, 1]) {
+        b.ellipsoid(headX + side * 0.041, 0.664, -0.026, 0.02, 0.02, 0.022, hair);
+        for (let i = 0; i < 3; i++) lock([
+          [headX + side * 0.045, 0.668, -0.028],
+          [headX + side * (0.074 + i * 0.005), 0.626, -0.032],
+          [headX + side * (0.088 + i * 0.007), 0.542 - i * 0.02, -0.036],
+          [headX + side * (0.06 + i * 0.013), 0.45 - i * 0.028, -0.032],
+        ], 0.024, hair);
+        b.box(headX + side * 0.056, 0.652, -0.03, 0.021, 0.011, 0.01, materials.rose, 0.002);
+      }
+      // A held instrument, as on the reference figure, kept as pure display geometry.
+      if (design.prop === 'flute') {
+        b.cylinder(0.045, 0.372, 0.082, 0.006, 0.006, 0.19, materials.brass, [0, 0, Math.PI / 2.35], 10);
+        for (const dz of [-0.03, 0.045]) b.ellipsoid(0.045 + dz, 0.375, 0.083, 0.007, 0.007, 0.005, materials.ink);
       }
       if (design.hairstyle === 'low braid') {
         for (let i = 0; i < 3; i++) lock([[headX - 0.028, 0.635, -0.036], [headX - 0.046 + Math.sin(i * 2) * 0.008, 0.565, -0.026], [headX - 0.05 + Math.cos(i * 2) * 0.008, 0.504, -0.014], [headX - 0.046, 0.473, -0.011]], 0.018, hair);
@@ -384,11 +434,39 @@ export function createVillaGaming(parent: THREE.Object3D): {
     b.box(-.151, .245, 0, .009, .425, .38, glass, 0);
     b.box(0, .245, .201, .315, .425, .004, glass, 0);
     for (const x of [-.145, .145]) for (const z of [-.18, .18]) b.box(x, -.006, z, .028, .025, .03, rubber);
-    b.box(.133, .27, -.035, .015, .32, .275, green, 0);
-    b.box(.115, .31, -.095, .018, .084, .078, steel);
-    b.box(.095, .31, -.095, .035, .068, .068, black);
-    ring(.074, .31, -.095, .026, .003, rgb, [0, Math.PI / 2, 0]);
-    for (const z of [-.03, -.005]) { b.box(.103, .345, z, .027, .16, .012, black); b.box(.084, .345, z, .007, .155, .008, rgbPink); }
+    // Motherboard: a real ATX board rather than a bare green slab. Dark PCB with
+    // visible traces, VRM heatsinks, socket and pump block, four RAM slots (two
+    // populated), chipset and M.2 shields, the 24-pin run and a rear I/O shroud.
+    const pcb = black;
+    b.box(.134, .265, -.03, .010, .355, .30, pcb, 0);
+    for (const y of [.10, .16, .22, .28, .34, .40]) b.box(.1285, y, -.03, .0016, .0026, .292, green, 0);
+    for (const z of [-.155, -.10, -.045, .01]) b.box(.1285, .265, z, .0016, .35, .0026, green, 0);
+    // Top-edge VRM heatsinks and the rear I/O shroud.
+    b.box(.115, .425, -.115, .034, .052, .09, steel, .004);
+    b.box(.115, .425, -.015, .034, .052, .088, steel, .004);
+    b.box(.118, .40, .118, .03, .12, .056, black, .003);
+    for (let i = 0; i < 5; i++) b.box(.103, .355 + i * .018, .118, .006, .009, .038, steel);
+    // Socket, retention frame and the AIO pump block over it.
+    b.box(.118, .305, -.10, .026, .058, .058, steel);
+    b.box(.108, .305, -.10, .014, .05, .05, black);
+    b.cylinder(.09, .305, -.10, .032, .032, .028, black, [0, 0, Math.PI / 2], 16);
+    ring(.0755, .305, -.10, .026, .0035, rgb, [0, Math.PI / 2, 0]);
+    b.cylinder(.072, .305, -.10, .021, .021, .006, steel, [0, 0, Math.PI / 2], 16);
+    // Four DIMM slots; the two nearest the socket carry heatspreaders.
+    for (let i = 0; i < 4; i++) {
+      const z = -.045 + i * .026;
+      b.box(.118, .305, z, .012, .1, .009, i < 2 ? black : steel);
+      if (i < 2) { b.box(.106, .305, z, .013, .096, .011, rgbPink, 0); b.box(.098, .305, z, .004, .09, .009, steel); }
+    }
+    // Chipset heatsink and the M.2 shield with its retaining screw.
+    b.box(.118, .175, -.075, .026, .05, .07, steel, .004);
+    b.box(.118, .135, -.02, .022, .028, .09, black, .003);
+    b.cylinder(.106, .135, .026, .005, .005, .004, steel, [0, 0, Math.PI / 2], 8);
+    // 24-pin ATX run plus the EPS bundle, dressed along the tray.
+    b.box(.118, .255, .108, .022, .05, .02, black);
+    cable([[.115, .262, .1], [.128, .22, .07], [.132, .17, .04]], .009, grey);
+    b.box(.118, .415, .06, .02, .024, .024, black);
+    cable([[.112, .412, .055], [.126, .37, .02], [.132, .3, -.005]], .007, grey);
     b.box(0, .155, -.025, .26, .047, .27, black);
     b.box(0, .183, -.025, .252, .009, .264, steel);
     b.box(-.132, .16, -.025, .009, .018, .25, rgb);
@@ -469,17 +547,41 @@ export function createVillaGaming(parent: THREE.Object3D): {
       b.beam([1.4, .07, .04], [2.13, .07, .04], .022, black);
       b.box(1.95, .125, .04, .027, .15, .04, steel, .002);
       b.beam([2.13, .07, .04], [2.16, .07, .04], .024, orange);
-      silhouette([[.84, -.01], [1.04, -.01], [1.03, -.2], [1.1, -.37], [.97, -.42], [.86, -.27]], .066, black, [0, 0, .012]);
-      for (let i = 0; i < 3; i++) b.beam([.88 + i * .035, -.08, .08], [.96 + i * .025, -.32, .08], .004, steel);
+      // Curved 30-round magazine: a swept banana profile, not a rectangle.
+      silhouette([[.9, -.005], [1.0, -.005], [1.05, -.13], [1.12, -.27], [1.14, -.38],
+        [1.06, -.4], [1.0, -.29], [.95, -.15], [.89, -.03]], .05, black, [0, 0, .015]);
+      for (let i = 0; i < 3; i++) b.beam([.92 + i * .012, -.1, .046], [.97 + i * .022, -.34, .046], .0035, steel);
+      // Trigger, guard, magazine release and selector lever on the receiver side.
+      silhouette([[.86, -.02], [.9, -.02], [.895, -.085], [.865, -.09]], .02, steel, [0, 0, .052]);
+      silhouette([[.84, -.005], [.93, -.005], [.925, -.115], [.905, -.12], [.9, -.03], [.85, -.03]], .014, black, [0, 0, .03]);
+      b.box(.83, -.055, .052, .03, .028, .012, black, .002);
+      b.box(1.02, .03, .052, .07, .014, .01, steel, .002);
+      // Pistol grip raked back, with a steel buttplate and sling loops.
       silhouette([[.59, 0], [.71, -.015], [.67, -.22], [.56, -.19]], .07, wood, [0, 0, .01]);
+      b.box(1.87, .09, .04, .022, .17, .09, steel, .003);
+      for (const x of [1.9, .3]) { b.beam([x, .0, .04], [x, .06, .04], .006, steel); ring(x, .0, .04, .016, .003, steel, [0, Math.PI / 2, 0]); }
+      // Front sight post with ears, rear tangent leaf and the slant brake.
+      b.box(1.9, .155, .04, .02, .045, .03, steel, .002);
+      for (const dz of [-.018, .018]) b.box(1.9, .168, .04 + dz, .014, .022, .008, steel, .001);
+      b.box(1.18, .125, .04, .07, .02, .05, steel, .002);
+      silhouette([[2.12, .05], [2.2, .06], [2.19, .1], [2.11, .09]], .04, steel, [0, 0, .0]);
       ring(.77, -.079, .055, .055, .006, steel);
     });
     b.at(-1.28, 1.48, -.045, 0, () => {
       silhouette([[0, -.09], [.38, -.055], [.66, .025], [1.89, .025], [1.89, .095], [.7, .09], [.4, .045], [.03, .13]], .074, wood, [0, 0, 0]);
       b.beam([.59, .118, .037], [2.5, .118, .037], .017, steel);
       b.box(.76, .114, .038, .4, .075, .09, black, .004);
-      for (const x of [1.35, 1.77]) b.box(x, .055, .038, .045, .115, .085, steel, .002);
+      // Two barrel bands, the bolt with its turned-down handle, and sling slots.
+      for (const x of [1.35, 1.77]) { b.box(x, .055, .038, .045, .115, .085, steel, .002); b.beam([x - .02, .115, .038], [x + .02, .115, .038], .008, steel); }
       b.beam([.88, .14, .075], [.9, .065, .125], .009, steel); b.ellipsoid(.9, .065, .125, .021, .021, .021, black);
+      b.cylinder(.9, .075, .098, .008, .008, .05, steel, [Math.PI / 2, 0, 0], 10);
+      for (const x of [1.02, 2.1]) b.beam([x, -.02, .038], [x + .06, -.02, .038], .005, steel);
+      // Trigger and guard under the receiver, hooded front sight, steel buttplate.
+      silhouette([[.8, .02], [.84, .02], [.835, -.05], [.805, -.055]], .018, steel, [0, 0, .048]);
+      silhouette([[.78, .03], [.87, .03], [.865, -.075], [.845, -.08], [.84, .045], [.79, .045]], .012, black, [0, 0, .028]);
+      b.box(2.28, .1, .037, .022, .04, .028, steel, .002);
+      for (const dz of [-.016, .016]) b.box(2.28, .112, .037 + dz, .015, .02, .007, steel, .001);
+      b.box(.06, .052, .037, .022, .105, .078, steel, .003);
       ring(.69, -.045, .06, .055, .007, black);
       b.box(2.32, .153, .037, .03, .09, .03, black, .002);
       b.beam([2.5, .118, .037], [2.53, .118, .037], .018, orange);
@@ -492,10 +594,23 @@ export function createVillaGaming(parent: THREE.Object3D): {
       b.beam([.98, .1, .04], [1.14, .1, .04], .022, black);
       b.beam([1.14, .1, .04], [1.165, .1, .04], .024, orange);
       silhouette([[.25, .02], [.4, .02], [.36, -.23], [.22, -.21]], .08, rubber, [0, 0, 0]);
-      b.box(.62, -.14, .04, .105, .35, .075, black, .006);
-      b.box(.91, -.06, .04, .085, .25, .085, rubber, .017);
-      for (let i = 0; i < 4; i++) b.box(.91, -.13 + i * .041, .085, .078, .009, .008, steel, .002);
-      ring(.47, -.045, .055, .056, .006, black); ring(.99, .217, .04, .035, .008, steel, [0, Math.PI / 2, 0]);
+      // Curved magazine with witness ribs.
+      silhouette([[.6, -.115], [.68, -.115], [.7, -.21], [.76, -.3], [.7, -.325], [.66, -.24], [.61, -.16]], .045, black, [0, 0, .018]);
+      for (let i = 0; i < 3; i++) b.box(.585 + i * .012, -.19 - i * .04, .062, .012, .07, .006, steel, .001);
+      // Trigger, guard, selector drum and magazine release.
+      silhouette([[.6, -.02], [.64, -.02], [.635, -.08], [.605, -.085]], .016, steel, [0, 0, .046]);
+      silhouette([[.58, -.005], [.67, -.005], [.665, -.1], [.645, -.105], [.64, -.02], [.59, -.02]], .011, black, [0, 0, .026]);
+      b.cylinder(.5, -.02, .052, .014, .014, .022, steel, [0, 0, Math.PI / 2], 10);
+      ring(.47, -.045, .055, .056, .006, black);
+      // Drum front sight, rear aperture and the cocking handle tube.
+      b.cylinder(.99, .217, .04, .028, .028, .03, steel, [0, 0, Math.PI / 2], 12);
+      ring(.99, .217, .04, .02, .006, black, [Math.PI / 2, 0, 0]);
+      b.box(.66, .245, .04, .05, .022, .04, steel, .002);
+      b.cylinder(.86, .17, .062, .011, .011, .055, steel, [0, 0, Math.PI / 2], 8);
+      for (let i = 0; i < 3; i++) b.box(.9, .1 + i * .028, .07, .02, .008, .006, steel, .001);
+      // Extending stock rails collapsed along the receiver.
+      for (const dz of [-.045, .045]) b.beam([.3, .13, .04 + dz], [.72, .13, .04 + dz], .008, steel);
+      b.box(.31, .13, .04, .03, .11, .11, rubber, .006);
     });
   });
   b.collide(10.35, .125, 3.3, 2.9, 2.55, .44);

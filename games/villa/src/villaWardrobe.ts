@@ -8,7 +8,25 @@ export const VILLA_MASTER_WARDROBE = {
   approach: { x: -8.6, y: 3.6, z: 2.05 }, anchor: { x: -8.6, y: 5, z: 1.1 },
   name: 'Wardrobe', zh: '衣柜',
 } as const;
-export const VILLA_WARDROBES = [VILLA_MASTER_WARDROBE] as const;
+/** A tall fridge-freezer: same openable-door contract as the wardrobe, so the
+ *  hotspot, toggle and animation plumbing is shared rather than duplicated. */
+export const VILLA_FRIDGE_FREEZER = {
+  id: 'fridge-freezer', x: -3.15, y: 0, z: -8.58, width: 0.78, depth: 0.74, height: 1.92,
+  bays: 1, doorsPerBay: 2, handleFrontZ: 0,
+  approach: { x: -3.15, y: 0, z: -7.35 }, anchor: { x: -3.15, y: 1.1, z: -7.9 },
+  name: 'Fridge', zh: '冰箱', openName: 'Open the fridge', openNameZh: '打开冰箱',
+  closeName: 'Close the fridge', closeNameZh: '关闭冰箱',
+} as const;
+/** Entries whose approach point opens a hinged front and exposes lit contents. */
+export const VILLA_WARDROBES = [VILLA_MASTER_WARDROBE, VILLA_FRIDGE_FREEZER] as const;
+type VillaOpenable = (typeof VILLA_WARDROBES)[number] & { openName?: string; openNameZh?: string; closeName?: string; closeNameZh?: string };
+export function villaOpenableLabel(id: string, open: boolean, zh: boolean): string | null {
+  const entry = (VILLA_WARDROBES as readonly VillaOpenable[]).find(w => w.id === id);
+  if (!entry) return null;
+  const fallback = zh ? (open ? '关闭衣柜' : '打开衣柜') : (open ? 'Close the wardrobe' : 'Open the wardrobe');
+  const key = open ? (zh ? entry.closeNameZh : entry.closeName) : (zh ? entry.openNameZh : entry.openName);
+  return key ?? fallback;
+}
 export interface VillaWardrobeState { wardrobes: Record<string, { open: boolean; progress: number }> }
 export function createVillaWardrobes(): VillaWardrobeState {
   return { wardrobes: Object.fromEntries(VILLA_WARDROBES.map(w => [w.id, { open: false, progress: 0 }])) };
@@ -149,6 +167,73 @@ export function createVillaWardrobe(parent: THREE.Object3D) {
       Object.assign(panels[i], { minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.max.z, minY: bounds.min.y, maxY: bounds.max.y });
     }
     batches.forEach(batch => { batch.instanceMatrix.needsUpdate = true; }); lastProgress = progress; return true;
+  }
+  update();
+  return { root: b.root, colliders: b.colliders, doorColliders: panels, update };
+}
+
+/** Two-leaf fridge-freezer: a stainless carcass whose doors swing on their
+ *  hinges, with lit shelves behind them once open. */
+export function createVillaFridge(parent: THREE.Object3D) {
+  const b = new VillaModelBuilder(parent, 'Kitchen/fridge-freezer'), f = VILLA_FRIDGE_FREEZER;
+  const steel = villaMaterial('#c3c7ca', 0.42, 0.62), shell = villaMaterial('#8f9599', 0.5, 0.35);
+  const inner = villaMaterial('#e8ebee', 0.7), glassShelf = villaMaterial('#dbe6ea', 0.25, 0.1);
+  const handle = villaMaterial('#6d7478', 0.34, 0.72), seal = villaMaterial('#3c4145', 0.85);
+  const glow = villaMaterial('#eef4f6', 0.6); glow.emissive.set('#dff0f6'); glow.emissiveIntensity = 0;
+  const doorWidth = f.width - 0.03, hingeX = f.width / 2 - 0.015;
+  const leaves: Array<{ group: THREE.Group; panel: THREE.Mesh | null; height: number; cY: number }> = [];
+  const panels: VillaCollider[] = [];
+  b.at(f.x, f.y, f.z, 0, () => {
+    // Carcass: back, two sides, top, bottom and the divider between the two zones.
+    b.box(0, .96, -f.depth / 2 + .02, f.width, f.height, .04, shell, .004);
+    for (const x of [-f.width / 2 + .015, f.width / 2 - .015]) b.box(x, .96, 0, .03, f.height, f.depth, shell, .004);
+    b.box(0, f.height - .015, 0, f.width, .03, f.depth, shell, .004);
+    b.box(0, .015, 0, f.width, .03, f.depth, shell, .004);
+    b.box(0, 1.15, 0, f.width - .06, .025, f.depth - .06, inner, 0);
+    b.collide(0, 0, 0, f.width, f.height, f.depth);
+    // Lit interior: shelves, a crisper, bottles and a freezer basket.
+    for (const y of [0.42, 0.72, 1.42, 1.66]) b.box(0, y, 0, f.width - .09, .014, f.depth - .12, glassShelf, 0);
+    b.box(0, 1.52, .02, f.width - .09, .014, f.depth - .12, glow, 0);
+    for (const [x, y, z, r] of [[-.2, .49, .06, .04], [-.1, .49, -.06, .035], [-.02, .5, .09, .038], [.16, .5, 0, .042]] as const) {
+      b.cylinder(x, y + r, z, r, r, .12 + r, glassShelf, undefined, 10);
+    }
+    b.box(-.12, .98, .04, .3, .14, .3, seal, .006);
+    b.box(.19, .28, 0, .3, .16, .34, steel, .008);
+    for (let i = 0; i < 5; i++) b.beam([.06 + i * .06, .2, -.15], [.06 + i * .06, .36, -.15], .006, steel, 5);
+    // Two hinged leaves, built as groups so the swing is a pure rotation.
+    for (const zone of [{ cY: 1.5, height: 0.82 }, { cY: 0.57, height: 0.86 }] as const) {
+      const group = new THREE.Group(); group.name = `Kitchen/fridge-door-${zone.cY > 1 ? 'chill' : 'freeze'}`;
+      group.position.set(f.x + hingeX, f.y + zone.cY, f.z + f.depth / 2 + .012); b.root.add(group);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, zone.height, .05), steel);
+      door.position.set(-doorWidth / 2, 0, 0); door.castShadow = true; group.add(door);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(.016, .016, zone.height * .62, 10), handle);
+      bar.position.set(-doorWidth + .075, 0, .055); bar.rotation.z = Math.PI / 2; group.add(bar);
+      const badge = new THREE.Mesh(new THREE.BoxGeometry(.11, .03, .006), handle);
+      badge.position.set(-doorWidth / 2, zone.height * .3, .03); group.add(badge);
+      leaves.push({ group, panel: door as THREE.Mesh, height: zone.height, cY: zone.cY });
+      panels.push({ minX: f.x + hingeX - doorWidth, maxX: f.x + hingeX, minZ: f.z + f.depth / 2 - .01, maxZ: f.z + f.depth / 2 + .06,
+        minY: f.y + zone.cY - zone.height / 2, maxY: f.y + zone.cY + zone.height / 2 });
+    }
+  });
+  b.finish();
+  let lastProgress = -1;
+  function update(state?: VillaWardrobeState, lightOn = true): boolean {
+    glow.emissiveIntensity = lightOn ? 0.55 : 0;
+    const progress = Math.max(0, Math.min(1, state?.wardrobes[f.id]?.progress ?? 0));
+    if (progress === lastProgress) return false;
+    lastProgress = progress;
+    const angle = progress * progress * (3 - 2 * progress) * Math.PI * 0.62;
+    for (const leaf of leaves) {
+      leaf.group.rotation.y = angle;
+      // The open leaf sweeps into the room; close the collider gap it leaves behind.
+      const reach = Math.cos(angle) * doorWidth, swing = Math.sin(angle) * doorWidth;
+      const index = leaves.indexOf(leaf);
+      Object.assign(panels[index], {
+        minX: Math.min(f.x + hingeX - reach, f.x + hingeX - swing), maxX: f.x + hingeX,
+        minZ: f.z + f.depth / 2 - .01, maxZ: f.z + f.depth / 2 + .06 + Math.abs(swing),
+      });
+    }
+    return true;
   }
   update();
   return { root: b.root, colliders: b.colliders, doorColliders: panels, update };
