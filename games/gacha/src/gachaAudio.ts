@@ -156,10 +156,14 @@ export class GachaSfx {
       return;
     }
     try {
-      const t0 = ctx.currentTime + (layer.delay ?? 0);
+      const rate = layer.rate ?? 1;
+      // A reversed layer leads into its moment: its nominal delay marks when it
+      // *ends*, so a reverse-riser swell crests exactly on the reveal hit.
+      const offset = (layer.delay ?? 0) - (layer.reverse ? buffer.duration / rate : 0);
+      const t0 = ctx.currentTime + Math.max(0, offset);
       const src = ctx.createBufferSource();
       src.buffer = buffer;
-      src.playbackRate.value = layer.rate ?? 1;
+      src.playbackRate.value = rate;
       const gain = ctx.createGain();
       gain.gain.value = layer.gain;
       let out: AudioNode = gain;

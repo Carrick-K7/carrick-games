@@ -98,6 +98,10 @@ describe('gacha case-opening sound kit', () => {
     const gold = revealLayers(4);
     const riser = gold.find(layer => layer.reverse);
     expect(riser?.sample).toBe('riser');
+    // A reversed layer ends at its nominal delay, so it must be scheduled to
+    // crest no later than the fanfare it leads into.
+    const hit = Math.min(...gold.filter(layer => !layer.reverse).map(layer => layer.delay ?? 0));
+    expect(riser!.delay!).toBeLessThanOrEqual(hit + 0.02);
     const plucks = gold.filter(layer => layer.sample === 'pluck');
     expect(plucks.length).toBeGreaterThanOrEqual(4);
     for (let i = 1; i < plucks.length; i++) {

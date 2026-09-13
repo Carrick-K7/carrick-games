@@ -32,7 +32,10 @@ export interface GachaSampleLayer {
   pan?: number;
   /** Reverb send, 0..1. */
   wet?: number;
-  /** Play the buffer backwards (used for the reverse-riser swell). */
+  /**
+   * Play the buffer backwards. A reversed layer's `delay` marks when it
+   * *ends*, so it leads into that moment instead of starting after it.
+   */
   reverse?: boolean;
 }
 
@@ -82,6 +85,7 @@ export const GACHA_REVEAL: GachaSampleLayer[][] = [
     { sample: 'chime-glass', gain: 0.20, delay: 0.22, wet: 0.34 },
   ],
   [
+    // The reversed riser is scheduled to crest on the bell, not after it.
     { sample: 'riser', gain: 0.26, reverse: true, delay: 0.02, wet: 0.34 },
     { sample: 'thud', gain: 0.30, rate: 0.96, wet: 0.32 },
     { sample: 'bell-grand', gain: 0.44, wet: 0.42 },
