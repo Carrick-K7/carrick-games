@@ -6,8 +6,8 @@
   "cover": { "src": "cover.webp", "width": 640, "height": 400 },
   "name": "Warm Villa",
   "nameZh": "暖居别墅",
-  "desc": "Villa 1.2.0: a cozy 3D home with tea, pets, smart controls and a drivable country estate.",
-  "descZh": "别墅 1.2.0：品茶、陪伴小动物、操控智能家居，驾车探索温馨的三层住宅与乡间庄园。",
+  "desc": "Warm Villa: cosy, calm, and free to enjoy what is beautiful.",
+  "descZh": "暖居别墅，温馨、平静，自由地感受美好",
   "canvasSize": { "width": 1120, "height": 700 },
   "controls": {
     "keyboard": [
