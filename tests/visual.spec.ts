@@ -33,8 +33,22 @@ test.describe('shell visual regression', () => {
         await page.evaluate(() => document.fonts.ready);
         await waitForVisibleArtwork(page);
         await page.mouse.move(0, 0);
-        // Game animation behind the backdrop is not a shell visual contract.
-        await expect(page.locator('.library-dialog')).toHaveScreenshot(`picker-${variant}.png`, { animations: 'disabled' });
+        // Game animation behind the backdrop is not a shell visual contract, and
+        // neither is per-game card content: names, descriptions, control
+        // summaries, artwork and group counts all come from 28 independently
+        // released games. Masking them keeps this reference about the shell's own
+        // layout, so a game release can never invalidate it.
+        await expect(page.locator('.library-dialog')).toHaveScreenshot(`picker-${variant}.png`, {
+          animations: 'disabled',
+          mask: [
+            page.locator('.game-list-cover'),
+            page.locator('.game-list-name'),
+            page.locator('.game-list-desc'),
+            page.locator('.game-list-input'),
+            page.locator('.game-group-count'),
+            page.locator('#libraryResultCount'),
+          ],
+        });
       });
 
       test(`guide ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
@@ -45,7 +59,16 @@ test.describe('shell visual regression', () => {
         await page.locator('#helpBtn').click();
         await expect(page.locator('#helpBtn')).toHaveAttribute('aria-expanded', 'true');
         await page.evaluate(() => document.fonts.ready);
-        await expect(page.locator('#helpOverlay')).toHaveScreenshot(`controls-${variant}.png`, { animations: 'disabled' });
+        // The guide names the running release, and that version changes on every
+        // game release: masking the identity line keeps a game build from
+        // invalidating a shell reference. The key rows stay visible because this
+        // reference always drives one stable game and they render the shell's own
+        // key-cap component; control-guide.spec.ts asserts their content and
+        // geometry semantically.
+        await expect(page.locator('#helpOverlay')).toHaveScreenshot(`controls-${variant}.png`, {
+          animations: 'disabled',
+          mask: [page.locator('#helpGameName'), page.locator('#helpGameVersion')],
+        });
       });
 
       test(`minimal ${theme} ${mobile ? 'mobile' : 'desktop'} shell`, async ({ page }) => {

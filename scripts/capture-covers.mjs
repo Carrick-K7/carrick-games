@@ -19,13 +19,13 @@ try {
   for (const game of catalog.games.filter(game => !selected.size || selected.has(game.id))) {
     const recipePath = join(ROOT, 'games', game.id, 'tests', 'cover.mjs');
     const recipe = existsSync(recipePath) ? await import(pathToFileURL(recipePath).href) : {};
-    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'dark' });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'light' });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
       localStorage.setItem('cg-lang', 'en');
-      localStorage.setItem('cg-theme', 'dark');
+      localStorage.setItem('cg-theme', 'light');
       let seed = 314159;
       Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
       // Let game-owned input recipes target actual painted controls.
@@ -76,11 +76,14 @@ try {
         ctx.drawImage(canvas, (640 - sw * scale) / 2, (400 - sh * scale) / 2, sw * scale, sh * scale);
       } else {
         // Keep a portrait/square board complete. Side extensions are a softened
-        // copy of that same real frame, never invented game content.
+        // copy of that same real frame, never invented game content. Only the
+        // blur separates them from the board: the old fixed dark tint belonged to
+        // the dark captures and reads as a dark band, or as a grey wash when it is
+        // lightened, once the frame itself is captured in the light theme.
         const scale = Math.max(704 / sw, 464 / sh);
         ctx.filter = 'blur(20px)';
         ctx.drawImage(canvas, (640 - sw * scale) / 2, (400 - sh * scale) / 2, sw * scale, sh * scale);
-        ctx.filter = 'none'; ctx.fillStyle = 'rgba(7,15,15,.38)'; ctx.fillRect(0, 0, 640, 400);
+        ctx.filter = 'none';
         const width = 400 * aspect;
         ctx.drawImage(canvas, (640 - width) / 2, 0, width, 400);
       }

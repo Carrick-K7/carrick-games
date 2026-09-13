@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// The preview port is overridable so two checkouts on one machine can run their
+// suites side by side. The server is never reused: a foreign listener on this
+// port must fail the run loudly instead of silently serving another checkout.
+const port = Number(process.env.CG_PREVIEW_PORT ?? 8080);
+if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('CG_PREVIEW_PORT must be a valid TCP port');
+
 export default defineConfig({
   testDir: '.',
   testMatch: ['tests/**/*.spec.ts', 'games/*/tests/**/*.spec.ts'],
@@ -11,7 +17,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -21,8 +27,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 8080',
-    port: 8080,
-    reuseExistingServer: true,
+    // --strictPort keeps a busy port a startup failure rather than a silent move
+    // to a port the tests are not pointed at.
+    command: `npm run preview -- --host 127.0.0.1 --port ${port} --strictPort`,
+    port,
+    reuseExistingServer: false,
   },
 });
