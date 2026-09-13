@@ -1,9 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
-import { VILLA_VERSION } from '../src/villaVersion';
+import { createRequire } from 'node:module';
 import { VILLA_RACING } from '../src/villaActivities';
 import { VILLA_HOME_LIGHTS } from '../src/villaHome';
+
+// Read the published version the same way the release entry does, without
+// importing the JSON module (Node ESM needs an import attribute for that).
+const VILLA_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
 const moduleUrl = () => process.env.VILLA_MODULE_URL || gameModuleUrl('villa');
 const terminal = (page: Page) => page.locator('div[data-villa-terminal]');

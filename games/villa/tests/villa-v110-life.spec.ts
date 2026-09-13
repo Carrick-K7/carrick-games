@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
-import { VILLA_VERSION } from '../src/villaVersion';
+import { createRequire } from 'node:module';
 import { VILLA_FIREPLACE_WALL, VILLA_TEA_BAR, VILLA_AQUARIUM } from '../src/villaLivingLayout';
 import { VILLA_RELAX_SEATS } from '../src/villaSeating';
 import { VILLA_MASTER_WARDROBE } from '../src/villaWardrobe';
@@ -9,6 +9,10 @@ import { VILLA_CAMPING_HOME, VILLA_SWING } from '../src/villaOutdoor';
 import { VILLA_PICKUP } from '../src/villaEstateLayout';
 import { VILLA_SCOOTER } from '../src/villaActivities';
 import { POOL } from '../src/villaWorld';
+
+// Read the published version the same way the release entry does, without
+// importing the JSON module (Node ESM needs an import attribute for that).
+const VILLA_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
 const moduleUrl = () => process.env.VILLA_MODULE_URL || gameModuleUrl('villa');
 const canvas = (page: Page) => page.locator('#villa-v110-life-test');
