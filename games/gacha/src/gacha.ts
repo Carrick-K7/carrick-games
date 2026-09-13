@@ -243,6 +243,8 @@ export class GachaGame extends BaseGame {
     this.publishMenuActions();
     if (!this.startedOnce) {
       this.startedOnce = true;
+      // Release-owned recordings, resolved through the per-instance asset base.
+      if (this.host.assetUrl) this.sfx.setAssetUrl(this.host.assetUrl);
       // Holds the audio context open so the first pull already has sound.
       this.sfx.prime();
       preloadWeaponPhotos(this.host.assetUrl);
