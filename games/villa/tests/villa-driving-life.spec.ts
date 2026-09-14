@@ -3,6 +3,8 @@ import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_RELAX_SEATS, resolveVillaSeatPosition, villaSeatExitCandidates } from '../src/villaSeating';
 import { VILLA_AQUARIUM, VILLA_TEA_BAR, VILLA_FIREPLACE_WALL } from '../src/villaLivingLayout';
+import { VILLA_CAR } from '../src/villaActivities';
+import { POOL } from '../src/villaWorld';
 
 async function fixture(page: Page) {
   await page.goto('/#/snake');
@@ -45,11 +47,11 @@ const attach = async (name: string, image: string) => {
 test('villa car uses one-action automatic doors, rotating cockpit wheel and safe cancellation', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate((carExit) => {
     const { game: g, key, tick, pose, photo, cleanup } = (window as any).__villaLife;
     // Deliberate doorway fixture isolates the access sequence; the scenic-driving
     // regression separately walks the full real entrance-to-garage route.
-    pose({ x: 18.55, y: 0, z: -2.45 }, Math.PI / 2);
+    pose({ x: carExit.x, y: 0, z: carExit.z }, Math.PI / 2);
     key('e'); const opening = g.state.carDoorOpen && g.state.seated === null && Number.isFinite(g.enterCarAt);
     const scheduled = g.enterCarAt, outside = { ...g.position };
     key('q'); key('e'); key('w'); key(' '); tick(5);
@@ -70,7 +72,7 @@ test('villa car uses one-action automatic doors, rotating cockpit wheel and safe
     key('e'); tick(5);
     // Both real standing candidates are obstructed: the driver-side exit and
     // the alternate exit the source legitimately prefers when only one is free.
-    const wall = { minX: 13.5, maxX: 18.85, minZ: -2.8, maxZ: -2.1, minY: 0, maxY: 2 };
+    const wall = { minX: carExit.x - 5.05, maxX: carExit.x + 0.3, minZ: -2.8, maxZ: -2.1, minY: 0, maxY: 2 };
     const nc = g.scene.colliders.length, nd = g.scene.drivingObstacles.length;
     g.scene.colliders.push(wall); g.scene.drivingObstacles.push(wall); tick(40);
     const blocked = g.state.seated === 'car' && !g.state.carDoorOpen && g.scene.carDoorProgress === 0;
@@ -78,23 +80,24 @@ test('villa car uses one-action automatic doors, rotating cockpit wheel and safe
     key('e'); tick(40); key('e'); tick(3); key('h'); tick(45);
     const cancelled = g.state.seated === null && !g.state.carDoorOpen && g.enterCarAt === Infinity && g.exitCarAt === Infinity && g.position.z === 11.5;
     return { opening, singleAction, entered, turnsRight, centred, exited, exit, boardedWithQ, blocked, cancelled, cockpit, ...cleanup() };
-  });
+  }, VILLA_CAR.exit);
   for (const field of ['opening', 'singleAction', 'entered', 'turnsRight', 'centred', 'exited', 'boardedWithQ', 'blocked', 'cancelled', 'clean'] as const) expect(r[field], field).toBe(true);
-  expect(r.exit).toEqual({ x: 18.55, y: 0, z: -2.45 }); expect(r.scores).toBe(0); expect(errors).toEqual([]);
+  expect(r.exit).toEqual({ x: VILLA_CAR.exit.x, y: 0, z: VILLA_CAR.exit.z }); expect(r.scores).toBe(0); expect(errors).toEqual([]);
   await attach('villa-updated-cockpit-steering', r.cockpit);
 });
 
 test('villa car door steps the driver back out of a blocked swing instead of refusing', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate((carExit) => {
     const { game: g, key, tick, pose, cleanup } = (window as any).__villaLife;
-    pose({ x: 18.55, y: 0, z: -2.45 }, Math.PI / 2);
+    pose({ x: carExit.x, y: 0, z: carExit.z }, Math.PI / 2);
     g.enterCarAt = g.exitCarAt = g.closeCarAt = Infinity;
     // An obstruction exactly in front of the driver's swing: the door cannot
     // open where the player stands, so it must move them first.
     const nc = g.scene.colliders.length, nd = g.scene.drivingObstacles.length;
-    const wall = { minX: 18.2, maxX: 19.6, minZ: -2.95, maxZ: -2.6, minY: 0, maxY: 2 };
+    // Placed relative to where the driver actually stands after the garage moved.
+    const wall = { minX: carExit.x - .35, maxX: carExit.x + 1.05, minZ: -2.95, maxZ: -2.6, minY: 0, maxY: 2 };
     g.scene.colliders.push(wall); g.scene.drivingObstacles.push(wall);
     const from = { ...g.position }, doorBlocked = !g.roadExitClear('car');
     g.update(.05); // let the fixture's own tick settle before the input
@@ -116,7 +119,7 @@ test('villa car door steps the driver back out of a blocked swing instead of ref
     const reset = g.state.carDoorOpen === false && g.enterCarAt === Infinity && !g.doorStepBack;
     g.scene.colliders.length = nc; g.scene.drivingObstacles.length = nd;
     return { doorBlocked, stepped, moved, awayOnly, opened, atDoorway, proceeds, reset, prompts, settled, ...cleanup() };
-  });
+  }, VILLA_CAR.exit);
   for (const flag of ['doorBlocked', 'stepped', 'moved', 'awayOnly', 'opened', 'atDoorway', 'proceeds', 'reset', 'clean'] as const) {
     expect(r[flag], `${flag} at ${JSON.stringify(r.settled)}`).toBe(true);
   }
@@ -185,7 +188,7 @@ test('villa all 26 furniture seats and bed poses support free look and collision
     layout: { aquarium: VILLA_AQUARIUM, tea: VILLA_TEA_BAR, wall: VILLA_FIREPLACE_WALL },
   });
   expect(r.results).toHaveLength(26); expect(r.results.map((seat: any) => seat.id)).toEqual(VILLA_RELAX_SEATS.map(seat => seat.id));
-  expect(r.results.filter((seat: any) => seat.kind === 'sofa')).toHaveLength(6);
+  expect(r.results.filter((seat: any) => seat.kind === 'sofa')).toHaveLength(7);
   expect(r.results.filter((seat: any) => seat.kind === 'bed')).toHaveLength(2);
   for (const seat of r.results) {
     const contract = VILLA_RELAX_SEATS.find(expected => expected.id === seat.id)!;
@@ -196,7 +199,7 @@ test('villa all 26 furniture seats and bed poses support free look and collision
     expect(villaSeatExitCandidates(contract, resolved, seat.entry)).toContainEqual(seat.exit);
   }
   expect(r.allExitsBlocked).toBe(true); expect(r.blocked).toBe(true); expect(r.recovered).toBe(true); expect(r.clean).toBe(true); expect(r.scores).toBe(0);
-  expect(r.pool.width).toBeCloseTo(8.7); expect(r.pool.length).toBe(14); expect(r.pool.x).toBeCloseTo(-18.85); expect(r.pool.z).toBe(-.5);
+  expect(r.pool.width).toBeCloseTo(POOL.maxX - POOL.minX); expect(r.pool.length).toBe(14); expect(r.pool.x).toBeCloseTo((POOL.minX + POOL.maxX) / 2); expect(r.pool.z).toBe(-.5);
   expect(r.aquarium.x).toBe(VILLA_AQUARIUM.x); expect(r.aquarium.z).toBeCloseTo(VILLA_AQUARIUM.z, 6);
   for (const back of [r.aquarium.backZ, r.teaBackZ, r.wallBackZ]) expect(back).toBeCloseTo(VILLA_FIREPLACE_WALL.backZ, 6);
   expect(errors).toEqual([]);

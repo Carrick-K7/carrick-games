@@ -23,7 +23,7 @@ export const VILLA_GARDEN_TREES = [
   { x: -14, z: 22.8, scale: 1, species: 'mango' },
   { x: 8, z: 23, scale: 1.15, species: 'apple' },
   { x: 23.2, z: 19, scale: 1.2, species: 'orange' },
-  { x: 33.6, z: 7, scale: 1, species: 'lemon' },
+  { x: 22, z: 14.5, scale: 1, species: 'lemon' },
   { x: 34.2, z: -13.5, scale: 1.2, species: 'mango' },
   { x: -8, z: -23.4, scale: 1.15, species: 'apple' },
   { x: 8, z: -23.4, scale: 1.1, species: 'cherry' },

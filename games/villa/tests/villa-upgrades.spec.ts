@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_ANIME_FIGURES } from '../src/villaGaming';
+import { VILLA_CAR } from '../src/villaActivities';
 
 test('villa upgrades are physical models with reachable car seats, simulator inputs and safe running', async ({ page }) => {
   test.setTimeout(90_000);
@@ -10,7 +11,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
   page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
   await page.goto('/#/snake');
   const url = gameModuleUrl('villa');
-  const result = await page.evaluate(async url => {
+  const result = await page.evaluate(async ([url, carExit]: [string, { x: number; z: number }]) => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas');
     canvas.style.width = '1120px'; canvas.style.height = '700px'; document.body.append(canvas);
@@ -91,7 +92,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     walk(8.2, 0.0);
     game.yaw = 0; key('Shift'); key('w'); tick(12); key('w', 'keyup'); key('Shift', 'keyup');
     const tableBlocksRun = game.position.z > -1.83 && game.position.z <= -1.2;
-    walk(8.2, 0.5); walk(8.2, 2.6); walk(4.5, 2.6); walk(4.5, 1.4); walk(13.4, 1.4); walk(18.55, 1.4); walk(18.55, -2.45);
+    walk(8.2, 0.5); walk(8.2, 2.6); walk(4.5, 2.6); walk(4.5, 1.4); walk(carExit.x, 1.4); walk(carExit.x, 1.5); walk(carExit.x, carExit.z);
     key('e'); tick(14); const openAngle = door.rotation.y;
     const doorHasGlazing = door.children.some((o: any) => o.userData.kind === 'glazing');
     const doorStaysOpenDuringEntry = game.state.carDoorOpen;
@@ -121,7 +122,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     const exited = { seat: game.state.seated, ...game.position };
     key('q'); tick(40); const qBoards = game.state.seated === 'car' && !game.state.carDoorOpen;
     key('e'); tick(40); const eExits = game.state.seated === null && !game.state.carDoorOpen;
-    walk(18.55, -1.3); key('e'); const fenderCannotEnter = game.state.seated === null;
+    walk(carExit.x, -1.3); key('e'); const fenderCannotEnter = game.state.seated === null;
     // A restart must reset both the visible door and its mutable collider immediately.
     game.init(); const restartDoorClosed = !game.state.carDoorOpen && game.scene.vehicle.doorProgress === 0 && door.rotation.y === 0;
 
@@ -183,7 +184,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
     return { modelData, figures, legacyFigureNames, racingChecks, invalidVertices, meshCount, yieldsInputFrames, walking, running, panelClearsMovement, snookerVisited, tableBlocksRun,
       openAngle, doorHasGlazing, doorStaysOpenDuringEntry, seat, seatEye, carChecks, qOpens, qCloses, qBoards, eExits, exited, fenderCannotEnter, restartDoorClosed,
       racingSeat, sources, distinctScreenFrames: new Set(screenFrames).size, racingExit, lightsOff, pcOff, scores, carImage, screenImage, rallyTexture: screenFrames[0]! };
-  }, url);
+  }, [url, VILLA_CAR.exit] as const);
   expect(result.yieldsInputFrames).toBe(true);
   expect(result.invalidVertices).toBe(0);
   expect(result.meshCount).toBeGreaterThan(80);
@@ -222,7 +223,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
   expect(result.seat).toBe('car'); expect(result.seatEye).toBeCloseTo(1.16, 5);
   expect(result.carChecks).toEqual({ movesCar: true, lockedToSeat: true, brakes: true, shiftDoesNotBoost: true, resetToGarage: true });
   expect(result.qOpens).toBe(true); expect(result.qCloses).toBe(true); expect(result.qBoards).toBe(true); expect(result.eExits).toBe(true);
-  expect(result.exited).toMatchObject({ seat: null, x: 18.55, y: 0, z: -2.45 });
+  expect(result.exited).toMatchObject({ seat: null, x: VILLA_CAR.exit.x, y: 0, z: VILLA_CAR.exit.z });
   expect(result.fenderCannotEnter).toBe(true); expect(result.restartDoorClosed).toBe(true);
   expect(result.racingSeat).toBe('racing'); expect(result.sources).toEqual(['pc', 'ps', 'switch']); expect(result.distinctScreenFrames).toBe(3);
   expect(result.racingChecks.entrySource).toBe('pc');

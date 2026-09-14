@@ -65,7 +65,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
       // Negative control: a centre this far west of the lemon trunk fits, but its
       // positive standing exit intersects the tree. Anchored to the tree so the
       // case survives the garden moving with the house.
-      const retired = { ...state, x: lemonTree.x - 1.4 }, oldExit = villaScooterAnchors(retired).exits[0]!;
+      const retired = { ...state, x: lemonTree.x - 1.4, z: lemonTree.z }, oldExit = villaScooterAnchors(retired).exits[0]!;
       expect(villaScooterPoseBlocked(retired, mountingObstacles)).toBe(false);
       expect(villaCollides(oldExit, garden.colliders, 1.8)).toBe(true);
       expect(villaScooterExitClear(retired, mountingObstacles, 1)).toBe(false);
