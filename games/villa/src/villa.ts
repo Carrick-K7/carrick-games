@@ -30,7 +30,7 @@ import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, villa
 import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, isVillaCampingCollider, type VillaOutdoorState } from './villaOutdoor.js';
 import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
 import { villaCarSafeExit } from './villaDriving.js';
-import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
+import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
 import { VILLA_VERSION } from './villaVersion.js';
 
@@ -1548,7 +1548,12 @@ export class VillaGame extends BaseGame {
     }
     ctx.textBaseline = 'alphabetic';
     if (this.mapFloor === -1) { this.drawEstateMap(ctx, p, compact); return; }
-    const range = this.mapFloor === 0 ? { x: -25, z: -17, w: 70, d: 41 } : { x: -13, z: -10, w: 26, d: 23 };
+    // Plan bounds derive from the envelope so a resized house cannot fall off
+    // the map; the ground floor also spans the garage.
+    const shell = { minX: WEST.outer - 2, maxX: EAST.outer + 2, minZ: NORTH.outer - 2, maxZ: SOUTH.outer + 3 };
+    const range = this.mapFloor === 0
+      ? { x: shell.minX, z: shell.minZ, w: VILLA_GARAGE_EXTENT.maxX + 3 - shell.minX, d: shell.maxZ - shell.minZ }
+      : { x: shell.minX, z: shell.minZ, w: shell.maxX - shell.minX, d: shell.maxZ - shell.minZ };
     const scale = Math.min((p.w - 50) / range.w, (p.h - (compact ? 80 * s : 185)) / range.d);
     const left = p.x + (p.w - range.w * scale) / 2, top = p.y + (compact ? 57 * s : 133);
     const mx = (x: number) => left + (x - range.x) * scale;

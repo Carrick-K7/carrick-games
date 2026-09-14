@@ -3,6 +3,7 @@ import {
   CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_RUN_SPEED, VILLA_SNOOKER,
   VILLA_WALK_SPEED, createVillaActivities, nextVillaScreen,
 } from '../src/villaActivities';
+import { VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout';
 import {
   PLAYER_RADIUS, STAIR_FINISH_THICKNESS, STAIR_TREAD_THICKNESS, VILLA_BLOCKS,
   VILLA_ENTRANCE, VILLA_RAILS, VILLA_RAMPS, VILLA_WALL_COLLIDERS,
@@ -116,16 +117,16 @@ describe('Villa seats, exits and driver-side access', () => {
     expect(seat.z).toBeGreaterThan(body.minZ); expect(seat.z).toBeLessThan(body.maxZ);
     expect(door.x).toBeGreaterThan(body.maxX);
     expect(exit.x - body.maxX).toBeGreaterThan(PLAYER_RADIUS);
-    expect(exit.x + PLAYER_RADIUS).toBeLessThan(19.89);
+    expect(exit.x + PLAYER_RADIUS).toBeLessThan(VILLA_GARAGE_EXTENT.minX + 7.9);
     expect(VILLA_CAR.eyeHeight).toBe(1.16); expect(VILLA_CAR.yaw).toBe(Math.PI);
   });
   it('reaches the driver exit through the internal garage door and walks back without crossing the car', () => {
-    const route: Waypoint[] = [[0, 1.3], [8, 1.3], [8, 0.5], [18.55, 0.5], [VILLA_CAR.exit.x, VILLA_CAR.exit.z]];
+    const route: Waypoint[] = [[0, 1.3], [8, 1.3], [8, 0.5], [VILLA_GARAGE_BAYS[2].x, 0.5], [VILLA_CAR.exit.x, VILLA_CAR.exit.z]];
     const p = follow(VILLA_ENTRANCE, route, garageCollision);
     expect(p.x).toBeCloseTo(VILLA_CAR.exit.x); expect(p.z).toBeCloseTo(VILLA_CAR.exit.z);
     expect(villaRoomAt(p).id).toBe('garage');
     expect(nearestVillaHotspot(p)?.id).toBe('car');
-    follow(p, [[18.55, 0.5], [8, 0.5], [8, 1.3], [0, 1.3], [VILLA_ENTRANCE.x, VILLA_ENTRANCE.z]], garageCollision);
+    follow(p, [[VILLA_GARAGE_BAYS[2].x, 0.5], [8, 0.5], [8, 1.3], [0, 1.3], [VILLA_ENTRANCE.x, VILLA_ENTRANCE.z]], garageCollision);
   });
   it('keeps both seats and exits supported and clear of architectural walls', () => {
     for (const p of [VILLA_CAR.seat, VILLA_CAR.exit, VILLA_RACING.seat, VILLA_RACING.exit]) {

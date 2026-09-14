@@ -9,6 +9,7 @@ import { createVillaScooter, isVillaScooterCollider, villaScooterOverlaps } from
 import { createVillaActivities } from '../src/villaActivities.js';
 import { VILLA_ESTATE_BOUNDS, villaTerrainHeight, villaTerrainOrientation } from '../src/villaEstateLayout.js';
 import { VILLA_WALL_COLLIDERS, villaCollides, type VillaCollider } from '../src/villaWorld.js';
+import { POOL } from '../src/villaWorld';
 const idle = { throttle: 0, steer: 0, brake: false, handbrake: false };
 const tick = (state: ReturnType<typeof createVillaPickup>, input = idle, seconds = 1, obstacles: readonly VillaCollider[] = []) => { for (let i = 0; i < Math.round(seconds * 120); i++) advanceVillaPickup(state, input, 1 / 120, obstacles); };
 const dispose = (root: THREE.Object3D) => { const materials = new Set<THREE.Material>(); root.traverse(n => { if (n instanceof THREE.Mesh) { n.geometry.dispose(); (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => materials.add(m)); } }); materials.forEach(m => m.dispose()); };
@@ -16,10 +17,10 @@ const box = (x: number, z: number, y = 0, w = .15, d = .15, h = 1): VillaCollide
 
 describe('Villa pickup independent driving profile and safety', () => {
   it('has distinct dimensions, wheelbase and anchors and leaves the expanded second garage bay', () => {
-    const state = createVillaPickup(); expect(state).toMatchObject({ x: 21.5, z: -2.6, yaw: 0, speed: 0 });
+    const state = createVillaPickup(); expect(state).toMatchObject({ x: VILLA_PICKUP.center.x, z: VILLA_PICKUP.center.z, yaw: 0, speed: 0 });
     const a = villaPickupAnchors(state); expect(a.seat).toEqual(VILLA_PICKUP.seat); expect(a.exit).toEqual(VILLA_PICKUP.exit); expect(a.body).toEqual(VILLA_PICKUP.body);
     expect(VILLA_PICKUP_LIMITS.wheelbase).toBeGreaterThan(3); expect(VILLA_PICKUP.eyeHeight).toBeGreaterThan(1.5);
-    tick(state, { ...idle, throttle: 1 }, 6, VILLA_WALL_COLLIDERS); expect(state.z).toBeGreaterThan(23); expect(state.x).toBe(21.5); expect(state.collisions).toBe(0); expect(state.speed).toBeLessThanOrEqual(VILLA_PICKUP_LIMITS.maxSpeed);
+    tick(state, { ...idle, throttle: 1 }, 6, VILLA_WALL_COLLIDERS); expect(state.z).toBeGreaterThan(23); expect(state.x).toBe(VILLA_PICKUP.center.x); expect(state.collisions).toBe(0); expect(state.speed).toBeLessThanOrEqual(VILLA_PICKUP_LIMITS.maxSpeed);
   });
   it('retains common smooth brakes, bounded reverse and opposite reverse steering', () => {
     const forward = { ...createVillaPickup(), x: 10, z: 70 }, reverse = { ...forward };
@@ -37,7 +38,7 @@ describe('Villa pickup independent driving profile and safety', () => {
     tick(state, { ...idle, throttle: -1 }, 1, [obstacle]); expect(state.contact).toBe(false);
   });
   it('blocks pool/pond and contains the entire pitched truck inside the extended estate', () => {
-    expect(villaPickupPoseBlocked({ x: -18, z: 0, yaw: 0 }, [])).toBe(true);
+    expect(villaPickupPoseBlocked({ x: (POOL.minX + POOL.maxX) / 2, z: 0, yaw: 0 }, [])).toBe(true);
     expect(villaPickupPoseBlocked({ x: -13, z: 77.5, yaw: 0 }, [])).toBe(true);
     expect(villaPickupPoseBlocked({ x: 0, z: VILLA_ESTATE_BOUNDS.maxZ - 1, yaw: .3 }, [])).toBe(true);
     expect(villaPickupPoseBlocked({ x: 32, z: 140, yaw: 0 }, [])).toBe(false);

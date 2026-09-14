@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_HOME_LIGHTS, villaAtmosphere, type VillaHomeState } from './villaHome.js';
-import { VILLA_EAST_WALL as EAST, VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
+import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
 import type { VillaPosition } from './villaWorld.js';
 
 export interface VillaHomeModel {
@@ -68,13 +68,15 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
   // Segments run west edge -> centre -> east edge, with a 2 mm overlap at the
   // seam. The centres are derived from the fascia faces, not guessed: the
   // previous pair started 4.4 m west of the building and read as a floating strip.
-  const bandWest = -12.2 - .24 - .0175, bandEast = EAST.outer + .24 + .0175;
-  for (const z of [-9.455, 9.455]) {
-    const mid = 0;
-    b.box((bandWest + mid) / 2, 7.045, z, mid - bandWest + .002, .085, .035, roof, .008);
-    b.box((mid + bandEast) / 2, 7.045, z, bandEast - mid + .002, .085, .035, roof, .008);
+  const bandWest = WEST.outer - .24 - .0175, bandEast = EAST.outer + .24 + .0175;
+  // 0.24 is the fascia's half-depth: the strip sits just outside its outer face.
+  const bandNorth = NORTH.outer - .24 - .0175, bandSouth = SOUTH.outer + .24 + .0175, bandMid = (bandWest + bandEast) / 2;
+  for (const z of [bandNorth, bandSouth]) {
+    b.box((bandWest + bandMid) / 2, 7.045, z, bandMid - bandWest + .002, .085, .035, roof, .008);
+    b.box((bandMid + bandEast) / 2, 7.045, z, bandEast - bandMid + .002, .085, .035, roof, .008);
   }
-  for (const x of [bandWest + .0175, bandEast - .0175]) b.box(x, 7.045, 0, .035, .085, 18.945, roof, .008);
+  const bandDepth = bandSouth - bandNorth;
+  for (const x of [bandWest + .0175, bandEast - .0175]) b.box(x, 7.045, (bandNorth + bandSouth) / 2, .035, .085, bandDepth, roof, .008);
   b.finish();
   const fixtures = VILLA_HOME_LIGHTS.flatMap(room => room.fixtures.map(position => ({ room, position })));
   const pool = Array.from({ length: 6 }, (_, i) => {

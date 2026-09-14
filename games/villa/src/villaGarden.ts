@@ -15,16 +15,18 @@ export type VillaFruitSpecies = keyof typeof VILLA_FRUIT_SPECIES;
 
 /** Replaces, rather than supplements, the original furnishings' ten generic trees. */
 export const VILLA_GARDEN_TREES = [
-  { x: -23.2, z: -11, scale: 1.25, species: 'pear' },
-  { x: -23, z: 8.2, scale: 1, species: 'orange' },
+  // Six of the ten stand outside the enlarged footprint; the house doubled west,
+  // east and north, so the rows that hugged the old walls moved out with them.
+  { x: -30.4, z: -13.5, scale: 1.25, species: 'pear' },
+  { x: -30.2, z: 8.2, scale: 1, species: 'orange' },
   { x: -22, z: 19, scale: 1.25, species: 'cherry' },
   { x: -14, z: 22.8, scale: 1, species: 'mango' },
   { x: 8, z: 23, scale: 1.15, species: 'apple' },
   { x: 23.2, z: 19, scale: 1.2, species: 'orange' },
-  { x: 23.4, z: 7, scale: 1, species: 'lemon' },
-  { x: 22.7, z: -12, scale: 1.2, species: 'mango' },
-  { x: -8, z: -14.5, scale: 1.15, species: 'apple' },
-  { x: 8, z: -14.5, scale: 1.1, species: 'cherry' },
+  { x: 33.6, z: 7, scale: 1, species: 'lemon' },
+  { x: 34.2, z: -13.5, scale: 1.2, species: 'mango' },
+  { x: -8, z: -23.4, scale: 1.15, species: 'apple' },
+  { x: 8, z: -23.4, scale: 1.1, species: 'cherry' },
 ] as const satisfies readonly { x: number; z: number; scale: number; species: VillaFruitSpecies }[];
 
 export const VILLA_FLOWER_SPECIES = ['rose', 'lavender', 'daisy', 'tulip', 'hydrangea', 'sunflower'] as const;

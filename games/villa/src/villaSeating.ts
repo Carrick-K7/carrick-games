@@ -1,4 +1,5 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
+import { POOL } from './villaEstateLayout.js';
 export { VILLA_AQUARIUM } from './villaLivingLayout.js';
 
 export interface VillaRelaxSeat {
@@ -59,12 +60,16 @@ export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
   sofa('sofa-library-west', 4.2, 3.6, 6.4, 1.4, 0.4, [p(3.35, 3.6, 5.25), p(3, 3.6, 6.3)]),
   sofa('sofa-library-east', 6.9, 3.6, 6.9, 1.5, -0.4, [p(8.3, 3.6, 6.5), p(7.1, 3.6, 5.55)]),
   sofa('sofa-roof', -7, 7.2, 5.5, 4.15, 0, [p(-4.25, 7.2, 5.1), p(-5.1, 7.2, 4.3), p(-9.75, 7.2, 4.3)]),
-  ...[-20.2, -16.7].map((x, i): VillaRelaxSeat => ({ id: i ? 'lounger-east' : 'lounger-west', kind: 'lounger',
+  // The loungers sit on the pool's south deck, so they are anchored to the pool
+  // rectangle rather than to a remembered coordinate.
+  ...[POOL.minX + 3.2, POOL.minX + 6.7].map((x, i): VillaRelaxSeat => ({ id: i ? 'lounger-east' : 'lounger-west', kind: 'lounger',
     origin: p(x, 0, 9), width: 0.97, depth: 2.7, seat: p(x, 0, 9.55),
     approach: p(x + (i ? 1.05 : -1.05), 0, 9.5), exits: [p(x + (i ? 1.05 : -1.05), 0, 9.5), p(x, 0, 10.85), p(x + (i ? -1.05 : 1.05), 0, 9.5)],
     yaw: 0, pitch: 0.08, eyeHeight: 0.94, freeLook: true })),
   // 1.1.0 east wing: the widened reading bay and roof lounge are real seats.
   sofa('sofa-library-bay', 13.4, 3.6, 6.9, 1.3, 0.5, [p(13.85, 3.6, 8.05), p(14.85, 3.6, 7.05), p(12.35, 3.6, 8.15)]),
+  // The doubled plan's upstairs guest suite needed somewhere to sit.
+  sofa('sofa-east-suite', 24.6, 3.6, 6.9, 3.2, 0, [p(24.6, 3.6, 5.5), p(27.1, 3.6, 6.9), p(22.2, 3.6, 6.9)]),
   small('chair-roof-east-1', 'chair', 14.4, 7.2, 2.85, 0, 0.52, 0.52, 1.2, [p(14.4, 7.2, 1.75), p(15.5, 7.2, 2.85)]),
   small('chair-roof-east-2', 'chair', 14.4, 7.2, 5.75, Math.PI, 0.52, 0.52, 1.2, [p(14.4, 7.2, 6.85), p(13.3, 7.2, 5.75)]),
   ...[-9.33, -7.67].flatMap((x, col) => [-3.88, -1.72].map((z, row) =>

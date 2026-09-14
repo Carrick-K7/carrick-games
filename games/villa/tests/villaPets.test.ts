@@ -13,6 +13,7 @@ import { createVillaEstateModel } from '../src/villaEstateModel';
 import { createVillaVehicle } from '../src/villaVehicle';
 import { createVillaPickupModel } from '../src/villaPickupModel';
 import { createVillaScooterModel } from '../src/villaScooterModel';
+import { VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout';
 
 // Fixed 10–15 minute simulations check correctness, not a 5s wall-clock budget.
 // Shared CI runners need headroom without reducing steps or collision assertions.
@@ -315,14 +316,17 @@ describe('continuous rain shelter in the actual furnished estate', () => {
       advanceVillaPets(state, 0.25, colliders, undefined, { raining: true });
       assertSafe(state, before);
       state.pets.forEach((p, i) => {
-        if (before[i].z > 2 && p.z <= 2 && p.x > 12) {
-          expect(p.x).toBeGreaterThan(24.5); expect(p.x).toBeLessThan(27.6);
+        if (before[i].z > 2 && p.z <= 2 && p.x > VILLA_GARAGE_EXTENT.minX) {
+          // Birds cross the garage sill inside the reserved bay, whatever x the
+          // garage occupies after a resize.
+          const bay = VILLA_GARAGE_BAYS[2];
+          expect(p.x).toBeGreaterThan(bay.doorMinX); expect(p.x).toBeLessThan(bay.doorMaxX);
           if (p.kind === 'parrot') { expect(p.y).toBe(0); expect(p.wingFold).toBe(0); landedAtDoor.add(p.id); }
         }
         if (p.sheltered) {
           expect(p.shelterSite).toBe(VILLA_PET_SHELTERS[p.id].site);
           expect(p.z).toBeLessThan(p.shelterSite === 'garage' ? 1.4 : 8.4);
-          if (p.shelterSite === 'garage') { expect(p.x).toBeGreaterThan(12.5); expect(p.x).toBeLessThan(34.2); }
+          if (p.shelterSite === 'garage') { expect(p.x).toBeGreaterThan(VILLA_GARAGE_EXTENT.minX); expect(p.x).toBeLessThan(VILLA_GARAGE_EXTENT.maxX); }
           else { expect(p.x).toBeGreaterThan(-11.4); expect(p.x).toBeLessThan(-2.4); }
         }
       });

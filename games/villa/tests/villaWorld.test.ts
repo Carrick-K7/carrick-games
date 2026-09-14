@@ -6,6 +6,8 @@ import {
   type VillaCollider, type VillaPosition,
 } from '../src/villaWorld';
 import { VILLA_ESTATE_BOUNDS, VILLA_PICKUP, villaTerrainHeight } from '../src/villaEstateLayout';
+import { VILLA_EAST_WALL, VILLA_NORTH_WALL, VILLA_SOUTH_WALL, VILLA_WEST_WALL, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_BAYS } from '../src/villaEstateLayout';
+const WEST = VILLA_WEST_WALL, SOUTH = VILLA_SOUTH_WALL, NORTH = VILLA_NORTH_WALL, EAST = VILLA_EAST_WALL;
 
 const architecture = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS];
 type Waypoint = readonly [number, number];
@@ -120,7 +122,7 @@ describe('Villa doors and furniture-free room reachability', () => {
     { name: 'rear garden entrance', from: [0, 0, -10.5], to: [0, -8] },
     { name: 'pool garden entrance', from: [-13, 0, 3.8], to: [-10.5, 3.8] },
     { name: 'internal garage entrance', from: [10.5, 0, 0.5], to: [13.5, 0.5] },
-    { name: 'garage rolling door', from: [16, 0, 3.5], to: [16, 0] },
+    { name: 'garage rolling door', from: [VILLA_GARAGE_BAYS[0].x, 0, 3.5], to: [VILLA_GARAGE_BAYS[0].x, 0] },
     { name: 'gaming room', from: [4.2, 0, 1.5], to: [4.2, 4.5] },
     { name: 'primary bedroom', from: [-0.5, STOREY, 2.6], to: [-3.5, 2.6] },
     { name: 'guest bedroom', from: [-1.5, STOREY, -3.6], to: [-3.5, -3.6] },
@@ -138,8 +140,10 @@ describe('Villa doors and furniture-free room reachability', () => {
     const destinations: { route: Waypoint[]; room: string }[] = [
       { route: [[0, 6], [-5, 6]], room: 'living' },
       { route: [[-1.5, -4], [-5, -4]], room: 'kitchen' },
+      // The studio opens off the west aisle; the open stairwell blocks a straight line.
+      { route: [[-1.4, 6], [-1.4, -12], [-5, -12]], room: 'studio' },
       { route: [[0, 1.3], [4.2, 1.3], [4.2, 5]], room: 'gaming' },
-      { route: [[0, 1.3], [8, 1.3], [8, 0.5], [16, 0.5]], room: 'garage' },
+      { route: [[0, 1.3], [8, 1.3], [8, 0.5], [VILLA_GARAGE_BAYS[2].x, 0.5]], room: 'garage' },
     ];
     for (const { route, room } of destinations) {
       expect(villaRoomAt(walk(VILLA_ENTRANCE, route)).id).toBe(room);
@@ -180,44 +184,47 @@ describe('Villa collision, support and safe boundaries', () => {
   });
   it('blocks exterior walls and transparent windows on each occupied storey', () => {
     for (const y of [0, STOREY]) {
-      for (const x of [-5.5, 11.5]) {
+      for (const x of [-18, 11.5]) {
         const start = { x, y, z: 7 };
         expect(villaCollides(start, architecture)).toBe(false);
         const p = moveVillaPlayer(start, 0, 5, architecture);
-        expect(p.z).toBeLessThan(9 - PLAYER_RADIUS);
+        expect(p.z).toBeLessThan(SOUTH.inner - PLAYER_RADIUS);
         expect(villaCollides(p, architecture)).toBe(false);
       }
-      const west = moveVillaPlayer({ x: -10, y, z: -4 }, -5, 0, architecture);
-      expect(west.x).toBeGreaterThan(-12 + PLAYER_RADIUS);
+      const west = moveVillaPlayer({ x: -18, y, z: -4 }, -12, 0, architecture);
+      expect(west.x).toBeGreaterThan(WEST.inner + PLAYER_RADIUS);
     }
   });
   it('blocks the pool and property bounds even without walls', () => {
-    expect(moveVillaPlayer({ x: -13, y: 0, z: 0 }, -12, 0, []).x).toBeGreaterThan(-14.5 + PLAYER_RADIUS);
+    expect(moveVillaPlayer({ x: POOL.maxX + 0.6, y: 0, z: 0 }, -12, 0, []).x).toBeGreaterThan(POOL.maxX + PLAYER_RADIUS);
     expect(moveVillaPlayer({ x: 0, y: 0, z: 22 }, 0, 10, []).z).toBeCloseTo(32);
     expect(moveVillaPlayer({ x: 0, y: villaTerrainHeight(0, 161), z: 161 }, 0, 10, []).z).toBeLessThanOrEqual(VILLA_ESTATE_BOUNDS.maxZ);
-    for (const [x, z] of [[-25, 0], [46, 0], [0, -17], [0, 163], [-18, 0]]) {
+    for (const [x, z] of [[-41, 0], [63, 0], [0, -27], [0, 163], [-32, 0]]) {
       expect(villaSupportAt(x, z, 0)).toBeNull();
     }
   });
-  it('excludes the widened west pool from every side while keeping the south deck and pet lawn supported', () => {
-    expect(POOL).toEqual({ minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 });
-    for (const [x, z] of [[-22.8, 0], [-18, -7], [-18, 6], [-14.6, 0]]) expect(villaSupportAt(x, z, 0)).toBeNull();
-    const north = moveVillaPlayer({ x: -18, y: 0, z: -9 }, 0, 5, []);
-    const south = moveVillaPlayer({ x: -18, y: 0, z: 9 }, 0, -5, []);
-    const west = moveVillaPlayer({ x: -24, y: 0, z: 0 }, 5, 0, []);
+  it('excludes the west pool from every side while keeping the south deck and pet lawn supported', () => {
+    const mid = (POOL.minX + POOL.maxX) / 2, midZ = (POOL.minZ + POOL.maxZ) / 2;
+    for (const [x, z] of [[POOL.minX + .4, midZ], [mid, POOL.minZ + .5], [mid, POOL.maxZ - .5], [POOL.maxX - .4, midZ]]) {
+      expect(villaSupportAt(x, z, 0)).toBeNull();
+    }
+    const north = moveVillaPlayer({ x: mid, y: 0, z: POOL.minZ - 1.5 }, 0, 5, []);
+    const south = moveVillaPlayer({ x: mid, y: 0, z: POOL.maxZ + 1.5 }, 0, -5, []);
+    const west = moveVillaPlayer({ x: POOL.minX - 1.5, y: 0, z: midZ }, 5, 0, []);
     expect(north.z).toBeLessThanOrEqual(POOL.minZ - PLAYER_RADIUS);
     expect(south.z).toBeGreaterThanOrEqual(POOL.maxZ + PLAYER_RADIUS);
     expect(west.x).toBeLessThanOrEqual(POOL.minX - PLAYER_RADIUS);
-    for (const x of [-20.2, -16.7]) for (const z of [9, 10.85, 13.2, 18]) expect(villaSupportAt(x, z, 0)).toBe(0);
+    // The lounger deck followed the pool west and stays on level ground.
+    for (const x of [-33.2, -29.7]) for (const z of [9, 10.85, 13.2, 18]) expect(villaSupportAt(x, z, 0)).toBe(0);
   });
   it('supports all inclusive expanded ground bounds and rejects positions just outside', () => {
-    for (const [x, z] of [[-24.5, 20], [45, 20], [0, -16.5], [0, 162], [25, 0], [0, 24], [45, 162]]) {
+    for (const [x, z] of [[VILLA_ESTATE_BOUNDS.minX, 20], [VILLA_ESTATE_BOUNDS.maxX, 20], [0, VILLA_ESTATE_BOUNDS.minZ], [0, 162], [25, 0], [0, 24], [VILLA_ESTATE_BOUNDS.maxX, 162]]) {
       const y = villaTerrainHeight(x, z); expect(villaSupportAt(x, z, y)).toBe(y);
     }
-    for (const [x, z] of [[-24.501, 20], [45.001, 20], [0, -16.501], [0, 162.001]]) {
+    for (const [x, z] of [[VILLA_ESTATE_BOUNDS.minX - .001, 20], [VILLA_ESTATE_BOUNDS.maxX + .001, 20], [0, VILLA_ESTATE_BOUNDS.minZ - .001], [0, 162.001]]) {
       expect(villaSupportAt(x, z, villaTerrainHeight(x, z))).toBeNull();
     }
-    for (const [x, z, dx, dz] of [[-24, 20, -5, 0], [44.5, 20, 5, 0], [0, -16, 0, -5], [0, 161.5, 0, 5]]) {
+    for (const [x, z, dx, dz] of [[VILLA_ESTATE_BOUNDS.minX + .5, 20, -5, 0], [VILLA_ESTATE_BOUNDS.maxX - .5, 20, 5, 0], [0, VILLA_ESTATE_BOUNDS.minZ + .5, 0, -5], [0, 161.5, 0, 5]]) {
       const p = moveVillaPlayer({ x, y: villaTerrainHeight(x, z), z }, dx, dz, []);
       expect(p.x).toBeGreaterThanOrEqual(VILLA_ESTATE_BOUNDS.minX); expect(p.x).toBeLessThanOrEqual(VILLA_ESTATE_BOUNDS.maxX);
       expect(p.z).toBeGreaterThanOrEqual(VILLA_ESTATE_BOUNDS.minZ); expect(p.z).toBeLessThanOrEqual(VILLA_ESTATE_BOUNDS.maxZ);
@@ -236,7 +243,7 @@ describe('Villa collision, support and safe boundaries', () => {
     expect(villaSupportAt(-3, 5, STOREY, 1.75)).toBe(STOREY);
     // Posture never manufactures support inside the swimming pool or empty shaft.
     for (const height of [1.05, 1.75, 2.4]) {
-      expect(villaSupportAt(-18, 0, 0, height)).toBeNull();
+      expect(villaSupportAt((POOL.minX + POOL.maxX) / 2, 0, 0, height)).toBeNull();
       expect(villaSupportAt(4.55, -5.8, 0, height)).toBeNull();
     }
   });
@@ -256,10 +263,10 @@ describe('Villa collision, support and safe boundaries', () => {
       { p: { x: -5, y: STOREY, z: 10 }, dx: 0, dz: 8, axis: 'z', min: 9, max: 11.45 },
       { p: { x: -10, y: STOREY, z: 10 }, dx: -8, dz: 0, axis: 'x', min: -11.45, max: -9 },
       { p: { x: 0, y: STOREY, z: 10 }, dx: 8, dz: 0, axis: 'x', min: -1, max: 1.45 },
-      { p: { x: 0, y: 7.2, z: 7 }, dx: 0, dz: 8, axis: 'z', min: 6, max: 8.95 },
-      { p: { x: -3, y: 7.2, z: -7 }, dx: 0, dz: -8, axis: 'z', min: -8.95, max: -6 },
-      { p: { x: -10, y: 7.2, z: 3 }, dx: -8, dz: 0, axis: 'x', min: -11.95, max: -9 },
-      { p: { x: 14, y: 7.2, z: 3 }, dx: 8, dz: 0, axis: 'x', min: 13, max: 15.95 },
+      { p: { x: 0, y: 7.2, z: 7 }, dx: 0, dz: 8, axis: 'z', min: 6, max: SOUTH.outer - .25 },
+      { p: { x: -3, y: 7.2, z: -16 }, dx: 0, dz: -8, axis: 'z', min: NORTH.outer + .25, max: -15 },
+      { p: { x: -22, y: 7.2, z: 3 }, dx: -8, dz: 0, axis: 'x', min: WEST.outer + .25, max: -21 },
+      { p: { x: 26, y: 7.2, z: 3 }, dx: 8, dz: 0, axis: 'x', min: 25, max: EAST.outer - .25 },
     ] as const;
     for (const { p, dx, dz, axis, min, max } of edges) {
       const next = moveVillaPlayer(p, dx, dz, architecture);
@@ -269,8 +276,9 @@ describe('Villa collision, support and safe boundaries', () => {
       expect(villaCollides(next, architecture)).toBe(false);
     }
     // The storeys now reach x=16, so probe past the new east edge instead.
-    expect(villaSupportAt(17, 4, 7.2)).toBeNull();
+    expect(villaSupportAt(EAST.outer + 1, 4, 7.2)).toBeNull();
     expect(villaSupportAt(15.5, 4, 7.2)).toBe(7.2);
+    expect(villaSupportAt(WEST.inner + 1, 4, 7.2)).toBe(7.2);
     expect(villaSupportAt(0, 12, STOREY)).toBeNull();
   });
   const furniture: VillaCollider = { minX: -6, maxX: -5, minZ: 1, maxZ: 4, minY: 0, maxY: 1 };

@@ -7,6 +7,9 @@ import { createVillaGarden } from '../src/villaGarden.js';
 import { VILLA_CAR } from '../src/villaActivities.js';
 import { VILLA_SCOOTER_PARKING, villaTerrainHeight, villaTerrainOrientation } from '../src/villaEstateLayout.js';
 import { moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, POOL, type VillaCollider } from '../src/villaWorld.js';
+import { POOL } from '../src/villaWorld';
+import { VILLA_EAST_WALL } from '../src/villaEstateLayout';
+import { VILLA_GARDEN_TREES } from '../src/villaGarden';
 const idle = { throttle: 0, steer: 0, brake: false, handbrake: false };
 const open = () => ({ ...createVillaScooter(), x: 20, z: 25 });
 const tick = (state: ReturnType<typeof createVillaScooter>, input = idle, seconds = 1, boxes: VillaCollider[] = []) => {
@@ -23,6 +26,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
   });
   it('keeps the real garden spawn, positive exit and from-south mounting approach clear of the lemon tree', () => {
     const scene = new THREE.Group(), garden = createVillaGarden(scene), model = createVillaScooterModel(scene), state = createVillaScooter();
+    const lemonTree = VILLA_GARDEN_TREES.find(t => t.species === 'lemon')!;
     try {
       model.update(0, { scooter: state });
       const obstacles = [...VILLA_WALL_COLLIDERS, ...garden.colliders, ...model.colliders];
@@ -58,9 +62,10 @@ describe('Villa electric scooter physics and safe interaction', () => {
         expect(villaCollides(visitor, mountingObstacles, 1.8)).toBe(false);
       }
       expect(visitor.x).toBeCloseTo(anchors.seat.x); expect(visitor.z).toBeCloseTo(anchors.seat.z);
-      // Negative control: the retired x22 centre fit, but its positive standing
-      // exit intersected the actual lemon tree. Keep this regression meaningful.
-      const retired = { ...state, x: 22 }, oldExit = villaScooterAnchors(retired).exits[0]!;
+      // Negative control: a centre this far west of the lemon trunk fits, but its
+      // positive standing exit intersects the tree. Anchored to the tree so the
+      // case survives the garden moving with the house.
+      const retired = { ...state, x: lemonTree.x - 1.4 }, oldExit = villaScooterAnchors(retired).exits[0]!;
       expect(villaScooterPoseBlocked(retired, mountingObstacles)).toBe(false);
       expect(villaCollides(oldExit, garden.colliders, 1.8)).toBe(true);
       expect(villaScooterExitClear(retired, mountingObstacles, 1)).toBe(false);
@@ -140,7 +145,7 @@ describe('Villa electric scooter physics and safe interaction', () => {
     }
   });
   it('blocks pool, staircase, lift shaft, building walls and property edges without caller geometry', () => {
-    for (const pose of [{ x: -18, z: 3, yaw: 0 }, { x: 3, z: 0, yaw: 0 }, { x: 0, z: -6.3, yaw: 0 }, { x: 12, z: 5, yaw: 0 }, { x: VILLA_SCOOTER_BOUNDS.maxX - .3, z: 20, yaw: 0 }]) expect(villaScooterPoseBlocked(pose, [])).toBe(true);
+    for (const pose of [{ x: (POOL.minX + POOL.maxX) / 2, z: 3, yaw: 0 }, { x: 3, z: 0, yaw: 0 }, { x: 0, z: -6.3, yaw: 0 }, { x: VILLA_EAST_WALL.inner, z: 5, yaw: 0 }, { x: VILLA_SCOOTER_BOUNDS.maxX - .3, z: 20, yaw: 0 }]) expect(villaScooterPoseBlocked(pose, [])).toBe(true);
     const state = { ...open(), x: POOL.maxX + VILLA_SCOOTER_LIMITS.halfLength + .6, z: 0, yaw: -Math.PI / 2, speed: 6.1 };
     advanceVillaScooter(state, { ...idle, throttle: 1 }, .25, []); expect(state.contact).toBe(true);
     expect(villaScooterFootprint(state).every(p => p.x > POOL.maxX)).toBe(true);

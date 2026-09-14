@@ -5,7 +5,7 @@ import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaC
 import { VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout.js';
 import { createVillaVehicle } from '../src/villaVehicle.js';
 import { createVillaDrivingCourse } from '../src/villaDrivingCourse.js';
-import { moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, type VillaCollider } from '../src/villaWorld.js';
+import { POOL, moveVillaPlayer, villaCollides, villaSupportAt, VILLA_WALL_COLLIDERS, type VillaCollider } from '../src/villaWorld.js';
 const idle = { throttle: 0, steer: 0, brake: false, handbrake: false };
 const tick = (state: ReturnType<typeof createVillaDriving>, input = idle, seconds = 1, obstacles: readonly VillaCollider[] = []) => {
   for (let i = 0; i < Math.round(seconds * 120); i++) advanceVillaDriving(state, input, 1 / 120, obstacles);
@@ -15,9 +15,9 @@ const box = (minX: number, maxX: number, minZ: number, maxZ: number, minY = 0, m
 describe('Villa driving physics', () => {
   it('starts in the existing seat, drives out of the actual garage and reaches the yard', () => {
     const state = createVillaDriving();
-    expect(state).toMatchObject({ x: 16.2, z: -2.6, yaw: 0, speed: 0 });
+    expect(state).toMatchObject({ x: VILLA_CAR.center.x, z: VILLA_CAR.center.z, yaw: 0, speed: 0 });
     tick(state, { ...idle, throttle: 1 }, 6, VILLA_WALL_COLLIDERS);
-    expect(state.z).toBeGreaterThan(25); expect(state.x).toBe(16.2);
+    expect(state.z).toBeGreaterThan(25); expect(state.x).toBe(VILLA_CAR.center.x);
     expect(state.speed).toBeLessThanOrEqual(7); expect(state.collisions).toBe(0);
   });
   it('reverses slowly, brakes smoothly without changing direction, and coasts', () => {
@@ -55,7 +55,7 @@ describe('Villa driving physics', () => {
   });
   it('turns right with decreasing yaw and reverses the steering direction in reverse', () => {
     const forward = createVillaDriving(); tick(forward, { ...idle, throttle: 1, steer: 1 });
-    expect(forward.yaw).toBeLessThan(0); expect(forward.x).toBeLessThan(16.2);
+    expect(forward.yaw).toBeLessThan(0); expect(forward.x).toBeLessThan(VILLA_CAR.center.x);
     const reverse = createVillaDriving(); tick(reverse, { ...idle, throttle: -1, steer: 1 }); expect(reverse.yaw).toBeGreaterThan(0);
     const stationary = createVillaDriving(); tick(stationary, { ...idle, steer: -1 }); expect(stationary.yaw).toBe(0);
   });
@@ -79,9 +79,9 @@ describe('Villa driving physics', () => {
   it('contains the entire vehicle in world bounds and excludes the pool', () => {
     expect(villaDrivingPoseBlocked({ x: VILLA_DRIVING_BOUNDS.maxX - .5, z: 30, yaw: 0 }, [])).toBe(true);
     expect(villaDrivingPoseBlocked({ x: 0, z: VILLA_DRIVING_BOUNDS.maxZ - 1, yaw: 0 }, [])).toBe(true);
-    expect(villaDrivingPoseBlocked({ x: 26.5, z: 30, yaw: 0 }, [])).toBe(false); // retired internal east edge
+    expect(villaDrivingPoseBlocked({ x: VILLA_SCENIC_ROAD.x - 12.5, z: 30, yaw: 0 }, [])).toBe(false); // retired internal east edge
     expect(villaDrivingPoseBlocked({ x: 0, z: 54, yaw: 0 }, [])).toBe(false); // new southern land
-    expect(villaDrivingPoseBlocked({ x: -18, z: 0, yaw: 0 }, [])).toBe(true);
+    expect(villaDrivingPoseBlocked({ x: (POOL.minX + POOL.maxX) / 2, z: 0, yaw: 0 }, [])).toBe(true);
   });
   it('ignores invalid time and sanitizes inputs', () => {
     const state = createVillaDriving(), original = { ...state };
@@ -200,7 +200,7 @@ describe('Villa scenic road and vehicle transforms', () => {
     expect(villaCarExitClear(state, [box(1.5, 1.6, 30.1, 30.4, 1.6, 1.7)])).toBe(false);
     expect(villaCarExitClear(state, [box(1.5, 1.6, 30.1, 30.4, 2, 2.1)])).toBe(true);
     expect(villaCarExitClear(state, [box(1.5, 1.6, 30.1, 30.4, -0.1, 0)])).toBe(true);
-    expect(villaCarExitClear({ ...state, x: -13, z: 0, yaw: Math.PI }, [])).toBe(false); // pool
+    expect(villaCarExitClear({ ...state, x: (POOL.minX + POOL.maxX) / 2, z: 0, yaw: Math.PI }, [])).toBe(false); // pool
     expect(villaCarExitClear({ ...state, x: VILLA_DRIVING_BOUNDS.maxX - 1 }, [])).toBe(false); // property edge
     expect(villaCarExitClear({ ...state, yaw: NaN }, [])).toBe(false);
   });
@@ -214,7 +214,7 @@ describe('Villa scenic road and vehicle transforms', () => {
       expect(((x - road.x) / (road.radiusX - road.width / 2)) ** 2 + ((z - road.z) / (road.radiusZ - road.width / 2)) ** 2).toBeLessThan(1);
       expect(villaDrivingPoseBlocked({ x, z, yaw: 0 }, course.colliders)).toBe(true);
     }
-    for (let z = 3; z <= 34; z++) expect(villaDrivingPoseBlocked({ x: 16.2, z, yaw: 0 }, course.colliders)).toBe(false);
+    for (let z = 3; z <= 34; z++) expect(villaDrivingPoseBlocked({ x: VILLA_CAR.center.x, z, yaw: 0 }, course.colliders)).toBe(false);
     // Sample the tangent-aligned car on the centre and both broad road lanes.
     for (let i = 0; i < 96; i++) {
       const angle = i / 96 * Math.PI * 2, dx = -road.radiusX * Math.sin(angle), dz = road.radiusZ * Math.cos(angle), length = Math.hypot(dx, dz);

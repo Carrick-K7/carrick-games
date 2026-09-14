@@ -12,7 +12,7 @@ import { VILLA_ESTATE_BOUNDS } from './villaEstateLayout.js';
 import { createVillaAquariumLife } from './villaAquarium.js';
 import type { VillaTeaState } from './villaTea.js';
 import type { VillaWardrobeState } from './villaWardrobe.js';
-import type { VillaCollider } from './villaWorld.js';
+import { villaRoomAt, type VillaCollider } from './villaWorld.js';
 import { createVillaFridge } from './villaWardrobe.js';
 
 export interface VillaFurnishingState {
@@ -83,9 +83,9 @@ export function furnishVilla(scene: THREE.Scene): {
   const bookMats = [terra, sage, blue, cream, walnut, coral];
   const lampGlow = mat('#ffedc5'); lampGlow.emissive.set('#ffc679'); lampGlow.emissiveIntensity = 0.35;
   const roomGlows = new Map<string, THREE.MeshStandardMaterial>();
-  const roomAt = (p: THREE.Vector3) => p.y >= 7.2 ? 'terrace' : p.y >= 3.6
-    ? p.x < -2 ? p.z > 0 ? 'master' : 'guest' : p.z > 2 ? 'library' : 'bath'
-    : p.x > 12 ? 'garage' : p.x < -2 ? p.z > 0 ? 'living' : 'kitchen' : 'gaming';
+  // One source of truth for which room a lamp belongs to, so a resized plan
+  // cannot leave a fixture switching the wrong light.
+  const roomAt = (p: THREE.Vector3) => villaRoomAt(p as { x: number; y: number; z: number }).id;
   function at(x: number, y: number, z: number, yaw: number, build: () => void) {
     const saved = frame; frame = frame.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z)).multiply(new THREE.Matrix4().makeRotationY(yaw)); build(); frame = saved;
   }
@@ -331,18 +331,56 @@ export function furnishVilla(scene: THREE.Scene): {
   // Snooker: six apertures pierce cloth AND slate, not painted-on pockets.
   const snookerWalnut = mat('#382218', 0.42); snookerWalnut.map = oak.map;
   const snookerTable = createVillaSnookerTable(root); colliders.push(...snookerTable.colliders);
-  // Shallow north-wall cue rack, outside the cue sweep and all through paths.
-  for (const y of [0.3, 1.53]) box(10.45, y, -8.78, 1.06, 0.12, 0.15, snookerWalnut, 0.015);
+  // Shallow north-wall cue rack, west of the doorway and outside the cue sweep.
+  for (const y of [0.3, 1.53]) box(7.6, y, -8.78, 1.06, 0.12, 0.15, snookerWalnut, 0.015);
   for (let i = 0; i < 5; i++) {
-    const x = 10.05 + i * 0.2;
+    const x = 7.2 + i * 0.2;
     cyl(x, 0.62, -8.64, 0.016, 0.022, 0.6, snookerWalnut); cyl(x, 1.25, -8.64, 0.007, 0.016, 0.66, oak);
     cyl(x, 1.59, -8.64, 0.008, 0.008, 0.025, cream); cyl(x, 1.608, -8.64, 0.008, 0.008, 0.011, blue);
   }
-  hit(10.45, 0, -8.73, 1.08, 1.65, 0.25);
-  root.userData.snooker = { ...VILLA_SNOOKER, ballCount: 22, redCount: 15, colorCount: 6, whiteCount: 1, pocketCount: 6, baulkOffset: 0.737, dRadius: 0.292, collider: { minX: 8.07, maxX: 10.23, minZ: -5.83, maxZ: -1.77, minY: 0, maxY: 0.92 }, cueRack: { x: 10.45, z: -8.73, cueCount: 5 } };
+  hit(7.6, 0, -8.73, 1.08, 1.65, 0.25);
+  root.userData.snooker = { ...VILLA_SNOOKER, ballCount: 22, redCount: 15, colorCount: 6, whiteCount: 1, pocketCount: 6, baulkOffset: 0.737, dRadius: 0.292, collider: { minX: 8.07, maxX: 10.23, minZ: -5.83, maxZ: -1.77, minY: 0, maxY: 0.92 }, cueRack: { x: 7.6, z: -8.73, cueCount: 5 } };
 
   // First floor bedrooms and library.
   bed(VILLA_BEDS[0]); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
+  // ---- The four rooms the doubled plan added, plus the widened east wing ----
+  // Ground-floor studio: a working library along the west wall, desk facing north.
+  at(-19.4, 0, -13.6, 0, () => {
+    box(0, 1.02, -3.35, 3.6, 2.04, 0.34, walnut, 0.02);
+    for (let i = 0; i < 4; i++) box(0, 0.32 + i * 0.52, -3.2, 3.44, 0.035, 0.28, oak, 0.01);
+    at(0, 0, 6.6, 0, () => { table(2.2, 1, 0.75, walnut); box(-0.5, 0.81, 0, 0.42, 0.03, 0.3, cream); orb(0.35, 0.85, 0.06, 0.11, 0.13, 0.11, brass); });
+    at(0, 0, 5.5, Math.PI, () => chair(sage));
+  });
+  box(-19.4, 0.017, -11.2, 4.6, 0.028, 3.4, rugMat, 0.01);
+  at(-21.6, 0, -10.4, 0, () => lamp(true)); plant(-16.6, 0, -10.6, 1.35);
+  // Ground-floor gym and hobby room: bench, rack and a mirrored wall.
+  at(11.3, 0, -13.6, 0, () => {
+    box(-4.2, 0.5, -3.3, 2.6, 1, 0.16, steel, 0.02);
+    for (let i = 0; i < 5; i++) box(-5.1 + i * 0.45, 0.55, -3.12, 0.08, 1.1, 0.08, dark, 0.01);
+    for (const x of [-3.4, -1.2, 1, 3.2]) { box(x, 0.22, 1.4, 0.5, 0.44, 1.9, dark, 0.04); box(x, 0.5, 1.4, 0.34, 0.14, 1.7, sage, 0.03); }
+    box(0, 0.02, -1.2, 5.4, 0.035, 1.5, dark, 0.01);
+    box(4.6, 1.45, -3.35, 2.4, 1.9, 0.06, steel, 0.01);
+  });
+  // Ground-floor media lounge behind the hall arch.
+  at(22.6, 0, 0, 0, () => {
+    box(0, 1.35, -1.9, 5.2, 2.7, 0.3, walnut, 0.02);
+    box(0, 1.45, -1.7, 3.4, 1.9, 0.08, black, 0.02);
+    for (let i = 0; i < 5; i++) box(-2.3 + i * 0.12, 0.5, -1.72, 0.04, 0.9, 0.03, i % 2 ? cream : sage, 0.005);
+  });
+  box(22.6, 0.017, 3.4, 5.4, 0.028, 4.2, rugMat, 0.01);
+  at(20.4, 0, 5.4, 0, () => lamp(true)); plant(26.4, 0, 7.4, 1.4); plant(26.4, 0, -14.6, 1.3);
+  // Upstairs study: writing desk under the north light, books on both returns.
+  at(12.5, 3.6, -13.6, 0, () => {
+    at(0, 0, -3.1, 0, () => { table(2, 0.92, 0.75, oak); box(-0.46, 0.81, 0, 0.4, 0.03, 0.28, cream); orb(0.42, 0.84, 0.05, 0.1, 0.12, 0.1, brass); });
+    at(0, 0, -2.1, Math.PI, () => chair(sage));
+    for (const x of [-3.6, 3.6]) { box(x, 1.1, -3.3, 1.8, 2.2, 0.32, walnut, 0.02); for (let i = 0; i < 4; i++) box(x, 0.4 + i * 0.52, -3.16, 1.7, 0.035, 0.26, oak, 0.01); }
+  });
+  box(12.5, 3.617, -11.4, 4.8, 0.028, 3.2, rugMat, 0.01);
+  // Upstairs guest suite: sofa, low table and a reading corner.
+  at(24.6, 3.6, 6.9, 0, () => sofa(3.2, linen, false, 'sofa-east-suite'));
+  at(24.6, 3.6, 4.4, 0, () => { table(1.5, 0.9, 0.42, walnut); tea(0.34, 0.43, 0); plant(-0.35, 0.43, 0, 0.42, true); });
+  box(24.6, 3.617, 5.6, 5, 0.028, 4, rugMat, 0.01);
+  at(27.2, 3.6, -4.6, 0, () => lamp(true)); plant(18.6, 3.6, -16.6, 1.45);
   const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
   at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage, false, 'sofa-master')); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-2.14, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.

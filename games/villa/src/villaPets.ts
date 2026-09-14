@@ -1,3 +1,4 @@
+import { VILLA_GARAGE_BAYS } from './villaEstateLayout.js';
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
 export type VillaPetKind = 'dog' | 'cat' | 'parrot' | 'rabbit';
@@ -177,31 +178,35 @@ function visitStep(pet: VillaPet, state: VillaPetsState): boolean {
 /** Spaced rest sites leave the living/garage through-aisles unobstructed by sleeping pets. */
 export const VILLA_PET_SHELTERS: Readonly<Record<VillaPetId, { site: 'living' | 'garage'; x: number; z: number }>> = {
   dog: { site: 'living', x: -4.6, z: 4.5 }, cat: { site: 'living', x: -4.6, z: 7.85 },
-  parrot: { site: 'garage', x: 24.95, z: -5 }, rabbit: { site: 'garage', x: 27.1, z: -5 },
-  'parrot-blue': { site: 'garage', x: 24.95, z: -3.4 }, 'rabbit-female': { site: 'garage', x: 27.1, z: -3.4 },
+  // The garage moved east with the house; the birds rest in its reserved bay.
+  parrot: { site: 'garage', x: 41.15, z: -5 }, rabbit: { site: 'garage', x: 43.3, z: -5 },
+  'parrot-blue': { site: 'garage', x: 41.15, z: -3.4 }, 'rabbit-female': { site: 'garage', x: 43.3, z: -3.4 },
 };
 /** Stable visibility nodes, not a per-frame unbounded world search. Lawn nodes skirt
  * vegetable beds/pots; the two doorway corridors connect to real roofed interiors. */
 const SHELTER_NODES: readonly (readonly [number, number])[] = [
   ...[-20, -18, -16, -14, -12.3, -9, -6, -4].flatMap(x => [13.4, 14.8, 16.3, 19.5, 21.4].map(z => [x, z] as const)),
   ...STARTS, [-3, 14.5], [0, 11.5], [0, 6.5], [-4.6, 6.5],
-  [12.5, 11.5], [26, 11.5], [26, 3.1], [26, -1.4], [26, -3.4], [26, -5],
+  [12.5, 11.5], [28.6, 11.5], [42.2, 11.5], [42.2, 3.1], [42.2, -1.4], [42.2, -3.4], [42.2, -5],
 ];
 function drySite(pet: VillaPet): VillaPet['shelterSite'] {
   if (pet.x > -11.4 && pet.x < -2.4 && pet.z > 0.65 && pet.z < 8.4) return 'living';
-  if (pet.x > 12.5 && pet.x < 34.2 && pet.z > -7.4 && pet.z < 1.4) return 'garage';
+  if (pet.x > 28.4 && pet.x < 51.2 && pet.z > -7.4 && pet.z < 1.4) return 'garage';
   return null;
 }
 /** Dijkstra on a tiny visibility graph. Every segment, including the initial
  * connector, is swept against live walls/furniture/vehicles AND other pets.
  * Replanning is bounded and happens only at weather changes or after yielding. */
 function shelterPlan(pet: VillaPet, state: VillaPetsState, target: readonly [number, number]): [number, number][] {
-  const obstacles = state.colliders.filter(c => blocksLawn(c) && c.minX < 29 && c.maxX > -21 && c.minZ < 23 && c.maxZ > -7);
+  const obstacles = state.colliders.filter(c => blocksLawn(c) && c.minX < 52 && c.maxX > -26 && c.minZ < 23 && c.maxZ > -7);
   const clear = (ax: number, az: number, bx: number, bz: number) => {
     // Use the reserved bay, not a shortcut through a parked vehicle's working bay.
     if ((az - 2) * (bz - 2) < 0) {
       const sillX = ax + (bx - ax) * (2 - az) / (bz - az);
-      if (sillX > 11.8 && (sillX < 24.6 || sillX > 27.5)) return false;
+      // Crossing the garage's front wall is only legal inside the reserved bay,
+      // never through a bay a parked vehicle is working in.
+      const reserved = VILLA_GARAGE_BAYS[2];
+      if (sillX > 28.4 && !(sillX > reserved.doorMinX + .25 && sillX < reserved.doorMaxX - .25)) return false;
     }
     return pathClear(ax, az, bx, bz, obstacles, VILLA_PET_RADIUS)
       && state.pets.every(other => other === pet || segmentDistance(ax, az, bx, bz, other.x, other.z) >= 2 * VILLA_PET_RADIUS + 0.05 - 1e-8);
@@ -234,7 +239,7 @@ function shelterStep(pet: VillaPet, state: VillaPetsState, dt: number): boolean 
   pet.shelterReplan = Math.max(0, pet.shelterReplan - dt);
   // Birds travel low over the collision-reserved forecourt, then stop/land/fold
   // several metres BEFORE the garage sill. They walk while under either roof.
-  const walk = drySite(pet) !== null || (pet.x > 11.4 && pet.z < 4.8) || pet.shelterPhase === 'resting';
+  const walk = drySite(pet) !== null || (pet.x > 27.6 && pet.z < 4.8) || pet.shelterPhase === 'resting';
   pet.flightHeight = pet.kind === 'parrot' && !walk ? 0.55 : 0;
   if (pet.kind === 'parrot' && walk && (pet.y > 0.002 || pet.wingFold > 0.015)) { pet.mode = 'idle'; pet.timer = 1; return true; }
   if (pet.shelterPhase === 'resting') {

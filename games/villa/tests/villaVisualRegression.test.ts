@@ -8,6 +8,8 @@ import { createVillaHomeModel } from '../src/villaHomeModel.js';
 import { advanceVillaHome, createVillaHome, setVillaRoomLight, setVillaTimeOfDay } from '../src/villaHome.js';
 import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout.js';
 import { VILLA_BLOCKS } from '../src/villaWorld.js';
+import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH } from '../src/villaEstateLayout';
+import { VILLA_CAR } from '../src/villaActivities';
 
 const scenes: THREE.Scene[] = [];
 const scene = () => { const root = new THREE.Scene(); scenes.push(root); return root; };
@@ -46,7 +48,7 @@ describe('Villa observed visual regression geometry', () => {
     const car = root.getObjectByName('villa-vehicle')!, footwell = root.getObjectByName('vehicle-front-footwell')!;
     expect(footwell).toBeDefined();
     const anchor = villaCarAnchors(driving).seat, eye = new THREE.Vector3(anchor.x, anchor.y + VILLA_CAR.eyeHeight, anchor.z);
-    expect(eye.x).toBeCloseTo(16.63); expect(eye.y).toBe(1.16); expect(eye.z).toBeCloseTo(-2.55);
+    expect(eye.x).toBeCloseTo(VILLA_CAR.seat.x); expect(eye.y).toBe(1.16); expect(eye.z).toBeCloseTo(VILLA_CAR.seat.z);
     const tyreMeshes = meshes(root.getObjectByName('vehicle-body')!).filter(mesh =>
       mesh.material instanceof THREE.MeshStandardMaterial && mesh.material.color.getHex() === 0x151719);
     expect(tyreMeshes.length).toBeGreaterThan(0);
@@ -105,8 +107,13 @@ describe('Villa observed visual regression geometry', () => {
       if (points.every(point => point.y > 6.99 && point.y < 7.10)) { points.forEach(point => bandBounds.expandByPoint(point)); bandTriangles++; }
     });
     expect(bandTriangles).toBeGreaterThan(24); expect(bandBounds.max.y - bandBounds.min.y).toBeGreaterThan(.08);
-    expect(bandBounds.max.z).toBeGreaterThan(9.44); expect(bandBounds.min.z).toBeLessThan(-9.44);
-    expect(bandBounds.max.x).toBeGreaterThan(16.44); expect(bandBounds.min.x).toBeLessThan(-12.44);
+    // Envelope assertions derive from the layout datums: hardcoding them here
+    // meant every resizing of the house broke a reference that had nothing to
+    // say about the band itself.
+    expect(bandBounds.max.z).toBeGreaterThan(SOUTH.outer + .24);
+    expect(bandBounds.min.z).toBeLessThan(NORTH.outer - .24);
+    expect(bandBounds.max.x).toBeGreaterThan(EAST.outer + .24);
+    expect(bandBounds.min.x).toBeLessThan(WEST.outer - .24);
     const targets = meshes(root);
     // The outer strip is the first opaque surface on its own outward sightline
     // (a ground-level ray would be stopped by the eave fascia in front of it).
@@ -116,18 +123,18 @@ describe('Villa observed visual regression geometry', () => {
     expect(fascia.length).toBeGreaterThanOrEqual(4);
     for (const block of fascia) {
       const southFace = block.z + block.d / 2, northFace = block.z - block.d / 2;
-      if (Math.abs(block.z - 9.2) < .05) expect(bandBounds.max.z).toBeGreaterThan(southFace);
-      if (Math.abs(block.z + 9.2) < .05) expect(bandBounds.min.z).toBeLessThan(northFace);
+      if (Math.abs(block.z - SOUTH.outer) < .05) expect(bandBounds.max.z).toBeGreaterThan(southFace);
+      if (Math.abs(block.z - NORTH.outer) < .05) expect(bandBounds.min.z).toBeLessThan(northFace);
     }
     // The east/west strips sit just outside their own fascia face, and no part of
     // the run may float past the building: a mis-centred segment used to stick
     // 4.4 m into open air and read as a bright strip hanging above the lawn.
-    expect(bandBounds.max.x).toBeGreaterThan(16.2 + .24);
-    expect(bandBounds.max.x).toBeLessThan(16.2 + .24 + .06);
-    expect(bandBounds.min.x).toBeLessThan(-12.2 - .24);
-    expect(bandBounds.min.x).toBeGreaterThan(-12.2 - .24 - .06);
-    expect(bandBounds.max.z).toBeLessThan(9.2 + .24 + .06);
-    expect(bandBounds.min.z).toBeGreaterThan(-9.2 - .24 - .06);
+    expect(bandBounds.max.x).toBeGreaterThan(EAST.outer + .24);
+    expect(bandBounds.max.x).toBeLessThan(EAST.outer + .24 + .06);
+    expect(bandBounds.min.x).toBeLessThan(WEST.outer - .24);
+    expect(bandBounds.min.x).toBeGreaterThan(WEST.outer - .24 - .06);
+    expect(bandBounds.max.z).toBeLessThan(SOUTH.outer + .24 + .06);
+    expect(bandBounds.min.z).toBeGreaterThan(NORTH.outer - .24 - .06);
     // And the band really is the emissive material on its outward face.
     expect((roof as THREE.MeshStandardMaterial).emissive.getHex()).not.toBe(0);
     const lights: THREE.PointLight[] = []; root.traverse(node => { if (node instanceof THREE.PointLight) lights.push(node); });

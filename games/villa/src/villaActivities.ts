@@ -1,5 +1,5 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
-import { VILLA_SCOOTER_PARKING } from './villaEstateLayout.js';
+import { VILLA_GARAGE_BAYS, VILLA_SCOOTER_PARKING } from './villaEstateLayout.js';
 
 export type VillaScreenSource = 'pc' | 'ps' | 'switch';
 export type VillaSeat = 'car' | 'pickup' | 'racing' | 'scooter' | 'sofa' | 'lounger' | 'chair' | 'stool' | 'bed' | null;
@@ -18,13 +18,16 @@ export const CAR_DOOR_SECONDS = 0.65;
 export const VILLA_WALK_SPEED = 2.75;
 export const VILLA_RUN_SPEED = 5.8;
 
-/** Front of the Model-3-inspired sedan points towards the open garage (+Z). */
+/** Front of the Model-3-inspired sedan points towards the open garage (+Z).
+ *  Its anchors are offsets from the first bay, so moving the garage carries the
+ *  car, its door swing and its standing exit with it. */
+const sedanBay = VILLA_GARAGE_BAYS[0];
 export const VILLA_CAR = {
-  center: { x: 16.2, y: 0, z: -2.6 },
-  body: { minX: 15.24, maxX: 17.16, minZ: -4.96, maxZ: -0.24, minY: 0, maxY: 1.48 } satisfies VillaCollider,
-  door: { x: 17.2, y: 0, z: -2.2 },
-  exit: { x: 18.55, y: 0, z: -2.45 } satisfies VillaPosition,
-  seat: { x: 16.63, y: 0, z: -2.55 } satisfies VillaPosition,
+  center: { x: sedanBay.x, y: 0, z: sedanBay.z },
+  body: { minX: sedanBay.x - .96, maxX: sedanBay.x + .96, minZ: sedanBay.z - 2.36, maxZ: sedanBay.z + 2.36, minY: 0, maxY: 1.48 } satisfies VillaCollider,
+  door: { x: sedanBay.x + 1, y: 0, z: sedanBay.z + .4 },
+  exit: { x: sedanBay.x + 2.35, y: 0, z: sedanBay.z + .15 } satisfies VillaPosition,
+  seat: { x: sedanBay.x + .43, y: 0, z: sedanBay.z + .05 } satisfies VillaPosition,
   eyeHeight: 1.16,
   yaw: Math.PI,
 };

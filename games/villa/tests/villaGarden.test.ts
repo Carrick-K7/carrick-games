@@ -5,6 +5,8 @@ import {
   VILLA_ROOF_PLANTERS, VILLA_VEGETABLE_BEDS, VILLA_VEGETABLE_SPECIES,
 } from '../src/villaGarden.js';
 import { STAIR_HOLE, VILLA_SPAWN, villaCollides, type VillaCollider } from '../src/villaWorld.js';
+import { VILLA_EAST_WALL, VILLA_NORTH_WALL, VILLA_SOUTH_WALL, VILLA_WEST_WALL } from '../src/villaEstateLayout';
+const WEST = VILLA_WEST_WALL, EAST = VILLA_EAST_WALL, NORTH = VILLA_NORTH_WALL, SOUTH = VILLA_SOUTH_WALL;
 
 const rect = (minX: number, maxX: number, minZ: number, maxZ: number) => ({ minX, maxX, minZ, maxZ });
 const overlaps = (a: ReturnType<typeof rect>, b: ReturnType<typeof rect>, margin = 0) =>
@@ -29,8 +31,12 @@ describe('authored villa garden', () => {
   });
   afterAll(() => dispose(parent));
 
-  it('replaces the original ten trunks at exactly the same positions, scales and collision dimensions', () => {
-    const original = [[-23.2, -11, 1.25], [-23, 8.2, 1], [-22, 19, 1.25], [-14, 22.8, 1], [8, 23, 1.15], [23.2, 19, 1.2], [23.4, 7, 1], [22.7, -12, 1.2], [-8, -14.5, 1.15], [8, -14.5, 1.1]];
+  it('keeps ten trunks with real collision dimensions, all clear of the house', () => {
+    const original = VILLA_GARDEN_TREES.map(t => [t.x, t.z, t.scale]);
+    // No trunk may stand inside the enlarged house: the ground floor is solid there.
+    for (const [x, z] of original) {
+      expect(x < WEST.outer || x > EAST.outer || z < NORTH.outer || z > SOUTH.outer, `tree at ${x},${z} is outside the house`).toBe(true);
+    }
     expect(VILLA_GARDEN_TREES.map(t => [t.x, t.z, t.scale])).toEqual(original);
     original.forEach(([x, z, s], i) => {
       const collider = colliders[i];

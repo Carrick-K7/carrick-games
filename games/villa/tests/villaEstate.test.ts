@@ -12,17 +12,17 @@ const dispose = (root: THREE.Object3D) => {
 };
 
 describe('Villa authoritative estate terrain and layout', () => {
-  it('preserves every existing flat house/pool/garden coordinate and extends only the estate', () => {
-    expect(VILLA_ESTATE_BOUNDS).toEqual({ minX: -24.5, maxX: 45, minZ: -16.5, maxZ: 162 });
-    for (let x = -24; x <= 44; x += 2) for (let z = -16; z <= 35; z++) expect(villaTerrainHeight(x, z)).toBe(0);
-    expect(VILLA_GARAGE_BAYS.map(b => b.x)).toEqual([16.2, 21.5, 26, 30.7]); expect(VILLA_GARAGE_EXTENT.maxX).toBe(34.8);
+  it('keeps the estate flat under the house, pool and garden and spans the enlarged plot', () => {
+    expect(VILLA_ESTATE_BOUNDS).toEqual({ minX: -40, maxX: 62, minZ: -26, maxZ: 162 });
+    for (let x = -38; x <= 60; x += 2) for (let z = -24; z <= 35; z++) expect(villaTerrainHeight(x, z)).toBe(0);
+    expect(VILLA_GARAGE_BAYS.map(b => b.x)).toEqual([32.4, 37.7, 42.2, 46.9]); expect(VILLA_GARAGE_EXTENT.maxX).toBe(51);
     expect(VILLA_SCOOTER_PARKING.x).toBeGreaterThan(VILLA_GARAGE_EXTENT.maxX + 2);
-    expect(villaEstateContains(0, 151)).toBe(true); expect(villaEstateContains(45, 160, .1)).toBe(false);
-    expect(POOL).toEqual({ minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 });
+    expect(villaEstateContains(0, 151)).toBe(true); expect(villaEstateContains(62, 160, .1)).toBe(false);
+    expect(POOL).toEqual({ minX: -36.4, maxX: -27.7, minZ: -7.5, maxZ: 6.5 });
   });
   it('has low continuous comfortable slopes and a level pond shelf, never a discrete hill step', () => {
     let maximum = 0, slope = 0;
-    for (let x = -24; x < 45; x += 1.5) for (let z = 35; z < 162; z += 1.5) {
+    for (let x = -38; x < 60; x += 1.5) for (let z = 35; z < 162; z += 1.5) {
       const y = villaTerrainHeight(x, z), n = villaTerrainNormal(x, z); maximum = Math.max(maximum, y); slope = Math.max(slope, Math.hypot(n.x, n.z) / n.y);
       expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThanOrEqual(2.8);
       expect(Math.abs(villaTerrainHeight(x, z + .01) - y)).toBeLessThan(.003);
@@ -114,7 +114,8 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
       expect(roadVertices).toBeGreaterThan(10000); expect(meshes).toBeLessThan(35);
       expect(VILLA_ESTATE_FIELDS).toHaveLength(3); expect(scene.getObjectByName('estate-natural-pond')?.userData.waterY).toBe(VILLA_POND.waterY);
       expect(scene.getObjectByName('garage-charging-pedestal')?.userData.count).toBe(1);
-      for (const f of VILLA_ESTATE_FENCE_SEGMENTS) expect(f.from.x === -24.8 || f.from.x === 45.3).toBe(true);
+      // The fence runs just outside the estate bounds, whatever those are.
+    for (const f of VILLA_ESTATE_FENCE_SEGMENTS) expect([VILLA_ESTATE_BOUNDS.minX - .3, VILLA_ESTATE_BOUNDS.maxX + .3]).toContain(f.from.x);
     } finally { dispose(scene); }
   });
   it('keeps every garage door sweep corridor, reserved bay and both scooter approaches clear of workshop props', () => {

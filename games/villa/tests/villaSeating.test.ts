@@ -5,6 +5,7 @@ import { VILLA_AQUARIUM, VILLA_BEDS, VILLA_RELAX_SEATS, resolveVillaSeatPosition
 import { VILLA_FIREPLACE_WALL } from '../src/villaLivingLayout';
 import { VILLA_TEA_BAR } from '../src/villaTeaBar';
 import { VILLA_WALL_COLLIDERS, VILLA_RAILS, villaCollides, villaSupportAt, type VillaCollider } from '../src/villaWorld';
+import { POOL } from '../src/villaWorld';
 
 let scene: THREE.Scene, furniture: ReturnType<typeof furnishVilla>, colliders: VillaCollider[];
 beforeAll(() => {
@@ -29,12 +30,12 @@ afterAll(() => {
 describe('authored villa relaxation seats', () => {
   it('preserves seven legacy IDs and covers dining, roof dining, stools, guest/PC chairs and both beds', () => {
     expect(VILLA_RELAX_SEATS.slice(0, 7).map(s => s.id)).toEqual(['sofa-living', 'sofa-master', 'sofa-library-west', 'sofa-library-east', 'sofa-roof', 'lounger-west', 'lounger-east']);
-    expect(VILLA_RELAX_SEATS).toHaveLength(25);
-    expect(new Set(VILLA_RELAX_SEATS.map(s => s.id)).size).toBe(25);
+    expect(VILLA_RELAX_SEATS).toHaveLength(26);
+    expect(new Set(VILLA_RELAX_SEATS.map(s => s.id)).size).toBe(26);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'chair')).toHaveLength(12);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'stool')).toHaveLength(3);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'bed')).toHaveLength(2);
-    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(6);
+    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(7);
     for (const seat of VILLA_RELAX_SEATS) expect(villaRelaxSeat(seat.id)).toBe(seat);
     for (const missing of [null, undefined, '', 'sofa', 'unknown']) expect(villaRelaxSeat(missing)).toBeNull();
   });
@@ -125,12 +126,15 @@ describe('authored villa relaxation seats', () => {
   it('faces both south-deck loungers across the west pool, clear of water and the old side path', () => {
     for (const [index, id] of ['lounger-west', 'lounger-east'].entries()) {
       const seat = villaRelaxSeat(id)!, marker = scene.getObjectByName(`relax-seat/${id}`)!;
-      expect(marker.userData.modelOrigin).toEqual({ x: index ? -16.7 : -20.2, y: 0, z: 9 });
-      expect(seat.yaw).toBe(0); // camera forward (0,0,-1), toward pool z<=6.5
-      expect(seat.seat.z).toBeGreaterThan(6.5 + 1.35);
-      expect(seat.seat.x).toBeGreaterThan(-23.2); expect(seat.seat.x).toBeLessThan(-14.5);
+      // Derived from the pool datum: the deck moved west with the water.
+      const origin = marker.userData.modelOrigin as { x: number; y: number; z: number };
+      expect(origin.x).toBeCloseTo(POOL.minX + 3.2 + index * 3.5, 9); expect(origin.y).toBe(0); expect(origin.z).toBe(9);
+      expect(seat.yaw).toBe(0); // camera forward (0,0,-1), toward the pool
+      expect(seat.seat.z).toBeGreaterThan(POOL.maxZ + 1.35);
+      expect(seat.seat.x).toBeGreaterThan(POOL.minX - 0.5); expect(seat.seat.x).toBeLessThan(POOL.maxX + 0.5);
     }
-    for (const z of [-3, 1]) expect(villaCollides({ x: -13.04, y: 0, z }, furniture.colliders, 1.75)).toBe(false);
+    const path = (POOL.minX + POOL.maxX) / 2 + 5.5;
+    for (const z of [-3, 1]) expect(villaCollides({ x: path, y: 0, z }, furniture.colliders, 1.75)).toBe(false);
   });
 });
 

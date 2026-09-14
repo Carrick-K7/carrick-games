@@ -2,13 +2,15 @@
  * Intentionally dependency-free: World, vehicles and scene all consume this file.
  */
 export interface VillaEstateRect { minX: number; maxX: number; minZ: number; maxZ: number }
-export const VILLA_ESTATE_BOUNDS = { minX: -24.5, maxX: 45, minZ: -16.5, maxZ: 162 } as const;
-export const VILLA_GARAGE_EXTENT = { minX: 12, maxX: 34.8, minZ: -8, maxZ: 2, roofY: 3.5 } as const;
+export const VILLA_ESTATE_BOUNDS = { minX: -40, maxX: 62, minZ: -26, maxZ: 162 } as const;
+export const VILLA_GARAGE_EXTENT = { minX: 28.2, maxX: 51, minZ: -8, maxZ: 2, roofY: 3.5 } as const;
+/** Bays keep their 16.2 m setback from the house's east wall and their spacing,
+ *  so the four doors, the pickup's own anchors and every approach stay valid. */
 export const VILLA_GARAGE_BAYS = [
-  { id: 'sedan', x: 16.2, z: -2.6, doorMinX: 14, doorMaxX: 18.5 },
-  { id: 'pickup', x: 21.5, z: -2.6, doorMinX: 19.3, doorMaxX: 23.7 },
-  { id: 'reserved-1', x: 26, z: -2.6, doorMinX: 24.1, doorMaxX: 28 },
-  { id: 'reserved-2', x: 30.7, z: -2.6, doorMinX: 28.7, doorMaxX: 32.8 },
+  { id: 'sedan', x: 32.4, z: -2.6, doorMinX: 30.2, doorMaxX: 34.7 },
+  { id: 'pickup', x: 37.7, z: -2.6, doorMinX: 35.5, doorMaxX: 39.9 },
+  { id: 'reserved-1', x: 42.2, z: -2.6, doorMinX: 40.3, doorMaxX: 44.2 },
+  { id: 'reserved-2', x: 46.9, z: -2.6, doorMinX: 44.9, doorMaxX: 49 },
 ] as const;
 export const VILLA_PICKUP_LIMITS = { halfWidth: 1.2, halfLength: 2.86, height: 1.98, wheelbase: 3.45, maxSpeed: 6.5, maxReverse: 2.4, maxSteer: .53 } as const;
 const pickupBay = VILLA_GARAGE_BAYS[1];
@@ -20,26 +22,34 @@ export const VILLA_PICKUP = {
   body: { minX: pickupBay.x - 1.2, maxX: pickupBay.x + 1.2, minZ: pickupBay.z - 2.86, maxZ: pickupBay.z + 2.86, minY: 0, maxY: 1.98 },
   eyeHeight: 1.58, yaw: Math.PI,
 } as const;
-export const VILLA_SCOOTER_PARKING = { x: 38, y: 0, z: 7 } as const;
+export const VILLA_SCOOTER_PARKING = { x: 54.2, y: 0, z: 7 } as const;
 export const VILLA_ESTATE_BUILDINGS = [
-  { id: 'house', minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
+  { id: 'house', minX: -24.2, maxX: 28.2, minZ: -18.2, maxZ: 9 },
   { id: 'garage', ...VILLA_GARAGE_EXTENT },
 ] as const;
 /** One convex rectangle covering the house and the garage plus the 0.2 m slab
  * overhang. The lawn mesh is cut away here so the interior floor slabs and the
  * lift car floor never share a plane with the terrain (z-fighting). */
-export const VILLA_BUILDING_FOOTPRINT = { minX: -12.2, maxX: 34.8, minZ: -9.2, maxZ: 9.2 } as const;
-/** The core (stairs + lift) was widened east in 1.1.0: the interior east wall
- * moved from x=12 to x=16 so the stair aisle, the lift lobby and every east
- * room gained real walking clearance. Shared datum for world, rooms and decor. */
-export const VILLA_EAST_WALL = { inner: 16, outer: 16.2 } as const;
+export const VILLA_BUILDING_FOOTPRINT = { minX: -24.4, maxX: 51, minZ: -18.4, maxZ: 9.2 } as const;
+/** House envelope as wall centre lines, with the slab and fascia overhang 0.2 m
+ * outside. The interior doubled west, east and north in 1.3.0 while the stair
+ * and lift core stayed exactly where it was, so the core now sits near the
+ * middle of the plan instead of against the east side. Every wall, slab, room
+ * and piece of decor is authored from these datums. */
+export const VILLA_WEST_WALL = { inner: -24.2, outer: -24.4 } as const;
+export const VILLA_EAST_WALL = { inner: 28.2, outer: 28.4 } as const;
+export const VILLA_NORTH_WALL = { inner: -18.2, outer: -18.4 } as const;
+export const VILLA_SOUTH_WALL = { inner: 9, outer: 9.2 } as const;
+/** The pool rectangle. It lives with the layout datums because the seating and
+ *  garden modules need it and villaWorld already imports them. */
+export const POOL = { minX: -36.4, maxX: -27.7, minZ: -7.5, maxZ: 6.5 } as const;
 /** Fence runs live just beyond support bounds, so they never bisect the old
  * garden or expanded garage. Parent samples rail/post Y with terrainHeight. */
 export const VILLA_ESTATE_FENCE_SEGMENTS = [
-  { from: { x: -24.8, z: -16.8 }, to: { x: -24.8, z: 162.3 } },
-  { from: { x: 45.3, z: -16.8 }, to: { x: 45.3, z: 162.3 } },
-  { from: { x: -24.8, z: -16.8 }, to: { x: 45.3, z: -16.8 } },
-  { from: { x: -24.8, z: 162.3 }, to: { x: 45.3, z: 162.3 } },
+  { from: { x: -40.3, z: -26.3 }, to: { x: -40.3, z: 162.3 } },
+  { from: { x: 62.3, z: -26.3 }, to: { x: 62.3, z: 162.3 } },
+  { from: { x: -40.3, z: -26.3 }, to: { x: 62.3, z: -26.3 } },
+  { from: { x: -40.3, z: 162.3 }, to: { x: 62.3, z: 162.3 } },
 ] as const;
 export const VILLA_POND_BOUNDS = { minX: -20, maxX: -6, minZ: 67, maxZ: 88 } as const;
 export const VILLA_POND = { x: -13, z: 77.5, radiusX: 7, radiusZ: 10.5, waterY: -.10 } as const;

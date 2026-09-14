@@ -26,7 +26,24 @@ export const VILLA_SCENIC_ROAD_SAMPLES: readonly RoadPoint[] = Array.from({ leng
   const a = i / 144 * Math.PI * 2, r = VILLA_SCENIC_ROAD;
   return { x: r.x + Math.cos(a) * r.radiusX, z: r.z + Math.sin(a) * r.radiusZ };
 });
-export const VILLA_ESTATE_ROAD_PATHS: readonly (readonly RoadPoint[])[] = [VILLA_SCENIC_ROAD_SAMPLES, VILLA_SOUTH_ROAD_SAMPLES, [{ x: 16.2, z: 2 }, { x: 16.2, z: 34 }]];
+/** Garage driveway, now aligned with the first bay's new x after the garage
+ *  moved east with the enlarged house. */
+export const VILLA_GARAGE_DRIVE: readonly RoadPoint[] = [
+  { x: 32.4, z: 2 }, { x: 32.4, z: 12 }, { x: 30, z: 22 }, { x: 25.5, z: 29 }];
+/** A through-road across the front of the house, joining both ends of the long
+ *  southern branch. With it the estate has two independent loops instead of one
+ *  out-and-back line, which is the point of the added roads. */
+export const VILLA_FRONT_LINK: readonly RoadPoint[] = [
+  { x: -9, z: 28 }, { x: -6.5, z: 22.5 }, { x: -2, z: 18 }, { x: 5, z: 15.6 },
+  { x: 13, z: 16.2 }, { x: 19.6, z: 21.4 }, { x: 23, z: 28 }];
+/** A second descent down the east side, so the garage apron is not a dead end. */
+export const VILLA_EAST_LINK: readonly RoadPoint[] = [
+  { x: 40, z: 3 }, { x: 41.5, z: 14 }, { x: 39.5, z: 28 }, { x: 35, z: 45 }, { x: 31.4, z: 60 }];
+/** Short spur from the front link to the entrance forecourt. */
+export const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
+export const VILLA_ESTATE_ROAD_PATHS: readonly (readonly RoadPoint[])[] = [
+  VILLA_SCENIC_ROAD_SAMPLES, VILLA_SOUTH_ROAD_SAMPLES,
+  VILLA_GARAGE_DRIVE, VILLA_FRONT_LINK, VILLA_EAST_LINK, VILLA_ENTRY_SPUR];
 export function villaDistanceToRoad(x: number, z: number): number {
   let best = Infinity;
   for (const path of VILLA_ESTATE_ROAD_PATHS) for (let i = 1; i < path.length; i++) {
@@ -58,14 +75,19 @@ export function createVillaDrivingCourse(parent: THREE.Object3D): { colliders: V
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geometry.setIndex(indices); geometry.computeVertexNormals(); model.geometry(geometry, material);
   };
   const half = VILLA_SCENIC_ROAD.width / 2;
+  // The long branch, the scenic oval and every through-link share one width; the
+  // garage drive is the wider one.
+  const narrow = new Set<readonly RoadPoint[]>([VILLA_GARAGE_DRIVE]);
   for (const [index, path] of VILLA_ESTATE_ROAD_PATHS.entries()) {
-    const width = index === 2 ? VILLA_SCENIC_ROAD.drivewayWidth : half * 2;
-    ribbon(path, width + .9, .022 + index * .002, shoulder); ribbon(path, width, .041 + index * .003, asphalt);
+    const width = narrow.has(path) ? VILLA_SCENIC_ROAD.drivewayWidth : half * 2;
+    // 2 mm per road keeps overlapping ribbons off each other's plane while staying
+    // close enough to the ground to read as asphalt laid on the meadow.
+    ribbon(path, width + .9, .020 + index * .002, shoulder); ribbon(path, width, .038 + index * .002, asphalt);
   }
-  // Four-bay apron gently narrows into the original driveway; not a box crossing
-  // the preserved lemon trunk (23.4,7). Broad area stops at z5, north of that tree.
-  ribbon([{ x: 23.2, z: 2 }, { x: 23.2, z: 3.5 }, { x: 23.2, z: 5 }], 21.2, .048, asphalt);
-  const apron = [{ x: 29.5, z: 4.5 }, { x: 29.5, z: 13 }, { x: 27, z: 20 }, { x: 23.4, z: 27 }, { x: 20.3, z: 33 }];
+  // Four-bay apron in front of the garage, stopping north of the preserved lemon
+  // trunk now that the garage's west end has moved east with the house.
+  ribbon([{ x: 39.6, z: 2 }, { x: 39.6, z: 3.5 }, { x: 39.6, z: 5 }], 21.2, .048, asphalt);
+  const apron = [{ x: 40, z: 4.5 }, { x: 41, z: 13 }, { x: 39.5, z: 22 }, { x: 36, z: 27 }];
   ribbon(apron, 7, .024, shoulder); ribbon(apron, 6.3, .049, asphalt);
   // Paint stays on the old oval's quiet outer edge, interrupted at all merges.
   for (const side of [-1, 1]) for (let i = 0; i < VILLA_SCENIC_ROAD_SAMPLES.length - 1; i++) {

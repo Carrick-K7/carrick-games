@@ -8,22 +8,29 @@ export interface VillaHomeLight {
 }
 /** Lamps are grouped by room, including all three galleries and the east garage. */
 export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
-  { id: 'living', name: 'Living room', zh: '客厅', floor: 0, fixtures: [{ x: -7.7, y: 3.12, z: 4.1 }] },
-  { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房餐厅', floor: 0, fixtures: [{ x: -7.3, y: 3.1, z: -4.3 }] },
-  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, fixtures: [{ x: 7.2, y: 3.1, z: 6.1 }, { x: 12.6, y: 3.1, z: 6.1 }] },
+  // Fixtures follow the doubled plan: the west wing is a 22 m deep volume now,
+  // and the four new rooms each get their own switchable light.
+  { id: 'living', name: 'Living room', zh: '客厅', floor: 0, fixtures: [{ x: -18, y: 3.12, z: 4.4 }, { x: -7.7, y: 3.12, z: 4.1 }] },
+  { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房餐厅', floor: 0, fixtures: [{ x: -18, y: 3.1, z: -4.5 }, { x: -7.3, y: 3.1, z: -4.3 }] },
+  { id: 'studio', name: 'Studio', zh: '书房', floor: 0, fixtures: [{ x: -14, y: 3.1, z: -13.6 }] },
+  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, fixtures: [{ x: 7.2, y: 3.1, z: 6.1 }, { x: 13.4, y: 3.1, z: 6.1 }] },
   { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, fixtures: [{ x: 9.2, y: 3.12, z: -3.8 }, { x: 13.4, y: 3.12, z: -3.8 }] },
-  { id: 'garage', name: 'Garage & workshop', zh: '车库工坊', floor: 0, fixtures: [{ x: 16.2, y: 3.24, z: -2.8 }, { x: 24.1, y: 3.24, z: -2.8 }, { x: 31, y: 3.24, z: -2.8 }] },
-  { id: 'gallery-0', name: 'Ground floor hall', zh: '一楼走廊', floor: 0, fixtures: [{ x: 0, y: 3.14, z: 5.8 }, { x: 0, y: 3.14, z: -8.0 }] },
-  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, fixtures: [{ x: -7.4, y: 6.72, z: 4.4 }] },
-  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -7.5, y: 6.72, z: -4.6 }] },
-  { id: 'bath', name: 'Bathroom', zh: '浴室', floor: 1, fixtures: [{ x: 9.1, y: 6.72, z: -4.2 }, { x: 13.6, y: 6.72, z: -4.2 }] },
-  { id: 'library', name: 'Reading lounge', zh: '书房', floor: 1, fixtures: [{ x: 7.1, y: 6.72, z: 6 }, { x: 13.4, y: 6.72, z: 6 }] },
-  { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }] },
+  { id: 'gym', name: 'Gym & hobby room', zh: '健身多功能房', floor: 0, fixtures: [{ x: 11.3, y: 3.1, z: -13.6 }] },
+  { id: 'east-lounge', name: 'Media lounge', zh: '影音休闲厅', floor: 0, fixtures: [{ x: 22.6, y: 3.1, z: -4.5 }, { x: 22.6, y: 3.1, z: 5 }] },
+  { id: 'garage', name: 'Garage & workshop', zh: '车库工坊', floor: 0, fixtures: [{ x: 32.4, y: 3.24, z: -2.8 }, { x: 40, y: 3.24, z: -2.8 }, { x: 47, y: 3.24, z: -2.8 }] },
+  { id: 'gallery-0', name: 'Ground floor hall', zh: '一楼走廊', floor: 0, fixtures: [{ x: 0, y: 3.14, z: 5.8 }, { x: 0, y: 3.14, z: -8.0 }, { x: 0, y: 3.14, z: -15.5 }] },
+  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: 4.4 }, { x: -7.4, y: 6.72, z: 4.4 }] },
+  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: -4.6 }, { x: -7.5, y: 6.72, z: -4.6 }] },
+  { id: 'study-west', name: 'Upstairs study', zh: '二楼书房', floor: 1, fixtures: [{ x: -14, y: 6.72, z: -13.6 }] },
+  { id: 'bath', name: 'Bathroom', zh: '浴室', floor: 1, fixtures: [{ x: 10, y: 6.72, z: -4.2 }, { x: 14.6, y: 6.72, z: -4.2 }] },
+  { id: 'study', name: 'Study', zh: '书房阅读间', floor: 1, fixtures: [{ x: 12.5, y: 6.72, z: -13.6 }] },
+  { id: 'library', name: 'Reading lounge', zh: '阅读厅', floor: 1, fixtures: [{ x: 7.1, y: 6.72, z: 6 }, { x: 13.4, y: 6.72, z: 6 }] },
+  { id: 'east-suite', name: 'Guest suite', zh: '东侧客房', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -4.5 }, { x: 22.6, y: 6.72, z: 5 }] },
+  { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }] },
   { id: 'gallery-2', name: 'Roof access', zh: '天台楼梯间', floor: 2, fixtures: [{ x: 1.06, y: 10.32, z: -2.4 }] },
   { id: 'terrace', name: 'Roof light strips', zh: '天台灯带', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
-  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 29, y: 1.2, z: 8.4 }] },
-];
-export interface VillaSecurityCamera {
+  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }] },
+];export interface VillaSecurityCamera {
   id: string; name: string; zh: string; position: VillaPosition; target: VillaPosition;
 }
 export const VILLA_SECURITY_CAMERAS: readonly VillaSecurityCamera[] = [

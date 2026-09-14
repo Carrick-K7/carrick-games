@@ -11,7 +11,7 @@ import { isVillaVehicleCollider, type VillaDrivingState } from './villaDriving.j
 import { createVillaPickupModel } from './villaPickupModel.js';
 import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
 import { createVillaEstateModel } from './villaEstateModel.js';
-import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
+import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
@@ -338,10 +338,12 @@ export class VillaScene {
     // Concrete spans all four garage bays; its shell belongs to World.
     const garage = VILLA_GARAGE_EXTENT;
     box((garage.minX + garage.maxX) / 2, -.025, (garage.minZ + garage.maxZ) / 2, garage.maxX - garage.minX, .08, garage.maxZ - garage.minZ, materials.stone);
-    box(9.25, 3.61, -4, 5.45, 0.025, 9.8, materials.stone);
+    // Upstairs bathroom floor follows the room it belongs to.
+    box(12.5, 3.61, -4, 9, 0.025, 10, materials.stone);
     box(0, -0.015, 15.9, 3.8, 0.055, 13.5, materials.stone);
     box(8, -0.015, 11, 13, 0.055, 2.2, materials.stone);
-    box(-13.15, -0.01, 0, 2.2, 0.06, 20, materials.stone);
+    // The side path runs outside the west wall, between the house and the pool.
+    box(WEST.outer - 1.5, -0.01, 0, 2.2, 0.06, 20, materials.stone);
     for (let i = 0; i < 11; i++) box(-2.5 - i * 1.16, 0.008, 11.5, 0.92, 0.07, 1.2, materials.stone);
     for (let i = 0; i < 7; i++) box(0, 0.018, 10.5 + i * 1.7, 3.55, 0.02, 0.018, materials.bronze);
     const poolTile = new THREE.MeshStandardMaterial({ map: texture('tile'), roughness: 0.42 });

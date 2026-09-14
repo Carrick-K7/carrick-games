@@ -41,7 +41,13 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
     const scale = 1 / Math.cos(Math.PI / 128);
     return { x: VILLA_POND.x + Math.cos(angle) * VILLA_POND.radiusX * scale, z: VILLA_POND.z + Math.sin(angle) * VILLA_POND.radiusZ * scale };
   });
-  const pool = rect(POOL);
+  // The hole is 1 cm wider than the water on every side. A cell edge landing
+  // exactly on POOL's rectangle is stored as float32, and -27.7 becomes
+  // -27.70000076: a hair INSIDE the float64 rectangle, which left a 7.6e-7 m2
+  // grass sliver in the water. 1 cm is far larger than that rounding and is
+  // hidden under the coping.
+  const poolRect = { minX: POOL.minX - .001, maxX: POOL.maxX + .001, minZ: POOL.minZ - .001, maxZ: POOL.maxZ + .001 };
+  const pool = rect(poolRect);
   // The lawn must not run under the house or garage: its flat interior surface
   // is exactly coplanar with the interior slabs and the lift car floor, which
   // z-fights (a flickering threshold and a grass-looking lift floor).
@@ -57,7 +63,10 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   for (let x = 0; x + 1 < xs.length; x++) for (let z = 0; z + 1 < zs.length; z++) {
     const cell = { minX: xs[x]!, maxX: xs[x + 1]!, minZ: zs[z]!, maxZ: zs[z + 1]! };
     let polygons = [rect(cell)];
-    for (const [hole, r] of [[buildings, VILLA_BUILDING_FOOTPRINT], [pool, POOL], [pond, VILLA_POND_BOUNDS]] as const) {
+    // The overlap test and the subtracted polygon must be the SAME rectangle:
+    // testing against the unexpanded POOL skipped every cell whose edge lay on
+    // it, so the hole was never cut there.
+    for (const [hole, r] of [[buildings, VILLA_BUILDING_FOOTPRINT], [pool, poolRect], [pond, VILLA_POND_BOUNDS]] as const) {
       if (cell.maxX <= r.minX || cell.minX >= r.maxX || cell.maxZ <= r.minZ || cell.minZ >= r.maxZ) continue;
       polygons = polygons.flatMap(polygon => subtract(polygon, hole));
     }

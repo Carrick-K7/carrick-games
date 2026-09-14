@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
-import { VILLA_ESTATE_FIELDS, VILLA_ESTATE_VIEWPOINT, VILLA_POND, villaTerrainHeight } from './villaEstateLayout.js';
+import { VILLA_ESTATE_FIELDS, VILLA_ESTATE_VIEWPOINT, VILLA_GARAGE_EXTENT, VILLA_POND, villaTerrainHeight } from './villaEstateLayout.js';
 import type { VillaCollider } from './villaWorld.js';
 
 type Point = { x: number; z: number };
@@ -128,35 +128,40 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
 
   const workshop = new VillaModelBuilder(root, 'garage-maintenance-equipment');
   const metal = villaMaterial(0x88928e, .35, .7), charcoal = villaMaterial(0x28312f, .7), red = villaMaterial(0x97594a, .54, .15);
-  // Rear workbench; empty bay centres x26 and30.7 remain drive-through corridors.
-  workshop.box(28.8, .89, -7.24, 3.6, .10, .72, timber, .025);
-  for (const x of [27.25, 30.35]) for (const z of [-7.48, -7]) workshop.box(x, .43, z, .075, .86, .075, metal, .006);
-  workshop.box(28.8, 1.57, -7.64, 3.55, 1.08, .045, charcoal, .006);
+  // Authored as offsets from the garage's west wall, so moving the garage east
+  // carries its equipment instead of leaving it standing inside the house.
+  const g = VILLA_GARAGE_EXTENT;
+  const gx = (x: number) => x - 12 + g.minX;
+  // Rear workbench; the two reserved bay centres stay drive-through corridors.
+  workshop.box(gx(28.8), .89, -7.24, 3.6, .10, .72, timber, .025);
+  for (const x of [27.25, 30.35]) for (const z of [-7.48, -7]) workshop.box(gx(x), .43, z, .075, .86, .075, metal, .006);
+  workshop.box(gx(28.8), 1.57, -7.64, 3.55, 1.08, .045, charcoal, .006);
   for (let i = 0; i < 9; i++) {
-    const x = 27.4 + i * .35;
+    const x = gx(27.4 + i * .35);
     workshop.beam([x, 1.32, -7.58], [x, 1.7 + (i % 3) * .09, -7.58], .021, metal, 6);
     workshop.geometry(new THREE.TorusGeometry(.045, .013, 6, 12, Math.PI * 1.5), metal, [x, 1.76 + (i % 3) * .09, -7.58]);
   }
-  workshop.collide(28.8, 0, -7.28, 3.7, 2.14, .85);
+  workshop.collide(gx(28.8), 0, -7.28, 3.7, 2.14, .85);
   // Tool trolley along east wall, real drawers, casters and push handle.
-  workshop.box(33.8, .55, -3.7, .62, .72, 1.03, red, .026);
-  workshop.box(33.8, .93, -3.7, .68, .055, 1.09, charcoal, .014);
-  for (let i = 0; i < 5; i++) workshop.box(33.475, .30 + i * .12, -3.7, .018, .027, .69, metal, .006);
-  for (const x of [33.6, 34]) for (const z of [-4.1, -3.3]) workshop.cylinder(x, .13, z, .075, .075, .06, charcoal, [0, 0, Math.PI / 2], 12);
-  workshop.beam([33.52, .83, -4.2], [33.52, .83, -4.45], .019, metal); workshop.beam([33.52, .83, -4.45], [34.05, .83, -4.45], .019, metal);
-  workshop.collide(33.8, 0, -3.8, .75, .98, 1.4);
+  workshop.box(gx(33.8), .55, -3.7, .62, .72, 1.03, red, .026);
+  workshop.box(gx(33.8), .93, -3.7, .68, .055, 1.09, charcoal, .014);
+  for (let i = 0; i < 5; i++) workshop.box(gx(33.475), .30 + i * .12, -3.7, .018, .027, .69, metal, .006);
+  for (const x of [33.6, 34]) for (const z of [-4.1, -3.3]) workshop.cylinder(gx(x), .13, z, .075, .075, .06, charcoal, [0, 0, Math.PI / 2], 12);
+  workshop.beam([gx(33.52), .83, -4.2], [gx(33.52), .83, -4.45], .019, metal); workshop.beam([gx(33.52), .83, -4.45], [gx(34.05), .83, -4.45], .019, metal);
+  workshop.collide(gx(33.8), 0, -3.8, .75, .98, 1.4);
   // Floor jack stays parked against the northern wall, not under a spawn vehicle.
-  workshop.box(32.6, .13, -6.9, .44, .12, .95, red, .025);
-  workshop.beam([32.6, .16, -6.8], [32.6, .34, -7.12], .075, metal);
-  workshop.cylinder(32.6, .34, -7.12, .105, .105, .035, charcoal);
-  workshop.beam([32.6, .17, -6.55], [32.6, 1.03, -6.28], .018, metal); workshop.collide(32.6, 0, -6.85, .58, 1.06, 1.28);
-  for (let i = 0; i < 3; i++) workshop.geometry(new THREE.TorusGeometry(.29, .105, 10, 28), charcoal, [33.76, .14 + i * .21, -5.75], [Math.PI / 2, 0, 0]);
-  workshop.collide(33.76, 0, -5.75, .82, .68, .82);
+  workshop.box(gx(32.6), .13, -6.9, .44, .12, .95, red, .025);
+  workshop.beam([gx(32.6), .16, -6.8], [gx(32.6), .34, -7.12], .075, metal);
+  workshop.cylinder(gx(32.6), .34, -7.12, .105, .105, .035, charcoal);
+  workshop.beam([gx(32.6), .17, -6.55], [gx(32.6), 1.03, -6.28], .018, metal); workshop.collide(gx(32.6), 0, -6.85, .58, 1.06, 1.28);
+  for (let i = 0; i < 3; i++) workshop.geometry(new THREE.TorusGeometry(.29, .105, 10, 28), charcoal, [gx(33.76), .14 + i * .21, -5.75], [Math.PI / 2, 0, 0]);
+  workshop.collide(gx(33.76), 0, -5.75, .82, .68, .82);
   const charger = new THREE.Group(); charger.name = 'garage-charging-pedestal'; charger.userData = { kind: 'charging-pedestal', count: 1 }; root.add(charger);
   const charge = new VillaModelBuilder(charger, 'charging-pedestal-details');
-  charge.box(13.05, .60, -6.3, .24, 1.2, .22, metal, .025); charge.box(13.05, 1.25, -6.3, .37, .43, .25, charcoal, .045);
-  charge.box(13.05, 1.30, -6.164, .24, .11, .012, villaMaterial(0x8caea2, .3), .009);
-  charge.geometry(new THREE.TorusGeometry(.18, .018, 6, 24), charcoal, [13.05, .82, -6.15]); charge.box(13.21, 1.01, -6.12, .045, .12, .075, charcoal, .013);
-  charge.collide(13.05, 0, -6.27, .47, 1.5, .47); charge.finish(); workshop.finish();
+  const cx = gx(13.05);
+  charge.box(cx, .60, -6.3, .24, 1.2, .22, metal, .025); charge.box(cx, 1.25, -6.3, .37, .43, .25, charcoal, .045);
+  charge.box(cx, 1.30, -6.164, .24, .11, .012, villaMaterial(0x8caea2, .3), .009);
+  charge.geometry(new THREE.TorusGeometry(.18, .018, 6, 24), charcoal, [cx, .82, -6.15]); charge.box(cx + .16, 1.01, -6.12, .045, .12, .075, charcoal, .013);
+  charge.collide(cx, 0, -6.27, .47, 1.5, .47); charge.finish(); workshop.finish();
   return { colliders: [...model.colliders, ...workshop.colliders, ...charge.colliders] };
 }

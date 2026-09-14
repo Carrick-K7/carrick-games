@@ -1,10 +1,10 @@
 import { VILLA_CAR, VILLA_RACING, VILLA_SCOOTER } from './villaActivities.js';
 import { VILLA_ELEVATOR, villaElevatorShaftContains } from './villaElevator.js';
-import { VILLA_EAST_WALL as EAST } from './villaEstateLayout.js';
+import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH } from './villaEstateLayout.js';
 import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition } from './villaSeating.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import type { VillaPetId } from './villaPets.js';
-import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
+import { POOL, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
@@ -38,7 +38,7 @@ export const VILLA_ENTRANCE: VillaPosition = { x: 0, y: 0, z: 11.5 };
  * former shaft footprint (shifted west, same 3.95 x 7.5 size) and the lift
  * shaft sits in the north end of the former stairwell. */
 export const STAIR_HOLE = { minX: -0.85, maxX: 3.1, minZ: -7, maxZ: 0.5 };
-export const POOL = { minX: -23.2, maxX: -14.5, minZ: -7.5, maxZ: 6.5 };
+export { POOL } from './villaEstateLayout.js';
 export const VILLA_RAMPS: VillaRamp[] = [0, STOREY].flatMap(base => [
   { minX: -0.7, maxX: 1.08, startZ: 0.5, endZ: -5.5, bottom: base, top: base + 1.8, base },
   { minX: 1.32, maxX: 3.1, startZ: -5.5, endZ: 0.5, bottom: base + 1.8, top: base + STOREY, base },
@@ -49,17 +49,23 @@ export function villaTreadLayers(top: number) {
   return { bodyBottom: top - STAIR_TREAD_THICKNESS, bodyTop: top - STAIR_FINISH_THICKNESS, finishBottom: top - STAIR_FINISH_THICKNESS, finishTop: top };
 }
 export const VILLA_ROOMS: VillaRoom[] = [
-  { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
-  { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
-  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: EAST.inner, minZ: 3, maxZ: 9 },
-  { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 8, maxX: 12, minZ: -9, maxZ: 1 },
+  { id: 'studio', name: 'Studio', zh: '书房 · 工作室', floor: 0, minX: WEST.inner, maxX: -2, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: WEST.inner, maxX: -2, minZ: -9, maxZ: 0 },
+  { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: WEST.inner, maxX: -2, minZ: 0, maxZ: SOUTH.inner },
+  { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, minX: 5.65, maxX: 17, minZ: -9, maxZ: 1 },
+  { id: 'gym', name: 'Gym & hobby room', zh: '健身 · 多功能房', floor: 0, minX: 5.65, maxX: 17, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, minX: 2, maxX: 17, minZ: 3, maxZ: SOUTH.inner },
+  { id: 'east-lounge', name: 'Media lounge', zh: '影音休闲厅', floor: 0, minX: 17, maxX: EAST.inner, minZ: NORTH.inner, maxZ: SOUTH.inner },
   { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, ...VILLA_GARAGE_EXTENT },
-  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: -12, maxX: -2, minZ: 0, maxZ: 9 },
-  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: -12, maxX: -2, minZ: -9, maxZ: 0 },
-  { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 8, maxX: EAST.inner, minZ: -9, maxZ: 1 },
-  { id: 'library', name: 'Reading lounge', zh: '书房 · 阅读角', floor: 1, minX: 2, maxX: EAST.inner, minZ: 3, maxZ: 9 },
+  { id: 'study', name: 'Study', zh: '书房 · 阅读间', floor: 1, minX: 8, maxX: 17, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 8, maxX: 17, minZ: -9, maxZ: 1 },
+  { id: 'library', name: 'Reading lounge', zh: '书房 · 阅读角', floor: 1, minX: 2, maxX: 17, minZ: 3, maxZ: SOUTH.inner },
+  { id: 'east-suite', name: 'Guest suite', zh: '东侧客房', floor: 1, minX: 17, maxX: EAST.inner, minZ: NORTH.inner, maxZ: SOUTH.inner },
+  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: WEST.inner, maxX: -2, minZ: 0, maxZ: SOUTH.inner },
+  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: WEST.inner, maxX: -2, minZ: -9, maxZ: 0 },
+  { id: 'study-west', name: 'Upstairs study', zh: '二楼书房', floor: 1, minX: WEST.inner, maxX: -2, minZ: NORTH.inner, maxZ: -9 },
   { id: 'balcony', name: 'Bedroom balcony', zh: '卧室阳台', floor: 1, minX: -11.5, maxX: 1.5, minZ: 9, maxZ: 11.5 },
-  { id: 'terrace', name: 'Roof garden', zh: '天台 · 空中花园', floor: 2, minX: -12, maxX: EAST.inner, minZ: -9, maxZ: 9 },
+  { id: 'terrace', name: 'Roof garden', zh: '天台 · 空中花园', floor: 2, minX: WEST.inner, maxX: EAST.inner, minZ: NORTH.inner, maxZ: SOUTH.inner },
 ];
 
 const blocks: VillaBlock[] = [];
@@ -101,25 +107,56 @@ function wall(axis: 'x' | 'z', fixed: number, from: number, to: number, base: nu
   piece(cursor, to, 0, 3.4);
 }
 
-// Ground floor facade, with four actual entrances, not painted-on doors.
-wall('x', 9, -12, 12, 0, [{ from: -11, to: -3 }, { from: -1.45, to: 1.45, door: true }, { from: 3, to: 11 }]);
-wall('x', -9, -12, 12, 0, [{ from: -10.8, to: -9 }, { from: -6.4, to: -3.3 }, { from: -1.45, to: 1.45, door: true }, { from: 7, to: 9 }]);
-wall('z', -12, -9, 9, 0, [{ from: -8, to: -1 }, { from: 1, to: 2.3 }, { from: 2.5, to: 5.2, door: true }, { from: 5.5, to: 8 }]);
-wall('z', 12, -9, 9, 0, [{ from: -7, to: -3 }, { from: -0.8, to: 1.8, door: true }, { from: 4, to: 8 }]);
-wall('x', 3, 2, 12, 0, [{ from: 3, to: 5.5, door: true }]);
+// Ground floor facade, with four actual entrances, not painted-on doors. The
+// envelope doubled west, east and north; the openings keep their old x/z so
+// every window and door stays where the rooms already expect it.
+wall('x', SOUTH.inner, WEST.inner, EAST.inner, 0, [
+  { from: -23.2, to: -14.2 }, { from: -12, to: -4.5 },
+  { from: -1.45, to: 1.45, door: true },
+  { from: 3.5, to: 11 }, { from: 18.5, to: 27 }]);
+wall('x', NORTH.inner, WEST.inner, EAST.inner, 0, [
+  { from: -23.2, to: -15 }, { from: -12.5, to: -4 },
+  { from: -1.45, to: 1.45, door: true },
+  { from: 6.5, to: 12 }, { from: 19, to: 27 }]);
+wall('z', WEST.inner, NORTH.inner, SOUTH.inner, 0, [
+  { from: -17, to: -10 }, { from: -8, to: -1 }, { from: 1, to: 2.3 }, { from: 2.5, to: 5.2, door: true }, { from: 5.5, to: 8 }]);
+wall('z', EAST.inner, NORTH.inner, SOUTH.inner, 0, [
+  { from: -16, to: -12 }, { from: -7, to: -3 }, { from: -0.8, to: 1.8, door: true }, { from: 4, to: 8 }]);
+// The west wing is one deep open-plan volume now, split into three bands.
+wall('x', -9, WEST.inner, -2, 0, [{ from: -20.5, to: -15, door: true }]);
+// A cased opening, not a door: the studio still reads as part of the wing.
+wall('z', -2, NORTH.inner, -9, 0, [{ from: -16, to: -10.5, door: true }]);
+// East rooms are divided from the hall by one full-depth wall with a wide arch.
+wall('z', 17, NORTH.inner, SOUTH.inner, 0, [{ from: -3.5, to: 2.5, door: true }, { from: 4.5, to: 7.5, door: true }]);
+wall('x', 3, 2, 17, 0, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, 0);
+// The snooker lounge keeps a real north wall to hang its cue rack on, and the
+// band behind it becomes the ground floor's flexible room.
+wall('x', -9, 5.65, 17, 0, [{ from: 12, to: 15, door: true }]);
 // Two private bedrooms, a bathroom and a library off the upstairs gallery.
-wall('x', 9, -12, EAST.inner, STOREY, [{ from: -11, to: -8.8 }, { from: -8.5, to: -6.2, door: true }, { from: -5.9, to: 1 }, { from: 3, to: 15 }]);
-wall('x', -9, -12, EAST.inner, STOREY, [{ from: -11, to: -3 }, { from: -1.3, to: 1.3 }, { from: 7, to: 11 }]);
-wall('z', -12, -9, 9, STOREY, [{ from: -8, to: -1 }, { from: 1, to: 8 }]);
-wall('z', EAST.inner, -9, 9, STOREY, [{ from: -8, to: -2 }, { from: 4, to: 8 }]);
-wall('z', -2, -9, 9, STOREY, [{ from: -4.8, to: -2.5, door: true }, { from: 1.5, to: 3.8, door: true }]);
-wall('x', 0, -12, -2, STOREY);
-wall('x', 3, 2, 12, STOREY, [{ from: 3, to: 5.5, door: true }]);
+wall('x', SOUTH.inner, WEST.inner, EAST.inner, STOREY, [
+  { from: -23.2, to: -14.2 }, { from: -12, to: -8.8 },
+  // The bedroom balcony's own door: rewriting this facade without it sealed the
+  // balcony off behind glass.
+  { from: -8.5, to: -6.2, door: true },
+  { from: -5.9, to: -1.8 }, { from: -1.3, to: 1.3 }, { from: 3, to: 15 }, { from: 19.5, to: 27 }]);
+wall('x', NORTH.inner, WEST.inner, EAST.inner, STOREY, [
+  { from: -23.2, to: -14 }, { from: -11, to: -3 },
+  { from: 10, to: 15.5 }, { from: 20, to: 27 }]);
+wall('z', WEST.inner, NORTH.inner, SOUTH.inner, STOREY, [{ from: -17, to: -10 }, { from: -8, to: -1 }, { from: 1, to: 8 }]);
+wall('z', EAST.inner, NORTH.inner, SOUTH.inner, STOREY, [{ from: -8, to: -2 }, { from: 4, to: 8 }, { from: -16, to: -11.5 }]);
+// Gallery wall: one door per west room, and a wide opening onto the stair hall.
+wall('z', -2, NORTH.inner, SOUTH.inner, STOREY, [
+  { from: -16.5, to: -13.5, door: true }, { from: -4.8, to: -2.5, door: true }, { from: 1.5, to: 3.8, door: true }]);
+wall('x', 0, WEST.inner, -2, STOREY);
+wall('x', -9, WEST.inner, -2, STOREY, [{ from: -19, to: -15, door: true }]);
+wall('z', 17, NORTH.inner, SOUTH.inner, STOREY, [{ from: -4, to: 0, door: true }, { from: 4, to: 7.5, door: true }]);
+wall('x', 3, 2, 17, STOREY, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, STOREY);
-// The bathroom door faces the widened lift lobby, as in the original plan.
-wall('z', 8, -9, 1, STOREY, [{ from: -6.2, to: -3.4, door: true }]);
-wall('x', 1, 8, EAST.inner, STOREY, [{ from: 9.2, to: 11.3, door: true }]);
+// Wet rooms sit behind the lift lobby; the study takes the new north band.
+wall('z', 8, NORTH.inner, 1, STOREY, [{ from: -6.2, to: -3.4, door: true }, { from: -15, to: -12, door: true }]);
+wall('x', -9, 8, 17, STOREY, [{ from: 11, to: 14, door: true }]);
+wall('x', 1, 8, 17, STOREY, [{ from: 9.2, to: 11.3, door: true }]);
 // Four south-facing bays: sedan, pickup, and two genuinely empty spare spaces.
 const garage = VILLA_GARAGE_EXTENT;
 wall('z', garage.maxX, garage.minZ, garage.maxZ, 0, [{ from: -6.5, to: -3 }]);
@@ -137,25 +174,25 @@ for (const y of [STOREY, STOREY * 2]) {
   // The west slab must meet the stair opening exactly: cutting it at x=-1.0
   // while STAIR_HOLE.minX is -0.85 left a 15 cm slit down the full depth of the
   // upper storeys, which read as a seam in the floor.
-  add(-6.5, cy, 0, 11.4, 0.2, 18.4, finish, false);
-  add(1.125, cy, -8.1, 3.95, 0.2, 2.2, 'stone', false);
-  add(1.125, cy, 4.85, 3.95, 0.2, 8.7, finish, false);
-  add(3.275, cy, 0, 0.35, 0.2, 18.4, finish, false);
-  add(4.55, cy, -8.1, 2.2, 0.2, 2.2, 'stone', false);
+  add(-12.6, cy, -4.6, 23.6, 0.2, 27.6, finish, false);
+  add(1.15, cy, -12.7, 3.9, 0.2, 11.4, 'stone', false);
+  add(1.15, cy, 4.85, 3.9, 0.2, 8.7, finish, false);
+  add(3.275, cy, -4.6, 0.35, 0.2, 27.6, finish, false);
+  add(4.55, cy, -12.7, 2.2, 0.2, 11.4, 'stone', false);
   add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false);
-  add(10.925, cy, 0, 10.55, 0.2, 18.4, finish, false);
+  add(17.025, cy, -4.6, 22.75, 0.2, 27.6, finish, false);
 }
-add(-4.375, -0.13, 0, 15.65, 0.26, 18.4, 'oak', false);
-add(8.925, -0.13, 0, 6.55, 0.26, 18.4, 'oak', false);
-add(4.55, -0.13, -8.1, 2.2, 0.26, 2.2, 'oak', false);
+add(-10.475, -0.13, -4.6, 27.85, 0.26, 27.6, 'oak', false);
+add(17.025, -0.13, -4.6, 22.75, 0.26, 27.6, 'oak', false);
+add(4.55, -0.13, -12.7, 2.2, 0.26, 11.4, 'oak', false);
 add(4.55, -0.13, 2.3, 2.2, 0.26, 13.8, 'oak', false);
 add(-5, STOREY - 0.1, 10.25, 13, 0.2, 2.5, 'stone', false);
 // Layered fascia and timber accent fins make a composed modern exterior.
 for (const y of [3.42, 7.02]) {
-  add(0, y, 9.2, 24.8, 0.19, 0.48, 'stone', false);
-  add(0, y, -9.2, 24.8, 0.19, 0.48, 'stone', false);
-  add(-12.2, y, 0, 0.48, 0.19, 18.4, 'stone', false);
-  add(EAST.outer, y, 0, 0.48, 0.19, 18.4, 'stone', false);
+  add(2, y, SOUTH.outer, 52.8, 0.19, 0.48, 'stone', false);
+  add(2, y, NORTH.outer, 52.8, 0.19, 0.48, 'stone', false);
+  add(WEST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false);
+  add(EAST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false);
 }
 for (let x = -2.65; x <= -1.65; x += 0.16) add(x, 3.5, 9.17, 0.07, 6.9, 0.14, 'oak', false);
 add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false);
@@ -192,10 +229,10 @@ for (const y of [3.6, 7.2]) {
   rail(1.2, 0.51, 0.16, 0.12, y);
 }
 // Rooftop and bedroom balcony glass balustrades.
-rail(2, 8.95, 28, 0.12, 7.2, 1.1);
-rail(2, -8.95, 28, 0.12, 7.2, 1.1);
-rail(-11.95, 0, 0.12, 18, 7.2, 1.1);
-rail(15.95, 0, 0.12, 18, 7.2, 1.1);
+rail(2, 8.95, 52.4, 0.12, 7.2, 1.1);
+rail(2, -18.15, 52.4, 0.12, 7.2, 1.1);
+rail(-24.15, -4.6, 0.12, 27.4, 7.2, 1.1);
+rail(28.15, -4.6, 0.12, 27.4, 7.2, 1.1);
 rail(-5, 11.45, 13, 0.12, 3.6, 1.1);
 rail(-11.45, 10.2, 0.12, 2.5, 3.6, 1.1);
 rail(1.45, 10.2, 0.12, 2.5, 3.6, 1.1);
@@ -226,8 +263,8 @@ export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: s
   if (inRect(p.x, p.z, STAIR_HOLE)) return { id: 'stairs', name: 'Oak staircase', zh: '橡木楼梯' };
   const room = VILLA_ROOMS.find(r => r.floor === floor && inRect(p.x, p.z, r));
   if (room) return room;
-  if (floor === 0 && !inRect(p.x, p.z, { minX: -12.2, maxX: EAST.outer, minZ: -9.2, maxZ: 9.2 })) {
-    return p.x < -12 ? { id: 'garden', name: 'Pool garden', zh: '花园 · 泳池' } : { id: 'garden', name: 'Welcome home', zh: '庭院 · 欢迎回家' };
+  if (floor === 0 && !inRect(p.x, p.z, { minX: WEST.outer, maxX: EAST.outer, minZ: NORTH.outer, maxZ: SOUTH.outer })) {
+    return p.x < WEST.outer ? { id: 'garden', name: 'Pool garden', zh: '花园 · 泳池' } : { id: 'garden', name: 'Welcome home', zh: '庭院 · 欢迎回家' };
   }
   return { id: 'gallery', name: 'Sunlit gallery', zh: '采光走廊' };
 }
@@ -246,7 +283,8 @@ export function villaSupportAt(x: number, z: number, previousY: number, headHeig
   const heights: number[] = [villaTerrainHeight(x, z)];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {
-    if (inRect(x, z, { minX: -12.1, maxX: EAST.outer, minZ: -9.1, maxZ: 9.1 }) && !inRect(x, z, STAIR_HOLE)) {
+    // Interior envelope of the upper storeys, inset a hair inside the walls.
+    if (inRect(x, z, { minX: WEST.inner + .1, maxX: EAST.outer, minZ: NORTH.inner + .1, maxZ: SOUTH.outer }) && !inRect(x, z, STAIR_HOLE)) {
       heights.push(y); overhead.push({ top: y, thickness: .2 });
     }
   }
