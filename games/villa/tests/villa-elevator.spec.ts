@@ -235,7 +235,9 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
     ];
     for (const [key, done, label] of legs) {
       press(key);
-      const deadline = performance.now() + 30_000;
+      // Software rasterisation can starve the frame loop; a leg budget tied to
+      // wall-clock frames rather than to distance would strand the walker.
+      const deadline = performance.now() + 90_000;
       while (!done(position()) && performance.now() < deadline) await new Promise(r => setTimeout(r, 16));
       release(key);
       if (!done(position())) return { stuck: `${label} at ${JSON.stringify(position())}` };

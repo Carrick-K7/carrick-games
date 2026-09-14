@@ -70,6 +70,11 @@ export class VillaGame extends BaseGame {
    * of the camera, because a pointer-locked canvas receives no click positions
    * and the painted buttons would otherwise be unclickable. */
   private panelCursor: Point | null = null;
+  /** Granting pointer lock makes the browser emit one recentre move whose delta
+   *  is far larger than hand motion. Without this guard that single event spun
+   *  the camera (and threw the lift panel's cursor) the moment the player
+   *  re-captured the mouse. */
+  private skipLockRecentre = false;
   private wantPointerLock = false;
   private lockVersion = 0;
   private releasePending = false;
@@ -215,6 +220,10 @@ export class VillaGame extends BaseGame {
       const leave = () => { this.lastMouse = null; };
       const pointerMove = (e: MouseEvent) => {
         if (document.pointerLockElement !== this.canvas || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
+        if (this.skipLockRecentre) {
+          this.skipLockRecentre = false;
+          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60) return;
+        }
         if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
         if (this.panelCursor) { this.movePanelCursor(e.movementX, e.movementY); return; }
         this.look(e.movementX, e.movementY, 0.0023);
@@ -223,7 +232,7 @@ export class VillaGame extends BaseGame {
         this.clearInput();
         if (document.pointerLockElement === this.canvas) {
           if (!this.wantPointerLock || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) this.unlock();
-          else this.mouseLookEnabled = true;
+          else { this.mouseLookEnabled = true; this.skipLockRecentre = true; }
         } else if (this.releasePending) {
           this.releasePending = false;
         } else if (this.wantPointerLock) {
