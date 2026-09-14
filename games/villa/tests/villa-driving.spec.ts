@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_CAR } from '../src/villaActivities';
+import { VILLA_ESTATE_BOUNDS } from '../src/villaEstateLayout';
 
 const villaUrl = () => gameModuleUrl('villa');
 
@@ -32,7 +33,11 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
     // Enter through the middle of the sedan's own bay door, then step across to
     // the driver's standing exit; the exit anchor sits just outside the door span.
     key('h'); walk(0, 1.4); walk(carExit.x, 1.4); walk(carExit.x, 1.5); walk(carExit.x, carExit.z);
-    key('e'); tick(40); // One action opens, automatically boards, then closes the door.
+    key('e'); // One action opens, automatically boards, then closes the door.
+    // Wait for the seat rather than a fixed number of frames: a blocked door
+    // swing legitimately inserts a step-back before it opens.
+    for (let i = 0; i < 200 && game.state.seated !== 'car'; i++) game.update(.05);
+    if (game.state.seated !== 'car') throw new Error('The driver must board through the widened arc, at ' + JSON.stringify(game.position));
     const seated = game.state.seated;
     until(() => game.state.driving.z > 29);
     const reachedCourse = game.state.driving.z, room = canvas.dataset.villaRoom;
@@ -66,7 +71,7 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
     key('h'); const home = { seat: game.state.seated, speed: game.state.driving.speed, z: game.position.z };
     game.destroy(); const cleaned = !Object.keys(canvas.dataset).some(k => k.startsWith('villa')); canvas.remove();
     return { seated, reachedCourse, room, movingDoorSafe, noCarCrouch, angle, lookFollowsBody, parked, angledExit, reentered, bend, road, noExamState, poseSynced, stopped, reset, blurStops, home, scores, cleaned, image };
-  }, [villaUrl(), VILLA_CAR] as const);
+  }, [villaUrl(), VILLA_CAR.exit] as const);
   expect(result.seated).toBe('car'); expect(result.reachedCourse).toBeGreaterThan(29); expect(result.room).toBe('driving-course');
   expect(result.movingDoorSafe).toBe(true); expect(result.noCarCrouch).toBe(true); expect(Math.abs(result.angle)).toBeGreaterThan(.7); expect(Math.abs(result.angle)).toBeLessThan(1.1);
   expect(result.lookFollowsBody).toBe(true); expect(result.angledExit).toBe(true); expect(result.reentered).toBe('car');
@@ -80,7 +85,7 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
 
 test('villa rejects an exit across the garage wall and stops at the rendered garden fence', async ({ page }) => {
   await page.goto('/#/snake');
-  const result = await page.evaluate(async ([url, car] : [string, { center: { x: number; z: number } }]) => {
+  const result = await page.evaluate(async ([url, car, bounds] : [string, { center: { x: number; z: number } }, { maxX: number }]) => {
     const { VillaGame } = await import(url); const canvas = document.createElement('canvas'); document.body.append(canvas);
     const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false, isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;
     game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
@@ -88,21 +93,25 @@ test('villa rejects an exit across the garage wall and stops at the rendered gar
     const tick = (n: number) => { for (let i = 0; i < n; i++) game.update(.05); };
     // Deliberate collision-fixture placement: both real standing candidates are
     // obstructed, so no safe exit exists and the car must refuse to open.
-    Object.assign(game.state.driving, { x: 18.5, z: -.8, yaw: 0, speed: 0, steering: 0 });
+    // Two metres east of the sedan's bay, so the east wall is the only obstacle.
+    Object.assign(game.state.driving, { x: car.center.x + 2.3, z: -.8, yaw: 0, speed: 0, steering: 0 });
     game.enterCarAt = game.exitCarAt = game.closeCarAt = Infinity;
-    game.state.seated = 'car'; game.position = { x: 18.93, y: 0, z: -.75 }; game.yaw = Math.PI;
+    game.state.seated = 'car'; game.position = { x: car.center.x + 2.73, y: 0, z: -.75 }; game.yaw = Math.PI;
     game.scene.updateActivities(game.time, game.state);
     const wall = { minX: car.center.x - .7, maxX: car.center.x + 5.3, minZ: -1.15, maxZ: -.15, minY: 0, maxY: 2 };
     game.scene.colliders.push(wall); game.scene.drivingObstacles.push(wall);
     key('e'); key('q'); tick(30);
     const rejectsWallExit = game.state.seated === 'car' && !game.state.carDoorOpen && game.exitCarAt === Infinity;
-    // The estate now extends to x=45; the car starts near the real east fence.
-    Object.assign(game.state.driving, { x: 40, z: 12, yaw: Math.PI / 2, speed: 0, steering: 0 });
+    // Start well inside the plot and drive east into the real boundary fence.
+    const startX = bounds.maxX - 22;
+    Object.assign(game.state.driving, { x: startX, z: 12, yaw: Math.PI / 2, speed: 0, steering: 0 });
     game.yaw = Math.PI * 1.5; game.scene.updateActivities(game.time, game.state);
     key('w'); tick(120); key('w', false);
     const fence = { x: game.state.driving.x, contact: game.state.driving.contact, speed: game.state.driving.speed };
     game.destroy(); canvas.remove(); return { rejectsWallExit, fence };
-  }, [villaUrl(), VILLA_CAR] as const);
-  expect(result.rejectsWallExit).toBe(true); expect(result.fence.x).toBeGreaterThan(40); expect(result.fence.x).toBeLessThan(45);
+  }, [villaUrl(), VILLA_CAR, VILLA_ESTATE_BOUNDS] as const);
+  expect(result.rejectsWallExit).toBe(true);
+  expect(result.fence.x).toBeGreaterThan(VILLA_ESTATE_BOUNDS.maxX - 22);
+  expect(result.fence.x).toBeLessThan(VILLA_ESTATE_BOUNDS.maxX);
   expect(result.fence.contact).toBe(true); expect(result.fence.speed).toBe(0);
 });

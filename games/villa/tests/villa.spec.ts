@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_AQUARIUM } from '../src/villaLivingLayout';
+import { VILLA_GARAGE_BAYS } from '../src/villaEstateLayout';
 
 function villaModule(): string {
   return gameModuleUrl('villa');
@@ -71,7 +72,7 @@ test.describe('Warm Villa', () => {
   test('furnished controller walks both stairs up and down, enters every room, and interacts', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/#/snake');
-    const result = await page.evaluate(async ({ moduleUrl, aquariumApproach }) => {
+    const result = await page.evaluate(async ({ moduleUrl, aquariumApproach, garageBay }) => {
       const { VillaGame } = await import(moduleUrl);
       const canvas = document.createElement('canvas');
       canvas.style.width = '1120px'; canvas.style.height = '700px'; document.body.append(canvas);
@@ -115,7 +116,7 @@ test.describe('Warm Villa', () => {
       const descend = () => { walk(2.06, -6.2); walk(0.04, -6.2); walk(0.04, 1.4); floors.push(game.position.y); };
       descend(); walk(2.06, 1.4); descend();
       walk(4.2, 1.4); walk(4.2, 4); // gaming room
-      walk(4.2, 1.4); walk(13.4, 1.4); // internally connected garage
+      walk(4.2, 1.4); walk(garageBay.x, 1.4); // internally connected garage
       // Route round the stairwell and the aquarium cabinet (x=0 and x=-3.2 at
       // z=1.4 are now the lower flight and the aligned aquarium respectively).
       walk(0, 1.4); walk(-1.5, 1.4); walk(-1.5, -2.8); walk(-3.2, -2.8); // kitchen
@@ -123,6 +124,8 @@ test.describe('Warm Villa', () => {
       const aquariumTarget = game.hotspot()?.id, aquariumApproachSafe = game.canFit(1.75); key('e');
       const fed = game.state.fedUntil > game.time;
       walk(aquariumApproach.x, 2.2); walk(-6, 2.2); walk(-10, 2.2); key('e');
+      // Far west of the sofa and the aquarium cabinet, straight along the aisle.
+      walk(-6, 2.2); walk(-20, 2.2); walk(-20, 6.5); // living room
       const fireOff = !game.state.fireplace;
       game.renderFrame();
       const interiorImage = canvas.toDataURL('image/png');
@@ -134,7 +137,7 @@ test.describe('Warm Villa', () => {
       const cleaned = game.scene === null && !canvas.hasAttribute('data-villa-renderer');
       canvas.remove();
       return { floors, aquariumTarget, aquariumApproachSafe, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, masterMapLabel, masterRoomHudLabels, roofImage, interiorImage };
-    }, { moduleUrl: villaModule(), aquariumApproach: VILLA_AQUARIUM.approach });
+    }, { moduleUrl: villaModule(), aquariumApproach: VILLA_AQUARIUM.approach, garageBay: VILLA_GARAGE_BAYS[2] });
     expect(result.floors[0]).toBeCloseTo(3.6, 4);
     expect(result.floors[1]).toBeCloseTo(7.2, 4);
     expect(result.floors[2]).toBeCloseTo(3.6, 4);

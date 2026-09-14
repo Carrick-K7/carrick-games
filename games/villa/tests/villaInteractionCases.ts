@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
+import { VILLA_CAR } from '../src/villaActivities';
 
 const moduleUrl = () => process.env.VILLA_MODULE_URL || gameModuleUrl('villa');
 
@@ -91,7 +92,7 @@ export function registerVillaInteractionTests() {
       });
       const cases: Array<[number, number, string, string]> = [
         [VILLA_TEA_BAR.approach.x, VILLA_TEA_BAR.approach.z, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
-        [4.55, -3.88, 'elevator', 'lift'], [18.55, -2.45, 'car', 'door'],
+        [4.55, -3.88, 'elevator', 'lift'], [VILLA_CAR.exit.x, VILLA_CAR.exit.z, 'car', 'door'],
         [-5.25, 5.45, 'sofa-living', 'sofa'], [-21.25, 9.5, 'lounger-west', 'lounger'],
         [scooterApproach.x, scooterApproach.z, 'scooter', 'scooter'], [-16.5, 14.3, 'pet-parrot-blue', 'blue'],
         [8.15, 6.2, 'racing', 'race'],
@@ -196,7 +197,7 @@ export function registerVillaInteractionTests() {
       expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请先落地');
       // The wider door arc now accepts the spot it used to refuse, so the
       // refusal text is gone: a real action must start instead of a dead end.
-      await page.evaluate(() => { const f = (window as any).villaInput; f.pose(18.55, -2.45); }); await tapPaintedUse(page);
+      await page.evaluate((exit) => { const f = (window as any).villaInput; f.pose(exit.x, exit.z); }, { x: VILLA_CAR.exit.x, z: VILLA_CAR.exit.z }); await tapPaintedUse(page);
       const doorWords = await page.evaluate(() => (window as any).villaInput.words.join(''));
       expect(doorWords).toContain('开门');
       await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.activate('immersion'); f.render(); });

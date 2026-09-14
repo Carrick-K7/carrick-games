@@ -9,6 +9,7 @@ import { VILLA_CAMPING_HOME, VILLA_SWING } from '../src/villaOutdoor';
 import { VILLA_PICKUP } from '../src/villaEstateLayout';
 import { VILLA_SCOOTER } from '../src/villaActivities';
 import { POOL } from '../src/villaWorld';
+import { VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout';
 
 // Read the published version the same way the release entry does, without
 // importing the JSON module (Node ESM needs an import attribute for that).
@@ -221,7 +222,7 @@ test('Villa1.1 rain: all six pets physically travel to dry rooms and remain feed
     for (const pet of journey.pets) {
       expect(['living', 'garage']).toContain(pet.site);
       if (pet.site === 'living') { expect(pet.x).toBeGreaterThan(-11.4); expect(pet.x).toBeLessThan(-2.4); expect(pet.z).toBeGreaterThan(0.65); expect(pet.z).toBeLessThan(8.4); }
-      else { expect(pet.x).toBeGreaterThan(12.5); expect(pet.x).toBeLessThan(34.2); expect(pet.z).toBeGreaterThan(-7.4); expect(pet.z).toBeLessThan(1.4); }
+      else { expect(pet.x).toBeGreaterThan(VILLA_GARAGE_EXTENT.minX); expect(pet.x).toBeLessThan(VILLA_GARAGE_EXTENT.maxX); expect(pet.z).toBeGreaterThan(-7.4); expect(pet.z).toBeLessThan(1.4); }
     }
     await page.locator('[data-villa-terminal-close]').click();
     const chosen = await page.evaluate(() => {
