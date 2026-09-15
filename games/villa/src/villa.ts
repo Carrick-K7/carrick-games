@@ -76,6 +76,8 @@ export class VillaGame extends BaseGame {
    *  the camera (and threw the lift panel's cursor) the moment the player
    *  re-captured the mouse. */
   private skipLockRecentre = false;
+  /** When the current lock was granted, for the recentre guard's time window. */
+  private lockGrantedAt = -Infinity;
   private wantPointerLock = false;
   private lockVersion = 0;
   private releasePending = false;
@@ -223,7 +225,10 @@ export class VillaGame extends BaseGame {
         if (document.pointerLockElement !== this.canvas || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
         if (this.skipLockRecentre) {
           this.skipLockRecentre = false;
-          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60) return;
+          // Only the browser's own recentre jolt is dropped, and only while it
+          // can plausibly be the one arriving right after the grant. A large
+          // move the player makes later is real input and must reach the camera.
+          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60 && this.time - this.lockGrantedAt < .25) return;
         }
         if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
         if (this.panelCursor) { this.movePanelCursor(e.movementX, e.movementY); return; }
@@ -234,7 +239,7 @@ export class VillaGame extends BaseGame {
         if (document.pointerLockElement === this.canvas) {
           if (!this.wantPointerLock || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) this.unlock();
           else {
-            this.mouseLookEnabled = true; this.skipLockRecentre = true;
+            this.mouseLookEnabled = true; this.skipLockRecentre = true; this.lockGrantedAt = this.time;
             if (!this.hudHintShown) { this.hudHintShown = true; this.message(this.isZhLang() ? '按 Tab 释放鼠标，即可点击终端与页面按钮。' : 'Press Tab to free the mouse for the terminal and page buttons.'); }
           }
         } else if (this.releasePending) {
