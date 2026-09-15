@@ -231,7 +231,13 @@ export class VillaGame extends BaseGame {
           if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60 && this.time - this.lockGrantedAt < .25) return;
         }
         if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
-        if (this.panelCursor) { this.movePanelCursor(e.movementX, e.movementY); return; }
+        if (this.panelCursor) {
+          // The panel is aimed with small, deliberate moves. A browser recentre
+          // is one huge delta, arrives whenever it likes, and would otherwise
+          // throw the cursor off the button between aiming and clicking.
+          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60) return;
+          this.movePanelCursor(e.movementX, e.movementY); return;
+        }
         this.look(e.movementX, e.movementY, 0.0023);
       };
       const lockChange = () => {
