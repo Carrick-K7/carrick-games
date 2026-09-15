@@ -295,7 +295,9 @@ describe('Villa responsive input and contextual targets', () => {
 describe('Villa device-specific expanded help metadata', () => {
   it('passes the real SDK parser and groups every secondary control without touch keyboard-only notes', () => {
     const controls = parseGameMeta(metadata).controls;
-    expect(controls.keyboard).toHaveLength(3); expect(controls.touch).toHaveLength(2);
+    // Walk/look, the Tab mouse release and interact: three essentials plus one.
+    expect(controls.keyboard).toHaveLength(4); expect(controls.touch).toHaveLength(2);
+    expect(controls.keyboard?.[2]?.keys).toEqual(['Tab']);
     expect(controls.sections?.map(section => section.id)).toEqual(['movement', 'utilities', 'interactions', 'driving', 'elevator', 'snooker']);
     const sections = controls.sections!;
     for (const section of sections) { expect(section.title).toBeTruthy(); expect(section.titleZh).toBeTruthy(); expect(section.touch?.length).toBeGreaterThan(0); }

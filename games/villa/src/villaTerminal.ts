@@ -34,7 +34,7 @@ export function createVillaTerminal(canvas: HTMLCanvasElement, actions: VillaTer
   const style = document.createElement('style');
   style.textContent = `
 div[data-villa-terminal][hidden]{display:none!important}
-div[data-villa-terminal]{position:absolute;inset:0;z-index:35;display:grid;place-items:center;padding:calc(64px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:#14201c66;color:var(--vt-ink);font:14px/1.45 system-ui,-apple-system,sans-serif;box-sizing:border-box}
+div[data-villa-terminal]{position:absolute;inset:0;z-index:35;display:grid;place-items:center;padding:calc(64px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) calc(64px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:#14201c66;color:var(--vt-ink);font:14px/1.45 system-ui,-apple-system,sans-serif;box-sizing:border-box}
 div[data-villa-terminal] *{box-sizing:border-box}
 div[data-villa-terminal] .vt-panel{display:flex;flex-direction:column;width:min(960px,100%);max-height:100%;border:1px solid var(--vt-line);border-radius:18px;background:var(--vt-bg);box-shadow:0 18px 70px #0005;overflow:hidden}
 div[data-villa-terminal] .vt-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--vt-line)}
@@ -45,15 +45,16 @@ div[data-villa-terminal] button:hover{border-color:var(--vt-accent)}
 div[data-villa-terminal] button:focus-visible,div[data-villa-terminal] input:focus-visible{outline:3px solid var(--vt-accent);outline-offset:2px}
 div[data-villa-terminal] button[aria-pressed=true]{background:var(--vt-selected);border-color:var(--vt-accent)}
 div[data-villa-terminal] .vt-close{font-size:24px;line-height:1;width:44px;flex:0 0 44px;padding:4px}
-div[data-villa-terminal] .vt-tabs{display:flex;gap:7px;padding:10px 16px;overflow-x:auto;border-bottom:1px solid var(--vt-line);flex-shrink:0}
-div[data-villa-terminal] .vt-tabs button{white-space:nowrap;flex:1}
+div[data-villa-terminal] .vt-tabs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;padding:10px 16px;border-bottom:1px solid var(--vt-line);flex-shrink:0}
+div[data-villa-terminal] .vt-tabs button{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 div[data-villa-terminal] .vt-content{overflow:auto;padding:16px;overscroll-behavior:contain}
 div[data-villa-terminal] section[hidden]{display:none!important}
 div[data-villa-terminal] .vt-camera{display:grid;grid-template-columns:minmax(0,1fr) 155px;gap:12px}
 div[data-villa-terminal] .vt-feed{margin:0;min-width:0;background:#17251f;border-radius:12px;overflow:hidden;color:#edf5ed}
 div[data-villa-terminal] canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#17251f}
 div[data-villa-terminal] figcaption{padding:9px 12px;font-size:12px}
-div[data-villa-terminal] .vt-camera-list{display:flex;flex-direction:column;gap:7px}
+div[data-villa-terminal] .vt-camera-list{display:grid;grid-auto-rows:minmax(44px,auto);gap:7px}
+div[data-villa-terminal] .vt-camera-list button{width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 div[data-villa-terminal] .vt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 div[data-villa-terminal] .vt-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
 div[data-villa-terminal] .vt-note{color:var(--vt-muted);margin:10px 0 0;font-size:12px}
@@ -61,7 +62,7 @@ div[data-villa-terminal] .vt-settings{max-width:680px;margin:auto}
 div[data-villa-terminal] input[type=range]{width:100%;height:44px;accent-color:var(--vt-accent)}
 div[data-villa-terminal] .vt-range-label{display:flex;justify-content:space-between;gap:12px}
 div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:20px}
-@media(max-width:620px){div[data-villa-terminal]{padding:calc(64px + env(safe-area-inset-top,0px)) max(7px,env(safe-area-inset-right,0px)) max(7px,env(safe-area-inset-bottom,0px)) max(7px,env(safe-area-inset-left,0px));font-size:13px}div[data-villa-terminal] .vt-head{padding:10px 12px}div[data-villa-terminal] .vt-content{padding:12px}div[data-villa-terminal] .vt-tabs{padding:8px;gap:5px}div[data-villa-terminal] .vt-tabs button{padding:8px 9px}div[data-villa-terminal] .vt-camera{grid-template-columns:1fr}div[data-villa-terminal] .vt-camera-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}div[data-villa-terminal] .vt-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){div[data-villa-terminal]{padding:calc(64px + env(safe-area-inset-top,0px)) max(7px,env(safe-area-inset-right,0px)) calc(64px + env(safe-area-inset-bottom,0px)) max(7px,env(safe-area-inset-left,0px));font-size:13px}div[data-villa-terminal] .vt-head{padding:10px 12px}div[data-villa-terminal] .vt-content{padding:12px}div[data-villa-terminal] .vt-tabs{padding:8px;gap:5px}div[data-villa-terminal] .vt-tabs button{padding:8px 9px}div[data-villa-terminal] .vt-camera{grid-template-columns:1fr}div[data-villa-terminal] .vt-camera-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}div[data-villa-terminal] .vt-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:621px) and (max-height:560px){
   div[data-villa-terminal] .vt-head{padding:6px 12px}
   div[data-villa-terminal] h2{font-size:17px}

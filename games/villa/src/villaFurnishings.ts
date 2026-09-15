@@ -343,16 +343,28 @@ export function furnishVilla(scene: THREE.Scene): {
 
   // First floor bedrooms and library.
   bed(VILLA_BEDS[0]); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
-  // ---- The four rooms the doubled plan added, plus the widened east wing ----
-  // Ground-floor studio: a working library along the west wall, desk facing north.
-  at(-19.4, 0, -13.6, 0, () => {
-    box(0, 1.02, -3.35, 3.6, 2.04, 0.34, walnut, 0.02);
-    for (let i = 0; i < 4; i++) box(0, 0.32 + i * 0.52, -3.2, 3.44, 0.035, 0.28, oak, 0.01);
-    at(0, 0, 6.6, 0, () => { table(2.2, 1, 0.75, walnut); box(-0.5, 0.81, 0, 0.42, 0.03, 0.3, cream); orb(0.35, 0.85, 0.06, 0.11, 0.13, 0.11, brass); });
-    at(0, 0, 5.5, Math.PI, () => chair(sage));
+  // ---- The rooms the doubled plan added ----
+  // Ground-floor study: 11 x 9 m, desk under the north light, shelves on the west.
+  at(-18.6, 0, -13.6, 0, () => {
+    at(0, 0, -2.9, 0, () => { table(2.2, 1, 0.75, walnut); box(-0.5, 0.81, 0, 0.42, 0.03, 0.3, cream); orb(0.35, 0.85, 0.06, 0.11, 0.13, 0.11, brass); });
+    at(0, 0, -1.8, Math.PI, () => chair(sage));
+    at(-4.4, 0, 1.2, Math.PI / 2, () => {
+      box(0, 1.02, 0, 0.34, 2.04, 3.2, walnut, 0.02);
+      for (let i = 0; i < 4; i++) box(0.09, 0.32 + i * 0.52, 0, 0.28, 0.035, 3.04, oak, 0.01);
+    });
+    at(0, 0, -4.1, 0, () => lamp(true));
   });
-  box(-19.4, 0.017, -11.2, 4.6, 0.028, 3.4, rugMat, 0.01);
-  at(-21.6, 0, -10.4, 0, () => lamp(true)); plant(-16.6, 0, -10.6, 1.35);
+  box(-18.6, 0.017, -12.4, 5.4, 0.028, 4, rugMat, 0.01);
+  plant(-14.2, 0, -16.6, 1.35); plant(-22.8, 0, -10.4, 1.2);
+  // Ground-floor laundry and utility room: paired machines, sink run and shelves.
+  at(-7.5, 0, -13.6, 0, () => {
+    for (const x of [-2.6, -1.5]) { box(x, 0.44, -3.3, 0.62, 0.88, 0.66, white, 0.03); box(x, 0.5, -2.96, 0.44, 0.44, 0.04, steel, 0.02); }
+    at(1.2, 0, -3.6, 0, () => { table(3.4, 0.72, 0.9, oak); box(0, 0.95, 0, 2.6, 0.06, 0.5, steel, 0.02); box(-0.6, 1.0, 0, 0.42, 0.05, 0.4, steel, 0.02); });
+    for (let i = 0; i < 4; i++) box(-3.9, 0.5 + i * 0.6, 1.6, 0.36, 0.04, 2.6, oak, 0.01);
+    box(-4.05, 1.1, 1.6, 0.1, 2.4, 0.1, steel, 0.01);
+    box(3.6, 0.24, 2.9, 1.1, 0.48, 0.72, sage, 0.04);
+  });
+  at(-11.4, 0, -9.9, 0, () => lamp(true));
   // Ground-floor gym and hobby room: bench, rack and a mirrored wall.
   at(11.3, 0, -13.6, 0, () => {
     box(-4.2, 0.5, -3.3, 2.6, 1, 0.16, steel, 0.02);
@@ -376,6 +388,45 @@ export function furnishVilla(scene: THREE.Scene): {
     for (const x of [-3.6, 3.6]) { box(x, 1.1, -3.3, 1.8, 2.2, 0.32, walnut, 0.02); for (let i = 0; i < 4; i++) box(x, 0.4 + i * 0.52, -3.16, 1.7, 0.035, 0.26, oak, 0.01); }
   });
   box(12.5, 3.617, -11.4, 4.8, 0.028, 3.2, rugMat, 0.01);
+  // Upstairs dressing room: wardrobe runs, an island and a full-height mirror.
+  at(-18.6, 3.6, -13.6, 0, () => {
+    at(0, 0, -4.05, 0, () => { box(0, 1.25, 0, 8.4, 2.5, 0.5, walnut, 0.02); for (let i = 0; i < 6; i++) box(-3.5 + i * 1.4, 1.25, 0.26, 0.03, 2.4, 0.03, brass, 0.004); });
+    at(-4.9, 0, 0.4, Math.PI / 2, () => box(0, 1.25, 0, 0.5, 2.5, 5.6, walnut, 0.02));
+    at(0, 0, 0.6, 0, () => { box(0, 0.52, 0, 2.4, 0.9, 1.1, oak, 0.05); box(0, 0.99, 0, 2.5, 0.06, 1.2, stone, 0.03); });
+    at(3.4, 0, 1.1, 0, () => { box(0, 0.9, 0, 0.08, 1.8, 1.2, steel, 0.01); box(0, 0.95, 0.07, 0.05, 1.7, 1.1, white, 0.01); });
+    plant(4.6, 0, -3.6, 1.2);
+  });
+  // Upstairs ensuite: a second bathroom for the same suite.
+  at(-7.5, 3.6, -13.6, 0, () => {
+    at(0, 0, -3.6, 0, () => { box(0, 0.42, 0, 4.2, 0.84, 0.62, white, 0.05); box(0, 0.87, 0, 4.3, 0.06, 0.68, stone, 0.03); box(1.2, 0.95, 0, 0.5, 0.08, 0.4, steel, 0.03); });
+    at(-3.4, 0, 2.6, Math.PI / 2, () => { box(0, 0.26, 0, 1.7, 0.52, 0.8, white, 0.06); box(0, 0.56, 0, 1.6, 0.08, 0.72, stone, 0.04); });
+    at(2.8, 0, 2.4, 0, () => { box(0, 1.1, 0, 1.1, 2.2, 1.1, white, 0.05); box(0, 0.95, 0.58, 0.92, 1.9, 0.06, steel, 0.01); });
+    at(4.4, 0, -1.4, 0, () => box(0, 0.9, 0, 0.5, 1.8, 0.04, steel, 0.01));
+    plant(-4.4, 0, -3.4, 1);
+  });
+  // Ground-floor home cinema in the north-east band.
+  at(22.6, 0, -13.6, 0, () => {
+    at(0, 0, -4, 0, () => { box(0, 1.3, 0, 5.6, 2.6, 0.24, dark, 0.02); box(0, 1.35, 0.14, 5.2, 2.2, 0.05, white, 0.02); });
+    for (const [x, z] of [[-2.2, 0.6], [0, 0.6], [2.2, 0.6]]) {
+      box(x, 0.24, z, 1.9, 0.48, 0.9, dark, 0.05);
+      box(x, 0.56, z - 0.3, 1.85, 0.22, 0.34, sage, 0.05);
+      box(x, 0.72, z - 0.5, 1.85, 0.12, 0.22, cream, 0.04);
+    }
+    box(0, 0.02, 2.6, 6.6, 0.03, 3.4, rugMat, 0.01);
+    box(4.2, 1.1, -2.2, 0.5, 0.6, 0.5, black, 0.03);
+  });
+  at(26.6, 0, -10.2, 0, () => lamp(true));
+  // Upstairs play and hobby room above it.
+  at(22.6, 3.6, -13.6, 0, () => {
+    at(0, 0, -1.6, 0, () => { table(2.4, 1.3, 0.6, oak); for (const [x, z] of [[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]]) box(x, 0.24, z, 0.4, 0.48, 0.4, sage, 0.04); });
+    at(0, 0, 2.4, 0, () => box(0, 0.28, 0, 3.6, 0.56, 2, linen, 0.12));
+    for (let i = 0; i < 4; i++) box(-3.6, 0.5 + i * 0.6, -3.6, 0.32, 0.04, 2.4, i % 2 ? cream : sage, 0.01);
+    box(-3.75, 1.1, -3.6, 0.1, 2.4, 0.1, steel, 0.01);
+    box(2.6, 0.9, -3.7, 2.2, 0.045, 0.3, walnut, 0.01);
+    for (let i = 0; i < 6; i++) orb(1.7 + i * 0.36, 1.02, -3.6, 0.09, 0.11, 0.09, bookMats[i % bookMats.length]!);
+  });
+  box(22.6, 3.617, -11.6, 5.2, 0.028, 4, rugMat, 0.01);
+  at(19.4, 3.6, -10.4, 0, () => lamp(true)); plant(26.8, 3.6, -16.6, 1.3);
   // Upstairs guest suite: sofa, low table and a reading corner.
   at(24.6, 3.6, 6.9, 0, () => sofa(3.2, linen, false, 'sofa-east-suite'));
   at(24.6, 3.6, 4.4, 0, () => { table(1.5, 0.9, 0.42, walnut); tea(0.34, 0.43, 0); plant(-0.35, 0.43, 0, 0.42, true); });

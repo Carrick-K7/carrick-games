@@ -40,7 +40,6 @@
     <div class="header-actions">
       <button class="site-brand" id="siteBrand" type="button" aria-label="Carrick Games — Choose a game" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" title="Carrick Games — Choose a game">
         <img src="/brand/logo.svg" width="22" height="22" alt="">
-        <span class="site-brand-name">Carrick<span> Games</span></span>
       </button>
       <button class="game-menu-trigger game-help-trigger" id="helpBtn" type="button" aria-label="Controls" title="Controls (?)" aria-controls="helpOverlay" aria-expanded="false" aria-keyshortcuts="Shift+/"><span aria-hidden="true">?</span></button>
       <button class="game-menu-trigger" id="overflowBtn" type="button" aria-label="Game menu" aria-haspopup="dialog" aria-controls="overflowMenu" aria-expanded="false">
@@ -53,6 +52,8 @@
           <button class="dialog-close" id="menuCloseBtn" type="button" aria-label="Close menu"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
         </header>
         <div class="menu-body">
+          <section class="menu-group" data-menu-group="game" aria-labelledby="gameMenuGroupLabel">
+          <h2 class="menu-group-title" id="gameMenuGroupLabel">This game</h2>
           <div class="menu-section menu-game-switch">
             <div class="menu-label" id="pickerMenuLabel">Choose a game</div>
             <button class="game-picker-trigger" id="gamePickerBtn" type="button" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" aria-keyshortcuts="Control+k Meta+k">
@@ -68,6 +69,9 @@
             <div id="currentGameActions" class="current-game-actions" hidden></div>
             <aside class="game-context" id="statsPanel" hidden></aside>
           </div>
+          </section>
+          <section class="menu-group" data-menu-group="page" aria-labelledby="pageMenuGroupLabel">
+          <h2 class="menu-group-title" id="pageMenuGroupLabel">Page settings</h2>
           <div class="menu-section">
             <div class="menu-label" id="languageMenuLabel">Language</div>
             <div class="menu-options" aria-labelledby="languageMenuLabel">
@@ -83,6 +87,7 @@
               <button class="theme-btn" data-set="system" type="button">System</button>
             </div>
           </div>
+          </section>
           <footer class="menu-versions" id="menuVersions"><span id="menuGameVersion" hidden></span><span id="shellVersion" hidden></span></footer>
         </div>
       </section>

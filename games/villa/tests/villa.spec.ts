@@ -142,7 +142,7 @@ test.describe('Warm Villa', () => {
     expect(result.floors[1]).toBeCloseTo(7.2, 4);
     expect(result.floors[2]).toBeCloseTo(3.6, 4);
     expect(result.floors[3]).toBeCloseTo(0, 4);
-    expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'gaming', 'garage', 'master', 'guest', 'bath', 'library', 'terrace', 'stairs']));
+    expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'gaming', 'garage', 'master', 'guest', 'bath', 'family', 'terrace', 'stairs']));
     expect(result.masterMapLabel).toContain('主卧');
     expect(result.masterRoomHudLabels).toEqual([result.masterMapLabel]);
     expect(result.masterHudHasRoomLabel).toBe(false);

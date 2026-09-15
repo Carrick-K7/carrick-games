@@ -90,9 +90,8 @@ button:active:not(:disabled) { transition-duration: 60ms; }
 /* Three equal-material floating controls. Positions are a tested HUD contract. */
 .header-actions { position: static; }
 .site-brand, .game-menu-trigger { position: absolute; z-index: 45; top: calc(12px + var(--safe-top)); display: inline-flex; align-items: center; justify-content: center; height: 44px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow-control); }
-.site-brand { left: calc(12px + var(--safe-left)); width: 96px; gap: 6px; padding: 4px 7px; }
-.site-brand-name { display: flex; flex-direction: column; align-items: flex-start; font-size: 13px; font-weight: 600; line-height: 1.15; letter-spacing: -.015em; }
-.site-brand-name > span { font-size: 11px; font-weight: 500; }
+/* The mark alone is the persistent target; the full wordmark lives in the menu. */
+.site-brand { left: calc(12px + var(--safe-left)); width: 44px; gap: 0; padding: 4px; }
 .game-app:has(#gameCanvas[data-viewport-mode="responsive"]) .site-brand { left: auto; right: calc(116px + var(--safe-right)); }
 .game-menu-trigger { right: calc(12px + var(--safe-right)); width: 44px; }
 .game-help-trigger { right: calc(64px + var(--safe-right)); font-size: 21px; font-weight: 600; }
@@ -114,6 +113,10 @@ button:active:not(:disabled) { transition-duration: 60ms; }
 .overflow-menu { width: 320px; }
 .app-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 10px 12px 10px 20px; border-bottom: 1px solid var(--border); }
 .menu-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 4px 20px 16px; }
+.menu-group { display: block; }
+.menu-group + .menu-group { margin-top: 2px; border-top: 1px solid var(--border-strong); }
+.menu-group-title { margin: 14px 0 2px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.menu-group > .menu-section:first-of-type { padding-top: 10px; }
 .menu-section { padding: 16px 0; }
 .menu-section + .menu-section { border-top: 1px solid var(--border); }
 .menu-label { margin-bottom: 8px; color: var(--muted); font-size: 13px; font-weight: 500; }

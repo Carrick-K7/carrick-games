@@ -126,7 +126,7 @@ describe('Villa doors and furniture-free room reachability', () => {
     { name: 'gaming room', from: [4.2, 0, 1.5], to: [4.2, 4.5] },
     { name: 'primary bedroom', from: [-0.5, STOREY, 2.6], to: [-3.5, 2.6] },
     { name: 'guest bedroom', from: [-1.5, STOREY, -3.6], to: [-3.5, -3.6] },
-    { name: 'library', from: [4.2, STOREY, 1.5], to: [4.2, 4.5] },
+    { name: 'family room', from: [4.2, STOREY, 1.5], to: [4.2, 4.5] },
     { name: 'bathroom', from: [9.5, STOREY, 2], to: [9.5, -0.5] },
     { name: 'bedroom balcony', from: [-7.3, STOREY, 7.5], to: [-7.3, 10] },
   ];
@@ -141,7 +141,9 @@ describe('Villa doors and furniture-free room reachability', () => {
       { route: [[0, 6], [-5, 6]], room: 'living' },
       { route: [[-1.5, -4], [-5, -4]], room: 'kitchen' },
       // The studio opens off the west aisle; the open stairwell blocks a straight line.
-      { route: [[-1.4, 6], [-1.4, -12], [-5, -12]], room: 'studio' },
+      { route: [[-1.4, 6], [-1.4, -12], [-5, -12]], room: 'utility' },
+      // The study opens off the kitchen through its own cased opening.
+      { route: [[0, 6], [-5, 6], [-18, 6], [-18, -13]], room: 'studio' },
       { route: [[0, 1.3], [4.2, 1.3], [4.2, 5]], room: 'gaming' },
       { route: [[0, 1.3], [8, 1.3], [8, 0.5], [VILLA_GARAGE_BAYS[2].x, 0.5]], room: 'garage' },
     ];
@@ -149,13 +151,13 @@ describe('Villa doors and furniture-free room reachability', () => {
       expect(villaRoomAt(walk(VILLA_ENTRANCE, route)).id).toBe(room);
     }
   });
-  it('connects upstairs stair exit to both bedrooms, bathroom, library and balcony', () => {
+  it('connects upstairs stair exit to both bedrooms, bathroom, family room and balcony', () => {
     const destinations: { route: Waypoint[]; room: string }[] = [
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-5, 2.6]], room: 'master' },
       { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -3.6], [-5, -3.6]], room: 'guest' },
       // Clear the bathroom wall's 0.11m half-thickness plus player radius before turning east.
       { route: [[2.06, 1.3], [6.4, 1.6], [9.5, 1.6], [9.5, -3]], room: 'bath' },
-      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5]], room: 'library' },
+      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5]], room: 'family' },
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-7.3, 2.6], [-7.3, 10]], room: 'balcony' },
     ];
     for (const { route, room } of destinations) {
@@ -165,6 +167,32 @@ describe('Villa doors and furniture-free room reachability', () => {
 });
 
 describe('Villa collision, support and safe boundaries', () => {
+  it('keeps every room a room: one study per storey and no 22 m halls', () => {
+    for (const floor of [0, STOREY]) {
+      const rooms = VILLA_ROOMS.filter(room => room.floor === (floor ? 1 : 0) && room.id !== 'gallery' && room.id !== 'balcony');
+      // The ground-floor study is 'studio' and the upstairs one 'study'.
+      const studies = rooms.filter(room => room.zh.includes('书房'));
+      expect(studies, `floor ${floor ? 1 : 0} studies`).toHaveLength(1);
+      for (const room of rooms) {
+        expect(Math.min(room.maxX - room.minX, room.maxZ - room.minZ), `${room.id} shorter side`).toBeGreaterThan(2.4);
+        expect(Math.max(room.maxX - room.minX, room.maxZ - room.minZ), `${room.id} longer side`).toBeLessThanOrEqual(23);
+      }
+    }
+  });
+  it('opens a back door off the kitchen as well as the hall, so the stair core is not the only way out', () => {
+    // A kitchen door in the west facade: crossing x=WEST.inner inside its span
+    // must succeed while the wall itself still blocks elsewhere.
+    const through = moveVillaPlayer({ x: WEST.inner + 1.2, y: 0, z: -3.1 }, -3, 0, architecture);
+    expect(through.x).toBeLessThan(WEST.outer);
+    const blocked = moveVillaPlayer({ x: WEST.inner + 1.2, y: 0, z: -6.5 }, -3, 0, architecture);
+    expect(blocked.x).toBeGreaterThan(WEST.inner + PLAYER_RADIUS);
+    // Both back doors are walkable, and neither is behind the stair opening.
+    for (const z of [-3.1, -18]) {
+      const out = moveVillaPlayer({ x: z < -9 ? 0 : WEST.inner + 1.2, y: 0, z: z < -9 ? z + 1.2 : z }, 0, z < -9 ? -3 : -3, architecture);
+      expect(Number.isFinite(out.z)).toBe(true);
+    }
+    expect(villaRoomAt({ x: WEST.inner + 2, y: 0, z: -3.1 }).id).toBe('kitchen');
+  });
   it('gives timber door reveals their own faces instead of coplanar plaster surfaces', () => {
     const timber = VILLA_BLOCKS.filter(b => b.material === 'oak' && b.solid && (Math.abs(b.h - 3.04) < 1e-6 || Math.abs(b.h - .08) < 1e-6));
     const plaster = VILLA_BLOCKS.filter(b => b.material === 'plaster');
@@ -191,7 +219,7 @@ describe('Villa collision, support and safe boundaries', () => {
         expect(p.z).toBeLessThan(SOUTH.inner - PLAYER_RADIUS);
         expect(villaCollides(p, architecture)).toBe(false);
       }
-      const west = moveVillaPlayer({ x: -18, y, z: -4 }, -12, 0, architecture);
+      const west = moveVillaPlayer({ x: -18, y, z: -6.5 }, -12, 0, architecture);
       expect(west.x).toBeGreaterThan(WEST.inner + PLAYER_RADIUS);
     }
   });

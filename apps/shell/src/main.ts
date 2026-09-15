@@ -908,10 +908,15 @@ function setLang(lang: 'en' | 'zh') {
   renderGameList((document.getElementById('searchInput') as HTMLInputElement)?.value || '');
   const languageLabel = document.getElementById('languageMenuLabel');
   const themeLabel = document.getElementById('themeMenuLabel');
+  const gameGroupLabel = document.getElementById('gameMenuGroupLabel');
+  const pageGroupLabel = document.getElementById('pageMenuGroupLabel');
   const pickerLabel = document.getElementById('pickerMenuLabel');
   const overflowButton = document.getElementById('overflowBtn');
   if (languageLabel) languageLabel.textContent = lang === 'zh' ? '语言' : 'Language';
   if (themeLabel) themeLabel.textContent = lang === 'zh' ? '主题' : 'Theme';
+  // The menu keeps this game's own controls apart from the page's settings.
+  if (gameGroupLabel) gameGroupLabel.textContent = lang === 'zh' ? '本游戏' : 'This game';
+  if (pageGroupLabel) pageGroupLabel.textContent = lang === 'zh' ? '页面设置' : 'Page settings';
   if (pickerLabel) pickerLabel.textContent = lang === 'zh' ? '选择游戏' : 'Choose a game';
   if (overflowButton) overflowButton.setAttribute('aria-label', lang === 'zh' ? '游戏菜单与设置' : 'Game menu and settings');
   updatePresentationControls();

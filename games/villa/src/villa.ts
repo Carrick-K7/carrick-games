@@ -70,6 +70,7 @@ export class VillaGame extends BaseGame {
    * of the camera, because a pointer-locked canvas receives no click positions
    * and the painted buttons would otherwise be unclickable. */
   private panelCursor: Point | null = null;
+  private hudHintShown = false;
   /** Granting pointer lock makes the browser emit one recentre move whose delta
    *  is far larger than hand motion. Without this guard that single event spun
    *  the camera (and threw the lift panel's cursor) the moment the player
@@ -232,7 +233,10 @@ export class VillaGame extends BaseGame {
         this.clearInput();
         if (document.pointerLockElement === this.canvas) {
           if (!this.wantPointerLock || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) this.unlock();
-          else { this.mouseLookEnabled = true; this.skipLockRecentre = true; }
+          else {
+            this.mouseLookEnabled = true; this.skipLockRecentre = true;
+            if (!this.hudHintShown) { this.hudHintShown = true; this.message(this.isZhLang() ? '按 Tab 释放鼠标，即可点击终端与页面按钮。' : 'Press Tab to free the mouse for the terminal and page buttons.'); }
+          }
         } else if (this.releasePending) {
           this.releasePending = false;
         } else if (this.wantPointerLock) {
@@ -1228,6 +1232,14 @@ export class VillaGame extends BaseGame {
       else if (this.mapOpen && ['1', '2', '3'].includes(key)) this.mapFloor = Number(key) - 1;
       else if (!this.helpOpen && ['1', '2', '3'].includes(key) && this.inElevator()) this.selectElevatorFloor(Number(key) - 1);
       else if (!this.helpOpen && (key === 'o' || key === 'k') && this.inElevator()) this.controlElevatorDoor(key === 'o');
+      // Under pointer lock the browser reports no cursor, so the HUD is only
+      // mouse-reachable once the lock is released. Tab does exactly that and
+      // Tab again (or a click on the world) takes the lock back.
+      else if (key === 'tab' && !this.mapOpen && !this.terminal?.visible && !this.helpOpen) {
+        e.preventDefault();
+        if (document.pointerLockElement === this.canvas) { this.unlock(); this.mouseLookEnabled = false; this.message(this.isZhLang() ? '鼠标已释放：可以点击终端、地图和页面按钮。再按 Tab 或点击画面回到视角控制。' : 'Mouse freed: click the terminal, map or page buttons. Tab or a click on the world returns to camera control.'); }
+        else this.lockPointer();
+      }
       else if (key === 'p') { e.preventDefault(); this.activate('terminal'); }
       else if (key === 'm') this.activate('map');
       else if (key === 't') this.activate('time');

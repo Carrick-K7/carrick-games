@@ -9,7 +9,7 @@ async function activeShellBase(page: Page): Promise<string> {
 for (const mobile of [false, true]) {
   test.describe(`brand identity ${mobile ? 'phone' : 'desktop'}`, () => {
     test.use({ viewport: mobile ? { width: 320, height: 568 } : { width: 1440, height: 900 }, hasTouch: mobile, isMobile: mobile });
-    test('entry, menu and library retain the full brand without a start gate', async ({ page }, info) => {
+    test('entry keeps the mark only, while the menu and library carry the full brand', async ({ page }, info) => {
       await page.goto('/#/gacha');
       const logoUrl = `${await activeShellBase(page)}brand/logo.svg`;
       const canvas = page.locator('#gameCanvas'), brand = page.locator('#siteBrand');
@@ -18,13 +18,16 @@ for (const mobile of [false, true]) {
       await expect(brand).toBeVisible();
       await expect(brand).toHaveAccessibleName(/Carrick Games/);
       await expect(brand.locator('img')).toHaveAttribute('src', logoUrl);
-      await expect(brand).toContainText('Carrick Games');
+      // The persistent target is the mark alone; no brand text sits over play.
+      await expect(brand.locator('.site-brand-name')).toHaveCount(0);
+      expect((await brand.innerText()).replace(/\s+/g, '')).toBe('');
+      await expect(brand).toHaveAttribute('title', /Carrick Games/);
       const count = await canvas.getAttribute('data-game-prepare-count');
       await expect.poll(() => page.evaluate(() => {
         const a = document.getElementById('siteBrand')!.getBoundingClientRect();
         const b = document.querySelector('.gacha-progress-hud')!.getBoundingClientRect();
         const c = document.getElementById('gameCanvas')!.getBoundingClientRect();
-        return a.right <= b.left && b.bottom <= c.top && a.width === 96 && a.height === 44;
+        return a.right <= b.left && b.bottom <= c.top && a.width === 44 && a.height === 44;
       })).toBe(true);
       await page.screenshot({ path: info.outputPath('branded-entry.png') });
       await brand.click();
