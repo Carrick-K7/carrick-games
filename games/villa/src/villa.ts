@@ -47,6 +47,9 @@ const initialVillaState = (): VillaGameState => ({
 });
 
 /** A quiet, non-scoring first-person home. All scene resources belong to this game. */
+/** One pointer-lock recentre delta is the cursor's displacement from the canvas
+ *  centre, so it is large; a deliberate hand movement is not. */
+const RECENTRE_JOLT = 150;
 export class VillaGame extends BaseGame {
   private scene: VillaScene | null = null;
   private unavailable = false;
@@ -228,14 +231,17 @@ export class VillaGame extends BaseGame {
           // Only the browser's own recentre jolt is dropped, and only while it
           // can plausibly be the one arriving right after the grant. A large
           // move the player makes later is real input and must reach the camera.
-          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60 && this.time - this.lockGrantedAt < .25) return;
+          // A recentre is the cursor's whole displacement and runs to hundreds
+          // of pixels; a hand flick is far smaller. 150 leaves every human move
+          // reaching the camera while still swallowing the browser's jump.
+          if (Math.abs(e.movementX) + Math.abs(e.movementY) > RECENTRE_JOLT && this.time - this.lockGrantedAt < .25) return;
         }
         if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
         if (this.panelCursor) {
           // The panel is aimed with small, deliberate moves. A browser recentre
           // is one huge delta, arrives whenever it likes, and would otherwise
           // throw the cursor off the button between aiming and clicking.
-          if (Math.abs(e.movementX) + Math.abs(e.movementY) > 60) return;
+          if (Math.abs(e.movementX) + Math.abs(e.movementY) > RECENTRE_JOLT) return;
           this.movePanelCursor(e.movementX, e.movementY); return;
         }
         this.look(e.movementX, e.movementY, 0.0023);
