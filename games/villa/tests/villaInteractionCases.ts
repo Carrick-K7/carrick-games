@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
 import { VILLA_CAR } from '../src/villaActivities';
+import { villaRelaxSeat } from '../src/villaSeating';
 
 const moduleUrl = () => process.env.VILLA_MODULE_URL || gameModuleUrl('villa');
 
@@ -90,10 +91,13 @@ export function registerVillaInteractionTests() {
         const home = (window as any).villaInput.scooterHome;
         return { x: home.x + 1, z: home.z - .23 };
       });
+      // The loungers moved west with the pool, so their stance comes from the seat data.
+      const loungerApproach = villaRelaxSeat('lounger-west')!.approach;
+      const loungerExit = villaRelaxSeat('lounger-west')!.exits[0];
       const cases: Array<[number, number, string, string]> = [
         [VILLA_TEA_BAR.approach.x, VILLA_TEA_BAR.approach.z, 'tea-bar', 'tea'], [-10, 2.2, 'fireplace', 'fire'], [6.65, 4.9, 'gaming', 'pc'],
         [4.55, -3.88, 'elevator', 'lift'], [VILLA_CAR.exit.x, VILLA_CAR.exit.z, 'car', 'door'],
-        [-5.25, 5.45, 'sofa-living', 'sofa'], [-21.25, 9.5, 'lounger-west', 'lounger'],
+        [-5.25, 5.45, 'sofa-living', 'sofa'], [loungerApproach.x, loungerApproach.z, 'lounger-west', 'lounger'],
         [scooterApproach.x, scooterApproach.z, 'scooter', 'scooter'], [-16.5, 14.3, 'pet-parrot-blue', 'blue'],
         [8.15, 6.2, 'racing', 'race'],
       ];
@@ -146,17 +150,17 @@ export function registerVillaInteractionTests() {
           })).toEqual({ seat: action, relax: action === 'scooter' ? '' : target, scooterSpeed: 0, settled: true });
           const exitTrustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
           await tapPaintedUse(page);
-          expect(await page.evaluate(({ exitTrustedBefore, action }) => {
+          expect(await page.evaluate(({ exitTrustedBefore, action, loungerExit }) => {
             const f = (window as any).villaInput; f.tick(12); f.render();
             const exits = action === 'sofa' ? [[-5.25, 5.45], [-6.1, 4.6]]
-              : action === 'lounger' ? [[-21.25, 9.5], [-20.2, 10.85]]
+              : action === 'lounger' ? [[loungerExit.x, loungerExit.z], [loungerExit.x + 1.05, loungerExit.z + 1.35]]
                 : [1, -1].map(side => [f.scooterHome.x + side, f.scooterHome.z - .23]);
             const p = f.g.position;
             return { seat: f.g.state.seated, relax: f.g.state.relaxSeatId, snapshot: f.g.canvas.dataset.villaSeat,
               snapshotRelax: f.g.canvas.dataset.villaRelaxSeat, safe: f.g.canFit(1.75), settled: f.g.transition === null,
               authoredExit: p.y === 0 && exits.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < 1e-6),
               calls: f.calls, trusted: f.trusted.slice(exitTrustedBefore) };
-          }, { exitTrustedBefore, action })).toEqual({ seat: null, relax: null, snapshot: 'none', snapshotRelax: '', safe: true, settled: true,
+          }, { exitTrustedBefore, action, loungerExit })).toEqual({ seat: null, relax: null, snapshot: 'none', snapshotRelax: '', safe: true, settled: true,
             authoredExit: true, calls: before + 2, trusted: [true] });
         } else if (action === 'blue') {
           const snapshot = await page.evaluate(() => {
