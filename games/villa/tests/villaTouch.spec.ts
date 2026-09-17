@@ -6,8 +6,12 @@ test('villa captures the mouse on the first canvas click and releases it for its
   const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
   await expect(canvas).toHaveAttribute('data-game-running', 'true');
+  // A starved software-GL renderer can take many seconds to grant capture after
+  // the click; the contract is that the click DOES grant it, not how fast.
+  await page.evaluate(() => document.addEventListener('pointerlockerror', () => { (window as any).__lockError = true; }, true));
   await canvas.click();
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('gameCanvas');
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null), { timeout: 30_000 }).toBe('gameCanvas');
+  expect(await page.evaluate(() => (window as any).__lockError ?? false), 'the browser refused pointer capture').toBe(false);
   const before = await canvas.getAttribute('data-villa-look');
   // CDP absolute moves under pointer lock emit equal-and-opposite recenter
   // events. Supply raw relative MouseEvent deltas to the real document listener.

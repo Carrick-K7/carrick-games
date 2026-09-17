@@ -183,20 +183,40 @@ export function createVillaAnimeFigureDisplay(parent: THREE.Object3D, sharedLigh
       b.ellipsoid(headX, 0.644, -0.011, 0.047, 0.04, 0.038, hair);
       for (const side of [-1, 1]) {
         b.ellipsoid(headX + side * 0.04, 0.605, 0.003, 0.007, 0.012, 0.009, skin);
-        b.ellipsoid(headX + side * 0.018, 0.615, 0.038, 0.0105, 0.0057, 0.0036, cream);
-        b.ellipsoid(headX + side * 0.018, 0.615, 0.041, 0.004, 0.005, 0.0015, outfit);
-        b.ellipsoid(headX + side * 0.018, 0.615, 0.0423, 0.002, 0.004, 0.001, ink);
-        b.ellipsoid(headX + side * 0.019, 0.617, 0.0432, 0.0012, 0.0015, 0.0007, cream);
-        b.beam([headX + side * 0.009, 0.62, 0.04], [headX + side * 0.028, 0.619, 0.038], 0.0016, ink, 5);
-        b.beam([headX + side * 0.011, 0.631, 0.037], [headX + side * 0.028, 0.63, 0.034], 0.0018, hair, 5);
+        // Bigger, brighter eyes with a second catchlight, soft cheek blush and a
+        // smile — cuter while staying inside the adult scale silhouette. Tiny
+        // details are boxes, not spheres: the display is budgeted under 100k.
+        b.ellipsoid(headX + side * 0.0185, 0.614, 0.0385, 0.0124, 0.0074, 0.0036, cream);
+        b.ellipsoid(headX + side * 0.0185, 0.6135, 0.0415, 0.005, 0.0062, 0.0015, outfit);
+        b.ellipsoid(headX + side * 0.0185, 0.6135, 0.0429, 0.0024, 0.005, 0.001, ink);
+        b.ellipsoid(headX + side * 0.016, 0.6175, 0.0439, 0.0022, 0.0028, 0.0008, cream);
+        b.box(headX + side * 0.021, 0.6115, 0.0442, 0.0022, 0.0028, 0.0009, cream, 0);
+        b.beam([headX + side * 0.008, 0.6205, 0.0405], [headX + side * 0.03, 0.6195, 0.0385], 0.0016, ink, 4);
+        b.beam([headX + side * 0.011, 0.632, 0.037], [headX + side * 0.028, 0.631, 0.034], 0.0018, hair, 4);
+        b.box(headX + side * 0.0275, 0.5935, 0.0348, 0.011, 0.005, 0.0035, blush, 0);
       }
       b.ellipsoid(headX, 0.598, 0.042, 0.0032, 0.0045, 0.004, skin);
-      b.beam([headX - 0.005, 0.578, 0.0315], [headX + 0.004, 0.578, 0.0315], 0.0012, blush, 6);
+      // A small upturned smile instead of a straight line.
+      b.beam([headX - 0.0055, 0.579, 0.0318], [headX - 0.0005, 0.5765, 0.0325], 0.0013, blush, 4);
+      b.beam([headX - 0.0005, 0.5765, 0.0325], [headX + 0.005, 0.579, 0.0318], 0.0013, blush, 4);
       // Four asymmetrical pointed bangs attach to the cap; side locks overlap roots.
       for (let i = 0; i < 4; i++) {
         const xx = headX - 0.031 + i * 0.019;
         lock([[xx - 0.006, 0.676, 0.007], [xx, 0.659, 0.032], [xx + 0.012, 0.636 - (i % 2) * 0.008, 0.04]], 0.019, hair);
       }
+      // A colour-matched bow on the crown, and two sparkles at cheek height.
+      {
+        const bowSide = index % 2 ? -1 : 1, bx = headX + bowSide * 0.043, by = 0.652, bz = -0.004;
+        b.box(bx - 0.0105 * bowSide, by, bz, 0.02, 0.012, 0.009, materials.rose, 0);
+        b.box(bx + 0.0105 * bowSide, by, bz, 0.02, 0.012, 0.009, materials.rose, 0);
+        b.box(bx, by, bz + 0.001, 0.0085, 0.0085, 0.0065, materials.rose, 0);
+
+      }
+      const sparkle = (sx: number, sy: number, sz: number, size: number) => {
+        b.beam([sx - size, sy, sz], [sx + size, sy, sz], 0.0015, materials.cream, 3);
+        b.beam([sx, sy - size, sz], [sx, sy + size, sz], 0.0015, materials.cream, 3);
+      };
+      sparkle(headX + (index % 2 ? -0.115 : 0.115), 0.662, 0.03, 0.012);
       const long = /long|waves|wind/.test(design.hairstyle), bob = design.hairstyle.includes('bob');
       for (const side of [-1, 1]) for (let layer = 0; layer < (long ? 3 : 2); layer++) {
         const endY = long ? 0.467 + layer * 0.028 : bob ? 0.561 + layer * 0.01 : 0.588 + layer * 0.015;

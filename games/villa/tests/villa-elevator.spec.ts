@@ -1,3 +1,4 @@
+import { createVillaElevator, villaElevatorPanelButtons as gamePanelButtons } from '../src/villaElevator';
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 
@@ -139,17 +140,27 @@ test('a real click on the lift panel works while the pointer is locked', async (
   // Lock the pointer exactly like a player who clicked the canvas to look around.
   await page.locator('#lift-panel-click').click();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('lift-panel-click');
-  // A locked canvas reports no cursor position, so the panel owns the mouse. Put
-  // the painted cursor on the button first: this case is about the locked click
-  // reaching the panel, not about how the browser's recentre move moved it.
-  await page.evaluate(() => {
+  // The crosshair does the aiming while the pointer is locked: face the real
+  // 3D button, then a click selects the floor. This case is about the locked
+  // click reaching the panel, not about how the browser's recentre moved it.
+  const aimed = await page.evaluate((button) => {
     const game = (window as any).__liftPanel;
-    const b = game.buttons().find((x: any) => x.id === 'elevator-2');
-    game.panelCursor = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-  });
+    const eye = { x: game.position.x, y: game.position.y + 1.65, z: game.position.z };
+    const dx = button.x - eye.x, dy = button.y - eye.y, dz = button.z - eye.z;
+    game.yaw = Math.atan2(-dx, -dz); game.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    const hit = game.elevatorAimButton();
+    return hit ? hit.id : null;
+  }, gamePanelButtons(createVillaElevator()).find((b: any) => b.id === 'elevator-floor-2'));
+  expect(aimed).toBe('elevator-floor-2');
   await page.mouse.down(); await page.mouse.up();
   await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
-    { message: 'a locked click on the painted panel must select the floor' }).toBe(2);
+    { message: 'a locked click on the aimed panel button must select the floor' }).toBe(2);
+  // And the mouse keeps steering the view inside the car: the panel no longer
+  // owns it.
+  const yawBefore = await page.evaluate(() => (window as any).__liftPanel.yaw);
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 48, movementY: 6, bubbles: true })));
+  const yawAfter = await page.evaluate(() => (window as any).__liftPanel.yaw);
+  expect(yawAfter).not.toBe(yawBefore);
 });
 
 test('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {

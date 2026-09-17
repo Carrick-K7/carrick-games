@@ -3,7 +3,8 @@ import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.j
 import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen } from './villaActivities.js';
 import {
   advanceVillaElevator, createVillaElevator, idleVillaElevator, requestVillaElevator, requestVillaElevatorDoor, VILLA_ELEVATOR,
-  villaElevatorCabinContains, villaElevatorDoorwayObstructed, villaElevatorShaftContains, villaElevatorSupportAt,
+  villaElevatorCabinContains, villaElevatorDoorwayObstructed, villaElevatorPanelButtons, villaElevatorShaftContains, villaElevatorSupportAt,
+  type VillaElevatorPanelButton,
 } from './villaElevator.js';
 import {
   moveVillaPlayer, nearestVillaHotspot, villaFloor, villaRoomAt, villaSupportAt, villaCollides,
@@ -29,6 +30,7 @@ import { createVillaTea, advanceVillaTea, interactVillaTea, type VillaTeaState }
 import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, villaOpenableLabel, VILLA_WARDROBES, VILLA_FRIDGE_FREEZER, type VillaWardrobeState } from './villaWardrobe.js';
 import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, isVillaCampingCollider, type VillaOutdoorState } from './villaOutdoor.js';
 import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
+import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, type VillaSuvState } from './villaSuv.js';
 import { villaCarSafeExit } from './villaDriving.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
@@ -37,11 +39,11 @@ import { VILLA_VERSION } from './villaVersion.js';
 interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
 const UI_FONT = 'system-ui, -apple-system, sans-serif';
-type VillaRoadVehicle = 'car' | 'pickup';
-type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; aquariumOn: boolean };
+type VillaRoadVehicle = 'car' | 'pickup' | 'suv';
+type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; suv: VillaSuvState; aquariumOn: boolean };
 const initialVillaState = (): VillaGameState => ({
   evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(),
-  elevator: createVillaElevator(), driving: createVillaDriving(), pickup: createVillaPickup(), scooter: createVillaScooter(), race: createVillaRace(),
+  elevator: createVillaElevator(), driving: createVillaDriving(), pickup: createVillaPickup(), suv: createVillaSuv(), scooter: createVillaScooter(), race: createVillaRace(),
   snooker: createVillaSnooker(), snookerActive: false, pets: createVillaPets(), faucetOn: false, teaUntil: 0,
   home: createVillaHome(), outdoor: createVillaOutdoor(), tea: createVillaTea(), wardrobes: createVillaWardrobes(), aquariumOn: true,
 });
@@ -72,7 +74,6 @@ export class VillaGame extends BaseGame {
   /** While the lift's operating panel is up the mouse drives its cursor instead
    * of the camera, because a pointer-locked canvas receives no click positions
    * and the painted buttons would otherwise be unclickable. */
-  private panelCursor: Point | null = null;
   private hudHintShown = false;
   /** Granting pointer lock makes the browser emit one recentre move whose delta
    *  is far larger than hand motion. Without this guard that single event spun
@@ -236,14 +237,6 @@ export class VillaGame extends BaseGame {
           // reaching the camera while still swallowing the browser's jump.
           if (Math.abs(e.movementX) + Math.abs(e.movementY) > RECENTRE_JOLT && this.time - this.lockGrantedAt < .25) return;
         }
-        if (!this.panelCursor) { this.syncPanelCursor(); if (this.panelCursor) return; }
-        if (this.panelCursor) {
-          // The panel is aimed with small, deliberate moves. A browser recentre
-          // is one huge delta, arrives whenever it likes, and would otherwise
-          // throw the cursor off the button between aiming and clicking.
-          if (Math.abs(e.movementX) + Math.abs(e.movementY) > RECENTRE_JOLT) return;
-          this.movePanelCursor(e.movementX, e.movementY); return;
-        }
         this.look(e.movementX, e.movementY, 0.0023);
       };
       const lockChange = () => {
@@ -307,15 +300,36 @@ export class VillaGame extends BaseGame {
     return this.shellOverlayOpen;
   }
 
-  private drivingSeat(): boolean { return this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'racing' || this.state.seated === 'scooter'; }
-  private roadState(id: VillaRoadVehicle) { return id === 'pickup' ? this.state.pickup : this.state.driving; }
-  private roadAnchors(id: VillaRoadVehicle) { return id === 'pickup' ? villaPickupAnchors(this.state.pickup) : villaCarAnchors(this.state.driving); }
-  private roadObstacles(id: VillaRoadVehicle) { return (id === 'pickup' ? this.scene?.pickupObstacles : this.scene?.drivingObstacles) ?? []; }
-  private roadDoorProgress(id: VillaRoadVehicle) { return (id === 'pickup' ? this.scene?.pickupDoorProgress : this.scene?.carDoorProgress) ?? 0; }
-  private roadDoorOpen(id: VillaRoadVehicle) { return id === 'pickup' ? this.state.pickupDoorOpen : this.state.carDoorOpen; }
-  private setRoadDoor(id: VillaRoadVehicle, open: boolean) { if (id === 'pickup') this.state.pickupDoorOpen = open; else this.state.carDoorOpen = open; }
-  private roadSafeExit(id: VillaRoadVehicle) { return id === 'pickup' ? villaPickupSafeExit(this.state.pickup, this.roadObstacles(id)) : villaCarSafeExit(this.state.driving, this.roadObstacles(id)); }
-  private roadExitClear(id: VillaRoadVehicle) { return id === 'pickup' ? villaPickupExitClear(this.state.pickup, this.roadObstacles(id)) : villaCarExitClear(this.state.driving, this.roadObstacles(id)); }
+  private drivingSeat(): boolean { return this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || this.state.seated === 'racing' || this.state.seated === 'scooter'; }
+  /** One dispatch point per road vehicle: a third model must not fan out into
+   * nested ternaries at forty call sites. */
+  private roadApi(id: VillaRoadVehicle) {
+    return id === 'pickup'
+      ? { state: this.state.pickup, anchors: villaPickupAnchors, obstacles: this.scene?.pickupObstacles,
+          doorProgress: this.scene?.pickupDoorProgress ?? 0, doorOpen: this.state.pickupDoorOpen,
+          setDoor: (open: boolean) => { this.state.pickupDoorOpen = open; },
+          safeExit: villaPickupSafeExit, exitClear: villaPickupExitClear, advance: advanceVillaPickup,
+          create: createVillaPickup, blocked: villaPickupPoseBlocked, const: VILLA_PICKUP }
+      : id === 'suv'
+        ? { state: this.state.suv, anchors: villaSuvAnchors, obstacles: this.scene?.suvObstacles,
+            doorProgress: this.scene?.suvDoorProgress ?? 0, doorOpen: this.state.suvDoorOpen,
+            setDoor: (open: boolean) => { this.state.suvDoorOpen = open; },
+            safeExit: villaSuvSafeExit, exitClear: villaSuvExitClear, advance: advanceVillaSuv,
+            create: createVillaSuv, blocked: villaSuvPoseBlocked, const: VILLA_SUV }
+        : { state: this.state.driving, anchors: villaCarAnchors, obstacles: this.scene?.drivingObstacles,
+            doorProgress: this.scene?.carDoorProgress ?? 0, doorOpen: this.state.carDoorOpen,
+            setDoor: (open: boolean) => { this.state.carDoorOpen = open; },
+            safeExit: villaCarSafeExit, exitClear: villaCarExitClear, advance: advanceVillaDriving,
+            create: createVillaDriving, blocked: villaDrivingPoseBlocked, const: VILLA_CAR };
+  }
+  private roadState(id: VillaRoadVehicle) { return this.roadApi(id).state; }
+  private roadAnchors(id: VillaRoadVehicle) { return this.roadApi(id).anchors(this.roadApi(id).state); }
+  private roadObstacles(id: VillaRoadVehicle) { return this.roadApi(id).obstacles ?? []; }
+  private roadDoorProgress(id: VillaRoadVehicle) { return this.roadApi(id).doorProgress; }
+  private roadDoorOpen(id: VillaRoadVehicle) { return this.roadApi(id).doorOpen; }
+  private setRoadDoor(id: VillaRoadVehicle, open: boolean) { this.roadApi(id).setDoor(open); }
+  private roadSafeExit(id: VillaRoadVehicle) { return this.roadApi(id).safeExit(this.roadApi(id).state, this.roadObstacles(id)); }
+  private roadExitClear(id: VillaRoadVehicle) { return this.roadApi(id).exitClear(this.roadApi(id).state, this.roadObstacles(id)); }
   private currentRelaxSeat(): VillaRelaxSeat | null { return villaOutdoorSeat(this.state.outdoor, this.state.relaxSeatId) ?? villaRelaxSeat(this.state.relaxSeatId); }
 
   private cancelCarAccess() {
@@ -376,7 +390,6 @@ export class VillaGame extends BaseGame {
   update(dt: number) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 0;
     this.time += dt;
-    this.syncPanelCursor();
     advanceVillaHome(this.state.home, dt); this.state.evening = this.state.home.darkness > .2;
     advanceVillaTea(this.state.tea, dt);
     const wardrobeBefore = Object.fromEntries(Object.entries(this.state.wardrobes.wardrobes).map(([id, wardrobe]) => [id, wardrobe.progress]));
@@ -438,12 +451,11 @@ export class VillaGame extends BaseGame {
     if (enabled && Math.abs(forward) > .01) this.safetyBrake = false;
     const brake = !enabled || this.safetyBrake;
     const handbrake = enabled && (this.keys.has(' ') || held('brake'));
-    if (this.state.seated === 'car' || this.state.seated === 'pickup') {
+    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') {
       const id = this.state.seated, car = this.roadState(id), oldYaw = car.yaw;
       const input = { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
         steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
-      if (id === 'pickup') advanceVillaPickup(car, input, dt, this.roadObstacles(id));
-      else advanceVillaDriving(car, input, dt, this.roadObstacles(id));
+      this.roadApi(id).advance(car, input, dt, this.roadObstacles(id));
       this.yaw += car.yaw - oldYaw;
       this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'scooter') {
@@ -508,14 +520,20 @@ export class VillaGame extends BaseGame {
   }
   private hotspot(): VillaHotspot | null {
     const car = this.state.driving, pickup = this.state.pickup, p = this.groundPosition();
+    // In the car, the crosshair picks the operating panel's button: the buttons
+    // are centimetres apart, so proximity alone could never tell them apart.
+    const aimed = this.elevatorAimButton();
+    if (aimed) return { id: aimed.id, x: aimed.x, y: aimed.y, z: aimed.z, radius: .5, name: aimed.name, zh: aimed.zh };
     if (this.state.outdoor.camping.carried) return { id: 'camping-chair', x: p.x - Math.sin(this.yaw) * 1.25, y: p.y, z: p.z - Math.cos(this.yaw) * 1.25,
       name: 'Place the camping chair', zh: '放下露营椅', radius: 2 };
     const localX = (p.x - car.x) * Math.cos(car.yaw) - (p.z - car.z) * Math.sin(car.yaw);
     const pickupLocalX = (p.x - pickup.x) * Math.cos(pickup.yaw) - (p.z - pickup.z) * Math.sin(pickup.yaw);
+    const suv = this.state.suv, suvLocalX = (p.x - suv.x) * Math.cos(suv.yaw) - (p.z - suv.z) * Math.sin(suv.yaw);
     const scooter = villaScooterAnchors(this.state.scooter);
     const approach = scooter.exits.reduce((a, b) => Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b);
     let fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 }, approach,
-      { door: villaPickupAnchors(pickup).door, driverSide: pickupLocalX >= 1.2 });
+      { door: villaPickupAnchors(pickup).door, driverSide: pickupLocalX >= 1.2 },
+      { door: villaSuvAnchors(suv).door, driverSide: suvLocalX >= 1.08 });
     const swing = villaSwingSeat(this.state.outdoor), camping = villaCampingSeat(this.state.outdoor);
     const extras: VillaHotspot[] = [
       { id: 'swing', ...swing.seat, radius: 1.85, name: 'Sit on the swing', zh: '坐上秋千' },
@@ -664,9 +682,9 @@ export class VillaGame extends BaseGame {
         : this.state.seated ? [] : [['crouch', zh ? '蹲' : 'C'], ['jump', zh ? '跳' : 'Jump']];
       actions.forEach(([id, label], i) => buttons.push({ id, label, x: this.width - (this.state.seated ? 168 - i * 54 : 170 - i * 52) * s - safe.right, y: this.height - (this.state.seated ? 151 : 93) * s - safe.bottom, w: 44 * s, h: 44 * s }));
     }
-    if (this.touchMode && (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'racing' || this.state.relaxSeatId === 'chair-pc'
-      || (!this.state.seated && (target === 'car' || target === 'pickup' || target === 'media' || target === 'camping-chair' || target === 'chair-pc')))) {
-      const door = this.state.seated === 'car' || this.state.seated === 'pickup' || target === 'car' || target === 'pickup';
+    if (this.touchMode && (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || this.state.seated === 'racing' || this.state.relaxSeatId === 'chair-pc'
+      || (!this.state.seated && (target === 'car' || target === 'pickup' || target === 'suv' || target === 'media' || target === 'camping-chair' || target === 'chair-pc')))) {
+      const door = this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || target === 'car' || target === 'pickup' || target === 'suv';
       const camp = target === 'camping-chair', pc = target === 'chair-pc' || this.state.relaxSeatId === 'chair-pc';
       const label = zh ? (camp ? (this.state.outdoor.camping.carried ? '放下' : '搬起') : pc ? '电源' : door ? '车门' : '信号')
         : (camp ? (this.state.outdoor.camping.carried ? 'Place' : 'Carry') : pc ? 'Power' : door ? 'Door' : 'Input');
@@ -712,6 +730,7 @@ export class VillaGame extends BaseGame {
   private activate(id: string) {
     if (id === 'elevator-open') { this.controlElevatorDoor(true); return; }
     if (id === 'elevator-close') { this.controlElevatorDoor(false); return; }
+    if (id.startsWith('elevator-floor-')) { this.selectElevatorFloor(Number(id.slice(15))); return; }
     if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
     switch (id) {
       case 'terminal': this.setTerminal(!this.terminal?.visible); break;
@@ -753,11 +772,11 @@ export class VillaGame extends BaseGame {
         this.clearInput();
         if (this.state.snookerActive) this.state.snooker = createVillaSnooker();
         else if (this.state.seated === 'racing') this.state.race = createVillaRace();
-        else if (this.state.seated === 'car' || this.state.seated === 'pickup') {
-          const id = this.state.seated, parked = id === 'pickup' ? createVillaPickup() : createVillaDriving();
-          const blocked = id === 'pickup' ? villaPickupPoseBlocked(parked, this.roadObstacles(id)) : villaDrivingPoseBlocked(parked, this.roadObstacles(id));
+        else if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') {
+          const id = this.state.seated, parked = this.roadApi(id).create();
+          const blocked = this.roadApi(id).blocked(parked, this.roadObstacles(id));
           if (blocked) { this.message(this.isZhLang() ? '车库原位被占用了，请先移开障碍。' : 'The garage space is occupied. Clear it before resetting.'); break; }
-          if (id === 'pickup') this.state.pickup = parked; else this.state.driving = parked;
+          if (id === 'pickup') this.state.pickup = parked; else if (id === 'suv') this.state.suv = parked; else this.state.driving = parked;
           this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
           this.yaw = Math.PI; this.pitch = -.035; this.transition = null; this.setRoadDoor(id, false); this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
           this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
@@ -780,9 +799,9 @@ export class VillaGame extends BaseGame {
 
   private view(): VillaView {
     const rest = this.currentRelaxSeat();
-    const eyeHeight = this.state.seated === 'car' ? VILLA_CAR.eyeHeight : this.state.seated === 'pickup' ? VILLA_PICKUP.eyeHeight : this.state.seated === 'racing' ? VILLA_RACING.eyeHeight
+    const eyeHeight = this.state.seated === 'car' ? VILLA_CAR.eyeHeight : this.state.seated === 'pickup' ? VILLA_PICKUP.eyeHeight : this.state.seated === 'suv' ? VILLA_SUV.eyeHeight : this.state.seated === 'racing' ? VILLA_RACING.eyeHeight
       : this.state.seated === 'scooter' ? VILLA_SCOOTER.eyeHeight : this.state.seated && rest ? rest.eyeHeight : villaEyeHeight(this.motion);
-    const mounted = this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'scooter';
+    const mounted = this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || this.state.seated === 'scooter';
     const terrain = mounted ? villaTerrainOrientation(this.position.x, this.position.z, this.yaw) : { pitch: 0, roll: 0 };
     // Stay below the 3.4m ceiling. A wider top-down view fits the complete table.
     const target: VillaView = this.state.snookerActive
@@ -797,7 +816,7 @@ export class VillaGame extends BaseGame {
   }
 
   private takeSeat(seat: VillaRoadVehicle | 'racing' | 'scooter') {
-    const from = this.view(), road = seat === 'car' || seat === 'pickup';
+    const from = this.view(), road = seat === 'car' || seat === 'pickup' || seat === 'suv';
     this.state.seated = seat; this.state.relaxSeatId = null; this.state.relaxSeatPosition = null;
     this.state.relaxEntryPosition = seat === 'racing' ? { ...this.groundPosition() } : null;
     this.position = { ...(road ? this.roadAnchors(seat).seat : seat === 'scooter' ? villaScooterAnchors(this.state.scooter).seat : VILLA_RACING.seat) };
@@ -824,7 +843,7 @@ export class VillaGame extends BaseGame {
 
   private leaveSeat() {
     const seat = this.state.seated; if (!seat) return;
-    const road = seat === 'car' || seat === 'pickup', scooter = seat === 'scooter', from = this.view(), rest = this.currentRelaxSeat();
+    const road = seat === 'car' || seat === 'pickup' || seat === 'suv', scooter = seat === 'scooter', from = this.view(), rest = this.currentRelaxSeat();
     if ((road && Math.abs(this.roadState(seat).speed) > .12) || (scooter && Math.abs(this.state.scooter.speed) > .12)) {
       this.message(this.isZhLang() ? '请先停稳，再下车。' : 'Stop completely before getting off.'); return;
     }
@@ -853,36 +872,26 @@ export class VillaGame extends BaseGame {
   }
 
   /** The lift panel is on screen: its buttons are the mouse's job right now. */
-  private panelFocused(): boolean {
-    return !this.state.seated && this.inElevator() && !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !this.shellOpen();
-  }
-
-  private syncPanelCursor() {
-    if (!this.panelFocused()) { this.panelCursor = null; return; }
-    if (this.panelCursor) return;
-    const buttons = this.buttons().filter(b => b.id.startsWith('elevator-'));
-    const row = buttons.length ? buttons[0] : null;
-    this.panelCursor = row
-      ? { x: row.x + row.w / 2, y: row.y + row.h / 2 }
-      : { x: this.width / 2, y: this.height / 2 };
-  }
-
-  private movePanelCursor(dx: number, dy: number) {
-    if (!this.panelCursor) return;
-    const s = this.uiScale(), step = 1;
-    // Locking the pointer makes the browser emit one recentre move whose delta is
-    // far larger than real hand motion; clamping per event stops that jump from
-    // throwing the cursor into a corner before the player has moved at all.
-    const limit = 90;
-    const clamp = (v: number) => Math.max(-limit, Math.min(limit, v));
-    this.panelCursor = {
-      x: Math.max(0, Math.min(this.width, this.panelCursor.x + clamp(dx) * step * s)),
-      y: Math.max(0, Math.min(this.height, this.panelCursor.y + clamp(dy) * step * s)),
-    };
-  }
 
   private inElevator(): boolean {
     return this.state.elevator.riding || villaElevatorCabinContains(this.groundPosition(), this.state.elevator);
+  }
+
+  /** Inside the car, the crosshair aims at the operating panel's real buttons;
+   * the mouse keeps steering the view and E or a click presses the aimed one. */
+  private elevatorAimButton(): VillaElevatorPanelButton | null {
+    if (!this.inElevator() || this.state.seated || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return null;
+    const view = this.view(), eyeY = view.y + (view.eyeHeight ?? EYE_HEIGHT);
+    const cp = Math.cos(view.pitch), fx = -Math.sin(view.yaw) * cp, fy = Math.sin(view.pitch), fz = -Math.cos(view.yaw) * cp;
+    let best: VillaElevatorPanelButton | null = null, bestDot = 0.965;
+    for (const button of villaElevatorPanelButtons(this.state.elevator)) {
+      const dx = button.x - view.x, dy = button.y - eyeY, dz = button.z - view.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance < .25 || distance > 1.7) continue;
+      const dot = (dx * fx + dy * fy + dz * fz) / distance;
+      if (dot > bestDot) { bestDot = dot; best = button; }
+    }
+    return best;
   }
 
   private selectElevatorFloor(floor: number) {
@@ -919,11 +928,9 @@ export class VillaGame extends BaseGame {
     const from = at ?? this.position;
     const car = this.roadState(id), dx = from.x - car.x, dz = from.z - car.z;
     const x = dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw), z = dx * Math.sin(car.yaw) + dz * Math.cos(car.yaw);
-    // VILLA_CAR.door is a world anchor while the pickup's is already an offset
-    // from its bay centre, so compare in the vehicle's own local frame.
-    const hinge = id === 'pickup'
-      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
-      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    // Every road vehicle keeps door/center world anchors of the same shape, so
+    // compare in the vehicle's own local frame.
+    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
     return { along: z - hinge.z, lateral: x - hinge.x,
       height: Math.abs(this.groundPosition().y - this.roadAnchors(id).exit.y) };
   }
@@ -944,9 +951,7 @@ export class VillaGame extends BaseGame {
     const local = (x: number, z: number): VillaPosition => ({
       x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
     });
-    const hinge = id === 'pickup'
-      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
-      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
     const candidates: VillaPosition[] = [];
     if (anchors.exits[0]) candidates.push(anchors.exits[0]);
     // Offsets are from the vehicle centre, so the hinge offset is added here.
@@ -964,9 +969,7 @@ export class VillaGame extends BaseGame {
     const local = (x: number, z: number): VillaPosition => ({
       x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
     });
-    const hinge = id === 'pickup'
-      ? { x: VILLA_PICKUP.door.x - VILLA_PICKUP.center.x, z: VILLA_PICKUP.door.z - VILLA_PICKUP.center.z }
-      : { x: VILLA_CAR.door.x - VILLA_CAR.center.x, z: VILLA_CAR.door.z - VILLA_CAR.center.z };
+    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
     const nearest = Math.max(0, offset.lateral), along = Math.max(-1.5, Math.min(1.5, offset.along));
     const candidates: VillaPosition[] = [];
     // Straight out from the car's side first: it is the shortest clear move and
@@ -1014,7 +1017,7 @@ export class VillaGame extends BaseGame {
     return Math.abs(height - target.y) <= .1;
   }
 
-  private requestCarAccess(id: VillaRoadVehicle = this.state.seated === 'pickup' ? 'pickup' : 'car') {
+  private requestCarAccess(id: VillaRoadVehicle = this.state.seated === 'pickup' ? 'pickup' : this.state.seated === 'suv' ? 'suv' : 'car') {
     const zh = this.isZhLang(), leaving = this.state.seated === id;
     if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
     if (this.state.outdoor.camping.carried) { this.message(zh ? '请先放下露营椅。' : 'Put the camping chair down first.'); return; }
@@ -1072,8 +1075,8 @@ export class VillaGame extends BaseGame {
     if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
     const id = this.hotspot()?.id;
     if (this.state.outdoor.camping.carried || (!this.state.seated && id === 'camping-chair')) { this.toggleCampingCarry(); return; }
-    if (this.state.seated === 'car' || this.state.seated === 'pickup' || (!this.state.seated && (id === 'car' || id === 'pickup'))) {
-      this.requestCarAccess(this.state.seated === 'pickup' || id === 'pickup' ? 'pickup' : 'car'); return;
+    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || (!this.state.seated && (id === 'car' || id === 'pickup' || id === 'suv'))) {
+      this.requestCarAccess((this.state.seated as VillaRoadVehicle) ?? id); return;
     } else if (this.state.relaxSeatId === 'chair-pc' || (!this.state.seated && id === 'chair-pc')) {
       this.state.gaming = !this.state.gaming;
     } else if (this.state.seated === 'racing' || (!this.state.seated && (id === 'media' || id === 'racing'))) {
@@ -1117,7 +1120,7 @@ export class VillaGame extends BaseGame {
       this.message(this.interactionHint() ?? ''); this.publishState(); return;
     }
     if (this.state.outdoor.camping.carried) { this.toggleCampingCarry(); return; }
-    if (this.state.seated === 'car' || this.state.seated === 'pickup') { this.requestCarAccess(this.state.seated); return; }
+    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') { this.requestCarAccess(this.state.seated); return; }
     if (this.state.seated) { this.leaveSeat(); this.publishState(); return; }
     // Pressing Use with nothing in range is a no-op, not an error: the proximity
     // badges already say what is reachable, so a toast here is only noise.
@@ -1163,7 +1166,7 @@ export class VillaGame extends BaseGame {
           : (accepted ? 'Elevator called. Walk inside, then press 1 / 2 / 3.' : 'The elevator is busy. Please wait.'));
         break;
       }
-      case 'car': case 'pickup': this.requestCarAccess(hotspot.id); break;
+      case 'car': case 'pickup': case 'suv': this.requestCarAccess(hotspot.id); break;
       case 'scooter': {
         const bike = this.state.scooter;
         const clear = villaScooterAnchors(bike).exits.some((exit, i) =>
@@ -1273,11 +1276,11 @@ export class VillaGame extends BaseGame {
       if (this.shellOpen()) return;
       const point = this.canvasPoint(e.clientX, e.clientY);
       if (document.pointerLockElement === this.canvas) {
-        // Locked: the browser reports no cursor position, so the lift panel's
-        // cursor is the only thing a click can land on.
+        // Locked: the browser reports no cursor position, so a click acts through
+        // the crosshair — in the car it presses the aimed panel button.
         if (e.type === 'mousedown' && e.button === 0) {
-          this.syncPanelCursor();
-          if (this.panelCursor) this.clickUi(this.panelCursor);
+          const aimed = this.elevatorAimButton();
+          if (aimed) this.activate(aimed.id);
         }
         return;
       }
@@ -1387,26 +1390,12 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = 'rgba(255,251,238,.65)'; ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, 2, 0, Math.PI * 2); ctx.fill();
     }
     this.drawActivityHud(ctx);
-    this.drawPanelCursor(ctx);
     this.drawInteractionPrompt(ctx); this.drawContextFeedback(ctx);
     // No bottom instruction bar: only proximity badges and actual activity HUDs.
     ctx.textBaseline = 'alphabetic';
   }
 
   /** The lift panel's own cursor, drawn only while it owns the mouse. */
-  private drawPanelCursor(ctx: CanvasRenderingContext2D) {
-    if (!this.panelCursor) return;
-    const s = this.uiScale();
-    const over = this.buttons().some(b => this.hit(this.panelCursor!, b));
-    ctx.save();
-    ctx.strokeStyle = over ? 'rgba(127,196,140,.98)' : 'rgba(255,251,236,.82)';
-    ctx.lineWidth = 2 * s;
-    ctx.beginPath(); ctx.arc(this.panelCursor.x, this.panelCursor.y, 9 * s, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = over ? 'rgba(127,196,140,.30)' : 'rgba(255,251,236,.16)';
-    ctx.beginPath(); ctx.arc(this.panelCursor.x, this.panelCursor.y, 9 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
   /** A short-lived response to the player's own action, never a persistent
    *  bottom instruction bar. It attaches to the occupied object when there is
    *  one, and otherwise appears as a brief centred toast. */
@@ -1453,7 +1442,7 @@ export class VillaGame extends BaseGame {
         `${zh ? '目标' : 'Target'}: ${target} · ${zh ? '力度' : 'Power'} ${Math.round(table.power * 100)}%`,
         table.moving ? (zh ? '球正在滚动…' : 'Balls rolling…') : table.phase === 'complete' ? (zh ? '清台成功！R 开新局' : 'Table cleared! R for a fresh rack')
           : table.foul ? (zh ? `犯规：${fouls[table.foul] ?? '请按目标击球'}` : table.foul) : (zh ? '先红后彩；彩球清台按顺序' : 'Red, colour; then colours in order'));
-    } else if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'scooter') {
+    } else if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || this.state.seated === 'scooter') {
       const vehicle = this.state.seated === 'scooter' ? this.state.scooter : this.roadState(this.state.seated);
       lines.push(`${vehicle.handbrake ? 'Ⓟ' : vehicle.speed < -.05 ? 'R' : 'D'}  ${Math.abs(vehicle.speed * 3.6).toFixed(0)} km/h`);
       if (vehicle.handbrake) lines.push(zh ? '手刹已拉起' : 'Handbrake applied');
@@ -1469,7 +1458,7 @@ export class VillaGame extends BaseGame {
   }
 
   private drawInteractionPrompt(ctx: CanvasRenderingContext2D) {
-    if (this.mapOpen || this.terminal?.visible || this.helpOpen || this.state.seated || this.state.snookerActive || this.inElevator() || this.motion.offset > .001 || this.promptAlpha < .02) return;
+    if (this.mapOpen || this.terminal?.visible || this.helpOpen || this.state.seated || this.state.snookerActive || (this.inElevator() && !this.elevatorAimButton()) || this.motion.offset > .001 || this.promptAlpha < .02) return;
     const target = this.hotspot(); if (!target || !this.scene) return;
     // Hotspots describe where a visitor stands; badges belong on the actual prop,
     // not at that approach point (which can be behind the camera when close).

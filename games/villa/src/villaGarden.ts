@@ -22,11 +22,17 @@ export const VILLA_GARDEN_TREES = [
   { x: -22, z: 19, scale: 1.25, species: 'cherry' },
   { x: -14, z: 22.8, scale: 1, species: 'mango' },
   { x: 8, z: 23, scale: 1.15, species: 'apple' },
-  { x: 23.2, z: 19, scale: 1.2, species: 'orange' },
+  { x: 16.5, z: 60, scale: 1.2, species: 'orange' },
   { x: 22, z: 14.5, scale: 1, species: 'lemon' },
-  { x: 34.2, z: -13.5, scale: 1.2, species: 'mango' },
+  { x: 34.4, z: -15.6, scale: 1.2, species: 'mango' },
   { x: -8, z: -23.4, scale: 1.15, species: 'apple' },
   { x: 8, z: -23.4, scale: 1.1, species: 'cherry' },
+  // Roadside fruit trees, one every several metres of verge — sparse, never a hedge.
+  { x: -8, z: 12.5, scale: 1, species: 'cherry' },
+  { x: 12.5, z: 40, scale: 1.1, species: 'pear' },
+  { x: 12.5, z: 56.5, scale: 1.15, species: 'orange' },
+  { x: 16.5, z: 94.5, scale: 1.2, species: 'apple' },
+  { x: 16.5, z: 106.5, scale: 1.1, species: 'mango' },
 ] as const satisfies readonly { x: number; z: number; scale: number; species: VillaFruitSpecies }[];
 
 export const VILLA_FLOWER_SPECIES = ['rose', 'lavender', 'daisy', 'tulip', 'hydrangea', 'sunflower'] as const;

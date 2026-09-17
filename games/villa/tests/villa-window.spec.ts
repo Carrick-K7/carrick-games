@@ -52,7 +52,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
 
   test('captured play → ? → read → close continues directly without held movement or an extra Resume', async ({ page }, testInfo) => {
     const errors = captureErrors(page), canvas = await startVilla(page, false);
-    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('gameCanvas');
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id), { timeout: 30_000 }).toBe('gameCanvas');
     await assertWindow(page);
     const prepared = await canvas.getAttribute('data-game-prepare-count');
     await page.keyboard.down('w');

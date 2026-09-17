@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
 import { VILLA_PET_IDS, VILLA_PET_LABELS } from '../src/villaPets';
+import { VILLA_GARDEN_TREES } from '../src/villaGarden';
 
 const moduleUrl = () => gameModuleUrl('villa');
 async function mount(page: Page, touch = false) {
@@ -125,7 +126,7 @@ test('villa garden: authored plants, open aisles and six independently feedable 
       return { species, roamed, fed, visibleFood, labels, rabbits, quiet, finite, synced, reset, potsSolid };
     }, VILLA_PET_IDS);
     expect(new Set(result.species['fruit-tree'])).toEqual(new Set(['cherry', 'orange', 'mango', 'apple', 'pear', 'lemon']));
-    expect(result.species['fruit-tree']).toHaveLength(10); expect(result.species['flower-planter']).toHaveLength(6); expect(result.species['vegetable-bed']).toHaveLength(4);
+    expect(result.species['fruit-tree']).toHaveLength(VILLA_GARDEN_TREES.length); expect(result.species['flower-planter']).toHaveLength(6); expect(result.species['vegetable-bed']).toHaveLength(4);
     expect(result.fed).toHaveLength(6); expect(result.fed).toEqual(VILLA_PET_IDS); expect(result.visibleFood).toEqual(result.fed);
     expect(result.rabbits).toEqual([{ id: 'rabbit', sex: 'male' }, { id: 'rabbit-female', sex: 'female' }]);
     for (const label of result.labels) expect(label.prompt.toLowerCase()).toContain(VILLA_PET_LABELS[label.id as keyof typeof VILLA_PET_LABELS].en.toLowerCase());

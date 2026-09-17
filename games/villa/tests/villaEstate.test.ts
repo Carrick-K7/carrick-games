@@ -7,6 +7,11 @@ import { createVillaDrivingCourse, VILLA_SOUTH_ROAD_SAMPLES, villaDistanceToRoad
 import { villaDrivingPoseBlocked, villaCarAnchors, villaCarExitClear, createVillaDriving, advanceVillaDriving } from '../src/villaDriving.js';
 import { villaPickupPoseBlocked } from '../src/villaPickup.js';
 import { villaSupportAt, VILLA_WALL_COLLIDERS, POOL } from '../src/villaWorld.js';
+import { VILLA_ESTATE_ROAD_PATHS, VILLA_GARAGE_DRIVE } from '../src/villaDrivingCourse';
+import { VILLA_SCENIC_ROAD } from '../src/villaDriving';
+import { VILLA_ESTATE_BUILDINGS, VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout';
+import { POOL } from '../src/villaWorld';
+import { VILLA_GARDEN_TREES } from '../src/villaGarden';
 const dispose = (root: THREE.Object3D) => {
   const materials = new Set<THREE.Material>(); root.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(m => materials.add(m)); } }); materials.forEach(m => m.dispose());
 };
@@ -98,6 +103,28 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
       }
     } finally { dispose(scene); }
   });
+  it('keeps every road edge clear of the buildings, water and every tree trunk', () => {
+    // The shoulder is wider than the asphalt; clip the OUTER edge, not the line.
+    const half = VILLA_SCENIC_ROAD.width / 2 + .45;
+    for (const [i, path] of VILLA_ESTATE_ROAD_PATHS.entries()) {
+      const w = (path === VILLA_GARAGE_DRIVE ? VILLA_SCENIC_ROAD.drivewayWidth : VILLA_SCENIC_ROAD.width) / 2 + .45;
+      for (let k = 1; k < path.length; k++) {
+        const a = path[k - 1], b = path[k], dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
+        const steps = Math.max(1, Math.ceil(len / .5));
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps, x = a.x + dx * t, z = a.z + dz * t;
+          for (const side of [-1, 1]) {
+            const ex = x + (dz / len) * side * w, ez = z - (dx / len) * side * w;
+            const H = VILLA_ESTATE_BUILDINGS[0], G = VILLA_GARAGE_EXTENT;
+            expect(ex > H.minX && ex < H.maxX && ez > H.minZ && ez < H.maxZ, `road ${i} edge in house ${ex.toFixed(1)},${ez.toFixed(1)}`).toBe(false);
+            expect(ex > G.minX + .05 && ex < G.maxX - .05 && ez > G.minZ + .05 && ez < G.maxZ - .05, `road ${i} edge in garage ${ex.toFixed(1)},${ez.toFixed(1)}`).toBe(false);
+            expect(ex > POOL.minX - .3 && ex < POOL.maxX + .3 && ez > POOL.minZ - .3 && ez < POOL.maxZ + .3, `road ${i} edge in pool ${ex.toFixed(1)},${ez.toFixed(1)}`).toBe(false);
+            for (const tree of VILLA_GARDEN_TREES) expect(Math.hypot(ex - tree.x, ez - tree.z), `road ${i} edge near ${tree.species}`).toBeGreaterThan(.9);
+          }
+        }
+      }
+    }
+  });
   it('samples every asphalt vertex at exact shared height with upward normals and keeps static batching', () => {
     const scene = new THREE.Group(); createVillaDrivingCourse(scene); createVillaEstateModel(scene);
     let roadVertices = 0, meshes = 0;
@@ -117,6 +144,30 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
       // The fence runs just outside the estate bounds, whatever those are.
     for (const f of VILLA_ESTATE_FENCE_SEGMENTS) expect([VILLA_ESTATE_BOUNDS.minX - .3, VILLA_ESTATE_BOUNDS.maxX + .3]).toContain(f.from.x);
     } finally { dispose(scene); }
+  });
+  it('seats every rolling or parked workshop prop on the slab, with nothing hovering', () => {
+    const scene = new THREE.Group(), estate = createVillaEstateModel(scene); scene.updateMatrixWorld(true);
+    try {
+      // Wheel cylinders, the jack body and the tyre stack all touch y=0 now:
+      // batched meshes merge the props, so check the geometry's lowest vertices.
+      const lows: number[] = [];
+      for (const top of ['garage-maintenance-equipment', 'garage-charging-pedestal']) {
+        const node = scene.getObjectByName(top)!;
+        node.traverse(child => {
+          if (!(child instanceof THREE.Mesh)) return;
+          const pos = child.geometry.getAttribute('position');
+          for (let i = 0; i < pos.count; i++) {
+            const y = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(child.matrixWorld).y;
+            if (y < 0.4) lows.push(y);
+          }
+        });
+      }
+      expect(lows.length).toBeGreaterThan(10);
+      for (const y of lows) expect(y, `prop vertex bottoms at y=${y.toFixed(3)}`).toBeGreaterThan(-0.005);
+      expect(Math.min(...lows)).toBeLessThan(0.02); // and at least one truly rests on the slab
+    } finally {
+      scene.traverse(n => { if (n instanceof THREE.Mesh) { n.geometry.dispose(); const m = n.material; (Array.isArray(m) ? m : [m]).forEach(x => x.dispose()); } });
+    }
   });
   it('keeps every garage door sweep corridor, reserved bay and both scooter approaches clear of workshop props', () => {
     const scene = new THREE.Group(), estate = createVillaEstateModel(scene);

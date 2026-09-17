@@ -29,6 +29,22 @@ export function villaElevatorCabinContains(p: VillaPosition, state: VillaElevato
     && p.z >= e.carMinZ && p.z <= e.carMaxZ;
 }
 /** A person's full footprint must clear the sill before the doors may close. */
+export interface VillaElevatorPanelButton { id: `elevator-floor-${number}` | 'elevator-open' | 'elevator-close'; x: number; y: number; z: number; name: string; zh: string; floor?: number; open?: boolean; }
+/** The car operating panel's real button faces, in world space for the car's
+ * current height, so a visitor can aim the crosshair at them. The panel sits on
+ * the front-right return of the car, facing back into the cabin. */
+export function villaElevatorPanelButtons(state: VillaElevatorState): readonly VillaElevatorPanelButton[] {
+  const px = VILLA_ELEVATOR.centerX + .823, pz = VILLA_ELEVATOR.centerZ + 6.3 - 5.19;
+  const buttons: VillaElevatorPanelButton[] = [];
+  for (let row = 0; row < 3; row++) {
+    const floor = 2 - row, y = state.y + 1.335 - row * .105;
+    buttons.push({ id: `elevator-floor-${floor}`, x: px, y, z: pz, floor, name: `Floor ${floor + 1}`, zh: `${floor + 1} 层` });
+  }
+  buttons.push({ id: 'elevator-open', x: px - .035, y: state.y + 1.02, z: pz, open: true, name: 'Open the doors', zh: '开门' });
+  buttons.push({ id: 'elevator-close', x: px + .035, y: state.y + 1.02, z: pz, open: false, name: 'Close the doors', zh: '关门' });
+  return buttons;
+}
+
 export function villaElevatorDoorwayObstructed(p: VillaPosition, state: VillaElevatorState): boolean {
   return Math.abs(p.y - state.y) < 0.3 && Math.abs(p.x - VILLA_ELEVATOR.centerX) < VILLA_ELEVATOR.doorWidth / 2 + 0.25
     && Math.abs(p.z - VILLA_ELEVATOR.frontZ) < 0.36;

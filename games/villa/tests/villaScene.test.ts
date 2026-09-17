@@ -65,7 +65,7 @@ function fixture() {
     securityKey: '', securityLastAt: -Infinity, securityLastTime: -Infinity,
     disposed: false, contextLost: false, environment: new THREE.CubeTexture(), lowSpec: true,
     cachedFrame: canvas(), lastStateKey: '', lastDrawAt: -Infinity, cachedTime: -1, softwareInputFrames: 0,
-    vehicle: { update: vi.fn(() => false) }, pickup: { update: vi.fn(() => false) }, scooter: { update: vi.fn(() => false) },
+    vehicle: { update: vi.fn(() => false) }, pickup: { update: vi.fn(() => false) }, suv: { update: vi.fn(() => false) }, scooter: { update: vi.fn(() => false) },
     elevator: { update: vi.fn(() => false) }, elevatorCollisions: { update: vi.fn() }, snooker: { update: vi.fn(() => false) },
     course: { update: vi.fn() }, pets: { update: vi.fn() }, furnishings: { update: vi.fn(() => false) }, gaming: { update: vi.fn() },
   });

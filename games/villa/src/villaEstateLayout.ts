@@ -3,7 +3,7 @@
  */
 export interface VillaEstateRect { minX: number; maxX: number; minZ: number; maxZ: number }
 export const VILLA_ESTATE_BOUNDS = { minX: -40, maxX: 62, minZ: -26, maxZ: 162 } as const;
-export const VILLA_GARAGE_EXTENT = { minX: 28.2, maxX: 51, minZ: -8, maxZ: 2, roofY: 3.5 } as const;
+export const VILLA_GARAGE_EXTENT = { minX: 28.2, maxX: 51, minZ: -12, maxZ: 2, roofY: 3.5 } as const;
 /** Bays keep their 16.2 m setback from the house's east wall and their spacing,
  *  so the four doors, the pickup's own anchors and every approach stay valid. */
 export const VILLA_GARAGE_BAYS = [
@@ -21,6 +21,18 @@ export const VILLA_PICKUP = {
   exit: { x: pickupBay.x + 2.75, y: 0, z: pickupBay.z - .30 },
   body: { minX: pickupBay.x - 1.2, maxX: pickupBay.x + 1.2, minZ: pickupBay.z - 2.86, maxZ: pickupBay.z + 2.86, minY: 0, maxY: 1.98 },
   eyeHeight: 1.58, yaw: Math.PI,
+} as const;
+export const VILLA_SUV_LIMITS = { halfWidth: .99, halfLength: 2.46, height: 1.72, wheelbase: 2.9, maxSpeed: 7, maxReverse: 2.6, maxSteer: .55 } as const;
+// The coupe-SUV parks in the second reserved bay; the first reserved bay stays
+// empty because the pets' shelter route crosses the sill there.
+const suvBay = VILLA_GARAGE_BAYS[3];
+export const VILLA_SUV = {
+  center: { x: suvBay.x, y: 0, z: suvBay.z },
+  seat: { x: suvBay.x + .52, y: 0, z: suvBay.z + .37 },
+  door: { x: suvBay.x + 1.08, y: 0, z: suvBay.z + .42 },
+  exit: { x: suvBay.x + 2.7, y: 0, z: suvBay.z - .30 },
+  body: { minX: suvBay.x - .99, maxX: suvBay.x + .99, minZ: suvBay.z - 2.46, maxZ: suvBay.z + 2.46, minY: 0, maxY: 1.72 },
+  eyeHeight: 1.5, yaw: Math.PI,
 } as const;
 export const VILLA_SCOOTER_PARKING = { x: 54.2, y: 0, z: 7 } as const;
 export const VILLA_ESTATE_BUILDINGS = [

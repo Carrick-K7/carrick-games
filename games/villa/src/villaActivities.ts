@@ -2,10 +2,11 @@ import type { VillaCollider, VillaPosition } from './villaWorld.js';
 import { VILLA_GARAGE_BAYS, VILLA_SCOOTER_PARKING } from './villaEstateLayout.js';
 
 export type VillaScreenSource = 'pc' | 'ps' | 'switch';
-export type VillaSeat = 'car' | 'pickup' | 'racing' | 'scooter' | 'sofa' | 'lounger' | 'chair' | 'stool' | 'bed' | null;
+export type VillaSeat = 'car' | 'pickup' | 'suv' | 'racing' | 'scooter' | 'sofa' | 'lounger' | 'chair' | 'stool' | 'bed' | null;
 export interface VillaActivityState {
   carDoorOpen: boolean;
   pickupDoorOpen: boolean;
+  suvDoorOpen: boolean;
   seated: VillaSeat;
   relaxSeatId?: string | null;
   relaxSeatPosition?: VillaPosition | null;
@@ -13,7 +14,7 @@ export interface VillaActivityState {
   screenSource: VillaScreenSource;
   displayLights: boolean;
 }
-export const createVillaActivities = (): VillaActivityState => ({ carDoorOpen: false, pickupDoorOpen: false, seated: null, relaxSeatId: null, relaxSeatPosition: null, relaxEntryPosition: null, screenSource: 'pc', displayLights: true });
+export const createVillaActivities = (): VillaActivityState => ({ carDoorOpen: false, pickupDoorOpen: false, suvDoorOpen: false, seated: null, relaxSeatId: null, relaxSeatPosition: null, relaxEntryPosition: null, screenSource: 'pc', displayLights: true });
 export const CAR_DOOR_SECONDS = 0.65;
 export const VILLA_WALK_SPEED = 2.75;
 export const VILLA_RUN_SPEED = 5.8;

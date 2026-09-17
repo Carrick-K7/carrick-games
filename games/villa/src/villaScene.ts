@@ -9,7 +9,9 @@ import { createVillaElevatorColliders, type VillaElevatorState } from './villaEl
 import type { VillaActivityState } from './villaActivities.js';
 import { isVillaVehicleCollider, type VillaDrivingState } from './villaDriving.js';
 import { createVillaPickupModel } from './villaPickupModel.js';
+import { createVillaSuvModel } from './villaSuvModel.js';
 import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
+import { isVillaSuvCollider, type VillaSuvState } from './villaSuv.js';
 import { createVillaEstateModel } from './villaEstateModel.js';
 import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
@@ -34,8 +36,8 @@ import {
 export interface VillaView extends VillaPosition { yaw: number; pitch: number; roll?: number; eyeHeight?: number; fov?: number }
 export type VillaSceneState = VillaFurnishingState & VillaActivityState & {
   elevator: VillaElevatorState; driving: VillaDrivingState; scooter: VillaScooterState; race: VillaRaceState;
-  /** Optional only for old scene snapshots; the pickup model supplies its spawn. */
-  pickup?: VillaPickupState;
+  /** Optional only for old scene snapshots; each model supplies its own spawn. */
+  pickup?: VillaPickupState; suv?: VillaSuvState;
   home?: VillaHomeState; outdoor?: VillaOutdoorState;
   snooker: VillaSnookerState; snookerActive: boolean; pets: VillaPetsState;
 };
@@ -154,6 +156,7 @@ export class VillaScene {
   private readonly furnishings: ReturnType<typeof furnishVilla>;
   private readonly vehicle: ReturnType<typeof createVillaVehicle>;
   private readonly pickup: ReturnType<typeof createVillaPickupModel>;
+  private readonly suv: ReturnType<typeof createVillaSuvModel>;
   private readonly scooter: ReturnType<typeof createVillaScooterModel>;
   private readonly gaming: ReturnType<typeof createVillaGaming>;
   private readonly elevator: ReturnType<typeof createVillaElevatorModel>;
@@ -162,6 +165,7 @@ export class VillaScene {
   private readonly pets: ReturnType<typeof createVillaPetModel>;
   readonly drivingObstacles: VillaCollider[];
   readonly pickupObstacles: VillaCollider[];
+  readonly suvObstacles: VillaCollider[];
   readonly scooterObstacles: VillaCollider[];
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
@@ -431,6 +435,7 @@ export class VillaScene {
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
     this.pickup = createVillaPickupModel(this.scene);
+    this.suv = createVillaSuvModel(this.scene);
     this.scooter = createVillaScooterModel(this.scene);
     this.gaming = createVillaGaming(this.scene);
     this.elevator = createVillaElevatorModel(this.scene);
@@ -440,11 +445,12 @@ export class VillaScene {
     this.outdoorModel = createVillaOutdoorModel(this.scene);
     this.outdoorModel.update(this.fallbackOutdoor, this.primaryView, this.primaryView.yaw);
     this.pets = createVillaPetModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.pickup.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders, ...estate.colliders, ...this.outdoorModel.colliders);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.pickup.colliders, ...this.suv.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders, ...estate.colliders, ...this.outdoorModel.colliders);
     // Keep live identities: each vehicle ignores ONLY itself, collides with both
     // other vehicles, and stops before pets (walkers do not collide with pets).
     this.drivingObstacles = [...this.colliders.filter(c => !isVillaVehicleCollider(c)), ...this.pets.drivingColliders];
     this.pickupObstacles = [...this.colliders.filter(c => !isVillaPickupCollider(c)), ...this.pets.drivingColliders];
+    this.suvObstacles = [...this.colliders.filter(c => !isVillaSuvCollider(c)), ...this.pets.drivingColliders];
     this.scooterObstacles = [...this.colliders.filter(c => !isVillaScooterCollider(c)), ...this.pets.drivingColliders];
     this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
@@ -488,6 +494,7 @@ export class VillaScene {
     if (this.furnishings.update(time, { ...state, roomLights: home.roomLights, nightFactor: home.darkness })) this.renderer.shadowMap.needsUpdate = true;
     if (this.vehicle.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     if (this.pickup.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
+    if (this.suv.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     if (this.scooter.update(time, state)) this.renderer.shadowMap.needsUpdate = true;
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
@@ -501,6 +508,7 @@ export class VillaScene {
 
   get carDoorProgress(): number { return this.vehicle.doorProgress; }
   get pickupDoorProgress(): number { return this.pickup.doorProgress; }
+  get suvDoorProgress(): number { return this.suv.doorProgress; }
 
   /** A small in-world interaction badge, never visible through walls or behind the camera. */
   projectInteraction(point: VillaPosition, width: number, height: number): { x: number; y: number } | null {

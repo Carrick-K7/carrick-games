@@ -6,6 +6,7 @@ import {
 } from '../src/villaGarden.js';
 import { STAIR_HOLE, VILLA_SPAWN, villaCollides, type VillaCollider } from '../src/villaWorld.js';
 import { VILLA_EAST_WALL, VILLA_NORTH_WALL, VILLA_SOUTH_WALL, VILLA_WEST_WALL } from '../src/villaEstateLayout';
+import { villaDistanceToRoad } from '../src/villaDrivingCourse';
 const WEST = VILLA_WEST_WALL, EAST = VILLA_EAST_WALL, NORTH = VILLA_NORTH_WALL, SOUTH = VILLA_SOUTH_WALL;
 
 const rect = (minX: number, maxX: number, minZ: number, maxZ: number) => ({ minX, maxX, minZ, maxZ });
@@ -44,7 +45,7 @@ describe('authored villa garden', () => {
       expect(collider.minZ).toBeCloseTo(z - 0.25 * s); expect(collider.maxZ).toBeCloseTo(z + 0.25 * s);
       expect(collider.minY).toBe(0); expect(collider.maxY).toBeCloseTo(2.9 * s);
     });
-    expect(colliders).toHaveLength(20); // Ten trunks, six planters, four raised beds.
+    expect(colliders).toHaveLength(VILLA_GARDEN_TREES.length + VILLA_ROOF_PLANTERS.length + VILLA_VEGETABLE_BEDS.length);
   });
 
   it('has six botanical fruit species with distinct leaf, fruit and silhouette specifications', () => {
@@ -55,7 +56,7 @@ describe('authored villa garden', () => {
       expect(new Set(Object.values(VILLA_FRUIT_SPECIES).map(s => s[field])).size).toBe(6);
     }
     const trees = root.children.filter(n => n.userData.kind === 'fruit-tree');
-    expect(trees).toHaveLength(10);
+    expect(trees).toHaveLength(VILLA_GARDEN_TREES.length);
     for (const tree of trees) {
       expect(tree.userData.fruitClusters).toBe(12);
       expect(tree.userData.fruitHeight[0]).toBeGreaterThan(1.6);
@@ -165,9 +166,11 @@ describe('authored villa garden', () => {
       rect(-7.7, -4.3, -6.2, -2.8), rect(7.15, 9.85, -6.5, -5.5), // Dining and BBQ.
       ...[-10.3, -3.1].flatMap(x => [1.3, 7].map(z => rect(x - 0.08, x + 0.08, z - 0.08, z + 0.08))),
       ...[[-10.8, 7.9], [-3, 7.9], [10.7, 7.9], [10.7, -8], [-10.6, -7.9], [-3, -7.9]].map(([x, z]) => rect(x - 0.4, x + 0.4, z - 0.4, z + 0.4))];
+    // The planter colliders are the roof-level ones; tree and bed counts change.
+    const roofColliders = colliders.filter(c => c.minY > 6);
     VILLA_ROOF_PLANTERS.forEach((p, i) => {
       expect(markers[i].position.y).toBe(7.2);
-      const c = colliders[10 + i];
+      const c = roofColliders[i];
       expect(c.minY).toBe(7.2); expect(c.maxY).toBeCloseTo(7.63);
       expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(15.9);
       expect(c.minZ).toBeGreaterThan(-8.9); expect(c.maxZ).toBeLessThan(8.9);
@@ -181,7 +184,7 @@ describe('authored villa garden', () => {
     const markers = root.children.filter(n => n.userData.kind === 'vegetable-bed');
     expect(markers).toHaveLength(4);
     markers.forEach(n => { expect(n.userData.rows).toBe(2); expect(n.userData.plants).toBe(10); });
-    const beds = colliders.slice(16);
+    const beds = colliders.filter(c => c.minY === 0 && c.minZ >= 16.5 && c.maxZ <= 22.5 && c.minX >= -12.5 && c.maxX <= -3.5);
     beds.forEach(c => {
       expect(c.minX).toBeGreaterThanOrEqual(-11.6); expect(c.maxX).toBeLessThanOrEqual(-4.1);
       expect(c.minZ).toBeGreaterThanOrEqual(17); expect(c.maxZ).toBeLessThanOrEqual(22);
@@ -196,15 +199,17 @@ describe('authored villa garden', () => {
 
   it('preserves spawn, entrance path, driveway and driving course', () => {
     expect(villaCollides(VILLA_SPAWN, colliders)).toBe(false);
-    const keepClear = [rect(-2.3, 2.3, 11, 21), rect(13, 19, 2, 26), rect(-24, 27, 25, 53)];
+    const keepClear = [rect(-2.3, 2.3, 11, 21), rect(13, 19, 2, 26)];
     colliders.filter(c => c.minY < 1).forEach(c => keepClear.forEach(r => expect(overlaps(c, r, 0.23)).toBe(false)));
+    // Roadside fruit trees are wanted; they must simply never stand on the road.
+    for (const t of VILLA_GARDEN_TREES) expect(villaDistanceToRoad(t.x, t.z), `tree ${t.species} at ${t.x},${t.z}`).toBeGreaterThan(4.4);
   });
 
   it('batches shared, scene-owned materials into at most 28 draw calls without lights, text or animation nodes', () => {
     expect(parent.children).toHaveLength(1); expect(root.name).toBe('Villa garden');
     expect(meshes.length).toBeGreaterThan(15); expect(meshes.length).toBeLessThanOrEqual(28);
     expect(new Set(meshes.map(m => m.material)).size).toBe(meshes.length);
-    expect(root.children.filter(n => !(n instanceof THREE.Mesh))).toHaveLength(20);
+    expect(root.children.filter(n => !(n instanceof THREE.Mesh))).toHaveLength(VILLA_GARDEN_TREES.length + VILLA_ROOF_PLANTERS.length + VILLA_VEGETABLE_BEDS.length);
     let vertices = 0;
     for (const mesh of meshes) {
       const p = mesh.geometry.getAttribute('position'); vertices += p.count;

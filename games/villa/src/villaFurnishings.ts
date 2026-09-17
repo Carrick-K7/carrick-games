@@ -365,12 +365,33 @@ export function furnishVilla(scene: THREE.Scene): {
     box(3.6, 0.24, 2.9, 1.1, 0.48, 0.72, sage, 0.04);
   });
   at(-11.4, 0, -9.9, 0, () => lamp(true));
-  // Ground-floor gym and hobby room: bench, rack and a mirrored wall.
+  // Ground-floor gym: a treadmill, yoga mats and one bench, plus rack + mirror.
   at(11.3, 0, -13.6, 0, () => {
+    // Weight rack on the west wall.
     box(-4.2, 0.5, -3.3, 2.6, 1, 0.16, steel, 0.02);
     for (let i = 0; i < 5; i++) box(-5.1 + i * 0.45, 0.55, -3.12, 0.08, 1.1, 0.08, dark, 0.01);
-    for (const x of [-3.4, -1.2, 1, 3.2]) { box(x, 0.22, 1.4, 0.5, 0.44, 1.9, dark, 0.04); box(x, 0.5, 1.4, 0.34, 0.14, 1.7, sage, 0.03); }
-    box(0, 0.02, -1.2, 5.4, 0.035, 1.5, dark, 0.01);
+    hit(-4.2, 0, -3.3, 2.7, 1.1, 0.3);
+    // Treadmill facing the north window, with rails and a real console.
+    at(2.7, 0, -2.4, 0, () => {
+      box(0, 0.14, 0, 0.62, 0.18, 1.8, dark, 0.03);
+      box(0, 0.19, 0, 0.5, 0.04, 1.6, black, 0.01);
+      for (const side of [-1, 1]) {
+        rod(new THREE.Vector3(side * 0.27, 0.22, -0.72), new THREE.Vector3(side * 0.27, 1.02, -0.8), 0.02, steel);
+        rod(new THREE.Vector3(side * 0.27, 1.02, -0.8), new THREE.Vector3(side * 0.27, 1.05, 0.6), 0.016, steel);
+      }
+      box(0, 1.14, -0.84, 0.6, 0.3, 0.12, black, 0.03);
+      box(0, 1.16, -0.9, 0.46, 0.18, 0.03, steel, 0.01);
+    });
+    hit(2.7, 0, -2.4, 0.7, 1.3, 1.9);
+    // Yoga mats fanned over the floor, each with a rolled end.
+    for (const [x, z, yaw] of [[-1.9, 0.9, 0.12], [-0.4, 1.5, -0.06], [1.1, 0.7, 0.2]] as const) {
+      box(x, 0.012, z, 0.62, 0.024, 1.75, sage, 0.008, yaw);
+      box(x, 0.11, z + 0.82, 0.62, 0.2, 0.12, sage, 0.04, yaw);
+    }
+    // One bench, not a row of chairs.
+    box(-3.6, 0.22, 1.4, 0.5, 0.44, 1.9, dark, 0.04); box(-3.6, 0.5, 1.4, 0.34, 0.14, 1.7, sage, 0.03);
+    hit(-3.6, 0, 1.4, 0.5, 0.6, 1.9);
+    // Mirrored wall for form checks.
     box(4.6, 1.45, -3.35, 2.4, 1.9, 0.06, steel, 0.01);
   });
   // Ground-floor media lounge behind the hall arch.
@@ -404,6 +425,21 @@ export function furnishVilla(scene: THREE.Scene): {
     at(4.4, 0, -1.4, 0, () => box(0, 0.9, 0, 0.5, 1.8, 0.04, steel, 0.01));
     plant(-4.4, 0, -3.4, 1);
   });
+  // A small indoor fountain against the lounge's east wall, where the window
+  // into the garage used to be.
+  at(26.9, 0, -5, 0, () => {
+    cyl(0, 0.28, 0, 0.98, 1.04, 0.56, stone, 28);
+    cyl(0, 0.58, 0, 0.9, 0.9, 0.1, stone, 28);
+    const poolMat = mat('#8fc4c6', 0.3); poolMat.transparent = true; poolMat.opacity = 0.85;
+    put(new THREE.CylinderGeometry(0.84, 0.84, 0.03, 28), poolMat, 0, 0.6, 0);
+    cyl(0, 0.82, 0, 0.17, 0.22, 0.55, stone, 14);
+    cyl(0, 1.06, 0, 0.34, 0.26, 0.09, stone, 18);
+    put(new THREE.CylinderGeometry(0.27, 0.27, 0.02, 18), poolMat, 0, 1.09, 0);
+    cyl(0, 1.22, 0, 0.035, 0.05, 0.22, brass, 10);
+    for (let i = 0; i < 3; i++) orb(Math.cos(i * 2.1) * 0.5, 0.63, Math.sin(i * 2.1) * 0.5, 0.09, 0.045, 0.09, cream);
+    plant(0.62, 0.6, 0.3, 0.35, false);
+  });
+  hit(26.9, 0, -5, 2.1, 1.2, 2.1);
   // Ground-floor home cinema in the north-east band.
   at(22.6, 0, -13.6, 0, () => {
     at(0, 0, -4, 0, () => { box(0, 1.3, 0, 5.6, 2.6, 0.24, dark, 0.02); box(0, 1.35, 0.14, 5.2, 2.2, 0.05, white, 0.02); });

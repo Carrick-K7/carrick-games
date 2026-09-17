@@ -4,7 +4,7 @@ import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as N
 import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition } from './villaSeating.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import type { VillaPetId } from './villaPets.js';
-import { POOL, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
+import { POOL, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, VILLA_SUV, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
 export interface VillaCollider {
@@ -129,7 +129,10 @@ wall('z', WEST.inner, NORTH.inner, SOUTH.inner, 0, [
   { from: -4.3, to: -1.9, door: true },
   { from: -1.6, to: 2.3 }, { from: 2.5, to: 5.2, door: true }, { from: 5.5, to: 8 }]);
 wall('z', EAST.inner, NORTH.inner, SOUTH.inner, 0, [
-  { from: -16, to: -12 }, { from: -7, to: -3 }, { from: -0.8, to: 1.8, door: true }, { from: 4, to: 8 }]);
+  // No glass into the garage: the glazed panel facing the cars read as an
+  // unexplained screen from the lounge. The wall is solid and a small fountain
+  // sits against it instead.
+  { from: -16, to: -12 }, { from: -0.8, to: 1.8, door: true }, { from: 4, to: 8 }]);
 // The west wing is one deep open-plan volume now, split into three bands.
 wall('x', -9, WEST.inner, -2, 0, [{ from: -20.5, to: -15, door: true }]);
 // A cased opening, not a door: the studio still reads as part of the wing.
@@ -356,7 +359,7 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'swing' | 'camping-chair' | 'wardrobe-master' | 'fridge-freezer' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'elevator-open' | 'elevator-close' | `elevator-floor-${number}` | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'suv' | 'swing' | 'camping-chair' | 'wardrobe-master' | 'fridge-freezer' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: VILLA_ELEVATOR.centerX, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
@@ -370,6 +373,7 @@ export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'gaming', x: 6.65, y: 0, z: 4.3, radius: .75, name: 'Switch the gaming setup on / off', zh: '开关电竞设备' },
   { id: 'car', ...VILLA_CAR.door, radius: 1.75, name: 'Open the driver door / take a seat', zh: '打开驾驶位车门 / 入座' },
   { id: 'pickup', ...VILLA_PICKUP.door, radius: 2.15, name: 'Drive the pickup', zh: '驾驶皮卡' },
+  { id: 'suv', ...VILLA_SUV.door, radius: 2.1, name: 'Drive the SUV', zh: '驾驶 SUV' },
   { id: 'racing', ...VILLA_RACING.exit, radius: 1.2, name: 'Sit in the simulator', zh: '坐进驾驶模拟器' },
   { id: 'media', x: 7.5, y: 0, z: 8.25, radius: 1.25, name: 'Screen input: PC / PlayStation / Switch', zh: '大屏信号源：PC / PlayStation / Switch' },
   { id: 'figures', x: 3.1, y: 0, z: 6.45, radius: 1.25, name: 'Original anime figure collection · display lights', zh: '原创动漫美少女手办 · 开关柜灯' },
@@ -378,13 +382,14 @@ export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
 ];
-export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition, pickup?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
+export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition, pickup?: { door: VillaPosition; driverSide: boolean }, suv?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;
   let distance = Infinity;
   for (const original of VILLA_HOTSPOTS) {
     let h = original.id === 'car' && car ? { ...original, ...car.door }
       : original.id === 'pickup' && pickup ? { ...original, ...pickup.door }
-        : original.id === 'scooter' && scooter ? { ...original, ...scooter } : original;
+        : original.id === 'suv' && suv ? { ...original, ...suv.door }
+          : original.id === 'scooter' && scooter ? { ...original, ...scooter } : original;
     const seat = villaRelaxSeat(h.id);
     if (seat) {
       let point = resolveVillaSeatPosition(seat, p);
@@ -399,6 +404,7 @@ export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPositio
     if (Math.abs(h.y - p.y) > 0.4) continue;
     if (h.id === 'car' && (car ? !car.driverSide : p.x < VILLA_CAR.body.maxX)) continue;
     if (h.id === 'pickup' && (pickup ? !pickup.driverSide : p.x < VILLA_PICKUP.body.maxX)) continue;
+    if (h.id === 'suv' && (suv ? !suv.driverSide : p.x < VILLA_SUV.body.maxX)) continue;
     if (h.id === 'elevator' && (p.z < VILLA_ELEVATOR.frontZ + 0.12 || Math.abs(p.x - VILLA_ELEVATOR.centerX) > 0.85)) continue;
     const d = Math.hypot(h.x - p.x, h.z - p.z);
     if (d < (h.radius ?? 2.4) && d < distance) { nearest = h; distance = d; }
