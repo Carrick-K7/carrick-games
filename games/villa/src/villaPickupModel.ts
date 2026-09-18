@@ -89,6 +89,14 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     cabin.box(side * .52, .605, .67, .54, .012, .44, rubber, .015);
   }
   cabin.box(0, .83, .13, .29, .29, .72, dark, .035); cabin.box(0, .99, -.01, .28, .06, .37, fabric, .025);
+  // Two-pedal automatic footwell and the interior mirror on the header.
+  for (const [x, w] of [[.44, .11], [.61, .085]] as const) {
+    cabin.box(x, .72, 1.02, w, .135, .022, metal, .004);
+    cabin.box(x, .73, 1.005, w - .032, .105, .012, rubber, .003);
+  }
+  cabin.beam([0, 1.895, .775], [0, 1.79, .885], .011, dark);
+  cabin.box(0, 1.765, .895, .25, .075, .034, dark, .012);
+  cabin.box(0, 1.765, .878, .22, .058, .004, metal, .002);
   cabin.beam([.52, 1.24, 1.05], [.52, 1.31, .83], .035, dark);
   const mount = new THREE.Group(); mount.name = 'pickup-steering-mount'; mount.position.set(.52, 1.33, .80); mount.rotation.x = .24; root.add(mount);
   const wheel = new VillaModelBuilder(mount, 'pickup-steering-wheel');

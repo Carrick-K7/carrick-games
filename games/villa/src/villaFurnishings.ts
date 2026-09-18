@@ -532,9 +532,10 @@ export function furnishVilla(scene: THREE.Scene): {
   box(14, 7.217, 7.4, 3.4, 0.028, 2.8, rugMat, 0);
   for (const [x, z] of [[-10.8, 7.9], [-3, 7.9], [10.7, 7.9], [10.7, -8], [-10.6, -7.9], [-3, -7.9]]) plant(x, 7.2, z, 1.3, true);
 
-  // Hobby workbench and its tool board, tucked against the snooker lounge's
-  // east wall; the hollow, opening-door sedan lives in villaVehicle.
-  at(14.6, 0, -7.3, 0, () => {
+  // Workbench and its tool board, in the garage's north strip beside the
+  // estate's rear bench: a workshop bench belongs in the workshop, never on the
+  // snooker lounge's wall. The hollow, opening-door sedan lives in villaVehicle.
+  at(34.6, 0, -11.24, 0, () => {
     table(4.3, 0.91, 0.91); box(0, 1.74, -0.32, 4.15, 1.17, 0.075, walnut);
     for (let i = 0; i < 10; i++) { const x = -1.8 + i * 0.39; box(x, 1.73 + (i % 3) * 0.08, -0.25, 0.045, 0.4, 0.06, steel); if (i % 2) box(x, 1.95 + (i % 3) * 0.08, -0.25, 0.2, 0.09, 0.085, steel); else box(x, 1.53, -0.25, 0.085, 0.14, 0.09, terra); }
     box(-1.3, 1.08, 0, 0.6, 0.33, 0.4, terra); box(-1.3, 1.28, 0, 0.25, 0.05, 0.05, black); box(1.25, 1.03, 0, 0.48, 0.24, 0.3, steel);

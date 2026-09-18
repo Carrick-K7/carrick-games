@@ -12,7 +12,7 @@ import {
   EYE_HEIGHT, type VillaPosition, type VillaHotspot,
 } from './villaWorld.js';
 import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrouch, villaBodyHeight, villaEyeHeight } from './villaMotion.js';
-import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarDriverSide, villaCarExitClear, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from './villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarDriverSide, villaCarExitClear, villaDrivingPoseBlocked, VILLA_CAR_LIMITS, VILLA_SCENIC_ROAD } from './villaDriving.js';
 import { advanceVillaScooter, createVillaScooter, villaScooterAnchors, villaScooterSafeExit, villaScooterExitClear, villaScooterPoseBlocked, VILLA_SCOOTER } from './villaScooter.js';
 import { VILLA_AQUARIUM, villaRelaxSeat, resolveVillaSeatPosition, villaSeatExitCandidates, villaSeatColliderId, type VillaRelaxSeat } from './villaSeating.js';
 import { advanceVillaRace, createVillaRace } from './villaRacing.js';
@@ -29,23 +29,27 @@ import { createVillaTerminal, type VillaTerminal, type VillaTerminalSnapshot } f
 import { createVillaTea, advanceVillaTea, interactVillaTea, type VillaTeaState } from './villaTea.js';
 import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, villaOpenableLabel, VILLA_WARDROBES, VILLA_FRIDGE_FREEZER, type VillaWardrobeState } from './villaWardrobe.js';
 import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, type VillaOutdoorState } from './villaOutdoor.js';
-import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupDriverSide, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
-import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvDriverSide, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, type VillaSuvState } from './villaSuv.js';
+import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupDriverSide, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, VILLA_PICKUP_LIMITS, type VillaPickupState } from './villaPickup.js';
+import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvDriverSide, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
 import { villaCarSafeExit } from './villaDriving.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
+import { advanceVillaPark, createVillaParkRun, villaParkAvailable, villaParkRouteClear, villaVehicleParked, villaParkRoute, type VillaParkRun } from './villaAutopilot.js';
 import { VILLA_VERSION } from './villaVersion.js';
 
 interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
 const UI_FONT = 'system-ui, -apple-system, sans-serif';
 type VillaRoadVehicle = 'car' | 'pickup' | 'suv';
-type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; suv: VillaSuvState; aquariumOn: boolean };
+type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; suv: VillaSuvState; aquariumOn: boolean;
+  /** One self-driving run per road vehicle; only ever active when sent home. */
+  park: Record<VillaRoadVehicle, VillaParkRun> };
 const initialVillaState = (): VillaGameState => ({
   evening: true, fireplace: true, gaming: true, fedUntil: 0, ...createVillaActivities(),
   elevator: createVillaElevator(), driving: createVillaDriving(), pickup: createVillaPickup(), suv: createVillaSuv(), scooter: createVillaScooter(), race: createVillaRace(),
   snooker: createVillaSnooker(), snookerActive: false, pets: createVillaPets(), faucetOn: false, teaUntil: 0,
   home: createVillaHome(), outdoor: createVillaOutdoor(), tea: createVillaTea(), wardrobes: createVillaWardrobes(), aquariumOn: true,
+  park: { car: createVillaParkRun(), pickup: createVillaParkRun(), suv: createVillaParkRun() },
 });
 
 /** A quiet, non-scoring first-person home. All scene resources belong to this game. */
@@ -127,6 +131,7 @@ export class VillaGame extends BaseGame {
       aimAssist: on => { this.state.snooker.aimAssist = on; this.terminalChanged(); },
       fireplace: on => { this.state.fireplace = on; this.terminalChanged(); },
       aquarium: on => { this.state.aquariumOn = on; this.terminalChanged(); },
+      park: id => { this.parkVehicleHome(id as VillaRoadVehicle); this.terminalChanged(); },
       // Isolated/older hosts have no game-action menu; keep touch access in
       // terminal Settings instead of restoring extra persistent HUD buttons.
       ...(!this.host.presentation?.setActions ? {
@@ -176,6 +181,7 @@ export class VillaGame extends BaseGame {
     for (const id of ['car', 'pickup', 'suv'] as const) {
       const state = this.roadApi(id).state;
       state.speed = 0; state.steering = 0; state.handbrake = false;
+      this.state.park[id].active = false;
     }
   }
 
@@ -328,6 +334,43 @@ export class VillaGame extends BaseGame {
             safeExit: villaCarSafeExit, exitClear: villaCarExitClear, advance: advanceVillaDriving,
             create: createVillaDriving, blocked: villaDrivingPoseBlocked, const: VILLA_CAR };
   }
+  /** Per-vehicle steering and speed envelope for the autopilot. */
+  private roadLimits(id: VillaRoadVehicle) {
+    return id === 'pickup' ? VILLA_PICKUP_LIMITS : id === 'suv' ? VILLA_SUV_LIMITS : VILLA_CAR_LIMITS;
+  }
+  private parkVehicle(id: VillaRoadVehicle) { return id === 'pickup' ? 'pickup' as const : id === 'suv' ? 'suv' as const : 'car' as const; }
+  /** One-key parking: hand this car to its own autopilot and drive it home. */
+  private parkVehicleHome(id: VillaRoadVehicle) {
+    const key = this.parkVehicle(id), run = this.state.park[id], state = this.roadState(id);
+    if (run.active) { run.active = false; this.message(this.isZhLang() ? '已取消自动泊车。' : 'Auto-park cancelled.'); return; }
+    if (villaVehicleParked(key, state)) { this.message(this.isZhLang() ? '这辆车已经在自己的车位里。' : 'That car is already in its own bay.'); return; }
+    if (!villaParkAvailable(key, state)) { this.message(this.isZhLang() ? '车横在车库地面上：请先把它开出来再自动泊车。' : 'That car is sideways inside the garage: drive it out before auto-parking.'); return; }
+    if (this.state.seated === id) { this.cancelCarAccess(); this.closeCarAt = Infinity; }
+    const points = villaParkRoute(key, state);
+    // Never start a run that would scrape the estate: the route is validated with
+    // the same blocking test the car itself uses before a wheel turns.
+    if (!villaParkRouteClear(points, pose => this.roadApi(id).blocked(pose, this.roadObstacles(id)))) {
+      this.message(this.isZhLang() ? '到车库的路线被挡住了，无法自动泊车。' : 'The route home is blocked, so auto-park cannot start.');
+      return;
+    }
+    Object.assign(run, createVillaParkRun(), { active: true, points });
+    this.message(this.isZhLang() ? '已启动自动泊车：车辆正沿庄园道路返回自己的车位。' : 'Auto-park engaged: the car is driving itself back to its own bay.');
+  }
+  private nearestParkVehicle(): VillaRoadVehicle | null {
+    const p = this.groundPosition();
+    let best: VillaRoadVehicle | null = null, bestDistance = Infinity;
+    for (const id of ['car', 'pickup', 'suv'] as const) {
+      const key = this.parkVehicle(id), state = this.roadState(id);
+      if (villaVehicleParked(key, state) || !villaParkAvailable(key, state)) continue;
+      const d = Math.hypot(state.x - p.x, state.z - p.z);
+      if (d < bestDistance) { bestDistance = d; best = id; }
+    }
+    return best;
+  }
+  private messageFailedPark(id: VillaRoadVehicle, reason: string) {
+    const zh = this.isZhLang(), name = zh ? (id === 'car' ? '轿车' : id === 'pickup' ? '皮卡' : 'SUV') : (id === 'car' ? 'Sedan' : id === 'pickup' ? 'Pickup' : 'SUV');
+    this.message(zh ? `${name}自动泊车中断（${reason === 'blocked' ? '前方受阻' : '路线丢失'}），请手动驾驶。` : `${name} auto-park stopped (${reason}); please take over.`);
+  }
   private roadState(id: VillaRoadVehicle) { return this.roadApi(id).state; }
   private roadAnchors(id: VillaRoadVehicle) { return this.roadApi(id).anchors(this.roadApi(id).state); }
   private roadObstacles(id: VillaRoadVehicle) { return this.roadApi(id).obstacles ?? []; }
@@ -347,7 +390,12 @@ export class VillaGame extends BaseGame {
   private terminalSnapshot(): VillaTerminalSnapshot {
     return { home: this.state.home, zh: this.isZhLang(), dark: this.isDarkTheme(), version: VILLA_VERSION,
       aimAssist: this.state.snooker.aimAssist, fireplace: this.state.fireplace, aquarium: this.state.aquariumOn,
-      petsSheltered: this.state.pets.pets.filter(pet => pet.sheltered).length, petCount: this.state.pets.pets.length };
+      petsSheltered: this.state.pets.pets.filter(pet => pet.sheltered).length, petCount: this.state.pets.pets.length,
+      vehicles: (['car', 'pickup', 'suv'] as const).map(id => ({ id, name: id === 'car' ? 'Sedan' : id === 'pickup' ? 'Pickup' : 'SUV',
+        zh: id === 'car' ? '轿车' : id === 'pickup' ? '皮卡' : 'SUV',
+        parked: villaVehicleParked(this.parkVehicle(id), this.roadState(id)),
+        canPark: villaParkAvailable(this.parkVehicle(id), this.roadState(id)),
+        driving: this.state.park[id].active })) };
   }
   private terminalChanged() { this.terminal?.update(this.terminalSnapshot()); this.publishState(); }
   private setTerminal(open: boolean) {
@@ -458,8 +506,18 @@ export class VillaGame extends BaseGame {
     const handbrake = enabled && (this.keys.has(' ') || held('brake'));
     if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') {
       const id = this.state.seated, car = this.roadState(id), oldYaw = car.yaw;
-      const input = { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
-        steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
+      const run = this.state.park[id];
+      if (run.active && (forward || side || handbrake)) {
+        run.active = false;
+        this.message(this.isZhLang() ? '已接管驾驶，自动泊车取消。' : 'You took over, so auto-park is cancelled.');
+      }
+      const auto = run.active ? advanceVillaPark(id, car, car.speed, this.roadLimits(id), run, dt) : null;
+      if (auto && run.failed) { run.active = false; this.messageFailedPark(id, run.failed); }
+      else if (auto?.arrived) this.message(this.isZhLang() ? '已自动泊入车库。' : 'Parked itself back in the garage.');
+      const input = auto && run.active
+        ? auto.input
+        : { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
+          steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
       this.roadApi(id).advance(car, input, dt, this.roadObstacles(id));
       this.yaw += car.yaw - oldYaw;
       this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
@@ -493,6 +551,17 @@ export class VillaGame extends BaseGame {
       if (this.motion.offset > 0 || this.motion.velocity) this.eyeY = this.position.y;
       else this.eyeY += (this.position.y - this.eyeY) * Math.min(1, dt * 18);
       this.visited.add(villaRoomAt(this.groundPosition()).id);
+    }
+    // Cars the player is not sitting in still drive themselves home.
+    for (const id of ['car', 'pickup', 'suv'] as const) {
+      if (this.state.seated === id) continue;
+      const run = this.state.park[id];
+      if (!run.active) continue;
+      const state = this.roadState(id);
+      const auto = advanceVillaPark(this.parkVehicle(id), state, state.speed, this.roadLimits(id), run, dt);
+      if (run.failed) { run.active = false; this.messageFailedPark(id, run.failed); continue; }
+      if (auto.arrived) { this.message(this.isZhLang() ? '车辆已自动泊入车库。' : 'The car parked itself back in the garage.'); continue; }
+      this.roadApi(id).advance(state, auto.input, dt, this.roadObstacles(id));
     }
     advanceVillaSnooker(this.state.snooker, dt);
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
@@ -601,6 +670,11 @@ export class VillaGame extends BaseGame {
     data.villaCarDoor = this.state.carDoorOpen ? 'open' : 'closed';
     data.villaPickupDoor = this.state.pickupDoorOpen ? 'open' : 'closed';
     data.villaSuvDoor = this.state.suvDoorOpen ? 'open' : 'closed';
+    data.villaPark = JSON.stringify((['car', 'pickup', 'suv'] as const).map(id => ({ id,
+      parked: villaVehicleParked(this.parkVehicle(id), this.roadState(id)),
+      canPark: villaParkAvailable(this.parkVehicle(id), this.roadState(id)),
+      active: this.state.park[id].active, index: this.state.park[id].index, of: this.state.park[id].points.length,
+      failed: this.state.park[id].failed })));
     data.villaAccessVehicle = this.accessVehicle;
     data.villaCarAccess = this.enterCarAt !== Infinity ? 'entering' : this.exitCarAt !== Infinity ? 'exiting' : this.closeCarAt !== Infinity ? 'closing' : 'idle';
     data.villaScreenSource = this.state.screenSource;
@@ -1103,7 +1177,10 @@ export class VillaGame extends BaseGame {
       return zh ? `电梯 → ${lift.target + 1}F · 请稍候，可自由环顾` : `Elevator → ${lift.target + 1}F · Please wait, look around`;
     }
     if (this.state.snookerActive) return zh ? '鼠标 / ←→ 瞄准 · ↑↓ 力度 · 空格击球 · R 重摆 · E 离开' : 'Mouse / ←→ aim · ↑↓ power · Space shoot · R reset · E leave';
-    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') return zh ? 'W/S 前进倒车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space handbrake · E exit when stopped · R reset';
+    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') {
+      if (this.state.park[this.state.seated].active) return zh ? '自动泊车中 · 按任意驾驶键接管' : 'Auto-parking · press any driving key to take over';
+      return zh ? 'W/S 前进倒车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space handbrake · E exit when stopped · R reset';
+    }
     if (this.state.seated === 'racing') return zh ? `拉力赛 · W 油门 / S 刹车 · A/D 转向 · 空格手刹 · E 起身 · Q ${this.state.screenSource.toUpperCase()}` : `Rally · W throttle / S brake · A/D steer · Space handbrake · E exit · Q ${this.state.screenSource.toUpperCase()}`;
     if (this.state.seated === 'scooter') return zh ? 'W 加速 · S 刹车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W accelerate · S brake · A/D steer · Space handbrake · E dismount when stopped · R reset';
     if (this.state.seated) return zh ? '坐下来慢慢看风景 · E 或点离开起身' : 'Sit back and enjoy the view · E or Exit to stand';
@@ -1267,6 +1344,12 @@ export class VillaGame extends BaseGame {
         else this.lockPointer();
       }
       else if (key === 'p') { e.preventDefault(); this.activate('terminal'); }
+      else if (key === 'v') {
+        const target = this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv'
+          ? this.state.seated : this.nearestParkVehicle();
+        if (target) this.parkVehicleHome(target);
+        else this.message(this.isZhLang() ? '附近没有可以自动泊车的车辆。' : 'No car nearby that can park itself.');
+      }
       else if (key === 'm') this.activate('map');
       else if (key === 't') this.activate('time');
       else if (key === 'h') this.activate('home');

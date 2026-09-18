@@ -3,6 +3,8 @@ import { VILLA_HOME_LIGHTS, VILLA_SECURITY_CAMERAS, VILLA_LOOK_SENSITIVITY, type
 export interface VillaTerminalSnapshot {
   home: VillaHomeState; zh: boolean; dark: boolean; version: string;
   aimAssist: boolean; fireplace: boolean; aquarium: boolean; petsSheltered: number; petCount: number;
+  /** One row per road vehicle: where it is and whether it can drive itself home. */
+  vehicles: { id: string; name: string; zh: string; parked: boolean; canPark: boolean; driving: boolean }[];
 }
 export interface VillaTerminalActions {
   close(): void;
@@ -12,6 +14,8 @@ export interface VillaTerminalActions {
   weather(value: VillaWeather): void;
   sensitivity(value: number): void;
   aimAssist(on: boolean): void;
+  /** Send one vehicle home under its own control. */
+  park(id: string): void;
   fireplace(on: boolean): void;
   aquarium(on: boolean): void;
   /** Only older/isolation hosts without presentation.setActions need these. */
@@ -102,7 +106,7 @@ div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3
     for (const [key, section] of sections) section.hidden = key !== id;
     for (const [key, item] of tabButtons) { item.setAttribute('aria-selected', String(key === id)); item.setAttribute('aria-pressed', String(key === id)); }
   };
-  for (const [id, en, zh] of [['cameras', 'Cameras', '监控'], ['home', 'Home', '家居'], ['weather', 'Weather', '天气'], ['settings', 'Settings', '设置']]) {
+  for (const [id, en, zh] of [['cameras', 'Cameras', '监控'], ['home', 'Home', '家居'], ['vehicles', 'Vehicles', '车辆'], ['weather', 'Weather', '天气'], ['settings', 'Settings', '设置']]) {
     const item = button(en!, zh!, tabs, () => selectTab(id!)); item.dataset.villaTerminalTab = id; item.setAttribute('role', 'tab'); tabButtons.set(id!, item);
     const section = document.createElement('section'); section.dataset.villaTerminalPage = id; section.setAttribute('role', 'tabpanel'); content.append(section); sections.set(id!, section);
   }
@@ -134,6 +138,18 @@ div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3
   const devices = document.createElement('div'); devices.className = 'vt-row'; devices.style.marginTop = '16px'; homePage.append(devices);
   const fire = button('Fireplace', '壁炉', devices, () => actions.fireplace(!current?.fireplace)); fire.dataset.villaFireplace = '';
   const aquarium = button('Aquarium light', '鱼缸灯', devices, () => actions.aquarium(!current?.aquarium)); aquarium.dataset.villaAquariumLight = '';
+  const vehiclesPage = sections.get('vehicles')!, vehicleList = document.createElement('div'); vehicleList.className = 'vt-weather'; vehiclesPage.append(vehicleList);
+  const vehicleRows = new Map<string, { state: HTMLElement; action: HTMLButtonElement }>();
+  // The three road vehicles are fixed, so the rows are authored once and only
+  // their state text and enabled action change with each snapshot.
+  for (const [id, en, zh] of [['car', 'Sedan', '轿车'], ['pickup', 'Pickup', '皮卡'], ['suv', 'SUV', 'SUV']] as const) {
+    const row = document.createElement('div'); row.className = 'vt-row'; row.dataset.villaVehicle = id; vehicleList.append(row);
+    text('span', en, zh, row);
+    const state = text('span', '', '', row, 'vt-note');
+    const action = button('Park it', '一键泊车', row, () => actions.park(id)); action.dataset.villaParkAction = id;
+    vehicleRows.set(id, { state, action });
+  }
+  text('p', 'One-key parking hands a car to its own autopilot: it follows the estate roads and reverses into its own bay. A car left sideways on the garage floor has to be driven out first.', '一键泊车会把车交给自动泊车：沿庄园道路行驶并倒入自己的车位。若车横在车库地面上，需要先开出来。', vehiclesPage, 'vt-note');
   const weatherPage = sections.get('weather')!;
   text('h3', 'Time of day', '昼夜', weatherPage);
   const times = document.createElement('div'); times.className = 'vt-weather'; weatherPage.append(times);
@@ -179,6 +195,14 @@ div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3
     if (document.activeElement !== sensitivity) sensitivity.value = String(snapshot.home.lookSensitivity);
     sensitivityValue.value = `${snapshot.home.lookSensitivity.toFixed(2)}×`;
     shelter.textContent = snapshot.zh ? `已在室内：${snapshot.petsSheltered} / ${snapshot.petCount} 只小动物` : `Indoors: ${snapshot.petsSheltered} / ${snapshot.petCount} pets`;
+    for (const info of snapshot.vehicles) {
+      const row = vehicleRows.get(info.id); if (!row) continue;
+      row.state.textContent = info.driving ? (snapshot.zh ? '正在自动泊车…' : 'Driving itself home…')
+        : info.parked ? (snapshot.zh ? '已在车库车位' : 'In its garage bay')
+          : info.canPark ? (snapshot.zh ? '在庄园里 · 可自动泊车' : 'Out on the estate · can park itself')
+            : (snapshot.zh ? '在车库内，需要先开出来' : 'Inside the garage; drive it out first');
+      row.action.disabled = !info.canPark || info.driving || info.parked;
+    }
     refreshCamera();
   };
   root.addEventListener('click', event => { if (event.target === root) actions.close(); });

@@ -303,6 +303,13 @@
             ],
             "action": "Enter / leave when stopped",
             "actionZh": "上车 / 停稳后下车"
+          },
+          {
+            "keys": [
+              "V"
+            ],
+            "action": "One-key parking: send the nearest car back to its garage bay under its own control",
+            "actionZh": "一键泊车：让最近的车辆自动开回车库车位"
           }
         ],
         "touch": [
@@ -327,6 +334,11 @@
             "audience": "all",
             "text": "Sedan, pickup and scooter can reverse after stopping. The rally rig only brakes, with no reverse. Stop completely before opening road-vehicle doors or getting out.",
             "textZh": "轿车、皮卡与电动车刹停后可倒车；拉力模拟器仅刹车，不倒车。完全停稳后才能打开车辆车门或下车。"
+          },
+          {
+            "text": "The smart terminal also lists all three vehicles, each with its own one-key parking button.",
+            "textZh": "智能终端也列出三辆车，每辆都有一个一键泊车按钮。",
+            "audience": "all"
           }
         ]
       },

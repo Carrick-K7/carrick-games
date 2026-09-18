@@ -43,8 +43,12 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     body.box(side * .96, 1.06, z, .18, .2, 1.16, paint, .05);
     for (const dz of [-.58, .58]) body.box(side * 1.01, .74, z + dz, .12, .6, .14, paint, .03);
   }
-  // Lower body: a clean shoulder between the arches, then the hood's crown.
-  body.box(0, .88, .05, 1.86, .42, 4.0, paint, .05);
+  // Lower body split into sills, a front section under the hood and a rear
+  // section under the tail, so the cabin between them is a real hollow volume
+  // instead of one solid block the seats and dashboard sat inside.
+  for (const side of [-1, 1]) body.box(side * .85, .88, .05, .16, .42, 4.0, paint, .04);
+  body.box(0, .88, 1.58, 1.86, .42, .94, paint, .05);
+  body.box(0, .88, -1.72, 1.86, .42, .46, paint, .05);
   for (const side of [-1, 1]) body.box(side * .94, 1.02, 0, .09, .16, 3.4, trim, .03);
   quad(body, [[-.95, 1.06, .55], [-.82, 1.0, 2.34], [0, 1.06, 2.45], [0, 1.2, .5]], paint);
   quad(body, [[0, 1.2, .5], [0, 1.06, 2.45], [.82, 1.0, 2.34], [.95, 1.06, .55]], paint);
@@ -76,12 +80,57 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   body.box(0, .6, -2.5, .8, .1, .06, dark, .02);
   body.box(0, .48, -2.45, 1.9, .16, .18, paint, .05);
   body.box(0, 1.58, -.02, 1.0, .03, .06, trim, .01);
-  cabin.box(0, 1.3, -.3, 1.5, .05, 2.2, fabric, .02);
-  cabin.box(.52, 1.02, .3, .3, .1, .9, fabric, .02);
-  cabin.box(.52, 1.12, .05, .12, .1, .24, dark, .02);
+  // ---- Cabin interior: floor, footwells, seats, dashboard, console, headliner ----
+  // Plain boxes throughout: the earlier cabin was a placeholder slab that sat
+  // below the seated eye and hid the whole interior from the driver's view.
+  const upholstery = villaMaterial(0x9a8d78, .9);
+  cabin.box(0, .30, -.25, 1.72, .06, 2.32, dark, .02);
+  for (const side of [-1, 1]) {
+    cabin.box(side * .52, .335, .55, .54, .012, .52, rubber, .015);
+    // Seat: cushion, reclined backrest, headrest and a visible rail. The hip
+    // sits at the middle of the door, not at the windshield base.
+    cabin.box(side * .52, .50, -.30, .56, .16, .62, upholstery, .05);
+    cabin.box(side * .52, .84, -.64, .54, .60, .13, upholstery, .05);
+    cabin.box(side * .52, 1.19, -.69, .26, .17, .12, upholstery, .04);
+    cabin.box(side * .52, .375, -.30, .40, .045, .50, dark, .01);
+  }
+  // Rear bench behind the front seats.
+  cabin.box(0, .50, -1.22, 1.62, .16, .48, upholstery, .05);
+  cabin.box(0, .84, -1.50, 1.62, .56, .13, upholstery, .05);
+  for (const side of [-1, 1]) cabin.box(side * .48, 1.17, -1.55, .26, .17, .12, upholstery, .04);
+  // Dashboard with a driver cluster and a centred landscape touchscreen standing
+  // on the dash top, so neither crosses the steering wheel's rim.
+  cabin.box(0, .92, .52, 1.76, .30, .34, dark, .035);
+  cabin.box(0, 1.015, .665, 1.74, .035, .05, trim, .02);
+  cabin.box(.52, 1.105, .58, .34, .13, .025, dark, .012);
+  cabin.box(.52, 1.105, .566, .30, .10, .004, metal, .002);
+  cabin.box(.02, 1.14, .55, .42, .24, .03, dark, .012);
+  cabin.box(.02, 1.14, .533, .38, .20, .004, dark, .002);
+  for (const side of [-1, 1]) {
+    cabin.box(side * .66, .95, .70, .16, .07, .05, dark, .015);
+    cabin.box(side * .66, .95, .735, .13, .04, .012, metal, .004);
+  }
+  // Centre console with an armrest, a shifter and a pair of cup holders.
+  cabin.box(0, .56, -.10, .30, .48, .92, dark, .035);
+  cabin.box(0, .83, -.52, .28, .07, .46, upholstery, .025);
+  cabin.box(0, .86, -.08, .10, .13, .09, metal, .02);
+  cabin.beam([0, .92, -.08], [0, .99, -.08], .022, dark);
+  for (const z of [.12, .24]) cabin.cylinder(0, .85, z, .045, .038, .05, dark, [0, 0, 0], 12);
+  // Pedals sit in the driver's footwell below the dash, as in the other cars.
+  for (const [x, w] of [[.44, .11], [.61, .08]] as const) {
+    cabin.box(x, .46, .76, w, .13, .02, metal, .004);
+    cabin.box(x, .47, .745, w - .03, .10, .012, rubber, .003);
+  }
+  // The roof panel is double-sided, so only the interior mirror is added here.
+  cabin.beam([0, 1.552, .02], [0, 1.478, .10], .012, dark);
+  cabin.box(0, 1.452, .115, .25, .072, .034, dark, .012);
+  cabin.box(0, 1.452, .098, .22, .055, .004, metal, .002);
   const wheel = new VillaModelBuilder(root, 'suv-steering-wheel');
-  wheel.geometry(new THREE.TorusGeometry(.19, .02, 10, 36), fabric, [.52, 1.14, .45], [Math.PI / 2.3, 0, 0]);
-  for (const x of [-.14, .14]) wheel.beam([.52 + x, 1.14, .45], [.52, 1.16, .45], .018, fabric);
+  wheel.beam([.52, .84, .66], [.52, 1.03, .44], .033, dark);
+  wheel.geometry(new THREE.TorusGeometry(.19, .021, 10, 36), fabric, [.52, 1.06, .40], [Math.PI / 2.3, 0, 0]);
+  wheel.box(.52, 1.06, .40, .10, .075, .045, dark, .018);
+  for (const x of [-.14, .14]) wheel.beam([.52 + x, 1.06, .40], [.52 + x * .18, 1.072, .40], .017, fabric);
+  wheel.beam([.52, 1.045, .40], [.52, .985, .40], .017, fabric);
   wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
   for (const side of [1, -1]) {

@@ -229,6 +229,11 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   for (const side of [-1, 1]) footwell.box(side * .845, .51, .69, .045, .48, .50, dark, .012);
   footwell.root.userData = { kind: 'opaque-front-footwell', joinsFloor: true, joinsDashboard: true };
   footwell.finish();
+  // Two-pedal automatic footwell, visible when the driver looks down.
+  for (const [x, w] of [[0.38, 0.11], [0.53, 0.085]] as const) {
+    cabin.box(x, 0.40, 0.86, w, 0.135, 0.022, silver, 0.004);
+    cabin.box(x, 0.41, 0.845, w - 0.032, 0.105, 0.012, rubber, 0.003);
+  }
   for (const side of [-1, 1]) {
     cabin.box(side * 0.43, 0.293, 0.39, 0.57, 0.012, 0.54, rubber, 0.02);
     cabin.box(side * 0.43, 0.355, -0.105, 0.53, 0.09, 0.58, dark, 0.035);
@@ -303,6 +308,10 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   }
   cabin.box(0.13, 0.952, 0.587, 0.043, 0.078, 0.003, upholstery, 0.008);
   for (let i = 0; i < 3; i++) cabin.box(0.13, 0.869 + i * 0.015, 0.587, 0.068, 0.004, 0.002, displayAccent, 0);
+  // Interior mirror on the header, in the driver's forward view.
+  cabin.beam([0, 1.428, 0.115], [0, 1.325, 0.255], 0.011, dark);
+  cabin.box(0, 1.30, 0.265, 0.245, 0.072, 0.034, dark, 0.012);
+  cabin.box(0, 1.30, 0.248, 0.216, 0.055, 0.004, silver, 0.002);
 
   // The column remains fixed; only the wheel spins about its own tilted shaft.
   // Its top is below the driver's eyeline, not a detached ring across the windscreen.

@@ -45,6 +45,13 @@ export const VILLA_ROOF_PLANTERS = [
   { x: 0, z: 8.1, y: 7.2, w: 2.2, d: 0.72, species: 'sunflower' },
 ] as const;
 export const VILLA_VEGETABLE_SPECIES = ['tomato', 'lettuce', 'carrot', 'eggplant'] as const;
+// The east column stands inside the front link's 8.4 m corridor: its corner is
+// 0.19 m from the centreline, so the asphalt runs through the plants. A move must
+// satisfy five constraints at once - road corridor (>= 4.65 m), the pets' lawn
+// anchors, the camping-chair placement probe, the garden test's own bounds, and
+// the pets' rain-shelter timing (a site west of the lawn delays the two indoor
+// seekers past the test's window). Until they are solved together the car's own
+// route check refuses that stretch rather than driving over a bed.
 export const VILLA_VEGETABLE_BEDS = [
   { x: -10, z: 18, w: 2.6, d: 1.55, species: 'tomato' },
   { x: -5.8, z: 18, w: 2.6, d: 1.55, species: 'lettuce' },

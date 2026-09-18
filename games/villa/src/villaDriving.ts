@@ -8,11 +8,13 @@ export interface VillaDrivingState {
 }
 export interface VillaDrivingInput { throttle: number; steer: number; brake: boolean; handbrake?: boolean }
 export const VILLA_DRIVING_BOUNDS = VILLA_ESTATE_BOUNDS;
-const VILLA_DRIVING_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 7, maxReverse: 3, maxSteer: 0.56 };
+/** Published under a vehicle-specific name: the autopilot steers with the same
+ *  envelope the sedan itself is simulated with. */
+export const VILLA_CAR_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 7, maxReverse: 3, maxSteer: 0.56 };
 export const VILLA_SCENIC_ROAD = { x: 6, z: 39, radiusX: 15, radiusZ: 10.5, width: 8.4, drivewayWidth: 8.8 } as const;
 export interface VillaDrivingProfile {
   readonly id: string;
-  readonly limits: Readonly<typeof VILLA_DRIVING_LIMITS>;
+  readonly limits: Readonly<typeof VILLA_CAR_LIMITS>;
   readonly spawn: { readonly x: number; readonly z: number };
   readonly seat: readonly [number, number];
   readonly exit: readonly [number, number];
@@ -21,7 +23,7 @@ export interface VillaDrivingProfile {
   readonly reverseAcceleration: number;
 }
 const VILLA_SEDAN_PROFILE: VillaDrivingProfile = {
-  id: 'sedan', limits: VILLA_DRIVING_LIMITS, spawn: VILLA_CAR.center,
+  id: 'sedan', limits: VILLA_CAR_LIMITS, spawn: VILLA_CAR.center,
   seat: [.43, .05], exit: [2.35, .15], door: [1, .4], acceleration: 2.1, reverseAcceleration: 1.5,
 };
 /** Always supplied internally: the pool is not a drivable ground surface. Pond

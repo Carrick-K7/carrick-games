@@ -192,6 +192,11 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
       { axis: 'x' as const, outer: EAST.outer, inner: EAST.inner, sign: 1, label: 'east', crossLo: NORTH.outer, crossHi: SOUTH.outer },
       { axis: 'z' as const, outer: NORTH.outer, inner: NORTH.inner, sign: -1, label: 'north', crossLo: WEST.outer, crossHi: EAST.outer },
       { axis: 'z' as const, outer: SOUTH.outer, inner: SOUTH.inner, sign: 1, label: 'south', crossLo: WEST.outer, crossHi: EAST.outer },
+      // The garage shell is its own envelope east of the house, so workshop
+      // furniture cannot be built through those walls either.
+      { axis: 'z' as const, outer: VILLA_GARAGE_EXTENT.minZ - .11, inner: VILLA_GARAGE_EXTENT.minZ + .11, sign: -1, label: 'garage north', crossLo: VILLA_GARAGE_EXTENT.minX, crossHi: VILLA_GARAGE_EXTENT.maxX },
+      { axis: 'z' as const, outer: VILLA_GARAGE_EXTENT.maxZ + .11, inner: VILLA_GARAGE_EXTENT.maxZ - .11, sign: 1, label: 'garage south', crossLo: VILLA_GARAGE_EXTENT.minX, crossHi: VILLA_GARAGE_EXTENT.maxX },
+      { axis: 'x' as const, outer: VILLA_GARAGE_EXTENT.maxX + .11, inner: VILLA_GARAGE_EXTENT.maxX - .11, sign: 1, label: 'garage east', crossLo: VILLA_GARAGE_EXTENT.minZ, crossHi: VILLA_GARAGE_EXTENT.maxZ },
     ];
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     const offences = new Set<string>();

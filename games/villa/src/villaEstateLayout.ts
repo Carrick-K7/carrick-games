@@ -27,7 +27,9 @@ export const VILLA_SUV_LIMITS = { halfWidth: .99, halfLength: 2.46, height: 1.72
 const suvBay = VILLA_GARAGE_BAYS[3];
 export const VILLA_SUV = {
   center: { x: suvBay.x, y: 0, z: suvBay.z },
-  seat: { x: suvBay.x + .52, y: 0, z: suvBay.z + .37 },
+  // The hip sits at the middle of the driver's door: at +.37 the seated camera
+  // ended up at the windshield base with the dashboard in the driver's lap.
+  seat: { x: suvBay.x + .52, y: 0, z: suvBay.z - .30 },
   door: { x: suvBay.x + 1.08, y: 0, z: suvBay.z + .42 },
   exit: { x: suvBay.x + 2.7, y: 0, z: suvBay.z - .30 },
   body: { minX: suvBay.x - .99, maxX: suvBay.x + .99, minZ: suvBay.z - 2.46, maxZ: suvBay.z + 2.46, minY: 0, maxY: 1.72 },
