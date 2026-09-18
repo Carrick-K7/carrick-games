@@ -7,7 +7,7 @@ import type { VillaCollider } from './villaWorld.js';
 type RoadPoint = { x: number; z: number };
 /** The original garden oval is retained. A long flowing branch shares its east
  * and west tangents, so either short or long scenic drive is continuous. */
-export const VILLA_SOUTH_ROAD_KNOTS: readonly RoadPoint[] = [
+const VILLA_SOUTH_ROAD_KNOTS: readonly RoadPoint[] = [
   { x: 23, z: 28 }, { x: 21, z: 39 }, { x: 23, z: 51 }, { x: 30, z: 65 },
   { x: 32, z: 81 }, { x: 25, z: 100 }, { x: 32, z: 120 }, { x: 30, z: 139 },
   { x: 19, z: 150 }, { x: 4, z: 148 }, { x: -7, z: 133 }, { x: -8, z: 112 },
@@ -16,13 +16,13 @@ export const VILLA_SOUTH_ROAD_KNOTS: readonly RoadPoint[] = [
 ];
 const catmull = (a: number, b: number, c: number, d: number, t: number) => .5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
 /** End knots only constrain tangent; start/end at the original oval extremes. */
-export function villaSouthRoadPoint(t: number): RoadPoint {
+function villaSouthRoadPoint(t: number): RoadPoint {
   const spans = VILLA_SOUTH_ROAD_KNOTS.length - 3, u = Math.max(0, Math.min(1, t)) * spans, i = Math.min(spans - 1, Math.floor(u)), f = u - i;
   const [a, b, c, d] = VILLA_SOUTH_ROAD_KNOTS.slice(i, i + 4);
   return { x: catmull(a.x, b.x, c.x, d.x, f), z: catmull(a.z, b.z, c.z, d.z, f) };
 }
 export const VILLA_SOUTH_ROAD_SAMPLES: readonly RoadPoint[] = Array.from({ length: 481 }, (_, i) => villaSouthRoadPoint(i / 480));
-export const VILLA_SCENIC_ROAD_SAMPLES: readonly RoadPoint[] = Array.from({ length: 145 }, (_, i) => {
+const VILLA_SCENIC_ROAD_SAMPLES: readonly RoadPoint[] = Array.from({ length: 145 }, (_, i) => {
   const a = i / 144 * Math.PI * 2, r = VILLA_SCENIC_ROAD;
   return { x: r.x + Math.cos(a) * r.radiusX, z: r.z + Math.sin(a) * r.radiusZ };
 });
@@ -35,15 +35,15 @@ export const VILLA_GARAGE_DRIVE: readonly RoadPoint[] = [
 /** A through-road across the front of the house, joining both ends of the long
  *  southern branch. With it the estate has two independent loops instead of one
  *  out-and-back line, which is the point of the added roads. */
-export const VILLA_FRONT_LINK: readonly RoadPoint[] = [
+const VILLA_FRONT_LINK: readonly RoadPoint[] = [
   { x: -9, z: 28 }, { x: -6.5, z: 22.5 }, { x: -2, z: 18 }, { x: 5, z: 15.6 },
   // The east approach swings wide of the orange tree at (23.2, 19).
   { x: 13, z: 16.2 }, { x: 19, z: 21.2 }, { x: 25, z: 27.4 }];
 /** A second descent down the east side, so the garage apron is not a dead end. */
-export const VILLA_EAST_LINK: readonly RoadPoint[] = [
+const VILLA_EAST_LINK: readonly RoadPoint[] = [
   { x: 40, z: 3 }, { x: 41.5, z: 14 }, { x: 39.5, z: 28 }, { x: 35, z: 45 }, { x: 31.4, z: 60 }];
 /** Short spur from the front link to the entrance forecourt. */
-export const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
+const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
 export const VILLA_ESTATE_ROAD_PATHS: readonly (readonly RoadPoint[])[] = [
   VILLA_SCENIC_ROAD_SAMPLES, VILLA_SOUTH_ROAD_SAMPLES,
   VILLA_GARAGE_DRIVE, VILLA_FRONT_LINK, VILLA_EAST_LINK, VILLA_ENTRY_SPUR];

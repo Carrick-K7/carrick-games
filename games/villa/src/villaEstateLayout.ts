@@ -1,7 +1,6 @@
 /** Authoritative metre-scale estate layout. +Z south/front, +X east.
  * Intentionally dependency-free: World, vehicles and scene all consume this file.
  */
-export interface VillaEstateRect { minX: number; maxX: number; minZ: number; maxZ: number }
 export const VILLA_ESTATE_BOUNDS = { minX: -40, maxX: 62, minZ: -26, maxZ: 162 } as const;
 export const VILLA_GARAGE_EXTENT = { minX: 28.2, maxX: 51, minZ: -12, maxZ: 2, roofY: 3.5 } as const;
 /** Bays keep their 16.2 m setback from the house's east wall and their spacing,

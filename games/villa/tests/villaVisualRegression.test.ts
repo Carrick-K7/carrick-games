@@ -83,7 +83,7 @@ describe('Villa observed visual regression geometry', () => {
       triangleCount++; if (garage.intersectsTriangle(triangle)) intrusions++;
     });
     expect(triangleCount).toBeGreaterThan(1000); expect(intrusions).toBe(0);
-    for (const x of [-24.15, VILLA_ESTATE_BOUNDS.maxX - 1.15]) for (let i = 0; i < 14; i++) {
+    for (const x of [WEST.outer - .55, VILLA_ESTATE_BOUNDS.maxX - 1.15]) for (let i = 0; i < 14; i++) {
       const z = -12 + i * 2.45, hit = cast(new THREE.Vector3(x, 3, z), new THREE.Vector3(x, -.5, z), foliage)[0];
       expect(hit, `retained physical hedge ${x}/${z}`).toBeDefined();
       expect(hit.point.y).toBeGreaterThan(.8); expect(hit.point.y).toBeLessThan(1.4);

@@ -14,7 +14,7 @@ export interface VillaElevatorState {
   y: number; floor: number; target: number; phase: VillaElevatorPhase;
   door: number; fromY: number; travel: number; riding: boolean; idleFor: number;
 }
-export const ELEVATOR_DOOR_SECONDS = 0.8;
+const ELEVATOR_DOOR_SECONDS = 0.8;
 export const ELEVATOR_IDLE_SECONDS = 4;
 export function createVillaElevator(): VillaElevatorState {
   return { y: 0, floor: 0, target: 0, phase: 'closed', door: 0, fromY: 0, travel: 0, riding: false, idleFor: 0 };

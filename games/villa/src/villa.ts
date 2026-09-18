@@ -8,16 +8,16 @@ import {
 } from './villaElevator.js';
 import {
   moveVillaPlayer, nearestVillaHotspot, villaFloor, villaRoomAt, villaSupportAt, villaCollides,
-  VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_ROOMS, VILLA_SPAWN, POOL, STAIR_HOLE, PLAYER_RADIUS,
+  VILLA_BLOCKS, VILLA_ENTRANCE, VILLA_ROOMS, VILLA_SPAWN, POOL, STAIR_HOLE,
   EYE_HEIGHT, type VillaPosition, type VillaHotspot,
 } from './villaWorld.js';
 import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrouch, villaBodyHeight, villaEyeHeight } from './villaMotion.js';
-import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarExitClear, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from './villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarDriverSide, villaCarExitClear, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD } from './villaDriving.js';
 import { advanceVillaScooter, createVillaScooter, villaScooterAnchors, villaScooterSafeExit, villaScooterExitClear, villaScooterPoseBlocked, VILLA_SCOOTER } from './villaScooter.js';
-import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition, villaSeatExitCandidates, villaSeatColliderId, type VillaRelaxSeat } from './villaSeating.js';
+import { VILLA_AQUARIUM, villaRelaxSeat, resolveVillaSeatPosition, villaSeatExitCandidates, villaSeatColliderId, type VillaRelaxSeat } from './villaSeating.js';
 import { advanceVillaRace, createVillaRace } from './villaRacing.js';
 import { advanceVillaSnooker, createVillaSnooker, shootVillaSnooker } from './villaSnooker.js';
-import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, VILLA_PET_LABELS, villaPetLabel } from './villaPets.js';
+import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, villaPetLabel } from './villaPets.js';
 import { VILLA_FAUCET } from './villaFaucet.js';
 import { VILLA_TEA_BAR } from './villaTeaBar.js';
 import { VILLA_VEGETABLE_BEDS } from './villaGarden.js';
@@ -28,9 +28,9 @@ import { createVillaHome, advanceVillaHome, cycleVillaTimeOfDay, setVillaTimeOfD
 import { createVillaTerminal, type VillaTerminal, type VillaTerminalSnapshot } from './villaTerminal.js';
 import { createVillaTea, advanceVillaTea, interactVillaTea, type VillaTeaState } from './villaTea.js';
 import { createVillaWardrobes, advanceVillaWardrobes, toggleVillaWardrobe, villaOpenableLabel, VILLA_WARDROBES, VILLA_FRIDGE_FREEZER, type VillaWardrobeState } from './villaWardrobe.js';
-import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, isVillaCampingCollider, type VillaOutdoorState } from './villaOutdoor.js';
-import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
-import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, type VillaSuvState } from './villaSuv.js';
+import { createVillaOutdoor, advanceVillaOutdoor, villaOutdoorSeat, villaSwingSeat, villaCampingSeat, pickUpVillaCampingChair, placeVillaCampingChair, type VillaOutdoorState } from './villaOutdoor.js';
+import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupDriverSide, villaPickupSafeExit, villaPickupExitClear, villaPickupPoseBlocked, VILLA_PICKUP, type VillaPickupState } from './villaPickup.js';
+import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvDriverSide, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, type VillaSuvState } from './villaSuv.js';
 import { villaCarSafeExit } from './villaDriving.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
@@ -52,6 +52,10 @@ const initialVillaState = (): VillaGameState => ({
 /** One pointer-lock recentre delta is the cursor's displacement from the canvas
  *  centre, so it is large; a deliberate hand movement is not. */
 const RECENTRE_JOLT = 150;
+/** Look sensitivity per input channel: locked mouse deltas, unlocked drags
+ *  (scaled by canvas pixel density) and touch drags. */
+const LOCK_LOOK_SENSITIVITY = 0.0023;
+const TOUCH_LOOK_SENSITIVITY = 0.0036;
 export class VillaGame extends BaseGame {
   private scene: VillaScene | null = null;
   private unavailable = false;
@@ -71,14 +75,10 @@ export class VillaGame extends BaseGame {
   private readonly touchActions = new Map<number, string>();
   private lastMouse: Point | null = null;
   private mouseLookEnabled = true;
-  /** While the lift's operating panel is up the mouse drives its cursor instead
-   * of the camera, because a pointer-locked canvas receives no click positions
-   * and the painted buttons would otherwise be unclickable. */
   private hudHintShown = false;
   /** Granting pointer lock makes the browser emit one recentre move whose delta
    *  is far larger than hand motion. Without this guard that single event spun
-   *  the camera (and threw the lift panel's cursor) the moment the player
-   *  re-captured the mouse. */
+   *  the camera the moment the player re-captured the mouse. */
   private skipLockRecentre = false;
   /** When the current lock was granted, for the recentre guard's time window. */
   private lockGrantedAt = -Infinity;
@@ -87,7 +87,6 @@ export class VillaGame extends BaseGame {
   private releasePending = false;
   private listenersBound = false;
   private transition: { from: VillaView; at: number } | null = null;
-  private doorReadyAt = 0;
   private closeCarAt = Infinity;
   private enterCarAt = Infinity;
   private exitCarAt = Infinity;
@@ -165,11 +164,19 @@ export class VillaGame extends BaseGame {
 
   stop() {
     this.cancelCarAccess();
-    this.state.driving.speed = 0; this.state.driving.handbrake = false;
-    this.state.pickup.speed = 0; this.state.pickup.handbrake = false;
+    this.resetRoadVehicles();
     this.state.scooter.speed = 0; this.state.scooter.handbrake = false;
     super.stop();
     this.useButton?.hide(); this.terminal?.hide();
+  }
+
+  /** Zero every road vehicle's motion through the one dispatch point, so a
+   * newly added model cannot be forgotten by one of the reset sites. */
+  private resetRoadVehicles() {
+    for (const id of ['car', 'pickup', 'suv'] as const) {
+      const state = this.roadApi(id).state;
+      state.speed = 0; state.steering = 0; state.handbrake = false;
+    }
   }
 
   private use() {
@@ -192,8 +199,7 @@ export class VillaGame extends BaseGame {
       cameraAspect: this.scene?.cameraAspect,
       renderWidth: this.scene?.renderer.domElement.width,
       renderHeight: this.scene?.renderer.domElement.height,
-      paused: false,
-      buyOpen: false,
+      paused: this.presentationPaused,
     };
   }
 
@@ -205,7 +211,7 @@ export class VillaGame extends BaseGame {
     this.publishActions(); // Register before any potentially slow renderer initialization.
     this.terminal?.hide(); this.accessVehicle = 'car';
     try { const value = window.localStorage.getItem('carrick:villa:look-sensitivity'); if (value?.trim()) setVillaLookSensitivity(this.state.home, Number(value)); } catch { /* Optional, Villa-only preference. */ }
-    this.mouseLookEnabled = true; this.transition = null; this.doorReadyAt = 0; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
+    this.mouseLookEnabled = true; this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
     this.toast = ''; this.toastUntil = 0; this.toastTarget = ''; this.doorStepBack = null; this.usePressedUntil = 0; this.visited = new Set(['garden']);
     this.touchMode = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     if (!this.scene) {
@@ -237,7 +243,7 @@ export class VillaGame extends BaseGame {
           // reaching the camera while still swallowing the browser's jump.
           if (Math.abs(e.movementX) + Math.abs(e.movementY) > RECENTRE_JOLT && this.time - this.lockGrantedAt < .25) return;
         }
-        this.look(e.movementX, e.movementY, 0.0023);
+        this.look(e.movementX, e.movementY, LOCK_LOOK_SENSITIVITY);
       };
       const lockChange = () => {
         this.clearInput();
@@ -349,7 +355,7 @@ export class VillaGame extends BaseGame {
     this.cancelCarAccess(); this.clearInput(); this.unlock();
     if (open) {
       this.mapOpen = false; this.immersive = false; this.mouseLookEnabled = false;
-      for (const vehicle of [this.state.driving, this.state.pickup, this.state.scooter]) { vehicle.speed = 0; vehicle.handbrake = false; }
+      this.state.scooter.speed = 0; this.state.scooter.handbrake = false; this.resetRoadVehicles();
       this.state.race.speed = 0; this.terminal?.show(this.terminalSnapshot());
     } else {
       this.terminal?.hide(); this.mouseLookEnabled = !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !this.shellOpen();
@@ -365,7 +371,6 @@ export class VillaGame extends BaseGame {
 
   private clearInput() {
     this.keys.clear(); this.touchActions.clear(); this.safetyBrake = true; this.lastMouse = null; this.joystick = null; this.lookTouch = null;
-    this.canvas.style.cursor = '';
   }
 
   private unlock() {
@@ -373,7 +378,7 @@ export class VillaGame extends BaseGame {
     if (document.pointerLockElement === this.canvas) { this.releasePending = true; document.exitPointerLock?.(); }
   }
 
-  private look(dx: number, dy: number, sensitivity = 0.0038) {
+  private look(dx: number, dy: number, sensitivity: number) {
     sensitivity *= this.state.home.lookSensitivity;
     if (this.state.snookerActive) {
       if (!this.state.snooker.moving) {
@@ -414,10 +419,10 @@ export class VillaGame extends BaseGame {
         if (stance) { this.position = { ...stance }; this.eyeY = stance.y; }
         else this.doorClearedVehicle = vehicle;
         this.accessVehicle = vehicle; this.closeCarAt = Infinity; this.setRoadDoor(vehicle, true);
-        this.doorReadyAt = this.time + Math.max(.02, (1 - this.roadDoorProgress(vehicle)) * CAR_DOOR_SECONDS);
-        if (leaving) this.exitCarAt = this.doorReadyAt; else this.enterCarAt = this.doorReadyAt;
+        const readyAt = this.time + Math.max(.02, (1 - this.roadDoorProgress(vehicle)) * CAR_DOOR_SECONDS);
+        if (leaving) this.exitCarAt = readyAt; else this.enterCarAt = readyAt;
         this.message(this.isZhLang() ? (leaving ? '位置让开了，正在开门下车…' : '位置让开了，正在开门…')
-          : (leaving ? 'Clear now. Opening the door…' : 'Clear now. Opening the door…'));
+          : (leaving ? 'Clear now. Opening the door to step out…' : 'Clear now. Opening the door…'));
       }
       this.publishState();
     }
@@ -520,20 +525,20 @@ export class VillaGame extends BaseGame {
   }
   private hotspot(): VillaHotspot | null {
     const car = this.state.driving, pickup = this.state.pickup, p = this.groundPosition();
-    // In the car, the crosshair picks the operating panel's button: the buttons
-    // are centimetres apart, so proximity alone could never tell them apart.
+    // In the lift cabin, the crosshair picks the operating panel's button: the
+    // buttons are centimetres apart, so proximity alone could never tell them apart.
     const aimed = this.elevatorAimButton();
     if (aimed) return { id: aimed.id, x: aimed.x, y: aimed.y, z: aimed.z, radius: .5, name: aimed.name, zh: aimed.zh };
     if (this.state.outdoor.camping.carried) return { id: 'camping-chair', x: p.x - Math.sin(this.yaw) * 1.25, y: p.y, z: p.z - Math.cos(this.yaw) * 1.25,
       name: 'Place the camping chair', zh: '放下露营椅', radius: 2 };
-    const localX = (p.x - car.x) * Math.cos(car.yaw) - (p.z - car.z) * Math.sin(car.yaw);
-    const pickupLocalX = (p.x - pickup.x) * Math.cos(pickup.yaw) - (p.z - pickup.z) * Math.sin(pickup.yaw);
-    const suv = this.state.suv, suvLocalX = (p.x - suv.x) * Math.cos(suv.yaw) - (p.z - suv.z) * Math.sin(suv.yaw);
+    const suv = this.state.suv;
     const scooter = villaScooterAnchors(this.state.scooter);
     const approach = scooter.exits.reduce((a, b) => Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b);
-    let fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: localX >= .96 }, approach,
-      { door: villaPickupAnchors(pickup).door, driverSide: pickupLocalX >= 1.2 },
-      { door: villaSuvAnchors(suv).door, driverSide: suvLocalX >= 1.08 });
+    // Driver-side gating uses each profile's own door-hinge line, never a
+    // hardcoded offset that can drift away from the real hinge.
+    let fixture = nearestVillaHotspot(p, { door: villaCarAnchors(car).door, driverSide: villaCarDriverSide(car, p) }, approach,
+      { door: villaPickupAnchors(pickup).door, driverSide: villaPickupDriverSide(pickup, p) },
+      { door: villaSuvAnchors(suv).door, driverSide: villaSuvDriverSide(suv, p) });
     const swing = villaSwingSeat(this.state.outdoor), camping = villaCampingSeat(this.state.outdoor);
     const extras: VillaHotspot[] = [
       { id: 'swing', ...swing.seat, radius: 1.85, name: 'Sit on the swing', zh: '坐上秋千' },
@@ -595,6 +600,7 @@ export class VillaGame extends BaseGame {
     data.villaRelaxSeat = this.state.relaxSeatId ?? '';
     data.villaCarDoor = this.state.carDoorOpen ? 'open' : 'closed';
     data.villaPickupDoor = this.state.pickupDoorOpen ? 'open' : 'closed';
+    data.villaSuvDoor = this.state.suvDoorOpen ? 'open' : 'closed';
     data.villaAccessVehicle = this.accessVehicle;
     data.villaCarAccess = this.enterCarAt !== Infinity ? 'entering' : this.exitCarAt !== Infinity ? 'exiting' : this.closeCarAt !== Infinity ? 'closing' : 'idle';
     data.villaScreenSource = this.state.screenSource;
@@ -606,6 +612,7 @@ export class VillaGame extends BaseGame {
     data.villaMotion = JSON.stringify({ ...this.motion, eyeHeight: villaEyeHeight(this.motion) });
     data.villaDriving = JSON.stringify(this.state.driving);
     data.villaPickup = JSON.stringify(this.state.pickup);
+    data.villaSuv = JSON.stringify(this.state.suv);
     data.villaScooter = JSON.stringify(this.state.scooter);
     data.villaRace = JSON.stringify({ speed: this.state.race.speed, distance: this.state.race.distance, lane: this.state.race.lane, laps: this.state.race.laps, crashes: this.state.race.crashes });
     data.villaSnooker = JSON.stringify({ active: this.state.snookerActive, moving: this.state.snooker.moving, shots: this.state.snooker.shots, score: this.state.snooker.score, target: this.state.snooker.target, aim: this.state.snooker.aim, power: this.state.snooker.power, aimAssist: this.state.snooker.aimAssist });
@@ -693,7 +700,7 @@ export class VillaGame extends BaseGame {
     if (this.inElevator()) {
       const w = (this.touchMode ? 46 : 64) * s, gap = 8 * s;
       // Two rows: floor buttons with the highest floor on top, then the door
-      // open/close buttons, so the panel reads like a real car operating panel.
+      // open/close buttons, so the panel reads like a real lift operating panel.
       const rowY = this.touchMode ? top + (this.width - safe.left - safe.right < 640 ? 108 : 52) * s : this.height - 180 - safe.bottom;
       const floors = [2, 1, 0];
       floors.forEach((floor, column) => buttons.push({ id: `elevator-${floor}`, label: `${floor + 1}F`,
@@ -742,10 +749,11 @@ export class VillaGame extends BaseGame {
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
-        this.state.carDoorOpen = false; this.state.pickupDoorOpen = false; this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
+        this.state.carDoorOpen = false; this.state.pickupDoorOpen = false; this.state.suvDoorOpen = false;
+        this.transition = null; this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
         this.state.outdoor.camping.carried = false; this.terminal?.hide();
-        this.motion = createVillaMotion(); this.state.snookerActive = false; this.state.driving.speed = 0; this.state.driving.steering = 0; this.state.driving.handbrake = false;
-        this.state.pickup.speed = 0; this.state.pickup.steering = 0; this.state.pickup.handbrake = false;
+        this.motion = createVillaMotion(); this.state.snookerActive = false;
+        this.resetRoadVehicles();
         this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false;
         this.state.elevator = createVillaElevator(); this.scene?.updateActivities(this.time, this.state);
         this.mapOpen = false; this.clearInput();
@@ -871,14 +879,12 @@ export class VillaGame extends BaseGame {
       : (road ? 'Stepped outside. The door will close automatically.' : 'Back on your feet. Continue exploring.'));
   }
 
-  /** The lift panel is on screen: its buttons are the mouse's job right now. */
-
   private inElevator(): boolean {
     return this.state.elevator.riding || villaElevatorCabinContains(this.groundPosition(), this.state.elevator);
   }
 
-  /** Inside the car, the crosshair aims at the operating panel's real buttons;
-   * the mouse keeps steering the view and E or a click presses the aimed one. */
+  /** Inside the lift cabin, the crosshair aims at the operating panel's real
+   * buttons; the mouse keeps steering the view and E or a click presses the aimed one. */
   private elevatorAimButton(): VillaElevatorPanelButton | null {
     if (!this.inElevator() || this.state.seated || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return null;
     const view = this.view(), eyeY = view.y + (view.eyeHeight ?? EYE_HEIGHT);
@@ -923,14 +929,22 @@ export class VillaGame extends BaseGame {
     this.publishState();
   }
 
+  /** The vehicle's local frame for door work: the door-hinge offset plus a
+   * local→world position helper shared by every door-side method. */
+  private doorFrame(id: VillaRoadVehicle) {
+    const car = this.roadState(id), c = this.roadApi(id).const;
+    const cos = Math.cos(car.yaw), sin = Math.sin(car.yaw);
+    const local = (x: number, z: number, y: number): VillaPosition => ({ x: car.x + x * cos + z * sin, y, z: car.z - x * sin + z * cos });
+    return { car, hinge: { x: c.door.x - c.center.x, z: c.door.z - c.center.z }, local };
+  }
   /** How far the player is from the driver door, and how far along its face. */
   private driverDoorOffset(id: VillaRoadVehicle, at?: VillaPosition): { along: number; lateral: number; height: number } {
     const from = at ?? this.position;
-    const car = this.roadState(id), dx = from.x - car.x, dz = from.z - car.z;
+    const { car, hinge } = this.doorFrame(id);
+    const dx = from.x - car.x, dz = from.z - car.z;
     const x = dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw), z = dx * Math.sin(car.yaw) + dz * Math.cos(car.yaw);
     // Every road vehicle keeps door/center world anchors of the same shape, so
     // compare in the vehicle's own local frame.
-    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
     return { along: z - hinge.z, lateral: x - hinge.x,
       height: Math.abs(this.groundPosition().y - this.roadAnchors(id).exit.y) };
   }
@@ -946,17 +960,13 @@ export class VillaGame extends BaseGame {
   /** The nearest spot that still counts as standing at the driver doorway, so a
    * blocked swing only needs the shortest possible step before the door opens. */
   private driverDoorStance(id: VillaRoadVehicle): VillaPosition | null {
-    const anchors = this.roadAnchors(id), car = this.roadState(id), offset = this.driverDoorOffset(id);
-    const cos = Math.cos(car.yaw), sin = Math.sin(car.yaw);
-    const local = (x: number, z: number): VillaPosition => ({
-      x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
-    });
-    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
+    const anchors = this.roadAnchors(id), offset = this.driverDoorOffset(id);
+    const { hinge, local } = this.doorFrame(id);
     const candidates: VillaPosition[] = [];
     if (anchors.exits[0]) candidates.push(anchors.exits[0]);
     // Offsets are from the vehicle centre, so the hinge offset is added here.
     for (const out of [0, .25, .5, .8, 1.1, 1.5]) for (const slide of [offset.along, 0, .35, -.35, .7, -.7, 1.05, -1.05])
-      candidates.push(local(hinge.x + offset.lateral + out, hinge.z + slide));
+      candidates.push(local(hinge.x + offset.lateral + out, hinge.z + slide, anchors.exit.y));
     for (const candidate of candidates) if (this.atDriverDoor(id, candidate) && this.canFit(1.75, candidate)) return { ...candidate };
     return null;
   }
@@ -965,23 +975,19 @@ export class VillaGame extends BaseGame {
   private stepBackFromDriverDoor(id: VillaRoadVehicle): VillaPosition | null {
     if (!this.scene) return null;
     const anchors = this.roadAnchors(id), offset = this.driverDoorOffset(id);
-    const car = this.roadState(id), cos = Math.cos(car.yaw), sin = Math.sin(car.yaw);
-    const local = (x: number, z: number): VillaPosition => ({
-      x: car.x + x * cos + z * sin, y: anchors.exit.y, z: car.z - x * sin + z * cos,
-    });
-    const c = this.roadApi(id).const, hinge = { x: c.door.x - c.center.x, z: c.door.z - c.center.z };
+    const { hinge, local } = this.doorFrame(id);
     const nearest = Math.max(0, offset.lateral), along = Math.max(-1.5, Math.min(1.5, offset.along));
     const candidates: VillaPosition[] = [];
     // Straight out from the car's side first: it is the shortest clear move and
     // it never crosses the very obstruction that made the door blocked.
     for (const out of [nearest, nearest + .25, nearest + .55, nearest + .9, .5, 1, 1.5, 2.1, 2.7])
-      candidates.push(local(out, hinge.z + along));
+      candidates.push(local(out, hinge.z + along, anchors.exit.y));
     for (const out of [nearest + .2, nearest + .6, 1, 1.5, 2.1])
       for (const slide of [along + .45, along - .45, 0, .8, -.8, 1.3, -1.3])
-        candidates.push(local(out, hinge.z + slide));
+        candidates.push(local(out, hinge.z + slide, anchors.exit.y));
     if (anchors.exits[0]) candidates.push(anchors.exits[0]);
     if (anchors.exits[1]) candidates.push(anchors.exits[1]);
-    const height = 1.75, obstacles = this.roadObstacles(id);
+    const height = 1.75;
     const standing = (p: VillaPosition) => {
       if (Math.abs(p.y - anchors.exit.y) > .3) return false;
       const support = this.supportAt(p.x, p.z, p.y, height);
@@ -990,7 +996,7 @@ export class VillaGame extends BaseGame {
     // The door swings out and forward from its hinge; standing beyond the tip
     // clears the whole arc even when the exact route has been walled in.
     const clearOfSwing = (p: VillaPosition) => {
-      const tip = local(hinge.x + .82, hinge.z + .34);
+      const tip = local(hinge.x + .82, hinge.z + .34, anchors.exit.y);
       return Math.hypot(p.x - tip.x, p.z - tip.z) > .5;
     };
     let best: VillaPosition | null = null, bestDistance = Infinity;
@@ -1037,8 +1043,8 @@ export class VillaGame extends BaseGame {
     }
     if (this.accessVehicle !== id) this.cancelCarAccess();
     this.clearInput(); this.accessVehicle = id; this.closeCarAt = Infinity; this.setRoadDoor(id, true);
-    this.doorReadyAt = this.time + Math.max(.02, (1 - this.roadDoorProgress(id)) * CAR_DOOR_SECONDS);
-    if (leaving) this.exitCarAt = this.doorReadyAt; else this.enterCarAt = this.doorReadyAt;
+    const readyAt = this.time + Math.max(.02, (1 - this.roadDoorProgress(id)) * CAR_DOOR_SECONDS);
+    if (leaving) this.exitCarAt = readyAt; else this.enterCarAt = readyAt;
     this.message(zh ? (leaving ? '正在开门，下车后会自动关门…' : '正在开门，随后自动坐进驾驶位…')
       : (leaving ? 'Opening the door. Step out, then it closes automatically…' : 'Opening the door, then taking the driver seat automatically…'));
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw); this.publishState();
@@ -1097,7 +1103,7 @@ export class VillaGame extends BaseGame {
       return zh ? `电梯 → ${lift.target + 1}F · 请稍候，可自由环顾` : `Elevator → ${lift.target + 1}F · Please wait, look around`;
     }
     if (this.state.snookerActive) return zh ? '鼠标 / ←→ 瞄准 · ↑↓ 力度 · 空格击球 · R 重摆 · E 离开' : 'Mouse / ←→ aim · ↑↓ power · Space shoot · R reset · E leave';
-    if (this.state.seated === 'car') return zh ? 'W/S 前进倒车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space handbrake · E exit when stopped · R reset';
+    if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') return zh ? 'W/S 前进倒车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W/S drive/reverse · A/D steer · Space handbrake · E exit when stopped · R reset';
     if (this.state.seated === 'racing') return zh ? `拉力赛 · W 油门 / S 刹车 · A/D 转向 · 空格手刹 · E 起身 · Q ${this.state.screenSource.toUpperCase()}` : `Rally · W throttle / S brake · A/D steer · Space handbrake · E exit · Q ${this.state.screenSource.toUpperCase()}`;
     if (this.state.seated === 'scooter') return zh ? 'W 加速 · S 刹车 · A/D 转向 · 空格手刹 · 停稳后 E 下车 · R 复位' : 'W accelerate · S brake · A/D steer · Space handbrake · E dismount when stopped · R reset';
     if (this.state.seated) return zh ? '坐下来慢慢看风景 · E 或点离开起身' : 'Sit back and enjoy the view · E or Exit to stand';
@@ -1290,7 +1296,7 @@ export class VillaGame extends BaseGame {
       } else if (e.type === 'mousemove') {
         const overControl = this.buttons().some(b => this.hit(point, b));
         if (this.mouseLookEnabled && this.lastMouse && !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !overControl) {
-          const sensitivity = 0.0023 * (this.canvas.clientWidth || this.width) / this.width;
+          const sensitivity = LOCK_LOOK_SENSITIVITY * (this.canvas.clientWidth || this.width) / this.width;
           this.look(point.x - this.lastMouse.x, point.y - this.lastMouse.y, sensitivity);
         }
         this.lastMouse = point;
@@ -1314,7 +1320,7 @@ export class VillaGame extends BaseGame {
         } else if (e.type === 'touchmove') {
           if (this.joystick?.id === touch.identifier) this.joystick.point = point;
           if (this.lookTouch?.id === touch.identifier) {
-            this.look(point.x - this.lookTouch.point.x, point.y - this.lookTouch.point.y, 0.0036); this.lookTouch.point = point;
+            this.look(point.x - this.lookTouch.point.x, point.y - this.lookTouch.point.y, TOUCH_LOOK_SENSITIVITY); this.lookTouch.point = point;
           }
         }
       }
@@ -1395,7 +1401,6 @@ export class VillaGame extends BaseGame {
     ctx.textBaseline = 'alphabetic';
   }
 
-  /** The lift panel's own cursor, drawn only while it owns the mouse. */
   /** A short-lived response to the player's own action, never a persistent
    *  bottom instruction bar. It attaches to the occupied object when there is
    *  one, and otherwise appears as a brief centred toast. */
@@ -1529,20 +1534,20 @@ export class VillaGame extends BaseGame {
     for (const path of VILLA_ESTATE_ROAD_PATHS) {
       ctx.beginPath(); path.forEach((point, i) => { if (i) ctx.lineTo(mx(point.x), mz(point.z)); else ctx.moveTo(mx(point.x), mz(point.z)); }); ctx.stroke();
     }
-    rect(VILLA_GARAGE_EXTENT.minX, VILLA_GARAGE_EXTENT.maxX, 2, 5, '#626b63');
-    rect(-12, 12, -9, 9, dark ? '#c2b79c' : '#ece1c9');
-    rect(VILLA_GARAGE_EXTENT.minX, VILLA_GARAGE_EXTENT.maxX, -8, 2, '#aaa58f');
+    rect(VILLA_GARAGE_EXTENT.minX, VILLA_GARAGE_EXTENT.maxX, VILLA_GARAGE_EXTENT.maxZ, VILLA_GARAGE_EXTENT.maxZ + 3, '#626b63');
+    rect(WEST.outer, EAST.outer, NORTH.outer, SOUTH.outer, dark ? '#c2b79c' : '#ece1c9');
+    rect(VILLA_GARAGE_EXTENT.minX, VILLA_GARAGE_EXTENT.maxX, VILLA_GARAGE_EXTENT.minZ, VILLA_GARAGE_EXTENT.maxZ, '#aaa58f');
     rect(POOL.minX, POOL.maxX, POOL.minZ, POOL.maxZ, '#75afb6');
     for (const field of VILLA_ESTATE_FIELDS) rect(field.minX, field.maxX, field.minZ, field.maxZ, field.crop === 'lavender' ? '#978ca1' : field.crop === 'corn' ? '#a2aa64' : '#7e9463');
     const pond = VILLA_POND_BOUNDS;
     ctx.fillStyle = '#70a3a4'; ctx.beginPath(); ctx.ellipse(mx((pond.minX + pond.maxX) / 2), mz((pond.minZ + pond.maxZ) / 2), (pond.maxX - pond.minX) * scale / 2, (pond.maxZ - pond.minZ) * scale / 2, 0, 0, Math.PI * 2); ctx.fill();
     ctx.font = `500 ${Math.min(12 * s, Math.max(9, scale * 4.8))}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = dark ? '#fff2d9' : '#354a3b';
-    for (const [x, z, en, cn] of [[0, 0, 'Home', '主屋'], [23.4, -3, 'Garage', '车库'], [-17.6, 48, 'Fields', '田地'], [-13, 78, 'Pond', '池塘'], [14, 126, 'Viewpoint', '缓坡观景']] as const) ctx.fillText(zh ? cn : en, mx(x), mz(z), Math.max(34, 20 * scale));
+    for (const [x, z, en, cn] of [[0, 0, 'Home', '主屋'], [39.6, -6, 'Garage', '车库'], [-17.6, 48, 'Fields', '田地'], [-13, 78, 'Pond', '池塘'], [14, 126, 'Viewpoint', '缓坡观景']] as const) ctx.fillText(zh ? cn : en, mx(x), mz(z), Math.max(34, 20 * scale));
     const vehicle = (pose: { x: number; z: number; yaw: number }, color: string, width: number, length: number) => {
       ctx.save(); ctx.translate(mx(pose.x), mz(pose.z)); ctx.rotate(-pose.yaw); ctx.fillStyle = color;
       ctx.fillRect(-width * scale / 2, -length * scale / 2, Math.max(3, width * scale), Math.max(4, length * scale)); ctx.restore();
     };
-    vehicle(this.state.driving, '#d9e3dc', 1.9, 4.72); vehicle(this.state.pickup, '#a28b69', 2.4, 5.72); vehicle(this.state.scooter, '#839d8a', .8, 1.8);
+    vehicle(this.state.driving, '#d9e3dc', 1.9, 4.72); vehicle(this.state.pickup, '#a28b69', 2.4, 5.72); vehicle(this.state.suv, '#4a6b8f', 1.98, 4.92); vehicle(this.state.scooter, '#839d8a', .8, 1.8);
     for (const pet of this.state.pets.pets) { ctx.fillStyle = '#edd6a0'; ctx.beginPath(); ctx.arc(mx(pet.x), mz(pet.z), 2, 0, Math.PI * 2); ctx.fill(); }
     ctx.save(); ctx.translate(mx(this.position.x), mz(this.position.z)); ctx.rotate(-this.yaw); ctx.fillStyle = '#d1774d'; ctx.strokeStyle = '#fff8e9'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(5.5, 5.5); ctx.lineTo(0, 2); ctx.lineTo(-5.5, 5.5); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); ctx.restore();

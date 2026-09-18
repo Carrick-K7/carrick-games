@@ -17,7 +17,7 @@ export const VILLA_SNOOKER_POCKETS = [
  * extends just behind the cushion line, so a ball arriving at an angle is
  * swallowed instead of rebounding off the jaw. Physics and the aim guide share
  * this single test. */
-export function villaSnookerPocketContains(x: number, z: number): boolean {
+function villaSnookerPocketContains(x: number, z: number): boolean {
   for (const p of VILLA_SNOOKER_POCKETS) {
     const dx = x - p.x, dz = z - p.z;
     if (Math.hypot(dx, dz) < VILLA_SNOOKER_APERTURE_RADIUS) return true;

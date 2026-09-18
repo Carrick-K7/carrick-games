@@ -10,7 +10,7 @@ export const VILLA_PET_KINDS: readonly VillaPetKind[] = ['dog', 'cat', 'parrot',
 /** Bounds contain the entire pet, including wings/tails, not only its centre. */
 export const VILLA_PET_LAWN = { minX: -20.6, maxX: -3.4, minZ: 12.8, maxZ: 22 } as const;
 export const VILLA_PET_RADIUS = 0.4;
-export const VILLA_PET_FEED_RANGE = 2.2;
+const VILLA_PET_FEED_RANGE = 2.2;
 export const VILLA_PET_FEED_COOLDOWN = 8;
 export const VILLA_PET_FOOD: Readonly<Record<VillaPetKind, string>> = {
   dog: 'kibble', cat: 'kibble', parrot: 'seeds', rabbit: 'hay and greens',

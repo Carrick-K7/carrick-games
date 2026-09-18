@@ -672,7 +672,7 @@ export function createVillaGaming(parent: THREE.Object3D): {
   registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'racing');
   b.collide(10.5, 0, 6.72, .33, .99, .31);
   registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'racing');
-  mark('racingCockpit', [sx, 0, sz], { seat: VILLA_RACING.seat, exit: VILLA_RACING.exit, forward: '+Z', bounds: { minX: 9.22, maxX: 10.665, minZ: 5.55, maxZ: 8.1 }, pedals: 3, paddleShifters: 2, gearShifter: true });
+  mark('racingCockpit', [sx, 0, sz], { seat: VILLA_RACING.seat, exit: VILLA_RACING.exit, forward: '+Z', bounds: { minX: 9.22, maxX: 10.665, minZ: 5.62, maxZ: 8.1 }, pedals: 3, paddleShifters: 2, gearShifter: true });
 
   // Freestanding large display in front of glazing, with actual device silhouettes below.
   const tvCanvas = canvas(960, 540);

@@ -127,7 +127,7 @@ test('villa car door steps the driver back out of a blocked swing instead of ref
   expect(r.scores).toBe(0); expect(errors).toEqual([]);
 });
 
-test('villa all 26 furniture seats and bed poses support free look and collision-safe standing', async ({ page }) => {
+test('villa all furniture seats and bed poses support free look and collision-safe standing', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
   const blockedSeat = VILLA_RELAX_SEATS.find(seat => seat.id === 'sofa-master')!;
@@ -187,8 +187,8 @@ test('villa all 26 furniture seats and bed poses support free look and collision
     blockedExits: villaSeatExitCandidates(blockedSeat, resolveVillaSeatPosition(blockedSeat, blockedSeat.approach), blockedSeat.approach),
     layout: { aquarium: VILLA_AQUARIUM, tea: VILLA_TEA_BAR, wall: VILLA_FIREPLACE_WALL },
   });
-  expect(r.results).toHaveLength(26); expect(r.results.map((seat: any) => seat.id)).toEqual(VILLA_RELAX_SEATS.map(seat => seat.id));
-  expect(r.results.filter((seat: any) => seat.kind === 'sofa')).toHaveLength(7);
+  expect(r.results).toHaveLength(VILLA_RELAX_SEATS.length); expect(r.results.map((seat: any) => seat.id)).toEqual(VILLA_RELAX_SEATS.map(seat => seat.id));
+  expect(r.results.filter((seat: any) => seat.kind === 'sofa')).toHaveLength(VILLA_RELAX_SEATS.filter(seat => seat.kind === 'sofa').length);
   expect(r.results.filter((seat: any) => seat.kind === 'bed')).toHaveLength(2);
   for (const seat of r.results) {
     const contract = VILLA_RELAX_SEATS.find(expected => expected.id === seat.id)!;

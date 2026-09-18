@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import { furnishVilla } from '../src/villaFurnishings.js';
+import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST } from '../src/villaEstateLayout.js';
 import { VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FIELDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT, VILLA_POND, VILLA_SCOOTER_PARKING, villaEstateContains, villaPondContains, villaPondIntersectsPolygon, villaTerrainBounds, villaTerrainHeight, villaTerrainLocalPoint, villaTerrainNormal, villaTerrainOrientation } from '../src/villaEstateLayout.js';
 import { createVillaEstateModel } from '../src/villaEstateModel.js';
 import { createVillaTerrainGeometry, createVillaEstateFence } from '../src/villaTerrainModel.js';
@@ -175,5 +177,51 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
       for (const bay of VILLA_GARAGE_BAYS) for (let z = -2.6; z <= 9; z += .3) expect(villaPickupPoseBlocked({ x: bay.x, z, yaw: 0 }, estate.colliders)).toBe(false);
       for (const x of [VILLA_SCOOTER_PARKING.x - 1, VILLA_SCOOTER_PARKING.x + 1]) expect(estate.colliders.some(b => x > b.minX - .23 && x < b.maxX + .23 && 6.77 > b.minZ - .23 && 6.77 < b.maxZ + .23)).toBe(false);
     } finally { dispose(scene); }
+  });
+  it('never lets a furniture run straddle an exterior wall, which is how shelf, wardrobe, bench and board runs used to clip through the facade', () => {
+    const paint = new Proxy({}, { get: () => () => undefined, set: () => true });
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => paint }) });
+    const scene = new THREE.Scene();
+    try { furnishVilla(scene); } finally { vi.unstubAllGlobals(); }
+    scene.updateMatrixWorld(true);
+    // Material batches merge whole rooms into one mesh, so the check has to run
+    // per triangle: a triangle reaching past BOTH faces of a 0.2 m wall is a run
+    // punched through the facade, while the wall's own triangles stay inside it.
+    const walls = [
+      { axis: 'x' as const, outer: WEST.outer, inner: WEST.inner, sign: -1, label: 'west', crossLo: NORTH.outer, crossHi: SOUTH.outer },
+      { axis: 'x' as const, outer: EAST.outer, inner: EAST.inner, sign: 1, label: 'east', crossLo: NORTH.outer, crossHi: SOUTH.outer },
+      { axis: 'z' as const, outer: NORTH.outer, inner: NORTH.inner, sign: -1, label: 'north', crossLo: WEST.outer, crossHi: EAST.outer },
+      { axis: 'z' as const, outer: SOUTH.outer, inner: SOUTH.inner, sign: 1, label: 'south', crossLo: WEST.outer, crossHi: EAST.outer },
+    ];
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const offences = new Set<string>();
+    let checked = 0;
+    scene.traverse(node => {
+      if (!(node instanceof THREE.Mesh)) return;
+      const position = node.geometry.getAttribute('position'), index = node.geometry.index;
+      const count = index ? index.count : position.count;
+      for (let i = 0; i < count; i += 3) {
+        const [ia, ib, ic] = index ? [index.getX(i), index.getX(i + 1), index.getX(i + 2)] : [i, i + 1, i + 2];
+        a.fromBufferAttribute(position, ia).applyMatrix4(node.matrixWorld);
+        b.fromBufferAttribute(position, ib).applyMatrix4(node.matrixWorld);
+        c.fromBufferAttribute(position, ic).applyMatrix4(node.matrixWorld);
+        checked++;
+        for (const wall of walls) {
+          const values = [a[wall.axis], b[wall.axis], c[wall.axis]];
+          const lo = Math.min(...values), hi = Math.max(...values);
+          const outside = wall.sign < 0 ? lo < wall.outer - .02 : hi > wall.outer + .02;
+          const inside = wall.sign < 0 ? hi > wall.inner + .02 : lo < wall.inner - .02;
+          if (!outside || !inside) continue;
+          // A facade only exists where the house does, so poolside furniture west
+          // of the wing must not be blamed for spanning the south wall's plane.
+          const cross = wall.axis === 'x' ? [a.z, b.z, c.z] : [a.x, b.x, c.x];
+          if (Math.min(...cross) < wall.crossLo || Math.max(...cross) > wall.crossHi) continue;
+          offences.add(`${node.name || node.type} span ${lo.toFixed(2)}..${hi.toFixed(2)} straddles the ${wall.label} wall`);
+        }
+      }
+    });
+    expect(checked).toBeGreaterThan(10000);
+    expect([...offences]).toEqual([]);
+    scene.traverse(n => { if (n instanceof THREE.Mesh) { n.geometry.dispose(); const m = n.material; (Array.isArray(m) ? m : [m]).forEach(x => x.dispose()); } });
   });
 });

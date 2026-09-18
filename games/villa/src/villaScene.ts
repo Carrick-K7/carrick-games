@@ -13,7 +13,7 @@ import { createVillaSuvModel } from './villaSuvModel.js';
 import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
 import { isVillaSuvCollider, type VillaSuvState } from './villaSuv.js';
 import { createVillaEstateModel } from './villaEstateModel.js';
-import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
+import { VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';

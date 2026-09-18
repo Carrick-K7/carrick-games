@@ -41,13 +41,13 @@ export function villaScooterAnchors(pose: VillaScooterPose) {
     body: villaTerrainBounds(pose, VILLA_SCOOTER_LIMITS.halfWidth, VILLA_SCOOTER_LIMITS.halfLength, 1.4) satisfies VillaCollider };
 }
 /** These ground hazards are blocked even when the caller omits decorative colliders. */
-export const VILLA_SCOOTER_FIXED_COLLIDERS: readonly VillaCollider[] = [POOL, STAIR_HOLE, VILLA_ELEVATOR].map(box => ({ minX: box.minX, maxX: box.maxX, minZ: box.minZ, maxZ: box.maxZ, minY: -2, maxY: 4 }));
+const VILLA_SCOOTER_FIXED_COLLIDERS: readonly VillaCollider[] = [POOL, STAIR_HOLE, VILLA_ELEVATOR].map(box => ({ minX: box.minX, maxX: box.maxX, minZ: box.minZ, maxZ: box.maxZ, minY: -2, maxY: 4 }));
 /** OBB/AABB SAT; considers rider headroom, not just the low scooter shell. */
 export function villaScooterOverlaps(pose: VillaScooterPose, box: VillaCollider): boolean {
   const radius = Math.hypot(VILLA_SCOOTER_LIMITS.halfWidth, VILLA_SCOOTER_LIMITS.halfLength) + VILLA_SCOOTER_LIMITS.height;
   if (isVillaScooterCollider(box) || pose.x + radius < box.minX || pose.x - radius > box.maxX || pose.z + radius < box.minZ || pose.z - radius > box.maxZ) return false;
   const bounds = villaTerrainBounds(pose, VILLA_SCOOTER_LIMITS.halfWidth, VILLA_SCOOTER_LIMITS.halfLength, VILLA_SCOOTER_LIMITS.height);
-  if (isVillaScooterCollider(box) || box.maxY <= bounds.minY + .025 || box.minY >= bounds.maxY) return false;
+  if (box.maxY <= bounds.minY + .025 || box.minY >= bounds.maxY) return false;
   const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
   const dx = (box.minX + box.maxX) / 2 - pose.x, dz = (box.minZ + box.maxZ) / 2 - pose.z;
   const bx = (box.maxX - box.minX) / 2, bz = (box.maxZ - box.minZ) / 2;
@@ -101,8 +101,6 @@ export function villaScooterSafeExit(pose: VillaScooterPose, obstacles: readonly
   const anchors = villaScooterAnchors(pose);
   return villaScooterExitClear(pose, obstacles, 1) ? anchors.exits[0]! : villaScooterExitClear(pose, obstacles, -1) ? anchors.exits[1]! : null;
 }
-/** Compatibility name for callers authored before controller integration. */
-export const chooseVillaScooterExit = villaScooterSafeExit;
 /** W=throttle +1; S=throttle -1 brakes forward travel, then reverses slowly.
  * W brakes reverse before driving forwards. brake/Space only stop, never reverse.
  * Positive D/right DECREASES world yaw forwards and INCREASES it in reverse.

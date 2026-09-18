@@ -210,7 +210,10 @@ test('villa elevator floor buttons accept real coarse-pointer taps', async ({ br
 });
 
 test('villa shell supports a real keyboard elevator trip and walking out', async ({ page }) => {
-  test.setTimeout(180_000);
+  // A two-floor trip is seconds of simulation but can be minutes of wall-clock
+  // under software rasterisation, so this budget follows the same reasoning as
+  // the walk legs below rather than assuming a nominal renderer speed.
+  test.setTimeout(300_000);
   // Test live keyboard travel, not oversized software-renderer throughput.
   // Full viewport/DPR coverage lives in game-window.spec.ts.
   await page.setViewportSize({ width: 960, height: 540 });
@@ -265,7 +268,9 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-elevator'))!), {
     message: 'The real floor-selection key must begin a passenger trip',
   }).toMatchObject({ target: 2, riding: true });
-  await page.waitForFunction(() => { const e = JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!); return e.floor === 2 && e.phase === 'open'; }, null, { timeout: 60_000 });
+  // Interval polling, not rAF polling: a starved frame loop would otherwise
+  // never run the check often enough for its own timeout to fire cleanly.
+  await page.waitForFunction(() => { const e = JSON.parse(document.getElementById('gameCanvas')!.dataset.villaElevator!); return e.floor === 2 && e.phase === 'open'; }, null, { timeout: 150_000, polling: 250 });
   await expect(canvas).toHaveAttribute('data-villa-floor', '2');
   // Walk out of the car and keep going until the room really changes, rather
   // than a fixed distance that can leave the player still inside the lift zone.

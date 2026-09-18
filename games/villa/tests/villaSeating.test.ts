@@ -30,12 +30,12 @@ afterAll(() => {
 describe('authored villa relaxation seats', () => {
   it('preserves seven legacy IDs and covers dining, roof dining, stools, guest/PC chairs and both beds', () => {
     expect(VILLA_RELAX_SEATS.slice(0, 7).map(s => s.id)).toEqual(['sofa-living', 'sofa-master', 'sofa-library-west', 'sofa-library-east', 'sofa-roof', 'lounger-west', 'lounger-east']);
-    expect(VILLA_RELAX_SEATS).toHaveLength(26);
-    expect(new Set(VILLA_RELAX_SEATS.map(s => s.id)).size).toBe(26);
+    expect(VILLA_RELAX_SEATS).toHaveLength(27);
+    expect(new Set(VILLA_RELAX_SEATS.map(s => s.id)).size).toBe(27);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'chair')).toHaveLength(12);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'stool')).toHaveLength(3);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'bed')).toHaveLength(2);
-    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(7);
+    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(8);
     for (const seat of VILLA_RELAX_SEATS) expect(villaRelaxSeat(seat.id)).toBe(seat);
     for (const missing of [null, undefined, '', 'sofa', 'unknown']) expect(villaRelaxSeat(missing)).toBeNull();
   });

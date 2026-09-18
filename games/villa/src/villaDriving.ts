@@ -8,7 +8,7 @@ export interface VillaDrivingState {
 }
 export interface VillaDrivingInput { throttle: number; steer: number; brake: boolean; handbrake?: boolean }
 export const VILLA_DRIVING_BOUNDS = VILLA_ESTATE_BOUNDS;
-export const VILLA_DRIVING_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 7, maxReverse: 3, maxSteer: 0.56 };
+const VILLA_DRIVING_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 7, maxReverse: 3, maxSteer: 0.56 };
 export const VILLA_SCENIC_ROAD = { x: 6, z: 39, radiusX: 15, radiusZ: 10.5, width: 8.4, drivewayWidth: 8.8 } as const;
 export interface VillaDrivingProfile {
   readonly id: string;
@@ -20,13 +20,13 @@ export interface VillaDrivingProfile {
   readonly acceleration: number;
   readonly reverseAcceleration: number;
 }
-export const VILLA_SEDAN_PROFILE: VillaDrivingProfile = {
+const VILLA_SEDAN_PROFILE: VillaDrivingProfile = {
   id: 'sedan', limits: VILLA_DRIVING_LIMITS, spawn: VILLA_CAR.center,
   seat: [.43, .05], exit: [2.35, .15], door: [1, .4], acceleration: 2.1, reverseAcceleration: 1.5,
 };
 /** Always supplied internally: the pool is not a drivable ground surface. Pond
  * contact uses its actual ellipse, not a rectangular invisible garden wall. */
-export const VILLA_DRIVING_FIXED_COLLIDERS: readonly VillaCollider[] = [{ ...POOL, minY: -2, maxY: 1 }];
+const VILLA_DRIVING_FIXED_COLLIDERS: readonly VillaCollider[] = [{ ...POOL, minY: -2, maxY: 1 }];
 const colliderOwners = new WeakMap<VillaCollider, string>();
 /** Default remains SEDAN ONLY. A pickup never enters the sedan ownership set. */
 export function registerVillaVehicleColliders(colliders: readonly VillaCollider[], profile = VILLA_SEDAN_PROFILE): void { colliders.forEach(c => colliderOwners.set(c, profile.id)); }
@@ -48,8 +48,13 @@ export function villaCarAnchors(pose: VillaDrivingPose, profile = VILLA_SEDAN_PR
   return { seat: transform(profile.seat), exit: exits[0]!, exits, door: transform(profile.door),
     body: villaTerrainBounds(pose, profile.limits.halfWidth, profile.limits.halfLength, profile.limits.height) };
 }
+/** Driver-side test in the vehicle's local frame: outboard of the door hinge
+ * line counts as standing at the driver door. */
+export function villaCarDriverSide(pose: VillaDrivingPose, p: { x: number; z: number }, profile = VILLA_SEDAN_PROFILE): boolean {
+  return (p.x - pose.x) * Math.cos(pose.yaw) - (p.z - pose.z) * Math.sin(pose.yaw) >= profile.door[0];
+}
 /** Exact XZ capsule/rectangle contact: endpoint, edge crossing, rounded corners. */
-export function villaVehicleCorridorTouchesBox(a: VillaPosition, b: VillaPosition, box: VillaCollider): boolean {
+function villaVehicleCorridorTouchesBox(a: VillaPosition, b: VillaPosition, box: VillaCollider): boolean {
   const dx = b.x - a.x, dz = b.z - a.z;
   let lo = 0, hi = 1;
   for (const [origin, delta, min, max] of [[a.x, dx, box.minX, box.maxX], [a.z, dz, box.minZ, box.maxZ]]) {
