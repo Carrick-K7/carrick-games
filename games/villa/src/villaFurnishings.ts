@@ -16,6 +16,7 @@ import type { VillaWardrobeState } from './villaWardrobe.js';
 import { createVillaBathDoorModel, type VillaBathDoorState } from './villaBathDoors.js';
 import { villaRoomAt, type VillaCollider } from './villaWorld.js';
 import { createVillaFridge } from './villaWardrobe.js';
+import { createVillaSuiteFittings } from './villaSuiteFittings.js';
 
 export interface VillaFurnishingState {
   evening: boolean;
@@ -146,10 +147,10 @@ export function furnishVilla(scene: THREE.Scene): {
     marker.userData = { ...definition, modelOrigin: { x: origin.x, y: origin.y, z: origin.z }, width, depth };
     root.add(marker); // Metadata only: furniture remains in its existing material batches.
   }
-  function sofa(w = 3.4, material = linen, chaise = false, seatId?: string) {
+  function sofa(w = 3.4, material = linen, chaise = false, seatId?: string, cushions?: number) {
     legs(w, 1.2, 0.2); box(0, 0.32, 0, w, 0.37, 1.26, material, 0.12); box(0, 0.85, 0.5, w, 0.82, 0.28, material, 0.11);
     for (const x of [-w / 2 + 0.13, w / 2 - 0.13]) box(x, 0.62, 0, 0.28, 0.65, 1.3, material, 0.11);
-    const n = Math.max(1, Math.round(w / 1.1));
+    const n = cushions ?? Math.max(1, Math.round(w / 1.1));
     for (let i = 0; i < n; i++) { const x = -w / 2 + 0.3 + (i + 0.5) * (w - 0.6) / n; box(x, 0.56, -0.1, (w - 0.63) / n, 0.23, 0.98, material, 0.075); box(x, 0.92, 0.31, (w - 0.65) / n, 0.55, 0.22, material, 0.09); }
     cushion(-w / 2 + 0.65, 0.86, 0.12, terra, 0.14); if (w > 1.6) cushion(w / 2 - 0.65, 0.86, 0.11, sage, -0.17); hit(0, 0, 0, w, 1.26, 1.3, seatId);
     if (chaise) { box(-w / 2 + 0.63, 0.36, -1.05, 1.24, 0.48, 1.4, material, 0.13); box(-w / 2 + 0.63, 0.61, -1.03, 1.17, 0.15, 1.33, material, 0.07); hit(-w / 2 + 0.63, 0, -1.05, 1.24, 0.7, 1.4, seatId); }
@@ -370,11 +371,15 @@ export function furnishVilla(scene: THREE.Scene): {
       for (const [x, z] of [[0.42, 0.12], [0.58, 0.28], [0.34, 0.36], [0.62, 0.06]]) cyl(x, 0.49, z, 0.045, 0.036, 0.06, cream);
       hit(0, 0, 0, 1.95, 0.62, 1.3);
     });
-    for (const [x, z, yaw] of [[-1.75, -2.2, Math.PI / 2], [1.75, -2.7, -Math.PI / 2], [0.1, -0.35, Math.PI]] as const) {
-      at(x, 0, z, yaw, () => { box(0, 0.09, 0, 0.74, 0.18, 0.74, terra, 0.09); box(0, 0.195, 0.03, 0.52, 0.08, 0.52, linen, 0.06); });
+    for (const [i, [x, z, yaw]] of ([[-1.75, -2.2, -Math.PI / 2], [1.75, -2.7, Math.PI / 2], [0.1, -0.35, 0]] as const).entries()) {
+      const id = `stool-tea-${i + 1}`;
+      at(x, 0, z, yaw, () => { box(0, 0.09, 0, 0.74, 0.18, 0.74, terra, 0.09); box(0, 0.195, 0.03, 0.52, 0.08, 0.52, linen, 0.06); hit(0, 0, 0, .74, .235, .74, id); seatMarker(id, .74, .74); });
     }
-    at(-5.29, 0, 2.2, 0, () => {
-      box(0, 1.05, 0, 0.34, 2.1, 3, walnut, 0.02);
+    // Tea-ware faces west from the east partition's solid south return, never
+    // across its door or the west picture window.
+    at(5.27, 0, 2.85, Math.PI, () => {
+      box(-.15, 1.05, 0, .04, 2.1, 3, walnut, .005);
+      for (const z of [-1.48, 1.48]) box(0, 1.05, z, .34, 2.1, .04, walnut, .005);
       for (let i = 0; i < 4; i++) {
         box(0.09, 0.34 + i * 0.52, 0, 0.3, 0.035, 2.84, oak, 0.01);
         for (let c = 0; c < 4; c++) cyl(0.24, 0.44 + i * 0.52, -1.15 + c * 0.6, 0.05, 0.038, 0.09, i % 2 ? cream : sage);
@@ -384,7 +389,7 @@ export function furnishVilla(scene: THREE.Scene): {
     at(-2.6, 0, -4.05, 0, () => { cyl(0, 0.22, 0, 0.26, 0.32, 0.44, walnut); plant(0, 0.44, 0, 0.6); });
     at(2.8, 0, -4.1, 0, () => lamp(true));
   });
-  box(-18.6, 0.017, -12.4, 5.4, 0.028, 4, rugMat, 0.01);
+  box(-18.6, 0.017, -15.1, 6.2, 0.028, 4.5, rugMat, 0.01);
   plant(-14.2, 0, -16.6, 1.35); plant(-22.8, 0, -10.4, 1.2);
   // Ground-floor laundry and utility room: a matched front-loader washer and
   // heat-pump dryer under a shelf run, plus a folding table and basket.
@@ -411,25 +416,35 @@ export function furnishVilla(scene: THREE.Scene): {
     box(-4.05, 1.1, 1.6, 0.1, 2.4, 0.1, steel, 0.01);
     box(3.6, 0.24, 2.9, 1.1, 0.48, 0.72, sage, 0.04);
   });
-  // Hall runner by the lift lobby warms the stone strip behind the stairs, and a
-  // robot vacuum works its cleaning loop there.
-  box(1.1, 0.022, -12.4, 3.4, 0.028, 8.6, rugMat, 0.01);
-  let vacuumLidar: THREE.Mesh | undefined;
+  // The upstairs hall runner is on 2F, behind the stair/lift core; the robot
+  // stays on 1F. Neither decoration crosses a shaft or an entrance.
+  box(1.1, 3.622, -12.4, 3.4, 0.028, 8.6, rugMat, 0.01);
+  // Original procedural design informed by the Saros 20's ~8cm low profile and
+  // flush StarSight sensors, not an outdated tall spinning LiDAR tower.
+  // Reference: https://global.roborock.com/pages/roborock-saros-20
   const vacuum = new THREE.Group(); vacuum.name = 'robot-vacuum'; root.add(vacuum);
+  const vacuumBrush = new THREE.Group(); vacuumBrush.position.set(.145, .007, -.09); vacuum.add(vacuumBrush);
   {
     const shell = villaMaterial('#e8e6e1', .38), vacTrim = villaMaterial('#2a2e31', .5), lens = villaMaterial('#1b2124', .2, .3);
-    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, y: number, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(0, y, z); vacuum.add(m); return m; };
-    add(new THREE.CylinderGeometry(.175, .18, .09, 24), shell, .047);
-    add(new THREE.CylinderGeometry(.181, .181, .028, 24, 1, true), vacTrim, .052);
-    add(new THREE.CylinderGeometry(.172, .172, .02, 24), vacTrim, .012);
-    add(new THREE.CylinderGeometry(.048, .054, .045, 16), vacTrim, .115);
-    vacuumLidar = add(new THREE.CylinderGeometry(.05, .05, .014, 16), shell, .144);
-    add(new THREE.CylinderGeometry(.03, .03, .006, 12), lens, .1);
-    add(new THREE.BoxGeometry(.05, .008, .02), vacTrim, .095, .13);
-    for (const x of [-0.05, 0.05]) add(new THREE.CylinderGeometry(.014, .014, .006, 10), x < 0 ? vacTrim : shell, .095, x);
+    const add = (geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
+      const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); vacuum.add(m); return m;
+    };
+    add(new THREE.CylinderGeometry(.172, .18, .068, 24), shell, 0, .043, 0);
+    add(new THREE.CylinderGeometry(.181, .181, .027, 24, 1, true), vacTrim, 0, .04, 0);
+    add(new THREE.CylinderGeometry(.158, .158, .008, 24), shell, 0, .078, 0);
+    add(new THREE.BoxGeometry(.074, .024, .025), lens, 0, .041, .168);
+    for (const x of [-.026, .026]) add(new THREE.CylinderGeometry(.009, .009, .002, 10), vacTrim, x, .083, .105);
+    for (let i = 0; i < 3; i++) {
+      const brush = new THREE.Mesh(new THREE.BoxGeometry(.011, .005, .075), vacTrim);
+      const angle = i * Math.PI * 2 / 3; brush.position.set(Math.sin(angle) * .025, 0, Math.cos(angle) * .025); brush.rotation.y = angle; vacuumBrush.add(brush);
+    }
+    // Grounded all-in-one dock with an inset black wash bay and a ramp.
+    box(4.45, .245, -7.36, .43, .49, .32, shell, .025);
+    box(4.45, .08, -7.526, .36, .15, .018, vacTrim, .013);
+    box(4.45, .01, -7.72, .42, .02, .46, vacTrim, .015);
+    box(4.45, .34, -7.528, .27, .07, .014, lens, .008);
+    hit(4.45, 0, -7.36, .45, .51, .34);
   }
-  // Charging dock against the lift-shaft wall, just off the cleaning loop.
-  box(4.35, 0.045, -8.5, 0.34, 0.09, 0.2, villaMaterial('#2a2e31', .5), 0.02);
   at(-11.4, 0, -9.9, 0, () => lamp(true));
   // Ground-floor gym: weight rack, cable crossover, dumbbell tree, kettlebells,
   // a treadmill, one bench and a neat row of yoga mats, under a wall mirror.
@@ -495,42 +510,33 @@ export function furnishVilla(scene: THREE.Scene): {
   plant(26.4, 0, -14.6, 1.3);
   // Upstairs study: writing desk under the north light, books on both returns.
   at(12.5, 3.6, -13.6, 0, () => {
-    at(0, 0, -3.1, 0, () => { table(2, 0.92, 0.75, oak); box(-0.46, 0.81, 0, 0.4, 0.03, 0.28, cream); orb(0.42, 0.84, 0.05, 0.1, 0.12, 0.1, brass); });
-    at(0, 0, -2.1, Math.PI, () => chair(sage));
-    for (const x of [-3.6, 3.6]) { box(x, 1.1, -3.3, 1.8, 2.2, 0.32, walnut, 0.02); for (let i = 0; i < 4; i++) box(x, 0.4 + i * 0.52, -3.16, 1.7, 0.035, 0.26, oak, 0.01); }
+    at(0, 0, -3.1, 0, () => { table(2.6, 1, 0.75, oak); box(-0.46, 0.81, 0, 0.4, 0.03, 0.28, cream); orb(0.42, 0.84, 0.05, 0.1, 0.12, 0.1, brass); });
+    at(0, 0, -1.95, 0, () => chair(sage));
+    for (const x of [-3.1, 3.1]) at(x, 0, -3.3, 0, () => shelf(1.5));
   });
   box(12.5, 3.617, -11.4, 4.8, 0.028, 3.2, rugMat, 0.01);
-  // Upstairs dressing room (moved here with the guest swap): wardrobe runs, an
-  // island and a full-height mirror, now in the band south of the guest room.
-  at(-18.6, 3.6, -4.5, 0, () => {
-    at(0, 0, -4.05, 0, () => { box(0, 1.25, 0, 8.4, 2.5, 0.5, walnut, 0.02); for (let i = 0; i < 6; i++) box(-3.5 + i * 1.4, 1.25, 0.26, 0.03, 2.4, 0.03, brass, 0.004); });
-    at(-5.32, 0, 0.4, 0, () => box(0, 1.25, 0, 0.5, 2.5, 5.6, walnut, 0.02));
-    at(0, 0, 0.6, 0, () => { box(0, 0.52, 0, 2.4, 0.9, 1.1, oak, 0.05); box(0, 0.99, 0, 2.5, 0.06, 1.2, stone, 0.03); });
-    at(3.4, 0, 1.1, 0, () => { box(0, 0.9, 0, 0.08, 1.8, 1.2, steel, 0.01); box(0, 0.95, 0.07, 0.05, 1.7, 1.1, white, 0.01); });
-    plant(4.4, 0, -3.6, 1.2);
-  });
-  // Upstairs ensuite (moved with the same swap): double vanity, small bath, a
-  // glass-front shower and a mirror on the gallery wall.
-  at(-8.6, 3.6, -4.5, 0, () => {
-    at(0, 0, -3.6, 0, () => { box(0, 0.42, 0, 4.2, 0.84, 0.62, white, 0.05); box(0, 0.87, 0, 4.3, 0.06, 0.68, stone, 0.03); box(1.2, 0.95, 0, 0.5, 0.08, 0.4, steel, 0.03); });
-    at(-3.4, 0, 2.6, Math.PI / 2, () => { box(0, 0.26, 0, 1.7, 0.52, 0.8, white, 0.06); box(0, 0.56, 0, 1.6, 0.08, 0.72, stone, 0.04); });
-    at(2.8, 0, 2.4, 0, () => { box(0, 1.1, 0, 1.1, 2.2, 1.1, white, 0.05); box(0, 0.95, 0.58, 0.92, 1.9, 0.06, steel, 0.01); });
-    at(4.1, 0, -1.4, 0, () => box(0, 0.9, 0, 0.5, 1.8, 0.04, steel, 0.01));
-    plant(-3.8, 0, -3.4, 1);
-  });
+  // Fitted suite cabinetry, real double basins and shower: authored around the
+  // doors, rather than solid placeholder boxes spanning glazing and passages.
+  const suite = createVillaSuiteFittings(root); colliders.push(...suite.colliders);
+  plant(-14.1, 3.6, -7.7, 1.1);
   // The lounge's old indoor fountain went with the rest of the east lounge's
   // furniture when that hall was cleared for now.
   // Ground-floor home cinema in the north-east band: a 5.2 m screen over a real
   // AV rack, tower L/R + surround speakers with acoustic panels, and a tiered
   // leather row — a three-seat sofa, a double loveseat and a single recliner.
   const avGlow = mat('#8fb8c9', .3); avGlow.emissive.set('#6fb3c9'); avGlow.emissiveIntensity = .8;
-  const acoustic = mat('#3a3f3c', .95);
+  const acoustic = mat('#3a3f3c', .95), cinemaLeather = mat('#976553', .48);
   at(22.6, 0, -13.6, 0, () => {
+    // A continuous textile backing shades the glazing behind the projection
+    // screen, instead of putting a cinema screen across a bright bare window.
+    box(0, 1.55, -4.36, 9.3, 2.95, .05, acoustic, .005);
     at(0, 0, -4, 0, () => { box(0, 1.3, 0, 5.6, 2.6, 0.24, dark, 0.02); box(0, 1.35, 0.14, 5.2, 2.2, 0.05, white, 0.02); });
     // AV rack under the screen: centre channel on a walnut console, a receiver
     // with a glow display, a source deck and a vinyl nook.
     at(0, 0, -3.9, 0, () => {
-      box(0, 0.36, 0, 3.2, 0.72, 0.52, walnut, 0.03);
+      box(0, .36, -.23, 3.2, .72, .04, walnut, .006);
+      for (const x of [-1.58, -.48, .42, 1.58]) box(x, .36, 0, .04, .72, .52, walnut, .006);
+      for (const y of [.04, .39]) box(0, y, 0, 3.2, .045, .52, walnut, .006);
       box(0, 0.735, 0, 3.26, 0.03, 0.56, dark, 0.02);
       box(0, 0.96, -0.04, 1.3, 0.32, 0.32, dark, 0.03);
       for (let i = 0; i < 3; i++) cyl(-0.26 + i * 0.26, 0.96, 0.13, 0.052, 0.052, 0.02, steel, Math.PI / 2);
@@ -552,23 +558,26 @@ export function furnishVilla(scene: THREE.Scene): {
       // Surround speakers high on the side walls, angled toward the row, over
       // fabric acoustic panels.
       at(side * 5.42, 2.0, -0.6, side > 0 ? -0.6 : 0.6, () => box(0, 0, 0, 0.24, 0.4, 0.3, dark, 0.02));
-      for (let i = 0; i < 4; i++) box(side * 5.54, 1.5, -3.2 + i * 1.8, 0.07, 1.5, 1.1, acoustic, 0.02);
+      // West wall is solid; the east wall retains its window between z-16..-12.
+      for (const z of (side < 0 ? [-3.2, -1.4, .4, 2.2] : [-3.5, 3.2]))
+        box(side * 5.38, 1.5, z, .07, 1.5, .85, acoustic, .02);
     }
     // Tiered leather seating, all three seats registered as sittable.
-    at(0, 0, 0.7, 0, () => sofa(2.6, terra, false, 'sofa-cinema-three'));
-    at(3.3, 0, 1.0, 0.55, () => sofa(1.9, terra, false, 'sofa-cinema-double'));
+    at(0, 0, 0.7, 0, () => sofa(2.6, cinemaLeather, false, 'sofa-cinema-three', 3));
+    at(3.3, 0, 1.0, 0.55, () => sofa(1.9, cinemaLeather, false, 'sofa-cinema-double', 2));
     at(-3.3, 0, 1.0, -0.55, () => {
-      // Plush recliner: deep seat, angled backrest, winged headrest, arms.
-      box(0, 0.28, 0, 1.06, 0.3, 1.0, terra, 0.08);
-      box(0, 0.47, 0.06, 0.94, 0.17, 0.8, terra, 0.07);
-      box(0, 0.8, -0.4, 1.0, 0.74, 0.28, terra, 0.09);
-      box(0, 1.22, -0.5, 0.62, 0.3, 0.22, terra, 0.08);
-      box(-0.55, 0.56, -0.02, 0.2, 0.62, 0.9, terra, 0.07);
-      box(0.55, 0.56, -0.02, 0.2, 0.62, 0.9, terra, 0.07);
+      // Back/headrest are on +Z: the sitter faces -Z toward the screen, not
+      // directly into a backrest as in the earlier reversed chair.
+      box(0, 0.28, 0, 1.06, 0.3, 1.0, cinemaLeather, 0.08);
+      box(0, 0.47, -.06, 0.94, 0.17, 0.8, cinemaLeather, 0.07);
+      box(0, 0.8, .4, 1.0, 0.74, 0.28, cinemaLeather, 0.09);
+      box(0, 1.22, .46, 0.62, 0.3, .18, cinemaLeather, 0.07);
+      box(-0.55, 0.56, -0.02, 0.2, 0.62, 0.9, cinemaLeather, 0.07);
+      box(0.55, 0.56, -0.02, 0.2, 0.62, 0.9, cinemaLeather, 0.07);
       hit(0, 0, 0, 1.3, 1.35, 1.1, 'chair-cinema-single');
       seatMarker('chair-cinema-single', 1.06, 1.0);
     });
-    box(0, 0.02, 2.6, 6.6, 0.03, 3.4, rugMat, 0.01);
+    box(0, 0.02, 1.2, 9.7, 0.03, 3.4, rugMat, 0.01);
     // Powered subwoofer in the east corner with a bass port and glow LED.
     at(4.6, 0, -2.2, 0, () => { box(0, 0.31, 0, 0.52, 0.62, 0.5, black, 0.03); cyl(0, 0.3, 0.26, 0.14, 0.14, 0.02, steel, Math.PI / 2); box(0.2, 0.5, 0.252, 0.06, 0.02, 0.01, avGlow, 0.003); hit(0, 0, 0, 0.56, 0.62, 0.54); });
   });
@@ -578,16 +587,24 @@ export function furnishVilla(scene: THREE.Scene): {
   // stone bowls, soft lighting and a bench for robes.
   at(22.6, 3.6, -13.6, 0, () => {
     at(0, 0, -0.6, 0, () => {
-      for (const [x, z] of [[-0.72, -0.8], [0.72, -0.8], [-0.72, 0.8], [0.72, 0.8]]) cyl(x, 0.35, z, 0.05, 0.065, 0.7, walnut);
-      box(0, 0.76, 0, 1.86, 0.1, 1.98, walnut, 0.03);
-      box(0, 0.9, 0, 2, 0.16, 2.14, cream, 0.07);
-      box(0, 1, 0.78, 0.94, 0.12, 0.42, cream, 0.06);
-      box(0, 0.99, -0.88, 0.64, 0.12, 0.3, sage, 0.06);
-      box(0.55, 1.01, -0.1, 0.4, 0.07, 0.28, walnut, 0.02);
-      for (let i = 0; i < 3; i++) orb(0.45 + i * 0.11, 1.08, -0.1, 0.045, 0.038, 0.045, stone);
-      hit(0, 0, 0, 2.1, 1.1, 2.24);
+      // Human-scale treatment table, not the former two-metre-wide mattress.
+      for (const x of [-.32, .32]) for (const z of [-.8, .8]) cyl(x, .35, z, .045, .055, .7, walnut);
+      box(0, .73, 0, .82, .10, 2.02, walnut, .025);
+      box(0, .84, 0, .92, .14, 2.14, cream, .065);
+      box(0, .925, .35, .86, .025, .7, sage, .012);
+      cyl(0, .985, .77, .075, .075, .6, linen, 0, Math.PI / 2);
+      for (const x of [-.13, .13]) box(x, .81, -1.12, .025, .035, .32, steel, .004);
+      put(new THREE.TorusGeometry(.115, .044, 8, 22), cream, 0, .87, -1.2, Math.PI / 2);
+      hit(0, 0, -.06, .94, 1.08, 2.46);
+    });
+    at(1.45, 0, -.5, 0, () => {
+      table(.62, .44, .7, walnut);
+      for (let i = 0; i < 3; i++) orb(-.17 + i * .15, .745, .08, .052, .038, .052, stone);
+      for (const x of [-.16, .12]) { cyl(x, .8, -.1, .035, .038, .19, brass); cyl(x, .9, -.1, .023, .023, .025, dark); }
     });
     at(-4.1, 0, -3.8, 0, () => {
+      for (const x of [-.85, .85]) box(x, .98, -.04, .05, 1.96, .42, walnut, .009);
+      box(0, .98, -.25, 1.75, 1.96, .04, walnut, .005);
       for (let i = 0; i < 3; i++) box(0, 0.42 + i * 0.58, 0, 1.7, 0.05, 0.44, oak);
       box(-0.45, 0.6, 0, 0.52, 0.17, 0.38, linen, 0.05); box(0.4, 1.18, 0, 0.52, 0.17, 0.38, sage, 0.05); box(-0.25, 1.78, 0, 0.6, 0.15, 0.38, linen, 0.05);
       box(0.55, 0.62, 0, 0.18, 0.12, 0.18, brass, 0.02); box(0.55, 1.2, 0, 0.18, 0.12, 0.18, brass, 0.02);
@@ -597,47 +614,50 @@ export function furnishVilla(scene: THREE.Scene): {
     at(4.1, 0, 1.9, 0, () => lamp()); plant(-4.3, 0, 1.8, 1.25); plant(4.3, 0, 3.9, 1.1);
     at(-2.1, 0, 2.6, 0.3, () => { box(0, 0.26, 0, 0.5, 0.52, 0.5, walnut, 0.05); box(0, 0.55, 0, 0.56, 0.06, 0.56, stone, 0.04); orb(0, 0.62, 0, 0.1, 0.06, 0.1, water); hit(0, 0, 0, 0.6, 0.65, 0.6); });
   });
-  box(22.6, 3.617, -11.6, 5.2, 0.028, 4, rugMat, 0.01);
+  box(22.6, 3.617, -14, 4.4, 0.028, 4.9, rugMat, 0.01);
   at(19.4, 3.6, -10.4, 0, () => lamp(true)); plant(26.8, 3.6, -16.6, 1.3);
   // Upstairs guest suite: sofa, low table and a reading corner.
   at(24.6, 3.6, 6.9, 0, () => sofa(3.2, linen, false, 'sofa-east-suite'));
   at(24.6, 3.6, 4.4, 0, () => { table(1.5, 0.9, 0.42, walnut); tea(0.34, 0.43, 0); plant(-0.35, 0.43, 0, 0.42, true); });
-  box(24.6, 3.617, 5.6, 5, 0.028, 4, rugMat, 0.01);
+  // One coherent lounge rug, not two overlapping coplanar rugs.
+  box(23, 3.617, 5.6, 9.2, 0.028, 5.6, rugMat, 0.01);
   at(27.2, 3.6, -4.6, 0, () => lamp(true)); plant(18.6, 3.6, -16.6, 1.45);
   const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
-  const bathDoorModel = createVillaBathDoorModel(root);
+  const bathDoorModel = createVillaBathDoorModel(root); colliders.push(...bathDoorModel.colliders);
   at(-5.2, 3.6, 8, 0, () => sofa(1.25, sage, false, 'sofa-master')); at(-4.45, 3.6, 6.75, 0, () => lamp(true)); at(-5.4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-4.25, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.
   for (const x of [-11.05, -8.97, -5.72, -2.8]) {
     for (let i = 0; i < 4; i++) cyl(x + (i - 1.5) * 0.075, 5.13, 8.72, 0.055, 0.065, 2.77, linen);
   }
-  bed(VILLA_BEDS[1]);
+  bed(VILLA_BEDS[1]); box(-8, 3.617, -13.6, 5.6, .028, 5.2, rugMat, .01);
   // Guest bedroom, now the whole north strip after the swap: bedside reading
   // table, chair and a bookcase against the north wall.
   at(-5.4, 3.6, -14.75, 0, () => { table(1.75, 0.75); books(-0.75, 0.77, -0.08, 4); at(0.62, 0.77, -0.05, 0, () => lamp()); box(0, 0.775, 0.1, 0.55, 0.013, 0.33, cream, 0); });
   at(-5.3, 3.6, -13.2, 0, () => chair(sage, 'chair-guest')); at(-9.8, 3.6, -17.55, 0, () => shelf(2.4)); plant(-5.2, 3.6, -16.4, 1.1);
   // Reading hall (阅读厅): every element of the old family room moved here after
   // its walls came down. North half is the library, south half the lounge.
-  at(20.5, 3.6, -8.62, 0, () => shelf(1.9)); at(24.7, 3.6, -8.62, 0, () => shelf(2.8));
-  at(17.68, 3.6, -1.1, -Math.PI / 2, () => shelf(2.2)); at(17.68, 3.6, 2.2, -Math.PI / 2, () => shelf(2.2));
-  at(20.8, 3.6, -4.6, 0, () => { table(1.75, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(21, 3.617, -4.6, 4.2, 0.028, 3, rugMat, 0);
+  // Keep the massage-room doorway (x20..23 at z=-9) and both sides of the
+  // bathroom's east door completely free; all shelves now face the reader.
+  at(18.45, 3.6, -8.62, 0, () => shelf(1.9)); at(25.45, 3.6, -8.62, 0, () => shelf(2.8));
+  at(27.7, 3.6, 1.8, -Math.PI / 2, () => shelf(2.2));
+  at(17.5, 3.6, 1.95, Math.PI / 2, () => shelf(2.2));
+  at(20.8, 3.6, -4.6, 0, () => { table(1.75, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(21, 3.617, -4.6, 6.4, 0.028, 3, rugMat, 0);
   at(18.6, 3.6, -4.6, -Math.PI / 2, () => sofa(1.4, linen, false, 'sofa-library-west'));
   at(23.1, 3.6, -4.6, Math.PI / 2, () => sofa(1.5, terra, false, 'sofa-library-east'));
-  plant(18.2, 3.6, -8.1, 1.55); at(18.9, 3.6, -6.9, 0, () => lamp(true)); plant(26.9, 3.6, -8.1, 1.4);
+  plant(18.2, 3.6, -7.5, 1.55); at(18.9, 3.6, -6.9, 0, () => lamp(true)); plant(27.3, 3.6, -7.4, 1.4);
   // South lounge corner: the original guest-suite sofa plus the moved bay sofa.
   at(20.2, 3.6, 6.4, 0.5, () => sofa(1.3, linen, false, 'sofa-library-bay'));
   at(20.4, 3.6, 3.2, 0, () => { table(1.15, 0.75, 0.46); tea(0.3, 0.47, 0); books(-0.36, 0.47, 0, 3); });
-  box(21, 3.617, 5, 3.4, 0.028, 3, rugMat, 0);
   plant(18, 3.6, 8.1, 1.4); at(19.2, 3.6, 1.6, 0, () => lamp(true));
 
   // Bathroom: the tub grew 50 % in both plan dimensions and a walk-in shower
   // with frosted panels fills the north-east corner.
   const frosted = mat('#cfe4e8', .12); frosted.transparent = true; frosted.opacity = .32; frosted.roughness = .3; frosted.depthWrite = false;
   at(11.4, 3.6, -4.4, 0, () => {
-    box(0, 0.17, 0, 2.4, 0.34, 4.35, white, 0.16);
+    box(0, 0.10, 0, 2.4, 0.20, 4.35, white, 0.10);
     for (const x of [-1.05, 1.05]) box(x, 0.44, 0, 0.3, 0.6, 4.2, white, 0.09);
     for (const z of [-2.02, 2.02]) box(0, 0.44, z, 2.1, 0.6, 0.3, white, 0.09);
-    box(0, 0.24, 0, 1.98, 0.04, 3.65, water, 0.02);
+    box(0, 0.31, 0, 1.98, 0.025, 3.65, water, 0.01);
     cyl(0.9, 0.88, -1.68, 0.025, 0.025, 0.6, brass);
     cyl(0.645, 1.17, -1.68, 0.025, 0.025, 0.51, brass, 0, Math.PI / 2);
     box(0, 0.77, 0.9, 2.2, 0.055, 0.34, oak); tea(0.3, 0.8, 0.9);
@@ -655,10 +675,15 @@ export function furnishVilla(scene: THREE.Scene): {
     hit(-0.925, 0, 0, 0.1, 2.4, 1.9);
     hit(-0.475, 0, 0.925, 0.95, 2.4, 0.1);
   });
-  cyl(16.62, 2.06, -7.85, 0.022, 0.022, 0.5, steel, 0, Math.PI / 2);
-  cyl(16.38, 2.28, -7.85, 0.14, 0.14, 0.025, steel);
-  for (let i = 0; i < 4; i++) cyl(16.38, 2.24, -7.85, 0.004, 0.004, 0.05, steel);
-  at(14.2, 3.6, -1.65, -Math.PI / 2, () => {
+  // Riser and head are authored relative to the second-floor shower, never at
+  // ground-floor y=2.2. The four nozzles occupy distinct positions.
+  at(15.85, 3.6, -7.85, 0, () => {
+    cyl(.94, 1.5, 0, .02, .02, 1.56, steel);
+    rod(new THREE.Vector3(.94, 2.28, 0), new THREE.Vector3(.20, 2.28, 0), .022, steel);
+    cyl(.20, 2.25, 0, .17, .17, .035, steel);
+    for (const x of [.14, .26]) for (const z of [-.06, .06]) cyl(x, 2.224, z, .009, .009, .025, black);
+  });
+  at(13.7, 3.6, .42, Math.PI, () => {
     box(0, 0.42, 0, 1.9, 0.84, 0.85, oak); box(0, 0.89, 0, 2, 0.1, 0.94, white); cyl(0, 1.015, 0, 0.31, 0.23, 0.2, white); cyl(0, 1.12, 0, 0.24, 0.24, 0.007, stone); cyl(0, 1.13, -0.32, 0.022, 0.022, 0.42, brass); cyl(0, 1.34, -0.22, 0.022, 0.022, 0.2, brass, Math.PI / 2);
     box(0, 1.96, -0.39, 1.48, 1.38, 0.05, brass); box(0, 1.96, -0.355, 1.37, 1.27, 0.018, steel, 0.01);
     for (let i = 0; i < 3; i++) cyl(-0.7, 1 + i * 0.105, 0.06, 0.06, 0.06, 0.3, linen, Math.PI / 2); hit(0, 0, 0, 2, 0.97, 0.94);
@@ -680,13 +705,17 @@ export function furnishVilla(scene: THREE.Scene): {
     at(x, 7.2, z, 0, () => {
       legs(1.65, 0.85, 0.77, black, 0.045);
       box(0, 0.63, 0, 1.5, 0.45, 0.78, black, 0.06);
-      box(0, 0.885, 0, 1.56, 0.05, 0.84, steel, 0.03);
-      for (let i = 0; i < 5; i++) cyl(-0.6 + i * 0.3, 0.915, 0, 0.012, 0.012, 0.8, steel, 0, Math.PI / 2);
+      for (const sx of [-.765, .765]) box(sx, .885, 0, .03, .05, .84, steel, .006);
+      for (const sz of [-.405, .405]) box(0, .885, sz, 1.5, .05, .03, steel, .006);
+      // Parallel bars run front-to-back, spaced across the firebox (not five
+      // collinear cylinders hidden by an opaque top plate).
+      box(0, .881, 0, 1.44, .02, .71, black, .008);
+      for (let i = 0; i < 13; i++) cyl(-0.66 + i * .11, .915, 0, .009, .009, .70, steel, Math.PI / 2);
       for (const sx of [-1.06, 1.06]) box(sx, 0.86, 0, 0.5, 0.07, 0.76, oak);
       hit(0, 0, 0, 2.62, 1.27, 0.93);
     });
     // Lid pivot sits on the hinge line at the grill's back edge.
-    const lidPivot = new THREE.Group();
+    const lidPivot = new THREE.Group(); lidPivot.name = `roof-grill-lid-${grillLids.length + 1}`;
     lidPivot.position.set(x, 8.13, z - 0.42);
     lidPivot.userData = { animated: true, progress: 0 };
     root.add(lidPivot);
@@ -695,7 +724,9 @@ export function furnishVilla(scene: THREE.Scene): {
       lid.box(0, 0.05, 0.42, 1.56, 0.1, 0.8, steel, 0.04);
       lid.box(0, 0.13, 0.42, 1.38, 0.09, 0.68, steel, 0.06);
       lid.box(0, 0.21, 0.74, 0.67, 0.035, 0.05, black);
-      cyl(0, 0.16, 0.32, 0.045, 0.045, 0.02, black, Math.PI / 2);
+      // Use the lid builder, not the world's static cyl() helper: the gauge
+      // must follow the lid rather than appearing near the ground-floor origin.
+      lid.cylinder(0, .185, .32, .045, .045, .018, black);
     });
     lid.finish();
     grillLids.push(lidPivot);
@@ -709,7 +740,8 @@ export function furnishVilla(scene: THREE.Scene): {
     at(0, 0, 1.45, Math.PI, () => chair(sage, 'chair-roof-east-2'));
   });
   box(14, 7.217, 7.4, 3.4, 0.028, 2.8, rugMat, 0);
-  for (const [x, z] of [[-10.8, 7.9], [-3, 7.9], [10.7, 7.9], [10.7, -8], [-10.6, -7.9], [-3, -7.9]]) plant(x, 7.2, z, 1.3, true);
+  // The botanical perimeter pots in villaGarden replace the old interior pot
+  // row, avoiding doubled pots at the south parapet and beside the grills.
 
   // Workbench and its tool board, in the garage's north strip beside the
   // estate's rear bench: a workshop bench belongs in the workshop, never on the
@@ -719,7 +751,9 @@ export function furnishVilla(scene: THREE.Scene): {
     for (let i = 0; i < 10; i++) { const x = -1.8 + i * 0.39; box(x, 1.73 + (i % 3) * 0.08, -0.25, 0.045, 0.4, 0.06, steel); if (i % 2) box(x, 1.95 + (i % 3) * 0.08, -0.25, 0.2, 0.09, 0.085, steel); else box(x, 1.53, -0.25, 0.085, 0.14, 0.09, terra); }
     box(-1.3, 1.08, 0, 0.6, 0.33, 0.4, terra); box(-1.3, 1.28, 0, 0.25, 0.05, 0.05, black); box(1.25, 1.03, 0, 0.48, 0.24, 0.3, steel);
   });
-  at(19.3, 0, -5.6, -Math.PI / 2, () => {
+  // Storage belongs in the garage's northern service strip, not the deliberately
+  // empty lounge. This span is between, not across, the workshop benches.
+  at(40.2, 0, -11.15, 0, () => {
     for (const x of [-0.85, 0.85]) box(x, 1.2, 0, 0.06, 2.4, 0.58, steel);
     for (let level = 0; level < 4; level++) { box(0, 0.2 + level * 0.64, 0, 1.7, 0.06, 0.6, steel); for (const x of [-0.43, 0.43]) { box(x, 0.42 + level * 0.64, 0, 0.72, 0.37, 0.48, level % 2 ? sage : oak); box(x, 0.44 + level * 0.64, 0.247, 0.2, 0.065, 0.01, cream, 0); } } hit(0, 0, 0, 1.8, 2.4, 0.64);
   });
@@ -766,23 +800,35 @@ export function furnishVilla(scene: THREE.Scene): {
   const update = (time: number, state: VillaFurnishingState): boolean => {
     const t = Number.isFinite(time) ? Math.max(0, time) : 0, feeding = t < state.fedUntil;
     faucet.update(t, !!state.faucetOn); teaBar.update(t, state.tea ?? t < (state.teaUntil ?? 0));
-    const dt = Math.max(0, t - previousTime); previousTime = t;
+    const reset = t === 0 || t < previousTime;
+    const dt = reset ? 0 : Math.max(0, t - previousTime); previousTime = t;
     aquariumLife.update(t, dt, feeding);
-    const shadowChanged = bedroom.update(state.wardrobes, state.roomLights?.master !== false)
-      || fridge.update(state.wardrobes);
-    if (state.bathDoors) bathDoorModel.update(state.bathDoors);
-    // The robot vacuum loops the hall; the LiDAR turret keeps spinning.
-    const va = t * 0.22;
-    vacuum.position.set(4.4 + Math.sin(va) * 0.85, 0, -10.3 + Math.cos(va) * 0.85);
-    vacuum.rotation.y = Math.atan2(Math.cos(va), -Math.sin(va));
-    if (vacuumLidar) vacuumLidar.rotation.y = t * 5;
+    // Evaluate every updater before aggregating; short-circuit OR used to skip
+    // fridge updates whenever the bedroom wardrobe was moving.
+    const bedroomChanged = bedroom.update(state.wardrobes, state.roomLights?.master !== false);
+    const fridgeChanged = fridge.update(state.wardrobes);
+    const doorsChanged = bathDoorModel.update(state.bathDoors);
+    let shadowChanged = bedroomChanged || fridgeChanged || doorsChanged;
+    // A slow cleaning pass returns to its real dock, rather than orbiting forever.
+    const cycle = t % 80;
+    if (cycle < 6 || cycle >= 76) { vacuum.position.set(4.45, 0, -7.85); vacuum.rotation.y = 0; }
+    else if (cycle < 10 || cycle >= 70) {
+      const u = cycle < 10 ? (cycle - 6) / 4 : 1 - (cycle - 70) / 6;
+      vacuum.position.set(4.45 - .05 * u, 0, -7.85 - 1.6 * u); vacuum.rotation.y = cycle < 10 ? Math.PI : 0;
+    } else {
+      const a = (cycle - 10) * Math.PI * 2 / 60;
+      vacuum.position.set(4.4 + Math.sin(a) * .85, 0, -10.3 + Math.cos(a) * .85);
+      vacuum.rotation.y = Math.atan2(Math.cos(a), -Math.sin(a));
+    }
+    vacuumBrush.rotation.y = cycle >= 6 && cycle < 76 ? t * 10 : 0;
     // Grill lids ease toward their open/closed targets.
     for (let i = 0; i < grillLids.length; i++) {
       const target = state.grillLids?.[i] ? 1 : 0;
       const current = grillLids[i].userData.progress as number;
-      const next = current + Math.sign(target - current) * Math.min(Math.abs(target - current), dt / 0.7);
+      const next = reset ? target : current + Math.sign(target - current) * Math.min(Math.abs(target - current), dt / 0.7);
+      shadowChanged ||= next !== current;
       grillLids[i].userData.progress = next;
-      grillLids[i].rotation.x = -1.25 * next;
+      grillLids[i].rotation.x = next === 0 ? 0 : -1.25 * next;
     }
     for (let i = 0; i < flames.length; i++) { flames[i].visible = state.fireplace; flames[i].scale.y = 0.2 + 0.16 * (0.5 + Math.sin(t * 8 + i * 1.9) * 0.5); flames[i].position.y = 0.48 + flames[i].scale.y * 0.67; flames[i].rotation.z = Math.sin(t * 5 + i) * 0.16; }
     const night = state.nightFactor ?? (state.evening ? 1 : 0);

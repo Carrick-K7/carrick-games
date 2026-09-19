@@ -85,7 +85,7 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
   });
   const setView = (state: VillaHomeState, view: VillaPosition) => {
     const atmosphere = villaAtmosphere(state);
-    const indoors = view.x >= -12.3 && view.x <= 12.3 && view.z >= -9.4 && view.z <= 11.6;
+    const indoors = VILLA_ESTATE_BUILDINGS.some(building => view.x >= building.minX && view.x <= building.maxX && view.z >= building.minZ && view.z <= building.maxZ);
     const relativeY = indoors ? view.y : view.y - villaTerrainHeight(view.x, view.z);
     const candidates = fixtures.map(fixture => {
       const { position, room } = fixture;

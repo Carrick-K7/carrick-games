@@ -33,8 +33,8 @@ import { createVillaPickup, advanceVillaPickup, villaPickupAnchors, villaPickupD
 import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvDriverSide, villaSuvSafeExit, villaSuvExitClear, villaSuvPoseBlocked, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
 import { villaCarSafeExit } from './villaDriving.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
-import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
-import { VillaAudio } from './villaAudio.js';
+import { VILLA_ESTATE_ROAD_PATHS, VILLA_GARAGE_DRIVE } from './villaDrivingCourse.js';
+import { VillaAudio, type VillaAudioEngine } from './villaAudio.js';
 import { advanceVillaBathDoors, createVillaBathDoors, toggleVillaBathDoor, type VillaBathDoorState } from './villaBathDoors.js';
 import { advanceVillaPark, createVillaParkRun, villaParkAvailable, villaParkRouteClear, villaVehicleParked, villaParkRoute, type VillaParkRun } from './villaAutopilot.js';
 import { VILLA_VERSION } from './villaVersion.js';
@@ -78,7 +78,8 @@ export class VillaGame extends BaseGame {
   private motion = createVillaMotion();
   private readonly audio = new VillaAudio();
   /** Vehicle drive snapshot for the engine loop; null on foot. */
-  private audioEngine: { speed: number; throttle: number } | null = null;
+  private audioEngine: VillaAudioEngine | null = null;
+  private audioFocusLost = false;
   private stepDistance = 0;
   private readonly roadDoorAudio = new Map<VillaRoadVehicle, boolean>();
   private immersive = false;
@@ -139,7 +140,7 @@ export class VillaGame extends BaseGame {
       aimAssist: on => { this.state.snooker.aimAssist = on; this.terminalChanged(); },
       fireplace: on => { this.state.fireplace = on; this.audio.lightClick(); this.terminalChanged(); },
       aquarium: on => { this.state.aquariumOn = on; this.audio.lightClick(); this.terminalChanged(); },
-      sound: on => { this.audio.prime(); this.audio.setEnabled(on); this.terminalChanged(); },
+      sound: on => { this.audio.setEnabled(on); if (on) this.primeAudio(); this.terminalChanged(); },
       park: id => { this.parkVehicleHome(id as VillaRoadVehicle); this.terminalChanged(); },
       // Isolated/older hosts have no game-action menu; keep touch access in
       // terminal Settings instead of restoring extra persistent HUD buttons.
@@ -167,9 +168,22 @@ export class VillaGame extends BaseGame {
     ]);
   }
 
-  /** Shell menus pause world input immediately instead of waiting for update(). */
+  private syncAudioPause() {
+    this.audio.setPaused(!this.running || this.presentationPaused || this.shellOpen() || document.hidden || this.audioFocusLost || this.unavailable);
+  }
+  private primeAudio(event?: Event) {
+    if (!this.running || this.presentationPaused || this.shellOpen() || document.hidden || this.unavailable) return;
+    // Only genuine input can end the focus-loss silence. The audio module also
+    // validates the event/activation before constructing or resuming a context.
+    if (event?.isTrusted || navigator.userActivation?.isActive) this.audioFocusLost = false;
+    this.syncAudioPause(); this.audio.prime(event);
+  }
+  setPresentationPaused(paused: boolean) {
+    super.setPresentationPaused(paused); this.syncAudioPause();
+  }
+  /** Shell menus pause world input and audio immediately, not on a later RAF. */
   onShellOverlayChange(open: boolean) {
-    this.shellOverlayOpen = open;
+    this.shellOverlayOpen = open; this.syncAudioPause();
     if (open) { this.terminal?.hide(); this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
     else this.mouseLookEnabled = !this.mapOpen && !this.terminal?.visible && !this.helpOpen;
     this.syncUseButton();
@@ -177,6 +191,7 @@ export class VillaGame extends BaseGame {
   }
 
   stop() {
+    this.audio.setPaused(true);
     this.cancelCarAccess();
     this.resetRoadVehicles();
     this.state.scooter.speed = 0; this.state.scooter.handbrake = false;
@@ -219,6 +234,7 @@ export class VillaGame extends BaseGame {
   }
 
   init() {
+    this.audio.setPaused(true); this.audioEngine = null; this.stepDistance = 0; this.roadDoorAudio.clear();
     this.clearInput();
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;
     this.time = 0; this.mapOpen = false; this.mapFloor = 0;
@@ -238,11 +254,12 @@ export class VillaGame extends BaseGame {
   }
 
   protected onStart() {
+    this.audioFocusLost = false; this.syncAudioPause();
     this.publishActions();
     this.mouseLookEnabled = true;
     if (!this.listenersBound) {
       this.listenersBound = true;
-      const blur = () => { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); };
+      const blur = () => { this.audioFocusLost = true; this.audio.setPaused(true); this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); };
       const cancelTouch = () => this.clearInput();
       const visibility = () => { if (document.hidden) blur(); };
       const leave = () => { this.lastMouse = null; };
@@ -276,6 +293,16 @@ export class VillaGame extends BaseGame {
         }
         this.publishState();
       };
+      const mount = this.canvas.closest('#gameApp') ?? this.canvas.parentElement;
+      const primeControl = (event: Event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target === this.canvas || target?.closest('[data-villa-use], [data-villa-terminal]')) this.primeAudio(event);
+      };
+      const gestures = ['keydown', 'mousedown', 'pointerdown', 'touchstart', 'touchend', 'click'];
+      for (const type of gestures) mount?.addEventListener(type, primeControl, { capture: true, passive: true });
+      // Muting is toggled by the button callback after capture. Bubble lets the
+      // enabling click prime old WebKit, which has no navigator.userActivation.
+      mount?.addEventListener('click', primeControl);
       window.addEventListener('blur', blur);
       document.addEventListener('visibilitychange', visibility);
       document.addEventListener('mousemove', pointerMove);
@@ -283,6 +310,8 @@ export class VillaGame extends BaseGame {
       this.canvas.addEventListener('touchcancel', cancelTouch);
       this.canvas.addEventListener('mouseleave', leave);
       this.registerCleanup(() => {
+        for (const type of gestures) mount?.removeEventListener(type, primeControl, true);
+        mount?.removeEventListener('click', primeControl);
         window.removeEventListener('blur', blur);
         document.removeEventListener('visibilitychange', visibility);
         document.removeEventListener('mousemove', pointerMove);
@@ -301,7 +330,7 @@ export class VillaGame extends BaseGame {
   }
 
   private lockPointer() {
-    this.audio.prime(); // pointer-lock requests come from a real gesture.
+    this.primeAudio();
     if (this.touchMode || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
     this.mouseLookEnabled = true; this.lastMouse = null; this.wantPointerLock = true;
     const version = ++this.lockVersion;
@@ -459,7 +488,8 @@ export class VillaGame extends BaseGame {
     this.time += dt;
     this.audioEngine = null;
     advanceVillaHome(this.state.home, dt); this.state.evening = this.state.home.darkness > .2;
-    advanceVillaTea(this.state.tea, dt); advanceVillaBathDoors(this.state.bathDoors, dt);
+    advanceVillaTea(this.state.tea, dt);
+    advanceVillaBathDoors(this.state.bathDoors, dt, { position: this.groundPosition(), height: villaBodyHeight(this.motion) + this.motion.offset });
     const wardrobeBefore = Object.fromEntries(Object.entries(this.state.wardrobes.wardrobes).map(([id, wardrobe]) => [id, wardrobe.progress]));
     const wardrobeChanged = advanceVillaWardrobes(this.state.wardrobes, dt);
     advanceVillaOutdoor(this.state.outdoor, dt, this.state.relaxSeatId === 'swing');
@@ -535,13 +565,13 @@ export class VillaGame extends BaseGame {
         : { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
           steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
       this.roadApi(id).advance(car, input, dt, this.roadObstacles(id));
-      this.audioEngine = { speed: car.speed, throttle: input.throttle };
+      this.audioEngine = { kind: id, speed: car.speed, throttle: input.throttle };
       this.yaw += car.yaw - oldYaw;
       this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'scooter') {
       const scooter = this.state.scooter, oldYaw = scooter.yaw;
       advanceVillaScooter(scooter, { throttle: forward, steer: side, brake, handbrake }, dt, this.scene?.scooterObstacles ?? []);
-      this.audioEngine = { speed: scooter.speed, throttle: forward };
+      this.audioEngine = { kind: 'scooter', speed: scooter.speed, throttle: forward };
       this.yaw += scooter.yaw - oldYaw; this.position = { ...villaScooterAnchors(scooter).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'racing' && enabled && this.state.screenSource === 'pc') {
       advanceVillaRace(this.state.race, { throttle: forward, steer: side, brake: brake || handbrake }, dt);
@@ -566,7 +596,7 @@ export class VillaGame extends BaseGame {
           (x, z, y) => this.supportAt(x, z, y, height), height) : base;
         this.position = { ...next, y: next.y + this.motion.offset };
         const running = this.keys.has('shift') && !this.motion.crouched;
-        this.stepDistance += Math.hypot(dx, dz);
+        if (this.motion.offset === 0 && !this.motion.velocity) this.stepDistance += Math.hypot(next.x - base.x, next.z - base.z);
         if (this.stepDistance > (running ? 1.15 : 0.82)) { this.stepDistance = 0; this.audio.footstep(running); }
       } else this.position.y = base.y + this.motion.offset;
       if (this.motion.offset > 0 || this.motion.velocity) this.eyeY = this.position.y;
@@ -595,8 +625,8 @@ export class VillaGame extends BaseGame {
     const listener = this.groundPosition();
     this.audio.update({
       roomId: villaRoomAt(listener).id,
-      poolDistance: Math.hypot(listener.x - (POOL.minX + POOL.maxX) / 2, listener.z - (POOL.minZ + POOL.maxZ) / 2),
-      fireDistance: Math.hypot(listener.x + 10, listener.z - 0.95),
+      poolDistance: Math.hypot(listener.x - (POOL.minX + POOL.maxX) / 2, listener.y, listener.z - (POOL.minZ + POOL.maxZ) / 2),
+      fireDistance: Math.hypot(listener.x + 10, listener.y, listener.z - 0.95),
       fireplace: this.state.fireplace,
       rain: this.state.home.rain,
       engine: this.audioEngine,
@@ -685,6 +715,9 @@ export class VillaGame extends BaseGame {
     data.villaLights = JSON.stringify(this.state.home.roomLights);
     data.villaLookSensitivity = String(this.state.home.lookSensitivity);
     data.villaWardrobes = JSON.stringify(this.state.wardrobes.wardrobes);
+    data.villaBathDoors = JSON.stringify(this.state.bathDoors);
+    data.villaGrills = JSON.stringify(this.state.grillLids);
+    data.villaSoundEnabled = this.audio.enabled ? 'on' : 'off';
     data.villaOutdoor = JSON.stringify({ camping: this.state.outdoor.camping, swingAngle: +this.state.outdoor.swingAngle.toFixed(3) });
     data.villaFireplace = String(this.state.fireplace);
     data.villaGaming = String(this.state.gaming);
@@ -848,7 +881,7 @@ export class VillaGame extends BaseGame {
       toggleVillaBathDoor(this.state.bathDoors, which);
       this.audio.lightClick();
       const open = this.state.bathDoors[which];
-      this.message(this.isZhLang() ? (open ? '浴室门已打开。' : '浴室门已关好。') : open ? 'The bath door is open.' : 'The bath door is closed.');
+      this.message(this.isZhLang() ? (open ? '正在开门，请让开门扇。' : '正在关门，请让开门扇。') : open ? 'Opening. Please keep the swing clear.' : 'Closing. Please keep the swing clear.');
       this.publishState(); return;
     }
     if (id === 'grill-west' || id === 'grill-centre' || id === 'grill-east') {
@@ -894,7 +927,7 @@ export class VillaGame extends BaseGame {
           this.message(this.isZhLang() ? '上方空间不足，暂时不能站起。' : 'Not enough headroom to stand.');
         break;
       case 'jump': if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition && this.enterCarAt === Infinity) jumpVillaMotion(this.motion); break;
-      case 'shoot': if (this.state.snookerActive && !this.transition) { shootVillaSnooker(this.state.snooker); this.audio.snookerHit(this.state.snooker.power); } break;
+      case 'shoot': if (this.state.snookerActive && !this.transition && shootVillaSnooker(this.state.snooker)) this.audio.snookerHit(this.state.snooker.power); break;
       case 'reset-activity':
         this.clearInput();
         if (this.state.snookerActive) this.state.snooker = createVillaSnooker();
@@ -1287,7 +1320,7 @@ export class VillaGame extends BaseGame {
         const which = hotspot.id === 'bath-door-west' ? 'west' : 'east';
         toggleVillaBathDoor(this.state.bathDoors, which); this.audio.lightClick();
         const open = this.state.bathDoors[which];
-        this.message(zh ? (open ? '浴室门已打开。' : '浴室门已关好。') : open ? 'The bath door is open.' : 'The bath door is closed.');
+        this.message(zh ? (open ? '正在开门，请让开门扇。' : '正在关门，请让开门扇。') : open ? 'Opening. Please keep the swing clear.' : 'Closing. Please keep the swing clear.');
         this.publishState(); break;
       }
       case 'grill-west': case 'grill-centre': case 'grill-east': {
@@ -1368,6 +1401,7 @@ export class VillaGame extends BaseGame {
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (!this.running) return;
+    if (['keydown', 'mousedown', 'touchstart', 'touchend'].includes(e.type)) this.primeAudio(e);
     if (e instanceof KeyboardEvent) {
       const key = e.key.toLowerCase();
       if (e.type === 'keyup') { this.keys.delete(key); return; }
@@ -1716,8 +1750,9 @@ export class VillaGame extends BaseGame {
     // Plan bounds derive from the envelope so a resized house cannot fall off
     // the map; the ground floor also spans the garage.
     const shell = { minX: WEST.outer - 2, maxX: EAST.outer + 2, minZ: NORTH.outer - 2, maxZ: SOUTH.outer + 3 };
+    const groundWest = Math.min(shell.minX, POOL.minX - 2);
     const range = this.mapFloor === 0
-      ? { x: shell.minX, z: shell.minZ, w: VILLA_GARAGE_EXTENT.maxX + 3 - shell.minX, d: shell.maxZ - shell.minZ }
+      ? { x: groundWest, z: shell.minZ, w: VILLA_GARAGE_EXTENT.maxX + 3 - groundWest, d: 25 - shell.minZ }
       : { x: shell.minX, z: shell.minZ, w: shell.maxX - shell.minX, d: shell.maxZ - shell.minZ };
     const scale = Math.min((p.w - 50) / range.w, (p.h - (compact ? 80 * s : 185)) / range.d);
     const left = p.x + (p.w - range.w * scale) / 2, top = p.y + (compact ? 57 * s : 133);
@@ -1725,12 +1760,20 @@ export class VillaGame extends BaseGame {
     const mz = (z: number) => top + (z - range.z) * scale;
     ctx.fillStyle = dark ? '#344736' : '#dce4ca';
     ctx.fillRect(mx(range.x), mz(range.z), range.w * scale, range.d * scale);
-    ctx.fillStyle = dark ? '#707466' : '#ebe1ce'; ctx.fillRect(mx(-12), mz(-9), 24 * scale, 18 * scale);
+    ctx.fillStyle = dark ? '#707466' : '#ebe1ce';
+    ctx.fillRect(mx(WEST.inner), mz(NORTH.inner), (EAST.inner - WEST.inner) * scale, (SOUTH.inner - NORTH.inner) * scale);
     if (this.mapFloor === 0) {
       ctx.fillStyle = '#78b6bc'; ctx.fillRect(mx(POOL.minX), mz(POOL.minZ), (POOL.maxX - POOL.minX) * scale, (POOL.maxZ - POOL.minZ) * scale);
       ctx.fillStyle = '#37505a'; ctx.font = `${12 * s}px ${UI_FONT}`; ctx.fillText(zh ? '泳池' : 'Pool', mx((POOL.minX + POOL.maxX) / 2), mz((POOL.minZ + POOL.maxZ) / 2), 7 * scale);
       ctx.fillStyle = '#e9dfcb'; ctx.fillRect(mx(-1.7), mz(9), 3.4 * scale, 14 * scale);
-      ctx.fillStyle = '#85897d'; ctx.fillRect(mx(16.2 - VILLA_SCENIC_ROAD.drivewayWidth / 2), mz(2), VILLA_SCENIC_ROAD.drivewayWidth * scale, 22 * scale);
+      // Plot the actual paths, not the obsolete x=16.2 driveway through the house.
+      ctx.save(); ctx.beginPath(); ctx.rect(mx(range.x), mz(range.z), range.w * scale, range.d * scale); ctx.clip();
+      ctx.strokeStyle = '#85897d'; ctx.lineJoin = 'round';
+      for (const path of VILLA_ESTATE_ROAD_PATHS) {
+        ctx.lineWidth = (path === VILLA_GARAGE_DRIVE ? VILLA_SCENIC_ROAD.drivewayWidth : VILLA_SCENIC_ROAD.width) * scale;
+        ctx.beginPath(); path.forEach((point, index) => index ? ctx.lineTo(mx(point.x), mz(point.z)) : ctx.moveTo(mx(point.x), mz(point.z))); ctx.stroke();
+      }
+      ctx.fillStyle = '#85897d'; ctx.fillRect(mx(29), mz(2), 21.2 * scale, 3 * scale); ctx.restore();
       for (const bed of VILLA_VEGETABLE_BEDS) {
         ctx.fillStyle = '#75634c'; ctx.fillRect(mx(bed.x - bed.w / 2), mz(bed.z - bed.d / 2), bed.w * scale, bed.d * scale);
         ctx.fillStyle = '#a4b475'; ctx.fillRect(mx(bed.x - bed.w / 2) + 1, mz(bed.z - bed.d / 2) + 1, Math.max(1, bed.w * scale - 2), Math.max(1, bed.d * scale - 2));
@@ -1738,7 +1781,10 @@ export class VillaGame extends BaseGame {
       ctx.fillStyle = dark ? '#f3e7c4' : '#3c4b3e'; ctx.textAlign = 'center'; ctx.font = `${this.touchMode ? 10 * s : 12}px ${UI_FONT}`;
       ctx.fillText(zh ? '小伙伴' : 'Pets', mx(-17), mz(13.8), 9 * scale);
       ctx.fillText(zh ? '菜地' : 'Veg beds', mx(-7.9), mz(16), 7 * scale);
-      for (const pet of this.state.pets.pets) { ctx.fillStyle = '#ead9a8'; ctx.beginPath(); ctx.arc(mx(pet.x), mz(pet.z), 2.5, 0, Math.PI * 2); ctx.fill(); }
+      for (const pet of this.state.pets.pets) {
+        if (pet.x < range.x || pet.x > range.x + range.w || pet.z < range.z || pet.z > range.z + range.d) continue;
+        ctx.fillStyle = '#ead9a8'; ctx.beginPath(); ctx.arc(mx(pet.x), mz(pet.z), 2.5, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.fillStyle = dark ? '#f3e7c4' : '#3c4b3e'; ctx.textAlign = 'center'; ctx.font = `${this.touchMode ? 10 * s : 12}px ${UI_FONT}`;
       ctx.fillText(zh ? '↓ 南侧田园 · 庭院页查看' : '↓ South estate · see Estate tab', mx(6), mz(23), 25 * scale);
     }
@@ -1764,7 +1810,8 @@ export class VillaGame extends BaseGame {
     ctx.fillRect(mx(VILLA_ELEVATOR.minX), mz(VILLA_ELEVATOR.minZ), (VILLA_ELEVATOR.maxX - VILLA_ELEVATOR.minX) * scale, (VILLA_ELEVATOR.maxZ - VILLA_ELEVATOR.minZ) * scale);
     ctx.fillStyle = '#334339'; ctx.font = `bold 14px ${UI_FONT}`;
     ctx.fillText('↕', mx(VILLA_ELEVATOR.centerX), mz(VILLA_ELEVATOR.centerZ) + 4);
-    if (villaFloor(this.position.y) === this.mapFloor) {
+    if (villaFloor(this.position.y) === this.mapFloor && this.position.x >= range.x && this.position.x <= range.x + range.w
+      && this.position.z >= range.z && this.position.z <= range.z + range.d) {
       ctx.save(); ctx.translate(mx(this.position.x), mz(this.position.z)); ctx.rotate(-this.yaw);
       ctx.fillStyle = '#d1774d'; ctx.strokeStyle = '#fff8e9'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 6); ctx.lineTo(0, 3); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();

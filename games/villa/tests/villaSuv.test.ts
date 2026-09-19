@@ -72,6 +72,165 @@ describe('Villa coupe-SUV independent driving profile and safety', () => {
     expect(exit).toEqual(VILLA_SUV.exit);
     expect(villaSuvExitClear(pose, [], -1)).toBe(true);
   });
+  it('spins only a hub-centred rotor on the fixed shaft at every steering angle and car yaw', () => {
+    const scene = new THREE.Group(), model = createVillaSuvModel(scene), state = createVillaSuv();
+    try {
+      const car = scene.getObjectByName('villa-suv')!, column = scene.getObjectByName('suv-steering-column')!;
+      const wheel = scene.getObjectByName('suv-steering-wheel')!, marker = scene.getObjectByName('suv-wheel-top-marker')!;
+      expect(wheel.parent).toBe(column); expect(marker.parent).toBe(wheel);
+      expect(column.position.toArray()).toEqual([.52, 1.06, .40]); expect(column.rotation.x).toBeCloseTo(Math.atan2(.22, .26));
+      expect(wheel.position.toArray()).toEqual([0, 0, 0]);
+      const identities = [...model.colliders], point = new THREE.Vector3(), matrix = new THREE.Matrix4();
+      for (const pose of [
+        { x: state.x, z: state.z, yaw: 0 }, { x: state.x, z: state.z, yaw: 1.2 }, { x: 14, z: 127, yaw: -1.1 },
+      ]) {
+        Object.assign(state, pose, { steering: 0 }); model.update(0, { suv: state }); scene.updateMatrixWorld(true);
+        const fixed = column.matrixWorld.clone(), shell = car.matrixWorld.clone(), bounds = new THREE.Box3().setFromObject(car);
+        const colliders = model.colliders.map(c => ({ ...c })), anchors = villaSuvAnchors(state);
+        const expectedHub = car.localToWorld(new THREE.Vector3(.52, 1.06, .40));
+        const expectedBase = car.localToWorld(new THREE.Vector3(.52, .84, .66));
+        const inverseCar = car.matrixWorld.clone().invert();
+        for (const steering of [-.55, -.21, 0, .3, .55]) {
+          state.steering = steering; model.update(1, { suv: state }); scene.updateMatrixWorld(true);
+          expect(wheel.getWorldPosition(new THREE.Vector3()).distanceTo(expectedHub)).toBeLessThan(1e-9);
+          expect(column.localToWorld(new THREE.Vector3(0, 0, Math.hypot(.22, .26))).distanceTo(expectedBase)).toBeLessThan(1e-9);
+          expect(marker.getWorldPosition(new THREE.Vector3()).distanceTo(expectedHub)).toBeCloseTo(.19, 8);
+          const rotorAxis = new THREE.Vector3(0, 0, 1).transformDirection(wheel.matrixWorld);
+          expect(rotorAxis.dot(expectedBase.clone().sub(expectedHub).normalize())).toBeCloseTo(1, 9);
+          expect(column.matrixWorld.equals(fixed)).toBe(true); expect(car.matrixWorld.equals(shell)).toBe(true);
+          expect(wheel.rotation.x).toBe(0); expect(wheel.rotation.y).toBe(0); expect(wheel.rotation.z).toBeCloseTo(steering * 4.5);
+          expect(model.colliders).toEqual(colliders); model.colliders.forEach((c, i) => expect(c).toBe(identities[i]));
+          expect(villaSuvAnchors(state)).toEqual(anchors); expect(new THREE.Box3().setFromObject(car).equals(bounds)).toBe(true);
+          // Measure real mesh vertices in vehicle space, not inverse-transformed
+          // world AABBs, which would falsely grow on rotated/sloping terrain.
+          const rotorBounds = new THREE.Box3();
+          wheel.traverse(node => {
+            if (!(node instanceof THREE.Mesh)) return;
+            matrix.multiplyMatrices(inverseCar, node.matrixWorld);
+            const vertices = node.geometry.getAttribute('position');
+            for (let i = 0; i < vertices.count; i++) rotorBounds.expandByPoint(point.fromBufferAttribute(vertices, i).applyMatrix4(matrix));
+          });
+          expect(rotorBounds.min.x).toBeGreaterThan(.30); expect(rotorBounds.max.x).toBeLessThan(.74);
+          expect(rotorBounds.min.y).toBeGreaterThan(.87); expect(rotorBounds.max.y).toBeLessThan(1.25);
+          expect(rotorBounds.min.z).toBeGreaterThan(.23); expect(rotorBounds.max.z).toBeLessThan(.57);
+        }
+      }
+    } finally { dispose(scene); }
+  });
+  it.each([0, .8, -2.1])('projects right/left steering clockwise/counterclockwise from the actual seated camera at yaw %s', yaw => {
+    const scene = new THREE.Group(), model = createVillaSuvModel(scene), state = { ...createVillaSuv(), yaw };
+    try {
+      const car = scene.getObjectByName('villa-suv')!, column = scene.getObjectByName('suv-steering-column')!;
+      const wheel = scene.getObjectByName('suv-steering-wheel')!, marker = scene.getObjectByName('suv-wheel-top-marker')!;
+      const seat = villaSuvAnchors(state).seat, camera = new THREE.PerspectiveCamera(64, 16 / 9, .01, 100);
+      camera.position.set(seat.x, seat.y + VILLA_SUV.eyeHeight, seat.z);
+      camera.rotation.set(0, yaw + VILLA_SUV.yaw, 0, 'YXZ'); camera.updateMatrixWorld(true);
+      const project = () => {
+        model.update(0, { suv: state }); scene.updateMatrixWorld(true);
+        const center = wheel.getWorldPosition(new THREE.Vector3()).project(camera), top = marker.getWorldPosition(new THREE.Vector3()).project(camera);
+        return new THREE.Vector2(top.x - center.x, top.y - center.y);
+      };
+      const neutral = project(), fixed = column.matrixWorld.clone(), body = car.matrixWorld.clone();
+      expect(neutral.x).toBeCloseTo(0); expect(neutral.y).toBeGreaterThan(0);
+      tick(state, { ...idle, steer: .2 }, .15); const right = project();
+      expect(wheel.rotation.z).toBeGreaterThan(0); expect(right.x).toBeGreaterThan(0); expect(neutral.cross(right)).toBeLessThan(0);
+      tick(state, { ...idle, steer: -.2 }, .2); const left = project();
+      expect(wheel.rotation.z).toBeLessThan(0); expect(left.x).toBeLessThan(0); expect(neutral.cross(left)).toBeGreaterThan(0);
+      tick(state, idle, .2); const released = project();
+      expect(state.steering).toBe(0); expect(wheel.rotation.z).toBe(0);
+      expect(released.distanceTo(neutral)).toBeLessThan(1e-9);
+      expect(column.matrixWorld.equals(fixed)).toBe(true); expect(car.matrixWorld.equals(body)).toBe(true);
+    } finally { dispose(scene); }
+  });
+  it('keeps the steering transform finite for bad clocks and non-finite steering input', () => {
+    const scene = new THREE.Group(), model = createVillaSuvModel(scene), state = createVillaSuv();
+    try {
+      const wheel = scene.getObjectByName('suv-steering-wheel')!;
+      state.steering = .3; model.update(1, { suv: state }); const snapshot = wheel.matrixWorld.clone();
+      for (const time of [NaN, Infinity, -Infinity]) {
+        state.steering = -.3; expect(model.update(time, { suv: state })).toBe(false);
+        expect(wheel.matrixWorld.equals(snapshot)).toBe(true);
+      }
+      for (const steering of [NaN, Infinity, -Infinity]) {
+        state.steering = steering; model.update(2, { suv: state });
+        expect(wheel.matrixWorld.elements.every(Number.isFinite)).toBe(true);
+        expect(Math.abs(wheel.rotation.z)).toBeLessThanOrEqual(.55 * 4.5);
+      }
+    } finally { dispose(scene); }
+  });
+  it('has real opaque roof and hood coverage from above, not an open-topped body', () => {
+    const scene = new THREE.Group(); createVillaSuvModel(scene);
+    try {
+      const car = scene.getObjectByName('villa-suv')!; scene.updateMatrixWorld(true);
+      const ray = (point: THREE.Vector3, direction: THREE.Vector3, far = 4) => new THREE.Raycaster(
+        point.applyMatrix4(car.matrixWorld), direction.transformDirection(car.matrixWorld), 0, far,
+      ).intersectObject(car, true);
+      // Keep the audit over authored opaque panels, not the deliberately glazed
+      // front/rear windscreens or headlight lenses at the bonnet's outer edges.
+      for (const x of [-.7, -.35, 0, .35, .7]) for (const z of [-1.85, -1.5, -1, -.5, -.15]) {
+        const hit = ray(new THREE.Vector3(x, 3, z), new THREE.Vector3(0, -1, 0))[0];
+        expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
+        expect(hit.point.y - car.position.y).toBeCloseTo(1.58 + (z + .02) * .18 / 1.96, 5);
+      }
+      for (const x of [-.5, -.25, 0, .25, .5]) for (const z of [.65, .9, 1.2, 1.6, 2.1, 2.3]) {
+        const hit = ray(new THREE.Vector3(x, 3, z), new THREE.Vector3(0, -1, 0))[0];
+        expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
+        expect(hit.point.y - car.position.y).toBeGreaterThan(1); expect(hit.point.y - car.position.y).toBeLessThan(1.21);
+      }
+      // The recessed fascia and bright headlight lenses also have geometry;
+      // the apparent white cut-outs in a garage view are not absent front faces.
+      for (const x of [0, .45, .8, .95]) for (const y of [.84, .94, 1.02]) {
+        const hit = ray(new THREE.Vector3(x, y, 3.2), new THREE.Vector3(0, 0, -1), 6)[0];
+        expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ transparent: false });
+        const local = car.worldToLocal(hit.point.clone());
+        expect(local.z).toBeGreaterThan(2); expect(local.z).toBeLessThan(2.6);
+      }
+    } finally { dispose(scene); }
+  });
+  it('closes the confirmed roof/header seams without covering window or door openings', () => {
+    const scene = new THREE.Group(), model = createVillaSuvModel(scene), state = { ...createVillaSuv(), yaw: .6 };
+    try {
+      const car = scene.getObjectByName('villa-suv')!, headers = scene.getObjectByName('suv-roof-headers')!;
+      expect(headers.parent).toBe(car);
+      headers.traverse(node => {
+        if (!(node instanceof THREE.Mesh)) return;
+        const bounds = new THREE.Box3().setFromBufferAttribute(node.geometry.getAttribute('position') as THREE.BufferAttribute);
+        expect(bounds.min.x).toBeGreaterThanOrEqual(-.900001); expect(bounds.max.x).toBeLessThanOrEqual(.900001);
+        expect(bounds.min.y).toBeGreaterThanOrEqual(1.419999); expect(bounds.max.y).toBeLessThanOrEqual(1.580001);
+        expect(bounds.min.z).toBeGreaterThanOrEqual(-1.720001); expect(bounds.max.z).toBeLessThanOrEqual(.100001);
+        expect(Array.from(node.geometry.getAttribute('normal').array).every(Number.isFinite)).toBe(true);
+      });
+      for (const open of [false, true]) {
+        model.update(0, { suv: state, suvDoorOpen: open }); scene.updateMatrixWorld(true);
+        const ray = (point: THREE.Vector3, direction: THREE.Vector3) => new THREE.Raycaster(
+          point.applyMatrix4(car.matrixWorld), direction.transformDirection(car.matrixWorld), 0, 4,
+        ).intersectObject(car, true)[0];
+        // These horizontal rays previously passed between side-glass tops and
+        // roof rails (6–40mm gaps), right through both sides of the whole model.
+        for (const side of [-1, 1]) for (const [z, y] of [[-1, 1.4548241758241758], [-.5, 1.4862213500784929], [-.1, 1.5113390894819467]]) {
+          const hit = ray(new THREE.Vector3(side * 2, y, z), new THREE.Vector3(-side, 0, 0));
+          expect(hit).toBeDefined(); expect(hit.object.parent).toBe(headers);
+          expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
+          const local = car.worldToLocal(hit.point.clone()); expect(local.x * side).toBeGreaterThan(.8);
+        }
+        // Windscreen-to-roof header: intercept at the leading edge, not at the
+        // roof underside further inside the cabin behind an unsealed seam.
+        for (const side of [-1, 1]) {
+          const hit = ray(new THREE.Vector3(side * .7, 1.57, 1), new THREE.Vector3(0, 0, -1));
+          expect(hit.object.parent).toBe(headers);
+          const local = car.worldToLocal(hit.point.clone()); expect(local.z).toBeGreaterThan(-.05); expect(local.z).toBeLessThan(-.02);
+        }
+        // Clear panes stay glazed, not converted to opaque headers. The moving
+        // driver's leaf remains the sole door animation; the trim stays above.
+        const windscreen = ray(new THREE.Vector3(0, 1.32, 1), new THREE.Vector3(0, 0, -1));
+        expect((windscreen.object as THREE.Mesh).material).toMatchObject({ name: 'coupe-suv-glazing', transparent: true });
+        if (!open) for (const side of [-1, 1]) {
+          const window = ray(new THREE.Vector3(side * 2, 1.3, -.5), new THREE.Vector3(-side, 0, 0));
+          expect((window.object as THREE.Mesh).material).toMatchObject({ name: 'coupe-suv-glazing', transparent: true });
+        }
+      }
+    } finally { dispose(scene); }
+  });
   it('tilts to the shared terrain while live colliders and seated anchors follow the same height', () => {
     const scene = new THREE.Group(); const suv = createVillaSuvModel(scene), state = { ...createVillaSuv(), x: 14, z: 127 };
     try {

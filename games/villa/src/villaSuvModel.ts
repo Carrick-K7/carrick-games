@@ -24,6 +24,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   const taillight = new THREE.MeshStandardMaterial({ color: 0x8f1620, emissive: 0xc21e28, emissiveIntensity: .5, roughness: .3 });
   paint.name = 'gentian-clearcoat'; glass.name = 'coupe-suv-glazing';
   const body = new VillaModelBuilder(root, 'suv-body'), cabin = new VillaModelBuilder(root, 'suv-cabin'), glazing = new VillaModelBuilder(root, 'suv-glazing');
+  const roofHeaders = new VillaModelBuilder(root, 'suv-roof-headers');
   const quad = (builder: VillaModelBuilder, corners: Triple[], material: THREE.Material) => {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(corners.flat(), 3)); g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals(); builder.geometry(g, material);
   };
@@ -65,9 +66,20 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   // Raked windshield, then the coupe roofline falling away to the tail.
   quad(glazing, [[-.86, 1.1, .5], [.86, 1.1, .5], [.78, 1.56, -.05], [-.78, 1.56, -.05]], glass);
   quad(body, [[-.9, 1.58, -.02], [.9, 1.58, -.02], [.84, 1.4, -1.98], [-.84, 1.4, -1.98]], paint);
+  // The panels exist, but their unequal perimeter datums left open roof/window
+  // seams. Narrow edge-to-edge headers close only those gaps: no second roof,
+  // glazing overlay or fixed infill across the driver's moving door aperture.
+  quad(roofHeaders, [[-.78, 1.56, -.05], [.78, 1.56, -.05], [.9, 1.58, -.02], [-.9, 1.58, -.02]], paint);
   for (const side of [-1, 1]) {
     // Side glass: a fast, shallow arc under the falling roof rail.
     quad(glazing, [[side * .9, 1.12, .42], [side * .9, 1.12, -1.72], [side * .84, 1.42, -1.72], [side * .83, 1.5, .1]], glass);
+    const sideFront: Triple = [side * .83, 1.5, .1], roofFront: Triple = [side * .9, 1.58, -.02];
+    const roofFraction = 1.7 / 1.96;
+    const roofRear: Triple = [side * (.9 - .06 * roofFraction), 1.58 - .18 * roofFraction, -1.72];
+    quad(roofHeaders, [sideFront, roofFront, roofRear, [side * .84, 1.42, -1.72]], paint);
+    const corner = new THREE.BufferGeometry();
+    corner.setAttribute('position', new THREE.Float32BufferAttribute([[side * .78, 1.56, -.05], sideFront, roofFront].flat(), 3));
+    corner.computeVertexNormals(); roofHeaders.geometry(corner, paint);
     body.beam([side * .92, 1.56, -.02], [side * .86, 1.4, -1.98], .022, paint);
     body.box(side * .88, 1.02, -.85, .05, .34, .06, trim, .02);
   }
@@ -164,16 +176,26 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   cabin.box(0, 1.452, .098, .22, .055, .004, speaker, .002);
   cabin.box(0, 1.53, -.28, .34, .012, .1, dashSoft, .01);
   for (const side of [-1, 1]) cabin.box(side * .1, 1.522, -.28, .08, .006, .05, ambient, .002);
-  const wheel = new VillaModelBuilder(root, 'suv-steering-wheel');
-  // Three-spoke leather wheel with a slim hub, metal spokes and shift paddles.
-  wheel.beam([.52, .84, .66], [.52, 1.03, .44], .033, dashSoft);
-  wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather, [.52, 1.06, .40], [Math.PI / 2.3, 0, 0]);
-  wheel.box(.52, 1.06, .40, .11, .08, .05, dashSoft, .02);
-  wheel.box(.52, 1.06, .385, .05, .04, .012, speaker, .004);
-  for (const x of [-.15, .15]) wheel.beam([.52 + x, 1.06, .40], [.52 + x * .16, 1.072, .40], .016, speaker);
-  wheel.beam([.52, 1.045, .40], [.52, .985, .40], .016, speaker);
-  for (const x of [-.12, .12]) wheel.box(.52 + x, 1.10, .435, .03, .06, .01, speaker, .002);
-  wheel.finish();
+  // A fixed shaft joins the same dashboard base [.52,.84,.66] to the original
+  // hub [.52,1.06,.40]. Only the hub-local rotor turns: rotating the old builder
+  // at the vehicle origin orbited the wheel AND its column out of the cockpit.
+  const shaftTilt = Math.atan2(.22, .26), shaftLength = Math.hypot(.22, .26);
+  const steering = new VillaModelBuilder(root, 'suv-steering-column');
+  steering.root.position.set(.52, 1.06, .40); steering.root.rotation.x = shaftTilt;
+  steering.root.userData = { kind: 'steering', driverSide: '+X', position: [.52, 1.06, .40], shaftTilt };
+  steering.beam([0, 0, shaftLength], [0, 0, .025], .033, dashSoft);
+  const wheel = new VillaModelBuilder(steering.root, 'suv-steering-wheel');
+  // All three spokes, the hub and the circular leather rim share one plane
+  // normal to the shaft; paddles sit just behind it on the rotating assembly.
+  wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather);
+  wheel.box(0, 0, 0, .11, .08, .05, dashSoft, .02);
+  wheel.box(0, 0, -.032, .05, .04, .012, speaker, .004);
+  for (const side of [-1, 1]) wheel.beam([side * .175, .015, 0], [side * .045, .012, 0], .016, speaker);
+  wheel.beam([0, -.035, 0], [0, -.175, 0], .016, speaker);
+  for (const x of [-.12, .12]) wheel.box(x, .04, .04, .03, .06, .01, speaker, .002);
+  const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'suv-wheel-top-marker'; wheelMarker.position.set(0, .19, 0); wheel.root.add(wheelMarker);
+  wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true };
+  steering.finish(); wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
   for (const side of [1, -1]) {
     const pivot = new THREE.Group(); pivot.name = side === 1 ? 'suv-driver-door' : 'suv-passenger-door'; pivot.position.set(side * .99, 0, 1.05); pivot.userData = { animated: true, side, hinge: [side * .99, 0, 1.05] }; root.add(pivot);
@@ -199,7 +221,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     door.finish();
     doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.15 : -.18, .5, -1.65), new THREE.Vector3(side === 1 ? .18 : .15, 1.52, .18)) });
   }
-  for (const builder of [body, cabin, glazing]) builder.finish();
+  for (const builder of [body, cabin, glazing, roofHeaders]) builder.finish();
   const localBody = new THREE.Box3(new THREE.Vector3(-VILLA_SUV_LIMITS.halfWidth, 0, -VILLA_SUV_LIMITS.halfLength), new THREE.Vector3(VILLA_SUV_LIMITS.halfWidth, VILLA_SUV_LIMITS.height, VILLA_SUV_LIMITS.halfLength));
   const nodes = [{ root, bounds: localBody }, ...doors], world = new THREE.Box3(), query = new THREE.Vector3();
   const colliders: VillaCollider[] = nodes.map(() => ({ ...VILLA_SUV.body })), inverses = nodes.map(() => new THREE.Matrix4());

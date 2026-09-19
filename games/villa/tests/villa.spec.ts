@@ -97,7 +97,7 @@ test.describe('Warm Villa', () => {
       const floors: number[] = [];
       const ascend = () => { walk(0.04, -6.2); walk(2.06, -6.2); walk(2.06, 1.4); floors.push(game.position.y); };
       ascend();
-      walk(0, 1.4); walk(0, 2.6); walk(-3.4, 2.6); // master entry
+      walk(0, 1.4); walk(0, 2.6); walk(-4.9, 2.6); // inside the moved master wall
       const masterHudText: string[] = [], originalFillText = game.ctx.fillText;
       game.ctx.fillText = (text: string) => masterHudText.push(text);
       game.drawHud(game.ctx); game.ctx.fillText = originalFillText;
@@ -105,16 +105,35 @@ test.describe('Warm Villa', () => {
       const masterRoomHudLabels = masterHudText.filter(text => text.includes('主卧'));
       // The location/map badge is intentional; no extra or duplicate room HUD label is.
       const masterHudHasRoomLabel = masterRoomHudLabels.length > 1 || masterRoomHudLabels.some(text => text !== masterMapLabel);
-      // The stairwell now sits on the north hall: reach the guest door by the
-      // west aisle instead of stepping onto the lower flight at x=0.
-      walk(0, 2.6); walk(-1.5, 2.6); walk(-1.5, -3.5); walk(-3.4, -3.5); // guest entry
-      walk(-1.5, -3.5); walk(-1.5, 1.7); walk(9.6, 2.4); walk(9.6, -0.5); // bath entry through the widened lobby
-      walk(9.6, 2.4); walk(4.5, 2.4); walk(4.5, 4.5); // reading room entry
-      walk(4.2, 1.4); walk(2.06, 1.4); ascend();
-      game.renderFrame();
+      // The new west wing is physically toured: master balcony, ensuite,
+      // dressing room, its guest doorway, and the guest's north gallery door.
+      walk(-12.5, 2.6); walk(-12.5, 8.1); walk(-7.3, 8.1); walk(-7.3, 10);
+      walk(-7.3, 8.1); walk(-12.5, 8.1); walk(-12.5, 2.6); walk(-1.5, 2.6);
+      walk(-1.5, -3.65); walk(-8, -3.65); walk(-8, -4.9); walk(-16, -4.9);
+      walk(-16, -10.5); walk(-13, -10.5); walk(-13, -16); walk(-1.5, -16);
+      walk(6.4, -16); walk(6.4, -13.4); walk(10.5, -13.4); // study
+      walk(6.4, -13.4); walk(6.4, -4.8); walk(6.8, -4.8);
+      const useBathDoor = (id: string) => {
+        game.yaw = -Math.PI / 2;
+        if (game.hotspot()?.id !== id) throw new Error(`Door approach targets ${game.hotspot()?.id}, not ${id}`);
+        key('e'); for (let i = 0; i < 22; i++) game.update(.05);
+      };
+      useBathDoor('bath-door-west');
+      const westOpened = game.state.bathDoors.progressW === 1;
+      // Pass beyond the open west leaf tips before turning around the tub.
+      walk(9.85, -4.8); walk(9.85, -7.1); walk(13.4, -7.1); walk(13.4, -2); walk(15.8, -2);
+      useBathDoor('bath-door-east');
+      const eastOpened = game.state.bathDoors.progressE === 1;
+      walk(18.2, -2); walk(22, -2); walk(22, -10.2); // reading hall -> massage
+      walk(22, 5); walk(4.2, 5); walk(4.2, 1.4); walk(2.06, 1.4); ascend();
+      game.scene.softwareInputFrames = 0; game.scene.lastDrawAt = -Infinity; game.renderFrame();
       const roofImage = canvas.toDataURL('image/png');
       const descend = () => { walk(2.06, -6.2); walk(0.04, -6.2); walk(0.04, 1.4); floors.push(game.position.y); };
       descend(); walk(2.06, 1.4); descend();
+      // All north ground-floor zones, using actual furnished doorways.
+      walk(-1.5, 1.4); walk(-1.5, -14.3); walk(-5, -14.3); walk(-14.4, -14.3); // laundry, tea
+      walk(-1.5, -14.3); walk(-1.5, -10); walk(7.2, -10); walk(7.2, 0); // gym, snooker
+      walk(21.5, 0); walk(21.5, -10.2); walk(21.5, 1.4); // cinema, cleared lounge
       walk(4.2, 1.4); walk(4.2, 4); // gaming room
       walk(4.2, 1.4); walk(garageBay.x, 1.4); // internally connected garage
       // Route round the stairwell and the aquarium cabinet (x=0 and x=-3.2 at
@@ -136,13 +155,15 @@ test.describe('Warm Villa', () => {
       game.destroy();
       const cleaned = game.scene === null && !canvas.hasAttribute('data-villa-renderer');
       canvas.remove();
-      return { floors, aquariumTarget, aquariumApproachSafe, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, masterMapLabel, masterRoomHudLabels, roofImage, interiorImage };
+      return { floors, westOpened, eastOpened, aquariumTarget, aquariumApproachSafe, fed, fireOff, visited, scores, blurStopped, cleaned, masterHudHasRoomLabel, masterMapLabel, masterRoomHudLabels, roofImage, interiorImage };
     }, { moduleUrl: villaModule(), aquariumApproach: VILLA_AQUARIUM.approach, garageBay: VILLA_GARAGE_BAYS[2] });
     expect(result.floors[0]).toBeCloseTo(3.6, 4);
     expect(result.floors[1]).toBeCloseTo(7.2, 4);
     expect(result.floors[2]).toBeCloseTo(3.6, 4);
     expect(result.floors[3]).toBeCloseTo(0, 4);
-    expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'gaming', 'garage', 'master', 'guest', 'bath', 'family', 'terrace', 'stairs']));
+    expect(result.visited).toEqual(expect.arrayContaining(['living', 'kitchen', 'tea-room', 'utility', 'gym', 'snooker', 'cinema', 'east-lounge',
+      'gaming', 'garage', 'master', 'balcony', 'guest', 'wardrobe', 'ensuite', 'study', 'bath', 'reading-hall', 'massage', 'terrace', 'stairs']));
+    expect(result.westOpened && result.eastOpened).toBe(true);
     expect(result.masterMapLabel).toContain('主卧');
     expect(result.masterRoomHudLabels).toEqual([result.masterMapLabel]);
     expect(result.masterHudHasRoomLabel).toBe(false);

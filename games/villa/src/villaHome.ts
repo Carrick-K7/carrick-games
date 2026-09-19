@@ -1,4 +1,5 @@
 import type { VillaPosition } from './villaWorld.js';
+import { POOL, VILLA_WEST_WALL, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
 
 export type VillaTimeOfDay = 'day' | 'evening' | 'night';
 export type VillaWeather = 'clear' | 'rain';
@@ -30,8 +31,8 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   { id: 'bath', name: 'Bathroom', zh: '浴室', floor: 1, fixtures: [{ x: 10, y: 6.72, z: -4.2 }, { x: 14.6, y: 6.72, z: -4.2 }] },
   { id: 'study', name: 'Study & library', zh: '书房', floor: 1, fixtures: [{ x: 12.5, y: 6.72, z: -13.6 }] },
   { id: 'massage', name: 'Massage room', zh: '按摩室', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -13.6 }] },
-  { id: 'reading-hall', name: 'Reading hall', zh: '阅读厅', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -4.5 }, { x: 22.6, y: 6.72, z: 5 }, { x: 22.4, y: 6.72, z: -3 }] },
-  { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }] },
+  { id: 'reading-hall', name: 'Reading hall', zh: '阅读厅', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -6.5 }, { x: 22.6, y: 6.72, z: .5 }, { x: 22.6, y: 6.72, z: 6.5 }] },
+  { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }, { x: 8, y: 6.74, z: 6 }, { x: 14, y: 6.74, z: 6 }] },
   { id: 'gallery-2', name: 'Roof access', zh: '天台楼梯间', floor: 2, fixtures: [{ x: 1.06, y: 10.32, z: -2.4 }] },
   { id: 'terrace', name: 'Roof terrace', zh: '天台', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
   { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }] },
@@ -41,8 +42,10 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
 export const VILLA_SECURITY_CAMERAS: readonly VillaSecurityCamera[] = [
   { id: 'entrance', name: 'South entrance', zh: '南向大门', position: { x: 2, y: 2.75, z: 9.85 }, target: { x: -4, y: .6, z: 20 } },
   { id: 'living', name: 'Living room', zh: '客厅', position: { x: -2.55, y: 2.95, z: 8.35 }, target: { x: -7.8, y: .8, z: 2.7 } },
-  { id: 'garage', name: 'Garage', zh: '车库', position: { x: 33.6, y: 3.05, z: 1.5 }, target: { x: 22.7, y: .8, z: -3.8 } },
-  { id: 'pool', name: 'Pool garden', zh: '泳池庭院', position: { x: -13.1, y: 3.1, z: 10 }, target: { x: -18.5, y: .3, z: -.5 } },
+  { id: 'garage', name: 'Garage', zh: '车库', position: { x: VILLA_GARAGE_EXTENT.maxX - .5, y: 3.05, z: 1.3 },
+    target: { x: (VILLA_GARAGE_EXTENT.minX + VILLA_GARAGE_EXTENT.maxX) / 2, y: .8, z: -4 } },
+  { id: 'pool', name: 'Pool garden', zh: '泳池庭院', position: { x: VILLA_WEST_WALL.outer - .4, y: 3.1, z: 8.8 },
+    target: { x: (POOL.minX + POOL.maxX) / 2, y: .3, z: (POOL.minZ + POOL.maxZ) / 2 } },
   { id: 'roof', name: 'Roof garden', zh: '天台', position: { x: 14.8, y: 9.3, z: 8.5 }, target: { x: 3, y: 7.7, z: 3.6 } },
   { id: 'farm', name: 'Fields & pond', zh: '田地与池塘', position: { x: -2.5, y: 5.5, z: 59 }, target: { x: -13, y: .6, z: 78 } },
   { id: 'drive', name: 'South scenic road', zh: '南侧景观道路', position: { x: 40, y: 8, z: 114 }, target: { x: 20, y: 1.5, z: 133 } },

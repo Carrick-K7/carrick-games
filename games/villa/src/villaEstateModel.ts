@@ -59,13 +59,23 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
     }
   }
   const walkway = (knots: Point[], width = 1.6) => {
-    const points: Point[] = [], indices: number[] = [];
+    // A single stitched ribbon: per-segment strips left triangular grass slits
+    // at every bend of the pond path. Sample across width as well as length.
+    const centres: Point[] = [knots[0]], points: Point[] = [], indices: number[] = [];
     for (let i = 1; i < knots.length; i++) {
-      const a = knots[i - 1], b = knots[i], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz), n = Math.ceil(length / .7);
-      const start = points.length;
-      for (let j = 0; j <= n; j++) for (const side of [-1, 1]) points.push({ x: a.x + dx * j / n + side * dz / length * width / 2, z: a.z + dz * j / n - side * dx / length * width / 2 });
-      for (let j = 0; j < n; j++) { const k = start + j * 2; indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+      const a = knots[i - 1], b = knots[i], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / .45));
+      for (let j = 1; j <= n; j++) centres.push({ x: a.x + (b.x - a.x) * j / n, z: a.z + (b.z - a.z) * j / n });
     }
+    const last = knots[knots.length - 1];
+    const closed = Math.hypot(knots[0].x - last.x, knots[0].z - last.z) < .001;
+    const across = Math.ceil(width / .45), stride = across + 1;
+    centres.forEach((p, i) => {
+      const a = centres[i ? i - 1 : closed ? centres.length - 2 : 0];
+      const b = centres[i === centres.length - 1 && closed ? 1 : Math.min(centres.length - 1, i + 1)];
+      const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1;
+      for (let j = 0; j <= across; j++) { const offset = (j / across - .5) * width; points.push({ x: p.x + dz / length * offset, z: p.z - dx / length * offset }); }
+      if (i) for (let j = 0; j < across; j++) { const k = (i - 1) * stride + j; indices.push(k, k + stride, k + 1, k + 1, k + stride, k + stride + 1); }
+    });
     surface(points, indices, path, .063);
   };
   walkway([{ x: -13.5, z: 24 }, { x: -13.6, z: 31 }, { x: -13.7, z: 50 }, { x: -12, z: 63 }]);
@@ -78,8 +88,8 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
   pondRoot.userData = { waterY: VILLA_POND.waterY, unsupported: true, staticWater: true };
   // Clear water needs something to be clear *through*: a silt bed and a basin
   // wall so the terrain cutout never shows as a hole under the surface.
-  const water = new THREE.MeshStandardMaterial({ color: 0x9fd2d8, roughness: .05, metalness: .04, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide });
-  const bed = new THREE.MeshStandardMaterial({ color: 0xd8cba8, roughness: .93, metalness: 0 });
+  const water = new THREE.MeshStandardMaterial({ color: 0x559b9d, roughness: .16, metalness: .04, transparent: true, opacity: .48, depthWrite: false, side: THREE.DoubleSide });
+  const bed = new THREE.MeshStandardMaterial({ color: 0xa8a687, roughness: .93, metalness: 0 });
   const silt = new THREE.MeshStandardMaterial({ color: 0xb0a480, roughness: .95, metalness: 0 });
   const bedY = VILLA_POND.waterY - .62;
   const bedPoints: number[] = [VILLA_POND.x, bedY, VILLA_POND.z], bedIndices: number[] = [];

@@ -18,7 +18,9 @@ export const VILLA_GARDEN_TREES = [
   // Six of the ten stand outside the enlarged footprint; the house doubled west,
   // east and north, so the rows that hugged the old walls moved out with them.
   { x: -30.4, z: -13.5, scale: 1.25, species: 'pear' },
-  { x: -30.2, z: 8.2, scale: 1, species: 'orange' },
+  // The orange tree shades the pool approach, not the east lounger: its old
+  // trunk intersected that chair on the newly widened cedar deck.
+  { x: -26.7, z: 11.6, scale: 1, species: 'orange' },
   { x: -22, z: 19, scale: 1.25, species: 'cherry' },
   { x: -14, z: 22.8, scale: 1, species: 'mango' },
   // Moved 1.5 m east: the rerouted front link's shoulder reached within 0.7 m

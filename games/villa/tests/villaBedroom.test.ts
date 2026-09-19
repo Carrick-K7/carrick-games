@@ -58,12 +58,18 @@ describe('north-wall master bedroom joinery', () => {
     const s = VILLA_MASTER_STOOL;
     expect(villaCollides({ x: s.x, y: s.y, z: s.z }, colliders)).toBe(true);
     expect(colliders[colliders.length - 1].maxY).toBeCloseTo(s.y + s.height);
-    expect(colliders.filter(c => c.minX > -6)).toHaveLength(7); // Narrower vanity: legs/brace/drawers/top; mirror; stool.
+    const vanityColliders = colliders.filter(c => c.minX > -6);
+    expect(vanityColliders).toHaveLength(10); // All four legs, brace, two drawers, top, mirror, stool.
+    for (const c of vanityColliders) {
+      expect(c.minX).toBeGreaterThanOrEqual(v.x - v.width / 2);
+      expect(c.maxX).toBeLessThanOrEqual(v.x + v.width / 2);
+      expect(c.maxX).toBeLessThan(-4.11); // New master wall's interior face.
+    }
   });
 
   it('fits entirely inside the master room and preserves doors, bed access and glazing', () => {
     for (const c of colliders) {
-      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(-2.2);
+      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(-4.11);
       expect(c.minZ).toBeGreaterThan(0.11); expect(c.maxZ).toBeLessThan(2);
       expect(c.minY).toBeGreaterThanOrEqual(3.6); expect(c.maxY).toBeLessThan(7);
     }
@@ -87,7 +93,8 @@ describe('north-wall master bedroom joinery', () => {
     expect(node.position.toArray()).toEqual([m.x, m.y, m.z]);
     expect(node.userData).toMatchObject({ renderTarget: false, litTrim: true, reflection: 'environment-polished-metal' });
     const material = meshes.map(mesh => mesh.material as THREE.MeshStandardMaterial).find(mat => mat.name === 'Bedroom polished mirror')!;
-    expect(material.metalness).toBe(1); expect(material.roughness).toBeLessThan(0.1);
+    expect(material.metalness).toBeGreaterThan(.6); expect(material.metalness).toBeLessThan(1);
+    expect(material.roughness).toBeLessThan(0.1); // Reflective, with a visible fallback when software GL omits the environment.
     expect(material.envMap).toBeNull(); // Uses existing scene environment, no separately owned render target.
     expect(meshes.some(mesh => (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity === 0.65)).toBe(true);
     for (const kind of VILLA_VANITY_ACCESSORIES) expect(root.getObjectByName(`Bedroom/${kind}`)).toBeDefined();

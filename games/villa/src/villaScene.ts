@@ -48,7 +48,11 @@ export function villaSceneInputKey(state: VillaSceneState): string {
   const wardrobes = Object.entries(state.wardrobes?.wardrobes ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([id, w]) => `${id}:${w.open}`).join(',');
   const camp = state.outdoor?.camping;
   const camping = !camp ? 'legacy' : camp.carried ? 'carried' : `placed:${camp.x},${camp.y},${camp.z},${camp.yaw}`;
-  return `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${!!state.pickupDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}/${state.home?.revision ?? 0}/${state.tea?.phase ?? 'idle'}/${wardrobes}/${state.snooker.aimAssist !== false}/${state.aquariumOn !== false}/${camping}`;
+  // Targets invalidate a cached input frame immediately; eased fractions still
+  // obey the same bounded animation cadence as wardrobes and vehicles.
+  const doors = `${!!state.bathDoors?.west},${!!state.bathDoors?.east}`;
+  const grills = (state.grillLids ?? [false, false, false]).map(Number).join(',');
+  return `${state.evening}/${state.gaming}/${state.fireplace}/${state.carDoorOpen}/${!!state.pickupDoorOpen}/${!!state.suvDoorOpen}/${state.seated}/${state.screenSource}/${state.displayLights}/${state.elevator.phase}/${state.elevator.target}/${state.snookerActive}/${!!state.faucetOn}/${state.pets?.feedSequence ?? 0}/${state.teaUntil ?? 0}/${state.home?.revision ?? 0}/${state.tea?.phase ?? 'idle'}/${wardrobes}/${state.snooker.aimAssist !== false}/${state.aquariumOn !== false}/${camping}/${doors}/${grills}`;
 }
 export const VILLA_SECURITY_FEED_SIZE = { width: 384, height: 216, intervalMs: 500 } as const;
 /** Readback rows are bottom-up; the reusable canvas ImageData is top-down. */
