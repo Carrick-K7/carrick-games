@@ -167,19 +167,22 @@ describe('Villa coupe-SUV independent driving profile and safety', () => {
       ).intersectObject(car, true);
       // Keep the audit over authored opaque panels, not the deliberately glazed
       // front/rear windscreens or headlight lenses at the bonnet's outer edges.
-      for (const x of [-.7, -.35, 0, .35, .7]) for (const z of [-1.85, -1.5, -1, -.5, -.15]) {
+      for (const x of [-.7, -.35, 0, .35, .7]) for (const z of [-1.15, -.9, -.65, -.4, -.15]) {
         const hit = ray(new THREE.Vector3(x, 3, z), new THREE.Vector3(0, -1, 0))[0];
         expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
-        expect(hit.point.y - car.position.y).toBeCloseTo(1.58 + (z + .02) * .18 / 1.96, 5);
+        // New crowned canopy actually clears the unchanged1.5m seated eye;
+        // the old1.58→1.40 planar roof is no longer the design.
+        expect(hit.point.y - car.position.y).toBeGreaterThan(VILLA_SUV.eyeHeight + .10);
+        expect(hit.point.y - car.position.y).toBeLessThanOrEqual(VILLA_SUV_LIMITS.height);
       }
-      for (const x of [-.5, -.25, 0, .25, .5]) for (const z of [.65, .9, 1.2, 1.6, 2.1, 2.3]) {
+      for (const x of [-.4, -.2, 0, .2, .4]) for (const z of [1.05, 1.25, 1.55, 1.8, 2.05, 2.23]) {
         const hit = ray(new THREE.Vector3(x, 3, z), new THREE.Vector3(0, -1, 0))[0];
         expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
-        expect(hit.point.y - car.position.y).toBeGreaterThan(1); expect(hit.point.y - car.position.y).toBeLessThan(1.21);
+        expect(hit.point.y - car.position.y).toBeGreaterThan(.88); expect(hit.point.y - car.position.y).toBeLessThan(1.20);
       }
       // The recessed fascia and bright headlight lenses also have geometry;
       // the apparent white cut-outs in a garage view are not absent front faces.
-      for (const x of [0, .45, .8, .95]) for (const y of [.84, .94, 1.02]) {
+      for (const x of [0, .3, .6]) for (const y of [.45, .65, .80]) {
         const hit = ray(new THREE.Vector3(x, y, 3.2), new THREE.Vector3(0, 0, -1), 6)[0];
         expect(hit).toBeDefined(); expect((hit.object as THREE.Mesh).material).toMatchObject({ transparent: false });
         const local = car.worldToLocal(hit.point.clone());
@@ -195,9 +198,9 @@ describe('Villa coupe-SUV independent driving profile and safety', () => {
       headers.traverse(node => {
         if (!(node instanceof THREE.Mesh)) return;
         const bounds = new THREE.Box3().setFromBufferAttribute(node.geometry.getAttribute('position') as THREE.BufferAttribute);
-        expect(bounds.min.x).toBeGreaterThanOrEqual(-.900001); expect(bounds.max.x).toBeLessThanOrEqual(.900001);
-        expect(bounds.min.y).toBeGreaterThanOrEqual(1.419999); expect(bounds.max.y).toBeLessThanOrEqual(1.580001);
-        expect(bounds.min.z).toBeGreaterThanOrEqual(-1.720001); expect(bounds.max.z).toBeLessThanOrEqual(.100001);
+        expect(bounds.min.x).toBeGreaterThanOrEqual(-VILLA_SUV_LIMITS.halfWidth - 1e-6); expect(bounds.max.x).toBeLessThanOrEqual(VILLA_SUV_LIMITS.halfWidth + 1e-6);
+        expect(bounds.min.y).toBeGreaterThanOrEqual(1.02); // Rear belt≈1.067 minus the4cm C-pillar radius. expect(bounds.max.y).toBeLessThanOrEqual(VILLA_SUV_LIMITS.height + 1e-6);
+        expect(bounds.min.z).toBeGreaterThanOrEqual(-2.13); expect(bounds.max.z).toBeLessThanOrEqual(.98);
         expect(Array.from(node.geometry.getAttribute('normal').array).every(Number.isFinite)).toBe(true);
       });
       for (const open of [false, true]) {
@@ -205,20 +208,20 @@ describe('Villa coupe-SUV independent driving profile and safety', () => {
         const ray = (point: THREE.Vector3, direction: THREE.Vector3) => new THREE.Raycaster(
           point.applyMatrix4(car.matrixWorld), direction.transformDirection(car.matrixWorld), 0, 4,
         ).intersectObject(car, true)[0];
-        // These horizontal rays previously passed between side-glass tops and
-        // roof rails (6–40mm gaps), right through both sides of the whole model.
-        for (const side of [-1, 1]) for (const [z, y] of [[-1, 1.4548241758241758], [-.5, 1.4862213500784929], [-.1, 1.5113390894819467]]) {
+        // Independent horizontal probes follow the raised side-header seam,
+        // and must hit its near side rather than a far-side fallback.
+        for (const side of [-1, 1]) for (const [z, y] of [[-1, 1.617], [-.5, 1.641], [-.1, 1.658]]) {
           const hit = ray(new THREE.Vector3(side * 2, y, z), new THREE.Vector3(-side, 0, 0));
           expect(hit).toBeDefined(); expect(hit.object.parent).toBe(headers);
           expect((hit.object as THREE.Mesh).material).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
-          const local = car.worldToLocal(hit.point.clone()); expect(local.x * side).toBeGreaterThan(.8);
+          const local = car.worldToLocal(hit.point.clone()); expect(local.x * side).toBeGreaterThan(.78);
         }
         // Windscreen-to-roof header: intercept at the leading edge, not at the
         // roof underside further inside the cabin behind an unsealed seam.
         for (const side of [-1, 1]) {
-          const hit = ray(new THREE.Vector3(side * .7, 1.57, 1), new THREE.Vector3(0, 0, -1));
+          const hit = ray(new THREE.Vector3(side * .7, 1.671, 1), new THREE.Vector3(0, 0, -1));
           expect(hit.object.parent).toBe(headers);
-          const local = car.worldToLocal(hit.point.clone()); expect(local.z).toBeGreaterThan(-.05); expect(local.z).toBeLessThan(-.02);
+          const local = car.worldToLocal(hit.point.clone()); expect(local.z).toBeGreaterThan(.10); expect(local.z).toBeLessThan(.17);
         }
         // Clear panes stay glazed, not converted to opaque headers. The moving
         // driver's leaf remains the sole door animation; the trim stays above.
@@ -228,6 +231,19 @@ describe('Villa coupe-SUV independent driving profile and safety', () => {
           const window = ray(new THREE.Vector3(side * 2, 1.3, -.5), new THREE.Vector3(-side, 0, 0));
           expect((window.object as THREE.Mesh).material).toMatchObject({ name: 'coupe-suv-glazing', transparent: true });
         }
+      }
+    } finally { dispose(scene); }
+  });
+  it('keeps lower cognac door leather behind the tapered exterior skin, including the observed orange stripe', () => {
+    const scene = new THREE.Group(); createVillaSuvModel(scene);
+    try {
+      const car = scene.getObjectByName('villa-suv')!; scene.updateMatrixWorld(true);
+      for (const side of [-1, 1]) for (const y of [.585, .60, .63, .66]) for (const z of [-.5, -.25, 0, .25, .5, .7]) {
+        const origin = new THREE.Vector3(side * 2, y, z).applyMatrix4(car.matrixWorld);
+        const direction = new THREE.Vector3(-side, 0, 0).transformDirection(car.matrixWorld);
+        const hit = new THREE.Raycaster(origin, direction, 0, 2).intersectObject(car, true)[0];
+        expect(hit, `outside skin ${side}/${y}/${z}`).toBeDefined();
+        expect((hit.object as THREE.Mesh).material, `outside skin ${side}/${y}/${z}`).toMatchObject({ name: 'gentian-clearcoat', transparent: false });
       }
     } finally { dispose(scene); }
   });

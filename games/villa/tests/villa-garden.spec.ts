@@ -213,9 +213,11 @@ test('villa home: walk upstairs to fitted wardrobes and dressing table without l
       const floor = game.position.y, world = game.scene.scene, row = world.getObjectByName('Bedroom/wardrobe-row').userData;
       const table = world.getObjectByName('Bedroom/dressing-table').userData, mirror = world.getObjectByName('Bedroom/dressing-mirror').userData;
       const cosmetics = ['brush-cup', 'lipstick', 'compact', 'perfume-bottle', 'jewelry-tray'].every(id => !!world.getObjectByName('Bedroom/' + id));
-      walk(-8.6, 2.6); walk(-4.35, 2.6); walk(-4.35, 2.2); const vanityAccess = game.canFit(1.75);
-      // Walk round the bed's west side and through the existing balcony opening.
-      walk(-4.35, 2.6); walk(-11.1, 2.6); walk(-11.1, 8.15); walk(-7.5, 8.15); walk(-7.5, 9.6);
+      walk(-8.6, 2.6); walk(-13.05, 2.6); walk(-13.05, 6.15); walk(-22.1, 6.15); walk(-22.1, 2.45);
+      const vanityAccess = game.canFit(1.75) && game.hotspot()?.id === 'stool-dressing';
+      // The vanity is now on the actual north-west wall, not an empty patch at
+      // the former narrow table. Continue round the sleeping group to the balcony.
+      walk(-22.1, 8.15); walk(-7.5, 8.15); walk(-7.5, 9.6);
       const balcony = game.position.y === 3.6 && game.position.z > 9; render();
       const positions = world.getObjectByName('villa-contact-shadows').geometry.getAttribute('position');
       let floorShadows = true; for (let i = 0; i < positions.count; i++) if (![.039, 3.639, 7.239].some(y => Math.abs(y - positions.getY(i)) < .081)) floorShadows = false;

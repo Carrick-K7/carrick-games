@@ -2,6 +2,7 @@ import { PLAYER_RADIUS, POOL, STAIR_HOLE, VILLA_WALL_COLLIDERS, VILLA_RAILS, typ
 import { VILLA_ELEVATOR } from './villaElevator.js';
 import { VILLA_ESTATE_BOUNDS, villaPondIntersectsPolygon, villaTerrainAnchor, villaTerrainBounds, villaTerrainHeight, villaTerrainOrientation } from './villaEstateLayout.js';
 import { villaVehicleGroundClear } from './villaDriving.js';
+import { villaStreamIntersectsPolygon } from './villaStream.js';
 
 /** Model front is +Z; yaw is the seated camera offset, as on the villa car. */
 import { VILLA_SCOOTER } from './villaActivities.js';
@@ -63,7 +64,7 @@ function groundClear(x: number, z: number, radius = 0): boolean {
 export function villaScooterPoseBlocked(pose: VillaScooterPose, obstacles: readonly VillaCollider[]): boolean {
   if (!validPose(pose)) return true;
   const footprint = villaScooterFootprint(pose), bounds = villaTerrainBounds(pose, VILLA_SCOOTER_LIMITS.halfWidth, VILLA_SCOOTER_LIMITS.halfLength, VILLA_SCOOTER_LIMITS.height), b = VILLA_SCOOTER_BOUNDS;
-  if (bounds.minX < b.minX || bounds.maxX > b.maxX || bounds.minZ < b.minZ || bounds.maxZ > b.maxZ || villaPondIntersectsPolygon(footprint)) return true;
+  if (bounds.minX < b.minX || bounds.maxX > b.maxX || bounds.minZ < b.minZ || bounds.maxZ > b.maxZ || villaPondIntersectsPolygon(footprint) || villaStreamIntersectsPolygon(footprint)) return true;
   if (!groundClear(pose.x, pose.z) || footprint.some(p => !groundClear(p.x, p.z))) return true;
   return [VILLA_SCOOTER_FIXED_COLLIDERS, VILLA_WALL_COLLIDERS, VILLA_RAILS, obstacles].some(list => list.some(box => villaScooterOverlaps(pose, box)));
 }

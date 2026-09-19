@@ -3,6 +3,7 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { VILLA_HOME_LIGHTS, villaAtmosphere, type VillaHomeState } from './villaHome.js';
 import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
 import type { VillaPosition } from './villaWorld.js';
+import { VILLA_STREAM, villaStreamContains } from './villaStream.js';
 
 export interface VillaHomeModel {
   glow(room: string): THREE.MeshStandardMaterial;
@@ -14,6 +15,7 @@ export const VILLA_HEADHOUSE = { minX: -1.25, maxX: 3.37, minZ: -7.6, maxZ: 1.5,
 /** Rain starts above roofs instead of leaking into the occupied living spaces. */
 export function villaRainFloor(x: number, z: number): number {
   let floor = villaTerrainHeight(x, z);
+  if (villaStreamContains(x, z, 0, true)) floor = Math.max(floor, VILLA_STREAM.waterY);
   for (const building of VILLA_ESTATE_BUILDINGS) {
     if (x < building.minX - .3 || x > building.maxX + .3 || z < building.minZ - .3 || z > building.maxZ + .3) continue;
     floor = Math.max(floor, building.id === 'garage' ? 3.63 : 7.24);

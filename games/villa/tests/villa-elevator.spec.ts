@@ -282,5 +282,5 @@ test('villa shell supports a real keyboard elevator trip and walking out', async
   expect(JSON.parse((await canvas.getAttribute('data-villa-position'))!).y).toBe(3.6);
   await expect(canvas).not.toHaveAttribute('data-villa-room', 'elevator');
   expect(errors).toEqual([]);
-  await page.screenshot({ path: 'test-results/villa-elevator-shell.png' });
+  await page.screenshot({ path: test.info().outputPath('villa-elevator-shell.png') });
 });

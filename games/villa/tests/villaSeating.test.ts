@@ -4,7 +4,7 @@ import { furnishVilla } from '../src/villaFurnishings';
 import { VILLA_AQUARIUM, VILLA_BEDS, VILLA_RELAX_SEATS, resolveVillaSeatPosition, villaBedRestPose, villaRelaxSeat, villaSeatColliderId, villaSeatExitCandidates } from '../src/villaSeating';
 import { VILLA_FIREPLACE_WALL } from '../src/villaLivingLayout';
 import { VILLA_TEA_BAR } from '../src/villaTeaBar';
-import { VILLA_WALL_COLLIDERS, VILLA_RAILS, villaCollides, villaSupportAt, type VillaCollider } from '../src/villaWorld';
+import { VILLA_WALL_COLLIDERS, VILLA_RAILS, villaCollides, villaSupportAt, nearestVillaHotspot, type VillaCollider } from '../src/villaWorld';
 import { POOL } from '../src/villaWorld';
 
 let scene: THREE.Scene, furniture: ReturnType<typeof furnishVilla>, colliders: VillaCollider[];
@@ -30,13 +30,13 @@ afterAll(() => {
 describe('authored villa relaxation seats', () => {
   it('preserves seven legacy IDs and covers dining, roof dining, stools, guest/PC chairs and both beds', () => {
     expect(VILLA_RELAX_SEATS.slice(0, 7).map(s => s.id)).toEqual(['sofa-living', 'sofa-master', 'sofa-library-west', 'sofa-library-east', 'sofa-roof', 'lounger-west', 'lounger-east']);
-    expect(VILLA_RELAX_SEATS).toHaveLength(32);
+    expect(VILLA_RELAX_SEATS).toHaveLength(36);
     expect(new Set(VILLA_RELAX_SEATS.map(s => s.id)).size).toBe(VILLA_RELAX_SEATS.length);
-    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'chair')).toHaveLength(13);
-    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'stool')).toHaveLength(6);
+    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'chair')).toHaveLength(14);
+    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'stool')).toHaveLength(8);
     expect(VILLA_RELAX_SEATS.filter(s => s.id.startsWith('stool-tea-'))).toHaveLength(3);
     expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'bed')).toHaveLength(2);
-    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(9);
+    expect(VILLA_RELAX_SEATS.filter(s => s.kind === 'sofa')).toHaveLength(10);
     for (const seat of VILLA_RELAX_SEATS) expect(villaRelaxSeat(seat.id)).toBe(seat);
     for (const missing of [null, undefined, '', 'sofa', 'unknown']) expect(villaRelaxSeat(missing)).toBeNull();
   });
@@ -60,6 +60,12 @@ describe('authored villa relaxation seats', () => {
     expect(Math.abs(seat.pitch)).toBeLessThan(0.2);
   });
 
+  it('gives every new bedroom seat a clear approach within its actual interaction radius', () => {
+    for (const id of ['chair-master-reading', 'sofa-guest-lounge', 'bench-master', 'bench-guest-window']) {
+      const seat = villaRelaxSeat(id)!;
+      expect(seat.exits.some(p => !villaCollides(p, colliders, 1.75) && nearestVillaHotspot(p)?.id === id), id).toBe(true);
+    }
+  });
   it('ties every authored seat to a metadata-only marker and actual furniture footprint', () => {
     for (const seat of VILLA_RELAX_SEATS.filter(s => s.controller !== 'pc')) {
       const marker = scene.getObjectByName(`relax-seat/${seat.id}`)!;
@@ -79,7 +85,7 @@ describe('authored villa relaxation seats', () => {
       }
     }
     // Re-angled with the reading-hall and primary-suite remodels.
-    expect(villaRelaxSeat('sofa-master')!.yaw).toBe(0);
+    expect(villaRelaxSeat('sofa-master')!.yaw).toBe(Math.PI / 2);
     expect(villaRelaxSeat('sofa-library-west')!.yaw).toBe(-Math.PI / 2);
     expect(villaRelaxSeat('sofa-library-east')!.yaw).toBe(Math.PI / 2);
   });

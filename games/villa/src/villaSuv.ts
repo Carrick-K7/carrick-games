@@ -7,7 +7,7 @@ export type VillaSuvState = VillaDrivingState;
 const bay = VILLA_GARAGE_BAYS[3];
 const VILLA_SUV_PROFILE: VillaDrivingProfile = {
   id: 'suv', limits: VILLA_SUV_LIMITS, spawn: bay,
-  seat: [.52, -.30], door: [1.08, .42], exit: [2.7, -.30], acceleration: 1.85, reverseAcceleration: 1.25,
+  seat: [.52, -.30], door: [1.08, .42], exit: [2.7, -.30], acceleration: 3.4, reverseAcceleration: 1.6,
 };
 export const createVillaSuv = (): VillaSuvState => createVillaDriving(VILLA_SUV_PROFILE);
 export const registerVillaSuvColliders = (colliders: readonly VillaCollider[]): void => registerVillaVehicleColliders(colliders, VILLA_SUV_PROFILE);

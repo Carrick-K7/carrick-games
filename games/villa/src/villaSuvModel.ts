@@ -4,222 +4,169 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaSuv, registerVillaSuvColliders, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
+import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
 
-type Triple = [number, number, number];
 const smooth = (t: number) => t * t * (3 - 2 * t);
-/** A coupe-SUV with a sloped rear roofline, teardrop headlights and wide
- * haunches — an original design informed by full-size Porsche SUV proportions,
- * not a licensed model. Scene owns disposal; only pose, doors and wheel mutate. */
+/** Original grand-touring SUV: broad shoulders, substantial glazed cabin and a
+ * gently falling tail. All panels are lofted skins, never a solid cabin block. */
 export function createVillaSuvModel(parent: THREE.Object3D): {
   colliders: VillaCollider[];
   update(time: number, state: { suv?: VillaSuvState; suvDoorOpen?: boolean }): boolean;
   readonly doorProgress: number;
 } {
   const root = new THREE.Group(); root.name = 'villa-suv'; root.userData = { kind: 'vehicle', style: 'coupe-suv', forward: '+Z', driverSide: '+X', hollowCabin: true }; parent.add(root);
-  const paint = new THREE.MeshPhysicalMaterial({ color: 0x24466b, metalness: .38, roughness: .3, clearcoat: .85, clearcoatRoughness: .18, side: THREE.DoubleSide });
-  const dark = villaMaterial(0x1d2328, .58), rubber = villaMaterial(0x1a1e20, .93), metal = villaMaterial(0xb3bcc0, .3, .78);
-  const fabric = villaMaterial(0x2c3134, .9), trim = villaMaterial(0x59636b, .72);
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0x223a45, transparent: true, opacity: .34, depthWrite: false, roughness: .1, side: THREE.DoubleSide, clearcoat: 1 });
-  const headlight = new THREE.MeshStandardMaterial({ color: 0xe8f4f8, emissive: 0xd7ecf4, emissiveIntensity: .5, roughness: .2 });
-  const taillight = new THREE.MeshStandardMaterial({ color: 0x8f1620, emissive: 0xc21e28, emissiveIntensity: .5, roughness: .3 });
-  paint.name = 'gentian-clearcoat'; glass.name = 'coupe-suv-glazing';
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0x416780, metalness: .14, roughness: .35, clearcoat: .65, clearcoatRoughness: .27 });
+  const dark = villaMaterial(0x1d262a, .63), rubber = villaMaterial(0x191d20, .91), metal = villaMaterial(0xc7d0d3, .35, .30);
+  const leather = villaMaterial(0x966746, .82), insert = villaMaterial(0xb0835c, .91), stitch = villaMaterial(0xceba99, .8), wood = villaMaterial(0x514131, .74);
+  const glass = coachGlass(0x465e6c, .68);
+  const headlight = new THREE.MeshStandardMaterial({ color: 0xe7f4f9, emissive: 0xcfeaf6, emissiveIntensity: .5, roughness: .2 });
+  const taillight = new THREE.MeshStandardMaterial({ color: 0xa9222b, emissive: 0xc51e29, emissiveIntensity: .4, roughness: .3 });
+  const screen = new THREE.MeshBasicMaterial({ color: 0x142a33 }), graphic = new THREE.MeshBasicMaterial({ color: 0x92c5cc });
+  paint.name = 'gentian-clearcoat'; glass.name = 'coupe-suv-glazing'; leather.name = 'suv-saddle-leather';
   const body = new VillaModelBuilder(root, 'suv-body'), cabin = new VillaModelBuilder(root, 'suv-cabin'), glazing = new VillaModelBuilder(root, 'suv-glazing');
   const roofHeaders = new VillaModelBuilder(root, 'suv-roof-headers');
-  const quad = (builder: VillaModelBuilder, corners: Triple[], material: THREE.Material) => {
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(corners.flat(), 3)); g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals(); builder.geometry(g, material);
-  };
-  // Chassis rails below the footwell; the cabin above them stays hollow.
-  for (const x of [-.72, .72]) body.box(x, .4, 0, .14, .2, 4.6, dark, .018);
-  // Big 5-spoke wheels with wide arches — the SUV stance.
-  for (const side of [-1, 1]) for (const z of [-1.45, 1.45]) {
-    body.geometry(new THREE.TorusGeometry(.37, .105, 12, 42), rubber, [side * .99, .42, z], [0, Math.PI / 2, 0]);
-    body.cylinder(side * 1.1, .42, z, .27, .27, .045, dark, [0, 0, Math.PI / 2], 28);
-    body.geometry(new THREE.TorusGeometry(.255, .015, 6, 32), metal, [side * 1.12, .42, z], [0, Math.PI / 2, 0]);
-    for (let i = 0; i < 5; i++) {
-      const a = i * Math.PI * 2 / 5;
-      body.beam([side * 1.13, .42, z], [side * 1.13, .42 + Math.cos(a) * .245, z + Math.sin(a) * .245], .026, metal, 6);
+  const axles = [-1.45, 1.45];
+  const hull = coachHull([
+    [-2.44, .79, .97], [-2.20, .91, 1.055], [-1.45, .955, 1.105], [-.65, .941, 1.10],
+    [.4, .935, 1.105], [.92, .948, 1.10], [1.45, .955, 1.075], [2.13, .902, .985], [2.44, .76, .88],
+  ], axles, .42, .437, .32, .046);
+  const canopy = coachCanopy(hull, { frontBase: .92, rearBase: -2.08, front: [.13, .787, 1.661], rear: [-1.35, .799, 1.61], crown: .047 });
+  for (const side of [-1, 1]) {
+    hull.sides(body, paint, side, -2.44, -.62); hull.sides(body, paint, side, .92, 2.44);
+    body.box(side * .869, .30, .01, .105, .085, 1.94, dark, .025);
+    coachLine(body, t => hull.side(side, coachMix(-2.2, -.65, t), .84), metal, .004);
+  }
+  hull.deckPanel(body, paint, .92, 2.44); hull.deckPanel(body, paint, -2.44, -2.08);
+  hull.endPanel(body, paint, 2.44); hull.endPanel(body, paint, -2.44); hull.arches(body, dark, .026);
+  coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5 }, rubber, dark, metal, metal);
+  // A compact shield grille, separated corner intakes and wraparound optical
+  // housings articulate the nose. Every recess follows the sculpted bumper.
+  const grille = coachFasciaPatch(body, hull, 2.44, -.53, .53, .32, .69, dark);
+  for (let i = 0; i < 9; i++) coachLine(body, t => grille(.08 + i * .105, coachMix(.12, .88, t), .004), metal, .004, 5);
+  coachLine(body, t => grille(t, .98, .003), metal, .005, 20);
+  const skid = coachFasciaPatch(body, hull, 2.44, -.61, .61, .08, .17, metal, .006);
+  coachLine(body, t => skid(t, .02, .002), dark, .005, 20);
+  for (const side of [-1, 1]) {
+    coachFasciaPatch(body, hull, 2.44, side * .65, side * .96, .22, .44, dark, .008);
+    const lamp = coachFasciaPatch(body, hull, 2.44, side * .52, side * .97, .72, .96, dark, .010);
+    coachLine(body, t => lamp(coachMix(.04, .96, t), .85, .005), headlight, .007, 18);
+    coachLine(body, t => lamp(.94, coachMix(.12, .85, t), .005), headlight, .006, 8);
+    for (const u of [.30, .64]) {
+      const p = lamp(u, .42, .003); body.ellipsoid(p[0], p[1], p[2], .028, .026, .011, headlight);
     }
-    body.cylinder(side * 1.135, .42, z, .07, .07, .04, metal, [0, 0, Math.PI / 2], 14);
-    body.geometry(new THREE.TorusGeometry(.49, .038, 8, 36, Math.PI), dark, [side * 1.06, .42, z], [0, Math.PI / 2, 0]);
-    body.box(side * .96, 1.06, z, .18, .2, 1.16, paint, .05);
-    for (const dz of [-.58, .58]) body.box(side * 1.01, .74, z + dz, .12, .6, .14, paint, .03);
+    coachLine(body, t => hull.deck(side * coachMix(.20, .48, t), coachMix(1.05, 2.08, t), .002), paint, .005);
+    coachFasciaPatch(body, hull, -2.44, side * .50, side * .97, .77, .89, taillight, .008);
   }
-  // Lower body split into sills, a front section under the hood and a rear
-  // section under the tail, so the cabin between them is a real hollow volume
-  // instead of one solid block the seats and dashboard sat inside.
-  for (const side of [-1, 1]) body.box(side * .85, .88, .05, .16, .42, 4.0, paint, .04);
-  body.box(0, .88, 1.58, 1.86, .42, .94, paint, .05);
-  body.box(0, .88, -1.72, 1.86, .42, .46, paint, .05);
-  for (const side of [-1, 1]) body.box(side * .94, 1.02, 0, .09, .16, 3.4, trim, .03);
-  quad(body, [[-.95, 1.06, .55], [-.82, 1.0, 2.34], [0, 1.06, 2.45], [0, 1.2, .5]], paint);
-  quad(body, [[0, 1.2, .5], [0, 1.06, 2.45], [.82, 1.0, 2.34], [.95, 1.06, .55]], paint);
-  // Front bumper: three intake openings and teardrop headlights raked back.
-  body.box(0, .62, 2.42, 1.98, .34, .18, paint, .05);
-  body.box(0, .56, 2.51, .62, .2, .04, dark, .03);
+  coachLine(body, t => hull.fascia(-2.44, coachMix(-.66, .66, t), .835, .010), taillight, .005, 30);
+  coachFasciaPatch(body, hull, -2.44, -.93, .93, .09, .27, dark, .007);
+  coachFasciaPatch(body, hull, -2.44, -.54, .54, .09, .15, metal, .011);
+  // One continuous opaque roof, with matching inner skin and sealed edges.
+  coachPanel(body, canopy.roof, paint, [0, 1, 0], [0, -.038, 0], 28, 32);
+  canopy.frame(roofHeaders, paint, dark);
+  cabin.geometry(coachSheet(24, 24, (u, v) => { const p = canopy.roof(u, v); p[1] -= .042; return p; }, [0, -1, 0]), stitch);
+  for (const side of [-1, 1]) cabin.box(side * .44, 1.609, .065, .35, .026, .15, leather, .010);
+  for (const front of [true, false]) glazing.geometry(coachSheet(28, 24, (u, v) => canopy.wind(front, u, v), [0, 1, front ? 1 : -1]), glass);
   for (const side of [-1, 1]) {
-    body.box(side * .68, .58, 2.5, .5, .16, .045, dark, .03);
-    for (let i = 0; i < 3; i++) body.box(side * .56 + i * .12, .575, 2.53, .05, .1, .02, metal, .004);
-    quad(body, [[side * .6, .92, 2.35], [side * .94, .86, 2.18], [side * .9, 1.04, 1.62], [side * .56, 1.08, 1.75]], headlight);
-    body.ellipsoid(side * .77, .97, 1.95, .13, .09, .06, headlight);
-    body.box(side * .66, .62, 2.56, .09, .06, .02, headlight, .01);
+    canopy.pane(glazing, glass, side, -2.08, -.62);
+    coachLine(roofHeaders, t => canopy.window(side, -.62, t), dark, .028, 12);
+    coachLine(body, t => canopy.window(side, coachMix(-2.05, -.62, t), 0), metal, .008);
+    coachLine(roofHeaders, t => canopy.window(side, -1.48, t), paint, .033, 12);
+    // Roof rails sit inside the declared 1.72m envelope, not on spacers above it.
+    coachLine(roofHeaders, t => { const p = canopy.roof(side > 0 ? .92 : .08, coachMix(.12, .82, t)); p[1] += .010; return p; }, metal, .009);
   }
-  // Raked windshield, then the coupe roofline falling away to the tail.
-  quad(glazing, [[-.86, 1.1, .5], [.86, 1.1, .5], [.78, 1.56, -.05], [-.78, 1.56, -.05]], glass);
-  quad(body, [[-.9, 1.58, -.02], [.9, 1.58, -.02], [.84, 1.4, -1.98], [-.84, 1.4, -1.98]], paint);
-  // The panels exist, but their unequal perimeter datums left open roof/window
-  // seams. Narrow edge-to-edge headers close only those gaps: no second roof,
-  // glazing overlay or fixed infill across the driver's moving door aperture.
-  quad(roofHeaders, [[-.78, 1.56, -.05], [.78, 1.56, -.05], [.9, 1.58, -.02], [-.9, 1.58, -.02]], paint);
+  // Entire lower cabin is enclosed: wheel/road triangles cannot leak into the
+  // first-person footwell. The shell above the belt remains genuinely hollow.
+  cabin.box(0, .367, -.43, 1.75, .06, 2.86, dark, .018);
+  cabin.box(0, .715, .897, 1.76, .69, .065, dark, .014);
+  cabin.box(0, .67, -1.91, 1.68, .57, .06, dark, .014);
   for (const side of [-1, 1]) {
-    // Side glass: a fast, shallow arc under the falling roof rail.
-    quad(glazing, [[side * .9, 1.12, .42], [side * .9, 1.12, -1.72], [side * .84, 1.42, -1.72], [side * .83, 1.5, .1]], glass);
-    const sideFront: Triple = [side * .83, 1.5, .1], roofFront: Triple = [side * .9, 1.58, -.02];
-    const roofFraction = 1.7 / 1.96;
-    const roofRear: Triple = [side * (.9 - .06 * roofFraction), 1.58 - .18 * roofFraction, -1.72];
-    quad(roofHeaders, [sideFront, roofFront, roofRear, [side * .84, 1.42, -1.72]], paint);
-    const corner = new THREE.BufferGeometry();
-    corner.setAttribute('position', new THREE.Float32BufferAttribute([[side * .78, 1.56, -.05], sideFront, roofFront].flat(), 3));
-    corner.computeVertexNormals(); roofHeaders.geometry(corner, paint);
-    body.beam([side * .92, 1.56, -.02], [side * .86, 1.4, -1.98], .022, paint);
-    body.box(side * .88, 1.02, -.85, .05, .34, .06, trim, .02);
+    cabin.box(side * .865, .655, .68, .05, .54, .43, dark, .012);
+    cabin.box(side * .52, .407, .39, .53, .016, .63, rubber, .016);
+    coachSeat(cabin, side * .52, .662, -.26, .575, leather, insert, dark, stitch, .55);
+    cabin.beam([side * .84, 1.41, -.66], [side * .79, .66, -.72], .011, dark, 6);
+    coachSeat(cabin, side * .47, .638, -1.24, .57, leather, insert, dark, stitch, .46);
   }
-  // Raked rear glass into the tail, and the full-width light bar.
-  quad(glazing, [[-.8, 1.42, -1.96], [.8, 1.42, -1.96], [.86, 1.02, -2.36], [-.86, 1.02, -2.36]], glass);
-  body.box(0, .9, -2.42, 1.88, .44, .12, paint, .05);
-  body.box(0, 1.06, -2.47, 1.68, .075, .035, taillight, .012);
-  for (const side of [-1, 1]) body.ellipsoid(side * .78, 1.06, -2.47, .1, .055, .02, taillight);
-  body.box(0, .66, -2.46, 1.92, .2, .16, dark, .045);
-  body.box(0, .6, -2.5, .8, .1, .06, dark, .02);
-  body.box(0, .48, -2.45, 1.9, .16, .18, paint, .05);
-  body.box(0, 1.58, -.02, 1.0, .03, .06, trim, .01);
-  // ---- Cabin interior: a luxury two-tone cockpit ----
-  // Semi-aniline cognac leather with perforated centres and contrast piping, a
-  // leather-wrapped dash with open-pore walnut, a curved dual-screen cockpit and
-  // warm ambient strips — a full redesign of the old placeholder slab interior.
-  const leather = villaMaterial(0x77563c, .82), leatherLight = villaMaterial(0x9a7c5c, .86), piping = villaMaterial(0xd8c7a4, .6);
-  const dashSoft = villaMaterial(0x22262a, .7), wood = villaMaterial(0x4c3826, .55), speaker = villaMaterial(0x6b7176, .35, .6);
-  const screenGlass = new THREE.MeshStandardMaterial({ color: 0x0d141a, roughness: .16, metalness: .25 });
-  const screenGlow = new THREE.MeshStandardMaterial({ color: 0x16232c, emissive: 0x2c4e60, emissiveIntensity: .6, roughness: .3 });
-  const ambient = new THREE.MeshStandardMaterial({ color: 0x3a2c1c, emissive: 0xffb46b, emissiveIntensity: .45, roughness: .5 });
-  screenGlass.name = 'suv-screen-glass'; screenGlow.name = 'suv-screen-glow'; ambient.name = 'suv-ambient-glow';
-  cabin.box(0, .30, -.25, 1.72, .06, 2.32, dashSoft, .02);
-  // Deep-pile floor mats with a heel pad on the driver's side.
-  for (const side of [-1, 1]) {
-    cabin.box(side * .52, .335, .55, .56, .02, .56, fabric, .015);
-    cabin.box(side * .52, .335, -1.3, .56, .02, .5, fabric, .015);
+  cabin.box(0, .64, -1.28, .39, .13, .47, leather, .035);
+  cabin.box(0, .925, -1.54, .38, .44, .10, leather, .035);
+  // Curved leather fascia has a sculpted brow and a recessed walnut passenger
+  // wing. Screens face the occupants (-Z), with readable gauge/map geometry.
+  coachPanel(cabin, (u, v) => {
+    const x = u * 2 - 1;
+    return [x * .854, coachMix(.91, 1.065, v) - .025 * x * x, .90 - .255 * (1 - v) + .035 * x * x];
+  }, dark, [0, 0, -1], [0, 0, .05], 32, 10);
+  cabin.box(0, .945, .626, 1.62, .051, .021, wood, .010);
+  cabin.box(0, 1.008, .647, 1.61, .019, .027, rubber, .004);
+  for (const x of [-.73, .73]) for (let i = 0; i < 4; i++) cabin.box(x, .98, .626 - i * .001, .20, .003, .005, metal, 0);
+  cabin.box(.49, 1.166, .719, .374, .172, .039, dark, .023);
+  cabin.box(.49, 1.161, .695, .333, .129, .006, screen, .006);
+  for (const x of [.393, .585]) {
+    cabin.geometry(new THREE.TorusGeometry(.043, .0025, 5, 24, Math.PI * 1.6), graphic, [x, 1.159, .69], [0, 0, -.3]);
+    cabin.beam([x, 1.159, .688], [x - .017, 1.183, .688], .002, stitch, 5);
   }
-  cabin.box(.52, .352, .68, .22, .006, .18, speaker, .004);
-  // Luxury bucket seats: bolstered cushion, perforated centre, shoulder wings,
-  // contrast piping and an articulated headrest, on a hard back shell and rails.
-  const bucketSeat = (side: number, z: number, front: boolean) => {
-    const sx = side * .52;
-    cabin.box(sx, .50, z, .56, .16, .62, leather, .06);
-    cabin.box(sx - .21, .545, z, .10, .21, .58, leather, .05);
-    cabin.box(sx + .21, .545, z, .10, .21, .58, leather, .05);
-    cabin.box(sx, .512, z + .03, .34, .155, .46, leatherLight, .05);
-    cabin.box(sx, .86, z - .34, .54, .62, .13, leather, .05);
-    cabin.box(sx - .205, .93, z - .33, .11, .5, .14, leather, .05);
-    cabin.box(sx + .205, .93, z - .33, .11, .5, .14, leather, .05);
-    cabin.box(sx, .89, z - .325, .32, .46, .12, leatherLight, .04);
-    cabin.box(sx, .545, z + .30, .5, .03, .02, piping, .008);
-    cabin.box(sx, 1.165, z - .36, .38, .03, .03, piping, .008);
-    cabin.box(sx, 1.23, z - .36, .26, .18, .11, leather, .045);
-    cabin.box(sx, 1.23, z - .328, .18, .12, .05, leatherLight, .03);
-    cabin.box(sx, .86, z - .42, .5, .62, .04, dashSoft, .02);
-    cabin.box(sx, .375, z, .42, .05, .52, dashSoft, .012);
-    if (front) for (const dz of [-.18, .18]) cabin.box(sx, .345, z + dz, .44, .03, .05, speaker, .004);
-  };
-  bucketSeat(1, -.30, true); bucketSeat(-1, -.30, true);
-  // Rear bench: sculpted twin outer seats with a fold-down centre armrest.
-  cabin.box(0, .50, -1.26, 1.62, .16, .5, leather, .06);
-  for (const side of [-1, 1]) {
-    cabin.box(side * .47, .53, -1.26, .5, .19, .48, leatherLight, .05);
-    cabin.box(side * .47, .85, -1.5, .52, .58, .13, leather, .05);
-    cabin.box(side * .47, 1.19, -1.55, .24, .16, .11, leather, .04);
+  cabin.box(-.11, 1.164, .687, .56, .223, .028, dark, .013);
+  cabin.box(-.11, 1.166, .669, .518, .18, .004, screen, .004);
+  for (let i = 0; i < 4; i++) {
+    cabin.beam([-.34 + i * .108, 1.095, .666], [-.28 + i * .108, 1.237, .666], .002, graphic, 5);
+    cabin.box(-.14, 1.112 + i * .038, .665, .39, .003, .002, graphic, 0);
   }
-  cabin.box(0, .84, -1.5, .42, .5, .11, leather, .04);
-  cabin.box(0, .72, -1.44, .3, .08, .16, leatherLight, .03);
-  // Leather-wrapped dash: soft top, walnut inlay, and a full-width curved cockpit
-  // of two joined screens under one glass pane, plus a driver cluster hood.
-  cabin.box(0, .90, .52, 1.78, .26, .34, dashSoft, .05);
-  cabin.box(0, 1.015, .55, 1.76, .05, .3, dashSoft, .03);
-  cabin.box(0, .985, .68, 1.7, .06, .05, wood, .015);
-  cabin.box(0, 1.10, .60, 1.04, .16, .04, screenGlass, .012);
-  cabin.box(-.20, 1.10, .583, .58, .12, .006, screenGlow, .002);
-  cabin.box(.36, 1.10, .583, .28, .12, .006, screenGlow, .002);
-  cabin.box(.52, 1.13, .56, .42, .06, .1, dashSoft, .02);
-  // Slim turbine air vents and a row of milled climate toggles under the screen.
-  for (const side of [-1, 1]) {
-    cabin.cylinder(side * .80, .98, .685, .05, .05, .05, speaker, [Math.PI / 2, 0, 0], 16);
-    cabin.cylinder(side * .80, .98, .71, .03, .03, .012, dashSoft, [Math.PI / 2, 0, 0], 12);
+  cabin.box(-.11, 1.17, .662, .019, .036, .002, stitch, .004);
+  cabin.box(0, .70, -.04, .29, .54, .93, dark, .03);
+  cabin.box(0, .987, -.07, .28, .045, .87, wood, .019);
+  cabin.box(0, 1.018, -.38, .28, .075, .29, leather, .023);
+  for (const z of [-.07, .085]) {
+    cabin.cylinder(0, 1.012, z, .048, .048, .010, rubber, [0, 0, 0], 20);
+    cabin.geometry(new THREE.TorusGeometry(.05, .003, 5, 24), metal, [0, 1.018, z], [Math.PI / 2, 0, 0]);
   }
-  for (let i = 0; i < 6; i++) cabin.box(-.30 + i * .06, .935, .695, .035, .02, .012, speaker, .003);
-  // Floating centre console: open-pore wood bridge, hidden cup holders, a crystal
-  // drive selector and a wireless charging pad, with an ambient strip beneath.
-  cabin.box(0, .52, -.10, .32, .42, .96, dashSoft, .045);
-  cabin.box(0, .755, -.10, .30, .05, .9, wood, .025);
-  cabin.box(0, .83, -.48, .28, .08, .42, leather, .03);
-  cabin.ellipsoid(0, .80, .02, .05, .075, .05, screenGlass);
-  cabin.box(0, .745, .02, .07, .05, .07, screenGlass, .015);
-  cabin.box(0, .79, .28, .12, .01, .18, dashSoft, .01);
-  for (const z of [.34, .46]) cabin.cylinder(0, .775, z, .042, .036, .045, dashSoft, [0, 0, 0], 14);
-  cabin.box(0, .62, .36, .26, .02, .02, ambient, .004);
-  cabin.box(0, .985, .70, 1.66, .012, .012, ambient, .002);
-  // Pedals in the driver's footwell below the dash.
-  for (const [x, w] of [[.44, .11], [.61, .08]] as const) {
-    cabin.box(x, .46, .76, w, .13, .02, speaker, .004);
-    cabin.box(x, .47, .745, w - .03, .10, .012, rubber, .003);
-  }
-  // Panoramic-roof console: mirror, SOS/light touch panel and twin reading lights.
-  cabin.beam([0, 1.552, .02], [0, 1.478, .10], .012, dashSoft);
-  cabin.box(0, 1.452, .115, .25, .072, .034, dashSoft, .012);
-  cabin.box(0, 1.452, .098, .22, .055, .004, speaker, .002);
-  cabin.box(0, 1.53, -.28, .34, .012, .1, dashSoft, .01);
-  for (const side of [-1, 1]) cabin.box(side * .1, 1.522, -.28, .08, .006, .05, ambient, .002);
-  // A fixed shaft joins the same dashboard base [.52,.84,.66] to the original
-  // hub [.52,1.06,.40]. Only the hub-local rotor turns: rotating the old builder
-  // at the vehicle origin orbited the wheel AND its column out of the cockpit.
+  cabin.box(0, 1.02, .29, .17, .018, .21, rubber, .015);
+  for (const [x, w] of [[.44, .11], [.61, .08]] as const) cabin.box(x, .58, .827, w, .13, .024, metal, .006);
+  cabin.beam([0, 1.674, .12], [0, 1.51, .37], .010, dark);
+  cabin.box(0, 1.492, .375, .25, .07, .031, dark, .011);
+  cabin.box(0, 1.492, .357, .222, .052, .004, metal, .004);
+  // The proven hub/shaft geometry is intentionally unchanged. Only its local
+  // rotor turns; right input remains clockwise from the real seated camera.
   const shaftTilt = Math.atan2(.22, .26), shaftLength = Math.hypot(.22, .26);
   const steering = new VillaModelBuilder(root, 'suv-steering-column');
   steering.root.position.set(.52, 1.06, .40); steering.root.rotation.x = shaftTilt;
   steering.root.userData = { kind: 'steering', driverSide: '+X', position: [.52, 1.06, .40], shaftTilt };
-  steering.beam([0, 0, shaftLength], [0, 0, .025], .033, dashSoft);
+  steering.beam([0, 0, shaftLength], [0, 0, .025], .033, dark);
   const wheel = new VillaModelBuilder(steering.root, 'suv-steering-wheel');
-  // All three spokes, the hub and the circular leather rim share one plane
-  // normal to the shaft; paddles sit just behind it on the rotating assembly.
   wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather);
-  wheel.box(0, 0, 0, .11, .08, .05, dashSoft, .02);
-  wheel.box(0, 0, -.032, .05, .04, .012, speaker, .004);
-  for (const side of [-1, 1]) wheel.beam([side * .175, .015, 0], [side * .045, .012, 0], .016, speaker);
-  wheel.beam([0, -.035, 0], [0, -.175, 0], .016, speaker);
-  for (const x of [-.12, .12]) wheel.box(x, .04, .04, .03, .06, .01, speaker, .002);
+  wheel.box(0, 0, 0, .11, .08, .05, dark, .02); wheel.box(0, 0, -.032, .05, .04, .012, metal, .004);
+  for (const side of [-1, 1]) { wheel.beam([side * .175, .015, 0], [side * .045, .012, 0], .016, metal); wheel.box(side * .092, .016, -.020, .046, .022, .013, dark, .004); }
+  wheel.beam([0, -.035, 0], [0, -.175, 0], .016, metal);
+  for (const x of [-.12, .12]) wheel.box(x, .04, .04, .03, .06, .01, metal, .002);
   const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'suv-wheel-top-marker'; wheelMarker.position.set(0, .19, 0); wheel.root.add(wheelMarker);
-  wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true };
-  steering.finish(); wheel.finish();
+  wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true }; steering.finish(); wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
   for (const side of [1, -1]) {
     const pivot = new THREE.Group(); pivot.name = side === 1 ? 'suv-driver-door' : 'suv-passenger-door'; pivot.position.set(side * .99, 0, 1.05); pivot.userData = { animated: true, side, hinge: [side * .99, 0, 1.05] }; root.add(pivot);
     const door = new VillaModelBuilder(pivot, `suv-door-${side}`);
     door.at(-side * .99, 0, -1.05, 0, () => {
-      door.box(side * .97, .88, -.1, .08, .62, 1.5, paint, .02);
-      // Luxury door card: leather insert over a walnut strip, a stitched armrest,
-      // a round speaker grille, a pull handle and an ambient accent.
-      door.box(side * .92, .82, -.16, .04, .44, 1.34, leather, .014);
-      door.box(side * .90, 1.0, -.16, .03, .1, 1.3, wood, .012);
-      door.box(side * .86, .98, -.2, .12, .07, .58, leatherLight, .018);
-      door.cylinder(side * .905, .78, -.62, .07, .07, .02, speaker, [0, 0, Math.PI / 2], 18);
-      door.cylinder(side * .90, .78, -.62, .045, .045, .012, dashSoft, [0, 0, Math.PI / 2], 14);
-      door.box(side * .90, 1.0, .12, .05, .045, .18, dashSoft, .012);
-      door.box(side * .905, .74, .28, .012, .02, .5, ambient, .002);
-      quad(door, [[side * .95, 1.16, .38], [side * .95, 1.16, -1.0], [side * .86, 1.42, -1.0], [side * .87, 1.48, .1]], glass);
-      door.beam([side * .95, 1.16, -1.0], [side * .86, 1.42, -1.0], .012, dark);
-      door.beam([side * .86, 1.42, -1.0], [side * .87, 1.48, .1], .012, dark);
-      door.box(side * .99, 1.06, .5, .022, .05, .2, dark, .012);
-      door.beam([side * .95, 1.16, .55], [side * 1.09, 1.24, .62], .016, dark);
-      door.box(side * 1.09, 1.27, .66, .11, .12, .13, paint, .032);
+      hull.sides(door, paint, side, -.62, .92); canopy.pane(door, glass, side, -.62, .92);
+      coachLine(door, t => canopy.window(side, coachMix(-.62, .92, t), 0), metal, .008);
+      for (const z of [-.62, .92]) coachLine(door, t => hull.side(side, z, t), dark, .003, 12);
+      // Follow the tapered outer door rather than putting a rectangular trim
+      // slab at a fixed X: that slab protruded as an orange exterior stripe at
+      // y=.585..63. Both leather faces now remain inside the actual steel skin.
+      coachPanel(door, (u, v) => {
+        const z = coachMix(-.575, .775, u), y = coachMix(.578, 1.028, v);
+        const s = hull.section(z), bottom = hull.lower(z);
+        const p = hull.side(side, z, (y - bottom) / (s.belt - bottom));
+        p[0] -= side * .055; return p;
+      }, leather, [-side, 0, 0], [side * .015, 0, 0], 12, 6);
+      door.box(side * .852, .94, .10, .036, .075, 1.24, wood, .012);
+      door.box(side * .823, .851, -.03, .095, .075, .61, insert, .025);
+      door.box(side * .831, .959, .39, .031, .030, .153, metal, .007);
+      door.cylinder(side * .85, .68, .50, .074, .074, .016, dark, [0, 0, Math.PI / 2], 24);
+      door.box(side * .945, 1.005, -.43, .017, .025, .158, metal, .005);
+      door.beam([side * .887, 1.24, .70], [side * .947, 1.285, .76], .014, dark);
+      door.ellipsoid(side * .950, 1.30, .78, .038, .048, .093, paint);
+      door.box(side * .948, 1.30, .695, .06, .048, .005, metal, .010);
     });
     door.finish();
-    doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.15 : -.18, .5, -1.65), new THREE.Vector3(side === 1 ? .18 : .15, 1.52, .18)) });
+    // Expanded upward with the refitted cabin. Same collider objects/hinges and
+    // driver-only operation; bounds now contain the actual complete door leaf.
+    doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.23 : -.012, .28, -1.69), new THREE.Vector3(side === 1 ? .012 : .23, 1.70, .015)) });
   }
   for (const builder of [body, cabin, glazing, roofHeaders]) builder.finish();
   const localBody = new THREE.Box3(new THREE.Vector3(-VILLA_SUV_LIMITS.halfWidth, 0, -VILLA_SUV_LIMITS.halfLength), new THREE.Vector3(VILLA_SUV_LIMITS.halfWidth, VILLA_SUV_LIMITS.height, VILLA_SUV_LIMITS.halfLength));

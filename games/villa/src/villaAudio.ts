@@ -1,12 +1,18 @@
 /** Asset-free WebAudio sound kit. Only prime() may create/resume a context;
  * simulation and sound effects must remain safe before any user interaction. */
 
-export type VillaAudioEngineKind = 'car' | 'scooter' | 'suv' | 'pickup';
+import { VILLA_INTERACTION_CUES, villaAudioProximity as proximity, type VillaInteractionCue } from './villaInteractionAudio.js';
+import { VILLA_STREAM } from './villaStream.js';
+
+export type VillaAudioEngineKind = 'car' | 'scooter' | 'suv' | 'pickup' | 'rally';
 export interface VillaAudioEngine {
   speed: number;
   throttle: number;
   /** The sedan and scooter are electric. Omitted kinds retain the sedan default. */
   kind?: VillaAudioEngineKind;
+  /** Physics envelope in m/s; pitch must not saturate at the old 7m/s cap. */
+  maxSpeed?: number;
+  handbrake?: boolean;
 }
 export interface VillaAudioSnapshot {
   /** Room id from villaRoomAt for the listener's ground position. */
@@ -16,6 +22,11 @@ export interface VillaAudioSnapshot {
   /** Metres from the living-room fireplace, including floor height. */
   fireDistance: number;
   fireplace: boolean;
+  /** Distances already include listener/source height, not just map distance. */
+  streamDistance?: number;
+  faucetOn?: boolean;
+  faucetDistance?: number;
+  elevator?: { moving: boolean; distance: number };
   /** 0..1 rain level from the home state. */
   rain: number;
   /** Current vehicle; null on foot. */
@@ -32,12 +43,12 @@ interface Engine extends AudioGraph {
   road: GainNode;
   filter: BiquadFilterNode;
 }
-const OUTDOOR_ROOMS = new Set(['garden', 'fields', 'driving-course', 'pond', 'terrace', 'balcony']);
+interface LocalLoop extends AudioGraph { gain: GainNode }
+const OUTDOOR_ROOMS = new Set(['garden', 'fields', 'driving-course', 'pond', 'stream', 'terrace', 'balcony']);
 const GESTURES = new Set(['keydown', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend', 'click']);
 const MAX_VOICES = 24;
 const MIX_INTERVAL = 1 / 20;
 const clamp01 = (v: number) => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
-const proximity = (distance: number, radius: number) => Number.isFinite(distance) ? clamp01(1 - Math.max(0, distance) / radius) : 0;
 const graph = (): AudioGraph => ({ sources: [], nodes: [] });
 function own<T extends AudioNode>(owner: AudioGraph, node: T): T { owner.nodes.push(node); return node; }
 function source<T extends AudioScheduledSourceNode>(owner: AudioGraph, node: T): T {
@@ -78,6 +89,8 @@ export class VillaAudio {
   private ambience: AudioGraph | null = null;
   private layers = new Map<string, GainNode>();
   private engine: Engine | null = null;
+  private localLoops = new Map<'stream' | 'faucet' | 'elevator', LocalLoop>();
+  private lastCue = new Map<VillaInteractionCue, number>();
   private voices = new Set<Voice>();
   private targets = new WeakMap<AudioParam, number>();
   private resumePending: AudioContext | null = null;
@@ -210,6 +223,8 @@ export class VillaAudio {
     this.ambience = null; this.layers.clear();
     if (this.engine) disposeGraph(this.engine);
     this.engine = null;
+    for (const loop of this.localLoops.values()) disposeGraph(loop);
+    this.localLoops.clear(); this.lastCue.clear();
     for (const voice of this.voices) this.releaseVoice(voice);
     this.targets = new WeakMap();
     this.lastMix = this.lastStep = -Infinity; this.nextCrackle = 0;
@@ -239,11 +254,24 @@ export class VillaAudio {
         disposeGraph(this.engine); this.engine = null; this.lastMix = -Infinity;
       }
       const t = ctx.currentTime;
+      // Stop switched-off or out-of-range local sources immediately, even inside
+      // the 20Hz automation interval. No silent stream loops across the estate.
+      const outdoor = OUTDOOR_ROOMS.has(s.roomId);
+      const local = {
+        stream: proximity(s.streamDistance ?? Infinity, VILLA_STREAM.audioRange) ** 2 * (outdoor ? .13 : .018),
+        faucet: s.faucetOn ? proximity(s.faucetDistance ?? Infinity, 6) ** 2 * (s.roomId === 'kitchen' ? .11 : .012) : 0,
+        elevator: s.elevator?.moving ? proximity(s.elevator.distance, 9) ** 2 * .035 : 0,
+      };
+      for (const [id, loop] of this.localLoops) if (!local[id]) { disposeGraph(loop); this.localLoops.delete(id); }
       this.pruneVoices(t);
       if (t - this.lastMix < MIX_INTERVAL) return;
       this.lastMix = t;
       this.ensureAmbience(ctx);
-      const outdoor = OUTDOOR_ROOMS.has(s.roomId), rain = clamp01(s.rain);
+      const rain = clamp01(s.rain);
+      for (const id of ['stream', 'faucet', 'elevator'] as const) if (local[id] > 0) {
+        const loop = this.localLoops.get(id) ?? this.createLocalLoop(ctx, id);
+        this.target(loop.gain.gain, local[id], t, .18, .001);
+      }
       const fade = (id: string, value: number) => this.target(this.layers.get(id)!.gain, value, t, 0.45, 0.004);
       const breeze = 0.05 + 0.02 * Math.sin(t * 0.23) + 0.015 * Math.sin(t * 0.71 + 1.3);
       fade('wind', outdoor ? breeze * (1 - rain * 0.4) : breeze * 0.25);
@@ -261,6 +289,24 @@ export class VillaAudio {
     } catch { this.silence(); }
   }
 
+  private createLocalLoop(ctx: AudioContext, id: 'stream' | 'faucet' | 'elevator'): LocalLoop {
+    const owner = graph();
+    try {
+      const gain = own(owner, ctx.createGain()); gain.gain.value = 0;
+      const filter = own(owner, ctx.createBiquadFilter());
+      filter.type = id === 'faucet' ? 'bandpass' : 'lowpass';
+      filter.frequency.value = id === 'faucet' ? 2100 : id === 'stream' ? 1350 : 180; filter.Q.value = .65;
+      let sound: AudioScheduledSourceNode;
+      if (id === 'elevator') {
+        const motor = source(owner, ctx.createOscillator()); motor.type = 'sine'; motor.frequency.value = 85; sound = motor;
+      } else {
+        const water = source(owner, ctx.createBufferSource()); water.buffer = this.noiseBuffer; water.loop = true; sound = water;
+      }
+      sound.connect(filter); filter.connect(gain); gain.connect(this.master!); sound.start();
+      const loop = { ...owner, gain }; this.localLoops.set(id, loop); return loop;
+    } catch (error) { disposeGraph(owner); throw error; }
+  }
+
   private createEngine(ctx: AudioContext, kind: VillaAudioEngineKind): Engine {
     const owner = graph(), electric = kind === 'car' || kind === 'scooter';
     try {
@@ -270,7 +316,7 @@ export class VillaAudio {
       const sub = source(owner, ctx.createOscillator()); sub.type = electric ? 'sine' : 'triangle';
       // Set idle pitch before start: a default 440 Hz oscillator must not chirp
       // before the first speed target reaches the audio rendering thread.
-      osc.frequency.value = electric ? (kind === 'scooter' ? 230 : 150) : (kind === 'pickup' ? 30 : 40);
+      osc.frequency.value = electric ? (kind === 'scooter' ? 230 : 150) : (kind === 'pickup' ? 30 : kind === 'rally' ? 55 : 40);
       sub.frequency.value = osc.frequency.value * (electric ? 2 : 0.5);
       const road = own(owner, ctx.createGain()); road.gain.value = 0;
       const noise = source(owner, ctx.createBufferSource()); noise.buffer = this.noiseBuffer; noise.loop = true;
@@ -286,19 +332,22 @@ export class VillaAudio {
     if (!drive) return;
     const kind = drive.kind ?? 'car';
     const engine = this.engine ??= this.createEngine(ctx, kind);
-    const speed = Number.isFinite(drive.speed) ? Math.min(40, Math.abs(drive.speed)) : 0;
+    const speed = Number.isFinite(drive.speed) ? Math.min(100, Math.abs(drive.speed)) : 0;
     const throttle = clamp01(Math.abs(drive.throttle)), electric = kind === 'car' || kind === 'scooter';
-    const scooter = kind === 'scooter', pickup = kind === 'pickup', t = ctx.currentTime;
-    // Electric vehicles have a quiet speed-dependent motor whine, no combustion
-    // idle. The pickup has a lower growl than the SUV. Tyre noise is independent.
-    const frequency = electric ? (scooter ? 230 : 150) + speed * 24 + throttle * 45 : (pickup ? 30 : 40) + speed * 7 + throttle * 16;
-    const motion = clamp01(speed / (scooter ? 4 : 8));
+    const scooter = kind === 'scooter', pickup = kind === 'pickup', rally = kind === 'rally', t = ctx.currentTime;
+    const limit = Number.isFinite(drive.maxSpeed) && drive.maxSpeed! > 0 ? Math.max(1, Math.min(100, drive.maxSpeed!)) : scooter ? 12 : rally ? 60 : 50;
+    const rev = clamp01(speed / limit), motion = clamp01(speed / (scooter ? 4 : 8));
+    // Road EVs have no combustion idle or simulated automatic gears. Normalize
+    // pitch over the supplied physics envelope (150–180km/h), not the old cap.
+    const frequency = electric ? (scooter ? 230 : 150) + rev * 720 + throttle * 45
+      : (pickup ? 30 : rally ? 55 : 40) + rev * (rally ? 320 : 260) + throttle * 16;
     this.target(engine.osc.frequency, frequency, t, 0.12, 0.5);
     this.target(engine.sub.frequency, frequency * (electric ? 2 : 0.5), t, 0.12, 0.5);
-    this.target(engine.filter.frequency, electric ? 1300 + speed * 45 : 220 + speed * 26 + throttle * 160, t, 0.15, 1);
-    this.target(engine.road.gain, clamp01(speed / 9) * (scooter ? 0.035 : 0.1), t, 0.2);
-    this.target(engine.gain.gain, electric ? (motion * 0.045 + throttle * 0.02) * (scooter ? 0.75 : 1)
-      : (pickup ? 0.1 : 0.08) + throttle * 0.08 + motion * 0.04, t, 0.15);
+    this.target(engine.filter.frequency, electric ? 1300 + rev * 1500 : 220 + rev * 1100 + throttle * 160, t, 0.15, 1);
+    const skid = drive.handbrake ? motion * .035 : 0;
+    this.target(engine.road.gain, Math.sqrt(rev) * (scooter ? .035 : rally ? .13 : .1) + skid, t, .2);
+    this.target(engine.gain.gain, electric ? (motion * .045 + throttle * .02) * (scooter ? .75 : 1)
+      : (pickup ? .1 : rally ? .065 : .08) + throttle * .08 + motion * .04, t, .15);
   }
 
   private releaseVoice(voice: Voice, stop = true) { this.voices.delete(voice); disposeGraph(voice, stop); }
@@ -340,6 +389,20 @@ export class VillaAudio {
       noise.onended = () => this.releaseVoice(voice, false);
       noise.start(t0, Math.random()); noise.stop(voice.endsAt);
     } catch { this.releaseVoice(voice); this.silence(); }
+  }
+
+  /** Effects never unlock audio and are never queued for a pending resume.
+   * A spatial cue is attenuated by its controller-supplied 3D distance. */
+  cue(id: VillaInteractionCue, distance = 0, range = 8) {
+    const ctx = this.activeContext(), level = proximity(distance, range) ** 2;
+    if (!ctx || !level) return;
+    const interval = id === 'setting' ? .09 : id === 'reject' || id === 'busy' ? .15 : id === 'collision' ? .25 : 0;
+    if (ctx.currentTime - (this.lastCue.get(id) ?? -Infinity) < interval) return;
+    this.lastCue.set(id, ctx.currentTime);
+    for (const part of VILLA_INTERACTION_CUES[id]) {
+      if ('noise' in part) this.pop(part.noise, part.seconds, part.gain * level);
+      else this.tone(part.hz, part.seconds, part.wave, part.gain * level, part.to, part.delay);
+    }
   }
 
   footstep(running: boolean) {

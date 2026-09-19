@@ -1,5 +1,6 @@
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 import { POOL } from './villaEstateLayout.js';
+import { VILLA_BEDROOM_LAYOUT, VILLA_MASTER_STOOL } from './villaBedroomLayout.js';
 export { VILLA_AQUARIUM } from './villaLivingLayout.js';
 
 export interface VillaRelaxSeat {
@@ -38,25 +39,24 @@ const small = (id: string, kind: 'chair' | 'stool', x: number, y: number, z: num
 });
 
 /** Single centred pillow per bed, with eyes/head near it, facing along the mattress. */
-export const VILLA_BEDS = [
-  { id: 'bed-master', origin: p(-8, 3.6, 5.5), width: 2.55, depth: 3.8, yaw: 0,
-    pillow: p(-8, 4.55, 6.75), pillowWidth: 1.15,
-    rest: p(-8, 3.6, 6.65), eyeHeight: 1.12, pitch: 0.16,
-    exits: [p(-6.05, 3.6, 5.3), p(-10, 3.6, 5.3), p(-8, 3.6, 3.1)] },
-  { id: 'bed-guest', origin: p(-8, 3.6, -13.6), width: 2.1, depth: 3.8, yaw: Math.PI,
-    pillow: p(-8, 4.55, -14.85), pillowWidth: 1.05,
-    rest: p(-8, 3.6, -14.75), eyeHeight: 1.12, pitch: 0.16,
-    exits: [p(-6.25, 3.6, -13.3), p(-9.8, 3.6, -13.3), p(-8, 3.6, -11.2)] },
-] as const;
+export const VILLA_BEDS = (['master', 'guest'] as const).map(kind => {
+  const b = VILLA_BEDROOM_LAYOUT[kind].bed, origin = p(b.x, 3.6, b.z);
+  const pillow = local(origin, b.yaw, 0, 1.25); pillow.y = 4.55;
+  return { id: `bed-${kind}`, origin, width: b.width, depth: 3.8, yaw: b.yaw,
+    pillow, pillowWidth: kind === 'master' ? 1.15 : 1.05,
+    rest: local(origin, b.yaw, 0, 1.15), eyeHeight: 1.12, pitch: .16,
+    exits: [local(origin, b.yaw, b.width / 2 + .70, -.2), local(origin, b.yaw, -b.width / 2 - .70, -.2), local(origin, b.yaw, 0, -2.4)] };
+});
 export function villaBedRestPose(id: string) {
   const bed = VILLA_BEDS.find(b => b.id === id);
   return bed ? { position: { ...bed.rest }, yaw: bed.yaw, pitch: bed.pitch, eyeHeight: bed.eyeHeight, freeLook: true as const, exits: bed.exits.map(e => ({ ...e })) } : null;
 }
 
+const M = VILLA_BEDROOM_LAYOUT.master, G = VILLA_BEDROOM_LAYOUT.guest;
 /** All authored non-vehicle seats. The original seven IDs/order remain compatible. */
 export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
   sofa('sofa-living', -8, 0, 5.8, 4.2, 0, [p(-5.25, 0, 5.45), p(-6.1, 0, 4.6), p(-10.75, 0, 4.5)]),
-  sofa('sofa-master', -5.2, 3.6, 8, 1.25, 0, [p(-5.2, 3.6, 6.9), p(-6.4, 3.6, 8), p(-4.6, 3.6, 7)]),
+  sofa('sofa-master', M.sofa.x, 3.6, M.sofa.z, M.sofa.width, M.sofa.yaw, [p(-9.4, 3.6, 8.1), p(-9.4, 3.6, 4.85), p(-8, 3.6, 6.45)]),
   sofa('sofa-library-west', 18.6, 3.6, -4.6, 1.4, -Math.PI / 2, [p(18.6, 3.6, -3.2), p(18.6, 3.6, -6.1), p(17.55, 3.6, -3.2)]),
   sofa('sofa-library-east', 23.1, 3.6, -4.6, 1.5, Math.PI / 2, [p(23.1, 3.6, -3.3), p(23.1, 3.6, -6.1), p(24.3, 3.6, -4.6)]),
   sofa('sofa-roof', -7, 7.2, 5.5, 4.15, 0, [p(-4.25, 7.2, 5.1), p(-5.1, 7.2, 4.3), p(-9.75, 7.2, 4.3)]),
@@ -91,8 +91,15 @@ export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
     return small(`chair-roof-${i + 1}`, 'chair', origin.x, origin.y, origin.z, yaw, 0.65, 0.68, 1.08,
       [local(origin, yaw, 0.75, 0.18), local(origin, yaw, -0.75, 0.18), local(origin, yaw, 0, 0.82)]);
   }),
-  small('chair-guest', 'chair', -5.3, 3.6, -13.2, 0, 0.65, 0.68, 1.08, [p(-6.15, 3.6, -13.25), p(-5.3, 3.6, -12.4)]),
-  small('stool-dressing', 'stool', -5.05, 3.6, 1.58, 0, 0.604, 0.544, 1.04, [p(-5.05, 3.6, 2.32), p(-4.28, 3.6, 1.7)]),
+  small('chair-guest', 'chair', G.chair.x, 3.6, G.chair.z, G.chair.yaw, .65, .68, 1.08, [p(-9.05, 3.6, -16.05), p(-7.35, 3.6, -16.05), p(-8.2, 3.6, -15.35)]),
+  small('stool-dressing', 'stool', VILLA_MASTER_STOOL.x, 3.6, VILLA_MASTER_STOOL.z, 0, .604, .544, 1.04,
+    [p(VILLA_MASTER_STOOL.x, 3.6, 2.45), p(VILLA_MASTER_STOOL.x + .85, 3.6, 1.75)]),
+  small('chair-master-reading', 'chair', M.chair.x, 3.6, M.chair.z, M.chair.yaw, .65, .68, 1.08, [p(-12.9, 3.6, 4), p(-11.35, 3.6, 4.3)]),
+  sofa('sofa-guest-lounge', G.sofa.x, 3.6, G.sofa.z, G.sofa.width, G.sofa.yaw, [p(-12.7, 3.6, -10.15), p(-8.3, 3.6, -10.15), p(-10.5, 3.6, -11.35)]),
+  small('bench-master', 'stool', M.bench.x, 3.6, M.bench.z, Math.PI, M.bench.width, M.bench.depth, 1.10,
+    [p(-17.5, 3.6, 6.2), p(-17.5, 3.6, 4.45), p(-18.8, 3.6, 5.3), p(-16.2, 3.6, 5.3)]),
+  small('bench-guest-window', 'stool', G.bench.x, 3.6, G.bench.z, 0, G.bench.width, G.bench.depth, 1.10,
+    [p(-15.7, 3.6, -16.25), p(-17.45, 3.6, -17.15), p(-13.95, 3.6, -17.15)]),
   { ...small('chair-pc', 'chair', 7.25, 0, 5.1, 0, 0.7, 0.75, 1.11, [p(6.35, 0, 5.2), p(7.25, 0, 5.97), p(8.15, 0, 5.2)]), controller: 'pc' },
   ...VILLA_BEDS.map((bed): VillaRelaxSeat => ({ id: bed.id, kind: 'bed', origin: { ...bed.origin }, width: bed.width + 0.15, depth: bed.depth,
     seat: { ...bed.rest }, approach: { ...bed.exits[0] }, exits: bed.exits.map(e => ({ ...e })), yaw: bed.yaw,

@@ -233,7 +233,7 @@ describe('Villa collision, support and safe boundaries', () => {
     expect(moveVillaPlayer({ x: POOL.maxX + 0.6, y: 0, z: 0 }, -12, 0, []).x).toBeGreaterThan(POOL.maxX + PLAYER_RADIUS);
     expect(moveVillaPlayer({ x: 0, y: 0, z: 22 }, 0, 10, []).z).toBeCloseTo(32);
     expect(moveVillaPlayer({ x: 0, y: villaTerrainHeight(0, 161), z: 161 }, 0, 10, []).z).toBeLessThanOrEqual(VILLA_ESTATE_BOUNDS.maxZ);
-    for (const [x, z] of [[-41, 0], [63, 0], [0, -27], [0, 163], [-32, 0]]) {
+    for (const [x, z] of [[-41, 0], [63, 0], [0, VILLA_ESTATE_BOUNDS.minZ - 1], [0, 163], [-32, 0]]) {
       expect(villaSupportAt(x, z, 0)).toBeNull();
     }
   });

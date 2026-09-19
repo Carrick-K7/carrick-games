@@ -13,6 +13,7 @@ import { createVillaSuvModel } from './villaSuvModel.js';
 import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
 import { isVillaSuvCollider, type VillaSuvState } from './villaSuv.js';
 import { createVillaEstateModel } from './villaEstateModel.js';
+import { createVillaStreamModel, createVillaPeripheralLandscape } from './villaStreamModel.js';
 import { VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
@@ -154,6 +155,7 @@ export class VillaScene {
   private readonly ambient = new THREE.AmbientLight(0xffe2bd, 0.34);
   private readonly homeModel: ReturnType<typeof createVillaHomeModel>;
   private readonly outdoorModel: ReturnType<typeof createVillaOutdoorModel>;
+  private readonly stream: ReturnType<typeof createVillaStreamModel>;
   private readonly fallbackHome = createVillaHome();
   private readonly fallbackOutdoor = createVillaOutdoor();
   private primaryView: VillaView = { ...VILLA_SPAWN, yaw: 0, pitch: 0, eyeHeight: EYE_HEIGHT };
@@ -446,10 +448,11 @@ export class VillaScene {
     this.course = createVillaDrivingCourse(this.scene);
     this.snooker = createVillaSnookerModel(this.scene);
     const garden = createVillaGarden(this.scene), estate = createVillaEstateModel(this.scene);
+    this.stream = createVillaStreamModel(this.scene); createVillaPeripheralLandscape(this.scene);
     this.outdoorModel = createVillaOutdoorModel(this.scene);
     this.outdoorModel.update(this.fallbackOutdoor, this.primaryView, this.primaryView.yaw);
     this.pets = createVillaPetModel(this.scene);
-    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.pickup.colliders, ...this.suv.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders, ...estate.colliders, ...this.outdoorModel.colliders);
+    this.colliders.push(...this.furnishings.colliders, ...this.vehicle.colliders, ...this.pickup.colliders, ...this.suv.colliders, ...this.scooter.colliders, ...this.gaming.colliders, ...this.elevatorCollisions.colliders, ...this.course.colliders, ...garden.colliders, ...estate.colliders, ...this.stream.colliders, ...this.outdoorModel.colliders);
     // Keep live identities: each vehicle ignores ONLY itself, collides with both
     // other vehicles, and stops before pets (walkers do not collide with pets).
     this.drivingObstacles = [...this.colliders.filter(c => !isVillaVehicleCollider(c)), ...this.pets.drivingColliders];
@@ -503,7 +506,7 @@ export class VillaScene {
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
     if (this.snooker.update(state.snooker, state.snookerActive)) this.renderer.shadowMap.needsUpdate = true;
-    this.course.update(state.driving);
+    this.course.update(state.driving); this.stream.update(time);
     this.updatePets(time, state.pets);
   }
 

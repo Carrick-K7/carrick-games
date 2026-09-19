@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_SUV } from '../src/villaSuv.js';
+import { villaStreamSectionAt } from '../src/villaStream.js';
 
 async function fixture(page: Page) {
   await page.route('**/__villa-renovation', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body style="margin:0"><main id="gameApp" style="position:relative;width:960px;height:600px"><canvas id="gameCanvas" tabindex="0"></canvas></main></body></html>' }));
@@ -88,6 +89,47 @@ test('first real mobile tap unlocks audio only in an active touch gesture', asyn
   } finally { await context.close(); }
 });
 
+test('walks from the house across the north bridge, stops at water and plays local stream sound', async ({ page }) => {
+  test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await fixture(page); await page.keyboard.press('w');
+  await expect.poll(() => page.evaluate(() => (window as any).__villaRenovation.audio.ctx?.state)).toBe('running');
+  const result = await page.evaluate(shore => {
+    const g = (window as any).__villaRenovation;
+    const key = (key: string, type = 'keydown') => g.handleInput(new KeyboardEvent(type, { key }));
+    const walk = (x: number, z: number) => {
+      for (const axis of ['x', 'z']) {
+        const target = axis === 'x' ? x : z; let budget = 700;
+        while (Math.abs(g.position[axis] - target) > .006 && budget-- > 0) {
+          const diff = target - g.position[axis];
+          g.yaw = axis === 'x' ? diff > 0 ? -Math.PI / 2 : Math.PI / 2 : diff > 0 ? Math.PI : 0;
+          key('w'); g.update(Math.min(.05, Math.abs(diff) / 2.75)); key('w', 'keyup');
+        }
+        if (budget <= 0) throw new Error(`North walk blocked before ${x},${z}: ${JSON.stringify(g.position)}`);
+      }
+    };
+    key('h'); walk(0, 1.4); walk(-1.5, 1.4); walk(-1.5, -10); walk(0, -10); walk(0, -31); walk(0, -38);
+    const deckHeight = g.position.y, supported = g.canFit(1.75);
+    const before = g.scene.renderer.info.render.frame; g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.renderFrame();
+    const rendered = g.scene.renderer.info.render.frame > before;
+    walk(0, -50); walk(12, -50); walk(12, -41);
+    g.yaw = Math.PI; key('w'); for (let i = 0; i < 100; i++) g.update(.05); key('w', 'keyup');
+    return { deckHeight, supported, rendered, northReached: g.visited.has('stream'),
+      blockedByWater: g.position.z < shore.z - shore.halfWidth,
+      wetSupport: g.supportAt(12, shore.z, 0, 1.75), safeBank: g.canFit(1.75) };
+  }, villaStreamSectionAt(12)!);
+  expect(result).toEqual({ deckHeight: .08, supported: true, rendered: true, northReached: true, blockedByWater: true, wetSupport: null, safeBank: true });
+  // Let the REAL audio clock advance; don't fake an AudioContext or claim a
+  // manually advanced simulation clock proves native sound mixing.
+  await page.waitForFunction(() => {
+    const g = (window as any).__villaRenovation; g.update(.05);
+    const loop = g.audio.localLoops.get('stream'); return loop && g.audio.targets.get(loop.gain.gain) > 0;
+  }, undefined, { timeout: 5000 });
+  expect(await page.evaluate(() => {
+    const g = (window as any).__villaRenovation; g.stop(); const silent = g.audio.localLoops.size === 0 && g.audio.master.gain.value === 0; g.destroy(); return silent;
+  })).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('bath doors block closed, open with Use from both sides and never close through the player; grill lids reset', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
@@ -97,7 +139,7 @@ test('bath doors block closed, open with Use from both sides and never close thr
     // Explicit fixture placement isolates door mechanics; the full-map tour in
     // villa.spec.ts reaches these rooms by walking and stairs, not this helper.
     const pose = (x: number, z: number, floor = 3.6) => { g.position = { x, y: floor, z }; g.eyeY = floor; g.transition = null; g.motion.offset = g.motion.velocity = 0; g.yaw = -Math.PI / 2; g.keys.clear(); };
-    const tick = (n = 24) => { for (let i = 0; i < n; i++) g.update(.05); };
+    const tick = (n = 36) => { for (let i = 0; i < n; i++) g.update(.05); }; // Full 1.5s sliding travel
     const use = () => { g.handleInput(new KeyboardEvent('keydown', { key: 'e' })); g.handleInput(new KeyboardEvent('keyup', { key: 'e' })); };
     pose(6.8, -4.8); g.keys.add('w'); tick(); g.keys.clear(); const closedBlocks = g.position.x < 8.2;
     pose(6.8, -4.8); const westTarget = g.hotspot()?.id; use(); tick(); const westOpened = g.state.bathDoors.progressW === 1;

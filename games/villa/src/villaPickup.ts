@@ -7,7 +7,7 @@ export type VillaPickupState = VillaDrivingState;
 const bay = VILLA_GARAGE_BAYS[1];
 const VILLA_PICKUP_PROFILE: VillaDrivingProfile = {
   id: 'pickup', limits: VILLA_PICKUP_LIMITS, spawn: bay,
-  seat: [.52, .37], door: [1.10, .42], exit: [2.75, -.30], acceleration: 1.75, reverseAcceleration: 1.2,
+  seat: [.52, .37], door: [1.10, .42], exit: [2.75, -.30], acceleration: 2.8, reverseAcceleration: 1.5,
 };
 export const createVillaPickup = (): VillaPickupState => createVillaDriving(VILLA_PICKUP_PROFILE);
 export const registerVillaPickupColliders = (colliders: readonly VillaCollider[]): void => registerVillaVehicleColliders(colliders, VILLA_PICKUP_PROFILE);

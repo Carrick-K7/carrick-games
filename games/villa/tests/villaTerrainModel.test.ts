@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaEstateFence, createVillaTerrainGeometry } from '../src/villaTerrainModel.js';
-import { VILLA_BUILDING_FOOTPRINT, VILLA_ESTATE_BOUNDS as BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, villaTerrainHeight, villaTerrainNormal } from '../src/villaEstateLayout.js';
+import { VILLA_BUILDING_FOOTPRINT, VILLA_ESTATE_BOUNDS as BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, villaTerrainHeight, villaTerrainGroundHeight, villaTerrainGroundNormal } from '../src/villaEstateLayout.js';
 import { POOL } from '../src/villaWorld.js';
+import { VILLA_STREAM, villaStreamSectionAt, villaStreamTerrainHeight } from '../src/villaStream.js';
 
 type P = { x: number; y: number; z: number };
 type Triangle = [P, P, P];
@@ -57,8 +58,8 @@ describe('Villa sampled terrain mesh and exact water openings', () => {
     for (const name of ['position', 'normal', 'uv']) expect(Array.from(geometry.getAttribute(name).array).every(Number.isFinite)).toBe(true);
     const p = geometry.getAttribute('position'), normal = geometry.getAttribute('normal');
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = villaTerrainNormal(x, z);
-      maxHeightError = Math.max(maxHeightError, Math.abs(y - (villaTerrainHeight(x, z) - 0.022)));
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = villaTerrainGroundNormal(x, z);
+      maxHeightError = Math.max(maxHeightError, Math.abs(y - (villaTerrainGroundHeight(x, z) - 0.022)));
       maxNormalError = Math.max(maxNormalError, Math.abs(Math.hypot(normal.getX(i), normal.getY(i), normal.getZ(i)) - 1), Math.abs(normal.getX(i) - n.x), Math.abs(normal.getZ(i) - n.z));
       minNormalY = Math.min(minNormalY, normal.getY(i));
     }
@@ -84,6 +85,20 @@ describe('Villa sampled terrain mesh and exact water openings', () => {
     expect(closest, `normalized squared pond clearance=${closest}; triangle=${JSON.stringify(worst)}`).toBeGreaterThanOrEqual(1 - 2e-6);
     expect(at(VILLA_POND.x, VILLA_POND.z)).toHaveLength(0);
   });
+  it('cuts the exact stream water AND sloped banks instead of covering them with grass', () => {
+    let checked = 0;
+    for (let x = BOUNDS.minX + .15; x < BOUNDS.maxX; x += 1.37) {
+      const section = villaStreamSectionAt(x)!;
+      const span = section.halfWidth + VILLA_STREAM.bankWidth;
+      for (let offset = -span + .06; offset < span - .06; offset += .31) {
+        const z = section.z + offset;
+        expect(villaStreamTerrainHeight(x, z)).not.toBeNull();
+        expect(at(x, z), `grass over north stream/bank ${x},${z}`).toHaveLength(0); checked++;
+      }
+      for (const offset of [-span - .06, span + .06]) expect(at(x, section.z + offset).length).toBeGreaterThan(0);
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
   it('keeps the lawn completely out of the building footprint', () => {
     // A flat lawn under the house shares a plane with the interior slabs and the
     // lift car floor, which flickers at thresholds and makes the lift look grassy.
@@ -96,7 +111,7 @@ describe('Villa sampled terrain mesh and exact water openings', () => {
   it('retains outside support across estate bounds, grid seams and right up to the water margins', () => {
     const samples: [number, number][] = [];
     const inBuilding = (x: number, z: number) => x > VILLA_BUILDING_FOOTPRINT.minX && x < VILLA_BUILDING_FOOTPRINT.maxX && z > VILLA_BUILDING_FOOTPRINT.minZ && z < VILLA_BUILDING_FOOTPRINT.maxZ;
-    for (let x = BOUNDS.minX + 0.123; x <= BOUNDS.maxX; x += 2.13) for (let z = BOUNDS.minZ + 0.217; z <= BOUNDS.maxZ; z += 3.17) if (!inPool(x, z) && !inPond(x, z) && !inBuilding(x, z)) samples.push([x, z]);
+    for (let x = BOUNDS.minX + 0.123; x <= BOUNDS.maxX; x += 2.13) for (let z = BOUNDS.minZ + 0.217; z <= BOUNDS.maxZ; z += 3.17) if (!inPool(x, z) && !inPond(x, z) && !inBuilding(x, z) && villaStreamTerrainHeight(x, z) === null) samples.push([x, z]);
     for (const x of [BOUNDS.minX + 0.001, BOUNDS.maxX - 0.001]) for (const z of [BOUNDS.minZ + 0.001, 0, 61.5, 121, BOUNDS.maxZ - 0.001]) samples.push([x, z]);
     for (const x of [POOL.minX - 0.01, POOL.maxX + 0.01]) for (let z = POOL.minZ; z <= POOL.maxZ; z += 0.7) samples.push([x, z]);
     for (const z of [POOL.minZ - 0.01, POOL.maxZ + 0.01]) for (let x = POOL.minX; x <= POOL.maxX; x += 0.7) samples.push([x, z]);
@@ -107,7 +122,7 @@ describe('Villa sampled terrain mesh and exact water openings', () => {
     let worst = 0;
     for (const t of triangles) {
       const x = (t[0].x + t[1].x + t[2].x) / 3, z = (t[0].z + t[1].z + t[2].z) / 3, y = (t[0].y + t[1].y + t[2].y) / 3;
-      worst = Math.max(worst, Math.abs(y + 0.022 - villaTerrainHeight(x, z)));
+      worst = Math.max(worst, Math.abs(y + 0.022 - villaTerrainGroundHeight(x, z)));
     }
     // A 1m height grid stays within 1cm between samples, comfortably below the
     // 22mm visual grass offset; exact vertex height is checked separately.

@@ -5,16 +5,8 @@ import type { VillaCollider } from './villaWorld.js';
 import { createVillaWardrobe, VILLA_MASTER_WARDROBE, type VillaWardrobeState } from './villaWardrobe.js';
 import { registerVillaSeatCollider, villaRelaxSeat } from './villaSeating.js';
 export { VILLA_MASTER_WARDROBE } from './villaWardrobe.js';
-export const VILLA_MASTER_VANITY = {
-  x: -5.05, y: 3.6, z: 0.65, width: 1.6, depth: 0.72, height: 0.82,
-  kneeWidth: 0.94, kneeHeight: 0.69,
-} as const;
-export const VILLA_MASTER_MIRROR = {
-  x: -5.05, y: 5.38, z: 0.205, width: 1.3, height: 1.28, depth: 0.065,
-} as const;
-export const VILLA_MASTER_STOOL = {
-  x: -5.05, y: 3.6, z: 1.58, width: 0.6, depth: 0.54, height: 0.49,
-} as const;
+import { VILLA_MASTER_VANITY, VILLA_MASTER_MIRROR, VILLA_MASTER_STOOL } from './villaBedroomLayout.js';
+export { VILLA_MASTER_VANITY, VILLA_MASTER_MIRROR, VILLA_MASTER_STOOL } from './villaBedroomLayout.js';
 export const VILLA_VANITY_ACCESSORIES = ['brush-cup', 'lipstick', 'compact', 'perfume-bottle', 'jewelry-tray'] as const;
 
 /** Scene-owned joinery; controller owns pure wardrobe state, no DOM or render targets. */
@@ -40,49 +32,52 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
   marker('dressing-table', v.x, v.y, v.z, { openKneeSpace: true, kneeWidth: v.kneeWidth, kneeHeight: v.kneeHeight, drawers: 2 });
   b.at(v.x, v.y, v.z, 0, () => {
     // Table is open underneath: independent legs/drawers, not a solid cabinet box.
-    const legX = v.width / 2 - .115;
-    for (const x of [-legX, legX]) for (const z of [-0.265, 0.265]) {
+    const legX = v.width / 2 - .115, legZ = v.depth / 2 - .095;
+    for (const x of [-legX, legX]) for (const z of [-legZ, legZ]) {
       b.cylinder(x, 0.365, z, 0.032, 0.043, 0.73, oak, [0, 0, 0], 10);
       b.cylinder(x, 0.04, z, 0.044, 0.044, 0.075, brass, [0, 0, 0], 10);
       b.collide(x, 0, z, 0.09, 0.73, 0.09);
     }
-    b.box(0, 0.68, -0.292, v.width - .19, 0.12, 0.07, oak, 0.008);
-    b.collide(0, 0.62, -0.292, v.width - .19, 0.12, 0.07);
+    const braceZ = -v.depth / 2 + .068;
+    b.box(0, 0.68, braceZ, v.width - .19, 0.12, 0.07, oak, 0.008);
+    b.collide(0, 0.62, braceZ, v.width - .19, 0.12, 0.07);
     const drawerWidth = (v.width - v.kneeWidth) / 2 - .045;
     const drawerX = v.kneeWidth / 2 + .015 + drawerWidth / 2;
     for (const x of [-drawerX, drawerX]) {
-      b.box(x, 0.645, 0, drawerWidth, 0.24, 0.62, oak, 0.018);
-      b.box(x, 0.645, 0.326, drawerWidth - .05, 0.19, 0.027, sage, 0.01);
-      b.box(x, 0.665, 0.355, 0.14, 0.018, 0.035, brass, 0.006);
-      b.collide(x, 0.525, 0.015, drawerWidth, 0.24, 0.71);
+      b.box(x, 0.645, 0, drawerWidth, 0.24, v.depth - .1, oak, 0.018);
+      b.box(x, 0.645, v.depth / 2 - .034, drawerWidth - .05, 0.19, 0.027, sage, 0.01);
+      b.box(x, 0.665, v.depth / 2 - .005, 0.19, 0.018, 0.035, brass, 0.006);
+      b.collide(x, 0.525, 0.015, drawerWidth, 0.24, v.depth - .01);
     }
     b.box(0, 0.743, 0, v.width - 0.07, 0.055, v.depth - 0.04, oak, 0.017);
     b.box(0, 0.789, 0, v.width, 0.062, v.depth, stone, 0.027);
     b.collide(0, 0.715, 0, v.width, 0.105, v.depth);
 
-    // A small tray gathers objects at the ends, leaving the work surface usable.
-    marker('jewelry-tray', v.x - .48, v.y + v.height, v.z + 0.08);
-    b.box(-.48, 0.835, 0.07, 0.42, 0.025, 0.29, porcelain, 0.035);
-    for (const z of [-0.065, 0.205]) b.box(-.48, 0.856, z, 0.4, 0.035, 0.025, porcelain, 0.01);
-    for (const x of [-.676, -.284]) b.box(x, 0.856, 0.07, 0.025, 0.035, 0.25, porcelain, 0.01);
-    marker('perfume-bottle', v.x - 0.72, v.y + v.height, v.z + 0.035);
-    b.box(-0.72, 0.94, 0.035, 0.11, 0.17, 0.095, amber, 0.018);
-    b.box(-0.72, 0.943, 0.085, 0.068, 0.055, 0.006, linen, 0.002);
-    b.cylinder(-0.72, 1.047, 0.035, 0.033, 0.033, 0.06, brass, [0, 0, 0], 10);
-    marker('lipstick', v.x - 0.54, v.y + v.height, v.z + 0.11);
-    b.cylinder(-0.54, 0.893, 0.11, 0.027, 0.027, 0.095, brass, [0, 0, 0], 10);
-    b.cylinder(-0.54, 0.966, 0.11, 0.019, 0.019, 0.055, rose, [0, 0, 0], 10);
-    b.ellipsoid(-0.54, 0.996, 0.11, 0.019, 0.018, 0.019, rose);
-    marker('compact', v.x + 0.35, v.y + v.height, v.z + 0.1, { open: true });
-    b.cylinder(0.35, 0.837, 0.1, 0.085, 0.085, 0.028, brass, [0, 0, 0], 16);
-    b.cylinder(0.35, 0.856, 0.1, 0.067, 0.067, 0.012, rose, [0, 0, 0], 16);
-    b.cylinder(0.35, 0.918, 0.015, 0.085, 0.085, 0.015, brass, [Math.PI / 2 - 0.2, 0, 0], 16);
-    b.cylinder(0.35, 0.916, 0.027, 0.067, 0.067, 0.006, mirror, [Math.PI / 2 - 0.2, 0, 0], 16);
-    marker('brush-cup', v.x + .60, v.y + v.height, v.z - 0.13, { brushes: 3 });
-    b.cylinder(.60, 0.9, -0.13, 0.07, 0.058, 0.16, porcelain, [0, 0, 0], 12);
-    b.cylinder(.60, 0.982, -0.13, 0.053, 0.053, 0.008, charcoal, [0, 0, 0], 12);
+    // Two orderly accessory groups leave a generous clear worktop in the middle.
+    const trayX = -v.width / 2 + .48, perfumeX = trayX - .18, lipstickX = trayX + .08;
+    const compactX = v.width / 2 - .62, cupX = v.width / 2 - .25;
+    marker('jewelry-tray', v.x + trayX, v.y + v.height, v.z + .08);
+    b.box(trayX, .835, .07, .54, .025, .29, porcelain, .035);
+    for (const z of [-.065, .205]) b.box(trayX, .856, z, .52, .035, .025, porcelain, .01);
+    for (const x of [trayX - .256, trayX + .256]) b.box(x, .856, .07, .025, .035, .25, porcelain, .01);
+    marker('perfume-bottle', v.x + perfumeX, v.y + v.height, v.z + .035);
+    b.box(perfumeX, .94, .035, .11, .17, .095, amber, .018);
+    b.box(perfumeX, .943, .085, .068, .055, .006, linen, .002);
+    b.cylinder(perfumeX, 1.047, .035, .033, .033, .06, brass, [0, 0, 0], 10);
+    marker('lipstick', v.x + lipstickX, v.y + v.height, v.z + .11);
+    b.cylinder(lipstickX, .893, .11, .027, .027, .095, brass, [0, 0, 0], 10);
+    b.cylinder(lipstickX, .966, .11, .019, .019, .055, rose, [0, 0, 0], 10);
+    b.ellipsoid(lipstickX, .996, .11, .019, .018, .019, rose);
+    marker('compact', v.x + compactX, v.y + v.height, v.z + .1, { open: true });
+    b.cylinder(compactX, .837, .1, .085, .085, .028, brass, [0, 0, 0], 16);
+    b.cylinder(compactX, .856, .1, .067, .067, .012, rose, [0, 0, 0], 16);
+    b.cylinder(compactX, .918, .015, .085, .085, .015, brass, [Math.PI / 2 - .2, 0, 0], 16);
+    b.cylinder(compactX, .916, .027, .067, .067, .006, mirror, [Math.PI / 2 - .2, 0, 0], 16);
+    marker('brush-cup', v.x + cupX, v.y + v.height, v.z - .13, { brushes: 3 });
+    b.cylinder(cupX, .9, -.13, .07, .058, .16, porcelain, [0, 0, 0], 12);
+    b.cylinder(cupX, .982, -.13, .053, .053, .008, charcoal, [0, 0, 0], 12);
     for (let i = 0; i < 3; i++) {
-      const x = .565 + i * 0.035, top = 1.12 + i * 0.035;
+      const x = cupX - .035 + i * .035, top = 1.12 + i * .035;
       b.beam([x, 0.94, -0.13], [x + (i - 1) * 0.017, top, -0.13], 0.01, shadowOak, 6);
       b.cylinder(x + (i - 1) * 0.017, top, -0.13, 0.017, 0.014, 0.042, brass, [0, 0, 0], 8);
       b.ellipsoid(x + (i - 1) * 0.017, top + 0.04, -0.13, 0.025, 0.04, 0.023, charcoal);
@@ -95,7 +90,7 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
     b.box(0, 0, 0, m.width, m.height, m.depth, oak, 0.12);
     b.box(0, 0, 0.036, m.width - 0.06, m.height - 0.06, 0.017, brass, 0.105);
     b.box(0, 0, 0.047, m.width - 0.105, m.height - 0.105, 0.012, mirror, 0.09);
-    for (const x of [-0.61, 0.61]) b.box(x, 0, 0.057, 0.011, 0.91, 0.008, glow, 0.004);
+    for (const x of [-m.width / 2 + .12, m.width / 2 - .12]) b.box(x, 0, .057, .011, m.height - .3, .008, glow, .004);
     b.collide(0, -m.height / 2, 0.015, m.width, m.height, 0.095);
   });
   const s = VILLA_MASTER_STOOL;

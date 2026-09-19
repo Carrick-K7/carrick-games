@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { furnishVilla } from '../src/villaFurnishings.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST } from '../src/villaEstateLayout.js';
-import { VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FIELDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT, VILLA_POND, VILLA_SCOOTER_PARKING, villaEstateContains, villaPondContains, villaPondIntersectsPolygon, villaTerrainBounds, villaTerrainHeight, villaTerrainLocalPoint, villaTerrainNormal, villaTerrainOrientation } from '../src/villaEstateLayout.js';
+import { VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FIELDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT, VILLA_POND, VILLA_SCOOTER_PARKING, villaEstateContains, villaPondContains, villaPondIntersectsPolygon, villaTerrainBounds, villaTerrainHeight, villaTerrainGroundHeight, villaTerrainLocalPoint, villaTerrainNormal, villaTerrainOrientation } from '../src/villaEstateLayout.js';
 import { createVillaEstateModel } from '../src/villaEstateModel.js';
 import { furnishVilla } from '../src/villaFurnishings.js';
 import { createVillaGarden } from '../src/villaGarden.js';
@@ -23,7 +23,7 @@ const dispose = (root: THREE.Object3D) => {
 
 describe('Villa authoritative estate terrain and layout', () => {
   it('keeps the estate flat under the house, pool and garden and spans the enlarged plot', () => {
-    expect(VILLA_ESTATE_BOUNDS).toEqual({ minX: -40, maxX: 62, minZ: -26, maxZ: 162 });
+    expect(VILLA_ESTATE_BOUNDS).toEqual({ minX: -40, maxX: 62, minZ: -58, maxZ: 162 });
     for (let x = -38; x <= 60; x += 2) for (let z = -24; z <= 35; z++) expect(villaTerrainHeight(x, z)).toBe(0);
     expect(VILLA_GARAGE_BAYS.map(b => b.x)).toEqual([32.4, 37.7, 42.2, 46.9]); expect(VILLA_GARAGE_EXTENT.maxX).toBe(51);
     expect(VILLA_SCOOTER_PARKING.x).toBeGreaterThan(VILLA_GARAGE_EXTENT.maxX + 2);
@@ -75,13 +75,13 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
   it('integrates a single terrain lawn with genuine water holes and fence chunks outside the support boundary', () => {
     const geometry = createVillaTerrainGeometry(), scene = new THREE.Group(), wood = new THREE.MeshStandardMaterial(), fence = createVillaEstateFence(scene, wood);
     try {
-      expect(geometry.userData).toMatchObject({ gridMetres: 1, openings: ['building', 'pool', 'pond'] });
+      expect(geometry.userData).toMatchObject({ gridMetres: 1, openings: ['building', 'pool', 'pond', 'stream'] });
       const positions = geometry.getAttribute('position');
       for (let i = 0; i < positions.count; i += 3) {
         let x = 0, z = 0;
         for (let j = 0; j < 3; j++) {
           x += positions.getX(i + j) / 3; z += positions.getZ(i + j) / 3;
-          expect(positions.getY(i + j)).toBeCloseTo(villaTerrainHeight(positions.getX(i + j), positions.getZ(i + j)) - .022, 5);
+          expect(positions.getY(i + j)).toBeCloseTo(villaTerrainGroundHeight(positions.getX(i + j), positions.getZ(i + j)) - .022, 5);
         }
         expect(x > POOL.minX + 1e-5 && x < POOL.maxX - 1e-5 && z > POOL.minZ + 1e-5 && z < POOL.maxZ - 1e-5).toBe(false);
         expect(((x - VILLA_POND.x) / VILLA_POND.radiusX) ** 2 + ((z - VILLA_POND.z) / VILLA_POND.radiusZ) ** 2).toBeGreaterThan(.998);

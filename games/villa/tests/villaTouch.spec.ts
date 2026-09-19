@@ -67,7 +67,7 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   await page.touchscreen.tap(geometry.estate.x, geometry.estate.y);
   await expect(canvas).toHaveAttribute('data-villa-map-floor', '0');
   expect(await canvas.getAttribute('data-villa-position')).toBe(beforeMap);
-  await canvas.screenshot({ path: 'test-results/villa-mobile-map.png' });
+  await canvas.screenshot({ path: test.info().outputPath('villa-mobile-map.png') });
   await page.touchscreen.tap(geometry.close.x, geometry.close.y);
   await expect(canvas).toHaveAttribute('data-villa-map', 'false');
   await page.locator('#overflowBtn').tap();

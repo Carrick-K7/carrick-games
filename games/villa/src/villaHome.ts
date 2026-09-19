@@ -22,10 +22,10 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   { id: 'east-lounge', name: 'Living & media lounge', zh: '起居厅', floor: 0, fixtures: [{ x: 22.6, y: 3.1, z: -4.5 }, { x: 22.6, y: 3.1, z: 5 }] },
   { id: 'garage', name: 'Garage & workshop', zh: '车库工坊', floor: 0, fixtures: [{ x: 32.4, y: 3.24, z: -2.8 }, { x: 40, y: 3.24, z: -2.8 }, { x: 47, y: 3.24, z: -2.8 }] },
   { id: 'gallery-0', name: 'Ground floor hall', zh: '一楼走廊', floor: 0, fixtures: [{ x: 0, y: 3.14, z: 5.8 }, { x: 0, y: 3.14, z: -8.0 }, { x: 0, y: 3.14, z: -15.5 }] },
-  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: 4.4 }, { x: -7.4, y: 6.72, z: 4.4 }] },
+  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, fixtures: [{ x: -19.5, y: 6.72, z: 3 }, { x: -9.3, y: 6.72, z: 4.8 }] },
   // Swapped west wing: the guest bedroom now owns the north strip, the dressing
   // room and ensuite share the band south of it.
-  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: -13.6 }, { x: -7.5, y: 6.72, z: -13.6 }] },
+  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -20, y: 6.72, z: -12.2 }, { x: -9, y: 6.72, z: -14 }] },
   { id: 'wardrobe', name: 'Dressing room', zh: '衣帽间', floor: 1, fixtures: [{ x: -18.6, y: 6.72, z: -4.5 }] },
   { id: 'ensuite', name: 'Ensuite bath', zh: '主卫', floor: 1, fixtures: [{ x: -8.6, y: 6.72, z: -4.5 }] },
   { id: 'bath', name: 'Bathroom', zh: '浴室', floor: 1, fixtures: [{ x: 10, y: 6.72, z: -4.2 }, { x: 14.6, y: 6.72, z: -4.2 }] },
@@ -35,7 +35,7 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }, { x: 8, y: 6.74, z: 6 }, { x: 14, y: 6.74, z: 6 }] },
   { id: 'gallery-2', name: 'Roof access', zh: '天台楼梯间', floor: 2, fixtures: [{ x: 1.06, y: 10.32, z: -2.4 }] },
   { id: 'terrace', name: 'Roof terrace', zh: '天台', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
-  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }] },
+  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }, { x: -2.8, y: 1.2, z: -33 }, { x: 2.8, y: 1.2, z: -43 }] },
 ];export interface VillaSecurityCamera {
   id: string; name: string; zh: string; position: VillaPosition; target: VillaPosition;
 }

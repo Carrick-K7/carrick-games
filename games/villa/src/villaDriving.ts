@@ -1,5 +1,6 @@
 import { VILLA_CAR } from './villaActivities.js';
 import { PLAYER_RADIUS, POOL, villaSupportAt, type VillaCollider, type VillaPosition } from './villaWorld.js';
+import { villaStreamContains, villaStreamIntersectsPolygon } from './villaStream.js';
 import { VILLA_ESTATE_BOUNDS, villaEstateContains, villaPondContains, villaPondIntersectsPolygon, villaTerrainAnchor, villaTerrainBounds, villaTerrainHeight, villaTerrainOrientation } from './villaEstateLayout.js';
 
 export interface VillaDrivingState {
@@ -10,7 +11,8 @@ export interface VillaDrivingInput { throttle: number; steer: number; brake: boo
 export const VILLA_DRIVING_BOUNDS = VILLA_ESTATE_BOUNDS;
 /** Published under a vehicle-specific name: the autopilot steers with the same
  *  envelope the sedan itself is simulated with. */
-export const VILLA_CAR_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 7, maxReverse: 3, maxSteer: 0.56 };
+// 180 km/h capability, not the old 7m/s (25km/h) estate-wide limiter.
+export const VILLA_CAR_LIMITS = { halfWidth: 0.96, halfLength: 2.36, height: 1.48, wheelbase: 2.92, maxSpeed: 50, maxReverse: 4.5, maxSteer: 0.56 };
 export const VILLA_SCENIC_ROAD = { x: 6, z: 39, radiusX: 15, radiusZ: 10.5, width: 8.4, drivewayWidth: 8.8 } as const;
 export interface VillaDrivingProfile {
   readonly id: string;
@@ -24,7 +26,7 @@ export interface VillaDrivingProfile {
 }
 const VILLA_SEDAN_PROFILE: VillaDrivingProfile = {
   id: 'sedan', limits: VILLA_CAR_LIMITS, spawn: VILLA_CAR.center,
-  seat: [.43, .05], exit: [2.35, .15], door: [1, .4], acceleration: 2.1, reverseAcceleration: 1.5,
+  seat: [.43, .05], exit: [2.35, .15], door: [1, .4], acceleration: 3.8, reverseAcceleration: 1.8,
 };
 /** Always supplied internally: the pool is not a drivable ground surface. Pond
  * contact uses its actual ellipse, not a rectangular invisible garden wall. */
@@ -78,7 +80,7 @@ function villaVehicleCorridorTouchesBox(a: VillaPosition, b: VillaPosition, box:
 }
 /** No snapping to a floor above/below the terrain, nor unsupported pond exits. */
 export function villaVehicleGroundClear(x: number, z: number, height: number, radius = 0): boolean {
-  if (!villaEstateContains(x, z, radius) || villaPondContains(x, z, radius)) return false;
+  if (!villaEstateContains(x, z, radius) || villaPondContains(x, z, radius) || villaStreamContains(x, z, radius)) return false;
   const probes = radius ? [[0, 0], [-radius, -radius], [-radius, radius], [radius, -radius], [radius, radius]] : [[0, 0]];
   return probes.every(([dx, dz]) => {
     const y = villaTerrainHeight(x + dx, z + dz), support = villaSupportAt(x + dx, z + dz, y, height);
@@ -134,27 +136,41 @@ export function villaDrivingPoseBlocked(pose: VillaDrivingPose, obstacles: reado
   const footprint = villaCarFootprint(pose, profile), l = profile.limits, bounds = villaTerrainBounds(pose, l.halfWidth, l.halfLength, l.height), b = VILLA_DRIVING_BOUNDS;
   return bounds.minX < b.minX || bounds.maxX > b.maxX || bounds.minZ < b.minZ || bounds.maxZ > b.maxZ
     || !villaVehicleGroundClear(pose.x, pose.z, l.height) || footprint.some(p => !villaVehicleGroundClear(p.x, p.z, l.height))
-    || villaPondIntersectsPolygon(footprint) || VILLA_DRIVING_FIXED_COLLIDERS.some(o => villaCarOverlaps(pose, o, profile)) || obstacles.some(o => villaCarOverlaps(pose, o, profile));
+    || villaPondIntersectsPolygon(footprint) || villaStreamIntersectsPolygon(footprint)
+    || VILLA_DRIVING_FIXED_COLLIDERS.some(o => villaCarOverlaps(pose, o, profile)) || obstacles.some(o => villaCarOverlaps(pose, o, profile));
 }
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const approach = (n: number, target: number, amount: number) => n + clamp(target - n, -amount, amount);
+/** Retain full lock at parking speeds; progressively constrain high-speed
+ * curvature instead of imposing a walking-speed vehicle limiter. */
+export function villaDrivingSteerLimit(speed: number, limits = VILLA_CAR_LIMITS): number {
+  const v = Number.isFinite(speed) ? Math.abs(speed) : 0;
+  return Math.min(limits.maxSteer, Math.atan(limits.wheelbase * 6.5 / Math.max(.001, v * v - 64)));
+}
 /** Metres/seconds, front +Z. Right input decreases Three yaw; reverse naturally
  * reverses the turn. Optional profile retains every existing sedan call. */
 export function advanceVillaDriving(state: VillaDrivingState, input: VillaDrivingInput, dt: number, obstacles: readonly VillaCollider[], profile = VILLA_SEDAN_PROFILE): void {
   if (!Number.isFinite(dt) || dt <= 0) return;
   if (!validPose(state)) { Object.assign(state, createVillaDriving(profile)); return; }
-  const limits = profile.limits, duration = Math.min(dt, .25), count = Math.ceil(duration * 120), h = duration / count;
+  const limits = profile.limits, duration = Math.min(dt, .25);
   const throttle = Number.isFinite(input.throttle) ? clamp(input.throttle, -1, 1) : 0;
   const steer = Number.isFinite(input.steer) ? clamp(input.steer, -1, 1) : 0;
   state.speed = Number.isFinite(state.speed) ? clamp(state.speed, -limits.maxReverse, limits.maxSpeed) : 0;
   state.steering = Number.isFinite(state.steering) ? clamp(state.steering, -limits.maxSteer, limits.maxSteer) : 0;
   state.distance = Number.isFinite(state.distance) ? Math.max(0, state.distance) : 0;
+  // Bound movement of the furthest body corner, not just elapsed time. Even at
+  // full highway speed a thin rail/pet/bank cannot fit between two pose samples.
+  const speedBound = Math.min(Math.max(limits.maxSpeed, limits.maxReverse), Math.abs(state.speed) + Math.max(profile.acceleration, profile.reverseAcceleration) * duration);
+  const turnBound = villaDrivingSteerLimit(Math.max(0, Math.abs(state.speed) - 12.5 * duration), limits);
+  const cornerSpeed = speedBound * (1 + Math.hypot(limits.halfWidth, limits.halfLength) / limits.wheelbase * Math.tan(turnBound) * 1.18);
+  const count = Math.max(1, Math.ceil(duration * Math.max(120, cornerSpeed / .10))), h = duration / count;
   const wasContact = state.contact;
   state.contact = false; state.handbrake = !!input.handbrake;
   for (let i = 0; i < count; i++) {
-    state.steering = approach(state.steering, steer * limits.maxSteer, h * 1.8);
-    if (input.brake || state.handbrake) state.speed = approach(state.speed, 0, h * (state.handbrake ? 8.5 : 5.5));
-    else if (throttle === 0) state.speed = approach(state.speed, 0, h * (.32 + Math.abs(state.speed) * .13));
+    const allowedSteer = villaDrivingSteerLimit(state.speed, limits);
+    state.steering = clamp(approach(state.steering, steer * allowedSteer, h * 1.8), -allowedSteer, allowedSteer);
+    if (input.brake || state.handbrake) state.speed = approach(state.speed, 0, h * (state.handbrake ? 12.5 : 9.5));
+    else if (throttle === 0) state.speed = approach(state.speed, 0, h * (.32 + Math.abs(state.speed) * .06));
     else if (state.speed * throttle < 0) state.speed = approach(state.speed, 0, h * 4.5);
     else state.speed += throttle * h * (throttle > 0 ? profile.acceleration : profile.reverseAcceleration);
     state.speed = clamp(state.speed, -limits.maxReverse, limits.maxSpeed);

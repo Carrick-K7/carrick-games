@@ -332,12 +332,17 @@
         "notes": [
           {
             "audience": "all",
-            "text": "Sedan, pickup and scooter can reverse after stopping. The rally rig only brakes, with no reverse. Stop completely before opening road-vehicle doors or getting out.",
-            "textZh": "轿车、皮卡与电动车刹停后可倒车；拉力模拟器仅刹车，不倒车。完全停稳后才能打开车辆车门或下车。"
+            "text": "Sedan, SUV, pickup and scooter can reverse after stopping. The rally rig only brakes, with no reverse. Stop completely before opening road-vehicle doors or getting out.",
+            "textZh": "轿车、SUV、皮卡与电动车刹停后可倒车；拉力模拟器仅刹车，不倒车。完全停稳后才能打开车辆车门或下车。"
           },
           {
             "text": "The smart terminal also lists all three vehicles, each with its own one-key parking button.",
             "textZh": "智能终端也列出三辆车，每辆都有一个一键泊车按钮。",
+            "audience": "all"
+          },
+          {
+            "text": "Manual speed limits are 180 km/h for the sedan, 160 for the SUV and 140 for the pickup. Brake before tight estate bends; automatic parking still uses a precise low-speed approach.",
+            "textZh": "手动驾驶上限：轿车 180、SUV 160、皮卡 140 km/h。庭院急弯前请提前制动；自动泊车仍以低速精确入库。",
             "audience": "all"
           }
         ]

@@ -34,7 +34,7 @@ test.describe('Warm Villa', () => {
     // Release capture before a locator screenshot's scroll/stability action.
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
-    await canvas.screenshot({ path: 'test-results/villa-exterior.png' });
+    await canvas.screenshot({ path: test.info().outputPath('villa-exterior.png') });
     await page.keyboard.press('h');
     await expect(canvas).toHaveAttribute('data-villa-position', '{"x":0,"y":0,"z":11.5}');
     await page.keyboard.down('w');
@@ -107,20 +107,21 @@ test.describe('Warm Villa', () => {
       const masterHudHasRoomLabel = masterRoomHudLabels.length > 1 || masterRoomHudLabels.some(text => text !== masterMapLabel);
       // The new west wing is physically toured: master balcony, ensuite,
       // dressing room, its guest doorway, and the guest's north gallery door.
-      walk(-12.5, 2.6); walk(-12.5, 8.1); walk(-7.3, 8.1); walk(-7.3, 10);
-      walk(-7.3, 8.1); walk(-12.5, 8.1); walk(-12.5, 2.6); walk(-1.5, 2.6);
+      walk(-13.05, 2.6); walk(-13.05, 6.15); walk(-22.1, 6.15); walk(-22.1, 2.45); // real wall-side vanity
+      walk(-22.1, 8.1); walk(-7.3, 8.1); walk(-7.3, 10);
+      walk(-7.3, 8.1); walk(-5.2, 8.1); walk(-5.2, 2.6); walk(-1.5, 2.6);
       walk(-1.5, -3.65); walk(-8, -3.65); walk(-8, -4.9); walk(-16, -4.9);
-      walk(-16, -10.5); walk(-13, -10.5); walk(-13, -16); walk(-1.5, -16);
-      walk(6.4, -16); walk(6.4, -13.4); walk(10.5, -13.4); // study
+      walk(-16, -10.5); walk(-13, -10.5); walk(-13, -14.7); walk(-1.5, -14.7);
+      walk(6.4, -14.7); walk(6.4, -13.4); walk(10.5, -13.4); // study
       walk(6.4, -13.4); walk(6.4, -4.8); walk(6.8, -4.8);
       const useBathDoor = (id: string) => {
         game.yaw = -Math.PI / 2;
         if (game.hotspot()?.id !== id) throw new Error(`Door approach targets ${game.hotspot()?.id}, not ${id}`);
-        key('e'); for (let i = 0; i < 22; i++) game.update(.05);
+        key('e'); for (let i = 0; i < 36; i++) game.update(.05); // 1.5s telescopic slide + margin
       };
       useBathDoor('bath-door-west');
       const westOpened = game.state.bathDoors.progressW === 1;
-      // Pass beyond the open west leaf tips before turning around the tub.
+      // Follow the clear west aisle around the tub; both sliding leaves are parked north.
       walk(9.85, -4.8); walk(9.85, -7.1); walk(13.4, -7.1); walk(13.4, -2); walk(15.8, -2);
       useBathDoor('bath-door-east');
       const eastOpened = game.state.bathDoors.progressE === 1;

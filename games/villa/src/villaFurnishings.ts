@@ -17,6 +17,7 @@ import { createVillaBathDoorModel, type VillaBathDoorState } from './villaBathDo
 import { villaRoomAt, type VillaCollider } from './villaWorld.js';
 import { createVillaFridge } from './villaWardrobe.js';
 import { createVillaSuiteFittings } from './villaSuiteFittings.js';
+import { VILLA_BEDROOM_LAYOUT } from './villaBedroomLayout.js';
 
 export interface VillaFurnishingState {
   evening: boolean;
@@ -134,6 +135,10 @@ export function furnishVilla(scene: THREE.Scene): {
   function chair(material = sage, seatId?: string) {
     legs(0.6, 0.62, 0.46); box(0, 0.47, 0, 0.62, 0.13, 0.64, material, 0.06); box(0, 0.78, 0.27, 0.61, 0.63, 0.12, material, 0.07); hit(0, 0, 0, 0.65, 1.1, 0.68, seatId);
     if (seatId) seatMarker(seatId, 0.65, 0.68);
+  }
+  function bedroomBench(w: number, d: number, id: string) {
+    legs(w, d, .36, oak, .045); box(0, .37, 0, w, .10, d, oak, .03);
+    box(0, .46, 0, w, .15, d, linen, .055); hit(0, 0, 0, w, .54, d, id); seatMarker(id, w, d);
   }
   function cushion(x: number, y: number, z: number, material: THREE.Material, yaw = 0) {
     at(x, y, z, yaw, () => { box(0, 0, 0, 0.55, 0.52, 0.22, material, 0.1); box(0, 0, 0.117, 0.45, 0.42, 0.012, material, 0.045); });
@@ -353,7 +358,8 @@ export function furnishVilla(scene: THREE.Scene): {
     cueRack: { x: 16.8, z: -12, cueCount: 5 } };
 
   // First floor bedrooms and library.
-  bed(VILLA_BEDS[0]); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
+  const masterSuite = VILLA_BEDROOM_LAYOUT.master, guestSuite = VILLA_BEDROOM_LAYOUT.guest;
+  bed(VILLA_BEDS[0]); box(masterSuite.bed.x, 3.617, 3, 6.8, .026, 5.7, rugMat, 0);
   // ---- The rooms the doubled plan added ----
   // Ground-floor tea room (was the study): a low ceremonial tea table with a
   // full service, floor cushions, a tea-ware shelf and a bonsai on its stand.
@@ -624,16 +630,46 @@ export function furnishVilla(scene: THREE.Scene): {
   at(27.2, 3.6, -4.6, 0, () => lamp(true)); plant(18.6, 3.6, -16.6, 1.45);
   const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
   const bathDoorModel = createVillaBathDoorModel(root); colliders.push(...bathDoorModel.colliders);
-  at(-5.2, 3.6, 8, 0, () => sofa(1.25, sage, false, 'sofa-master')); at(-4.45, 3.6, 6.75, 0, () => lamp(true)); at(-5.4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-4.25, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
+  // Master suite: sleeping/vanity zone west, fitted storage north-east and a
+  // real sitting group east. The entry and balcony routes stay outside the group.
+  at(masterSuite.sofa.x, 3.6, masterSuite.sofa.z, masterSuite.sofa.yaw, () => sofa(masterSuite.sofa.width, sage, false, 'sofa-master', 2));
+  at(masterSuite.chair.x, 3.6, masterSuite.chair.z, masterSuite.chair.yaw, () => chair(linen, 'chair-master-reading'));
+  at(masterSuite.coffee.x, 3.6, masterSuite.coffee.z, 0, () => { table(masterSuite.coffee.width, masterSuite.coffee.depth, .43, walnut); tea(0, .44, -.3); books(-.25, .44, .3, 3); });
+  box(-10.7, 3.617, 6.1, 5.4, .026, 4.1, rugMat, 0);
+  at(masterSuite.bench.x, 3.6, masterSuite.bench.z, Math.PI, () => bedroomBench(masterSuite.bench.width, masterSuite.bench.depth, 'bench-master'));
+  at(-7.5, 3.6, 7.1, 0, () => lamp(true)); plant(-14.2, 3.6, 7, 1.3);
+  // Low storage divider gives the large room a human-scale sleeping zone,
+  // with clear passages at both ends. It is NOT a new enclosing room wall.
+  at(-13.7, 3.6, 3.6, Math.PI / 2, () => {
+    box(0, .43, 0, 2.8, .86, .40, oak, .025);
+    box(0, .88, 0, 2.84, .045, .44, stone, .012);
+    for (const x of [-.94, 0, .94]) { box(x, .43, -.207, .86, .72, .025, cream, .01); box(x, .61, -.227, .16, .018, .025, brass, .004); }
+    books(-.7, .905, -.02, 6); plant(.95, .905, 0, .46);
+    hit(0, 0, 0, 2.84, 1.22, .44);
+  });
+  artwork(-4.25, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.
   for (const x of [-11.05, -8.97, -5.72, -2.8]) {
     for (let i = 0; i < 4; i++) cyl(x + (i - 1.5) * 0.075, 5.13, 8.72, 0.055, 0.065, 2.77, linen);
   }
-  bed(VILLA_BEDS[1]); box(-8, 3.617, -13.6, 5.6, .028, 5.2, rugMat, .01);
-  // Guest bedroom, now the whole north strip after the swap: bedside reading
-  // table, chair and a bookcase against the north wall.
-  at(-5.4, 3.6, -14.75, 0, () => { table(1.75, 0.75); books(-0.75, 0.77, -0.08, 4); at(0.62, 0.77, -0.05, 0, () => lamp()); box(0, 0.775, 0.1, 0.55, 0.013, 0.33, cream, 0); });
-  at(-5.3, 3.6, -13.2, 0, () => chair(sage, 'chair-guest')); at(-9.8, 3.6, -17.55, 0, () => shelf(2.4)); plant(-5.2, 3.6, -16.4, 1.1);
+  // Guest bed is against the south-west solid wall, far from the gallery door
+  // at x=-4,z[-16.5,-13.5] AND clear of the dressing-room opening x[-19,-15].
+  bed(VILLA_BEDS[1]); box(guestSuite.bed.x, 3.617, -11.9, 5.6, .028, 5.3, rugMat, .01);
+  at(guestSuite.desk.x, 3.6, guestSuite.desk.z, 0, () => {
+    table(guestSuite.desk.width, guestSuite.desk.depth); books(-1.2, .77, -.06, 5);
+    at(1.13, .77, -.10, 0, () => lamp()); box(0, .775, .1, .7, .013, .42, cream, 0);
+    box(.2, .79, -.19, .25, .022, .15, walnut, .007);
+  });
+  at(guestSuite.chair.x, 3.6, guestSuite.chair.z, guestSuite.chair.yaw, () => chair(sage, 'chair-guest'));
+  at(guestSuite.sofa.x, 3.6, guestSuite.sofa.z, guestSuite.sofa.yaw, () => sofa(guestSuite.sofa.width, linen, false, 'sofa-guest-lounge', 3));
+  at(guestSuite.coffee.x, 3.6, guestSuite.coffee.z, 0, () => { table(guestSuite.coffee.width, guestSuite.coffee.depth, .43, walnut); tea(.45, .44, 0); books(-.55, .44, 0, 4); });
+  box(-10.5, 3.617, -11.35, 5.4, .028, 3.7, rugMat, .01);
+  at(-6.1, 3.6, -9.4, Math.PI, () => shelf(2.5));
+  at(guestSuite.bench.x, 3.6, guestSuite.bench.z, 0, () => bedroomBench(guestSuite.bench.width, guestSuite.bench.depth, 'bench-guest-window'));
+  artwork(-10.5, 5.65, -9.18, 2.7, 1.15, Math.PI);
+  plant(-23.35, 3.6, -17.1, 1.25); at(-12.8, 3.6, -9.8, 0, () => lamp(true));
+  // Narrow gathered panels frame, rather than cover, the north picture window.
+  for (const x of [-21.9, -14.5]) for (let i = 0; i < 5; i++) cyl(x + (i - 2) * .09, 5.13, -17.96, .055, .065, 2.77, linen);
   // Reading hall (阅读厅): every element of the old family room moved here after
   // its walls came down. North half is the library, south half the lounge.
   // Keep the massage-room doorway (x20..23 at z=-9) and both sides of the

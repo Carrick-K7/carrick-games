@@ -4,6 +4,7 @@ import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as N
 import { VILLA_AQUARIUM, VILLA_RELAX_SEATS, villaRelaxSeat, resolveVillaSeatPosition } from './villaSeating.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import type { VillaPetId } from './villaPets.js';
+import { VILLA_STREAM_BOUNDS, villaStreamContains } from './villaStream.js';
 import { POOL, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_GARAGE_BAYS, VILLA_PICKUP, VILLA_SUV, villaPondContains, villaTerrainHeight } from './villaEstateLayout.js';
 
 /** Shared metre-scale architecture and walk surfaces: rendering and collision agree. */
@@ -281,6 +282,7 @@ function inRect(x: number, z: number, r: { minX: number; maxX: number; minZ: num
 export function villaFloor(y: number): number { return Math.max(0, Math.min(2, Math.floor((y + 0.15) / STOREY))); }
 export function villaRoomAt(p: VillaPosition): { id: string; name: string; zh: string } {
   const floor = villaFloor(p.y);
+  if (floor === 0 && p.z < VILLA_STREAM_BOUNDS.maxZ + 5) return { id: 'stream', name: 'North stream & woodland bridge', zh: '北侧小溪 · 林间木桥' };
   if (p.z >= 24) {
     if (p.x < -3.4) return p.z >= 64
       ? { id: 'pond', name: 'South pond & meadow', zh: '南侧池塘 · 草甸' }
@@ -311,7 +313,7 @@ export function villaSupportAt(x: number, z: number, previousY: number, headHeig
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(previousY)) return null;
   const bounds = VILLA_ESTATE_BOUNDS;
   if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return null;
-  if (inRect(x, z, POOL, PLAYER_RADIUS) || villaPondContains(x, z, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
+  if (inRect(x, z, POOL, PLAYER_RADIUS) || villaPondContains(x, z, PLAYER_RADIUS) || villaStreamContains(x, z, PLAYER_RADIUS) || villaElevatorShaftContains(x, z)) return null;
   const heights: number[] = [villaTerrainHeight(x, z)];
   const overhead: { top: number; thickness: number }[] = [];
   for (const y of [STOREY, STOREY * 2]) {

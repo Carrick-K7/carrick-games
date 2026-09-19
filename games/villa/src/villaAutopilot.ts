@@ -15,10 +15,10 @@ export interface VillaParkRun {
   reverseFor: number;
   stuck: number;
   elapsed: number;
-  /** Seconds spent squaring up inside the bay, bounded so it always settles. */
+  /** Retained snapshot field; physical parking no longer uses a snap timer. */
   settle: number;
-  /** Closest approach to the bay so far, and seconds since it improved: the
-   *  controller only reverses after genuinely making no progress. */
+  /** Best remaining polyline distance and seconds since it improved. A legal
+   *  route can lead away from the bay before turning onto its access road. */
   best: number;
   noProgress: number;
   /** Set when the run gives up: the caller reports it and returns control. */
@@ -33,7 +33,9 @@ const BAY_BY_VEHICLE: Record<VillaParkVehicle, (typeof VILLA_GARAGE_BAYS)[number
   car: VILLA_GARAGE_BAYS[0], pickup: VILLA_GARAGE_BAYS[1], suv: VILLA_GARAGE_BAYS[3],
 };
 /** The apron waypoint east of the house that every approach enters by. */
-const APRIL_ENTRY = { x: VILLA_GARAGE_BAYS[0].x, z: VILLA_GARAGE_EXTENT.maxZ + 2.4 };
+// Leave enough straight approach for a full-size wheelbase to align before
+// reaching the garage. The old 2.4m apron required a pose snap to finish turns.
+const APRIL_ENTRY = { x: VILLA_GARAGE_BAYS[0].x, z: VILLA_GARAGE_EXTENT.maxZ + 12 };
 export function villaParkBay(vehicle: VillaParkVehicle): VillaParkPoint { return { x: BAY_BY_VEHICLE[vehicle].x, z: BAY_BY_VEHICLE[vehicle].z }; }
 export function createVillaParkRun(): VillaParkRun {
   return { active: false, points: [], index: 0, reversing: false, reverseFor: 0, stuck: 0, elapsed: 0, settle: 0, best: Infinity, noProgress: 0, failed: '' };
@@ -177,85 +179,65 @@ function localFrame(pose: VillaDrivingPose, point: VillaParkPoint): { x: number;
 }
 export interface VillaParkLimits { halfWidth: number; halfLength: number; wheelbase: number; maxSpeed: number; maxReverse: number; maxSteer: number }
 export interface VillaParkControl { input: VillaDrivingInput; run: VillaParkRun; arrived: boolean }
-/** One control step: aim at a look-ahead point, slow into turns, and reverse
- *  briefly when the target sits behind a stopped car. */
+/** One control step: follow an interpolated lookahead, slow before turns, and
+ *  maintain forward/reverse travel until the path genuinely changes direction.
+ *  Only commands/run bookkeeping are changed; pose is read-only in practice. */
 export function advanceVillaPark(vehicle: VillaParkVehicle, pose: VillaDrivingPose, speed: number, limits: VillaParkLimits, run: VillaParkRun, dt: number): VillaParkControl {
   const points = run.points;
   const last = points[points.length - 1];
   const idle: VillaParkControl = { input: { throttle: 0, steer: 0, brake: false, handbrake: true }, run, arrived: false };
-  if (!run.active || !last) return idle;
+  if (!run.active || !last || !Number.isFinite(dt) || dt <= 0) return idle;
   run.elapsed += dt;
   if (run.elapsed > 300) run.failed = 'lost';
-  if (villaVehicleParked(vehicle, pose) && Math.abs(speed) < .7) {
-    // Settle exactly into the bay, keeping the nose direction it arrived with.
-    const bay = villaParkBay(vehicle);
-    const noseIn = Math.abs(Math.atan2(Math.sin(pose.yaw), Math.cos(pose.yaw))) > Math.PI / 2;
-    Object.assign(pose, { x: bay.x, z: bay.z, yaw: noseIn ? Math.PI : 0 });
+  const bay = villaParkBay(vehicle), goalDistance = Math.hypot(bay.x - pose.x, bay.z - pose.z);
+  if (goalDistance < .035 && villaVehicleParked(vehicle, pose) && Math.abs(speed) < .08) {
+    // The drivetrain, not the controller, owns every millimetre of the pose.
+    // In particular there is no timed settling/arrival teleport into the bay.
     run.active = false;
     return { input: { throttle: 0, steer: 0, brake: true, handbrake: true }, run, arrived: true };
   }
-  // Endgame: inside the bay, creep while squaring up with the bay's own axis,
-  // then settle. A car that is already inside the bay cannot usefully pursue a
-  // point it has passed, and a stopped car cannot change its heading at all.
-  const bay = villaParkBay(vehicle);
-  const insideBay = Math.abs(pose.x - bay.x) < 1.3 && Math.abs(pose.z - bay.z) < 2.4;
-  if (insideBay && Math.abs(speed) < 1.6) {
-    const axis = Math.abs(Math.atan2(Math.sin(pose.yaw), Math.cos(pose.yaw))) > Math.PI / 2 ? Math.PI : 0;
-    const headingError = Math.atan2(Math.sin(axis - pose.yaw), Math.cos(axis - pose.yaw));
-    run.settle += dt;
-    if (Math.abs(headingError) < .16 || run.settle > 4) {
-      Object.assign(pose, { x: bay.x, z: bay.z, yaw: axis });
-      run.active = false;
-      return { input: { throttle: 0, steer: 0, brake: true, handbrake: true }, run, arrived: true };
-    }
-    const steer = Math.max(-1, Math.min(1, -headingError * 1.8 / limits.maxSteer));
-    return { input: { throttle: .3, steer, brake: false, handbrake: false }, run, arrived: false };
-  }
   run.settle = 0;
   const lookAhead = Math.min(7, 2.4 + Math.abs(speed) * .9);
-  // Progress is the closest path point in a window around the last one, then a
-  // look-ahead point further along is aimed at. Tracking "closest point" instead
-  // of "has this waypoint been reached" is what stops a wide, slow-turning car
-  // from orbiting a waypoint it can never touch.
-  let closest = run.index, closestDistance = Infinity;
-  for (let i = Math.max(0, run.index - 3); i <= Math.min(points.length - 1, run.index + 6); i++) {
-    const d = Math.hypot(points[i]!.x - pose.x, points[i]!.z - pose.z);
-    if (d < closestDistance) { closestDistance = d; closest = i; }
+  // Project onto actual SEGMENTS, then interpolate a fixed-distance lookahead.
+  // The old endpoint-only search jumped across the whole 16m final leg, driving
+  // a circle to the bay centre instead of aligning with its straight approach.
+  let closest = run.index, closestDistance = Infinity, projection = points[run.index]!;
+  for (let i = run.index; i < Math.min(points.length - 1, run.index + 7); i++) {
+    const a = points[i]!, b = points[i + 1]!, dx = b.x - a.x, dz = b.z - a.z, length2 = dx * dx + dz * dz;
+    if (length2 < 1e-8) continue;
+    const t = Math.max(0, Math.min(1, ((pose.x - a.x) * dx + (pose.z - a.z) * dz) / length2));
+    const p = { x: a.x + dx * t, z: a.z + dz * t }, distance = Math.hypot(p.x - pose.x, p.z - pose.z);
+    if (distance < closestDistance) { closestDistance = distance; closest = i; projection = p; }
   }
-  run.index = Math.min(points.length - 1, Math.max(run.index, closest));
-  let aimIndex = run.index, walked = 0;
-  while (aimIndex < points.length - 1 && walked < lookAhead) {
-    walked += Math.hypot(points[aimIndex + 1]!.x - points[aimIndex]!.x, points[aimIndex + 1]!.z - points[aimIndex]!.z);
+  run.index = closest;
+  let aimIndex = Math.min(points.length - 1, closest + 1), aim = projection, left = lookAhead;
+  while (aimIndex < points.length) {
+    const b = points[aimIndex]!, distance = Math.hypot(b.x - aim.x, b.z - aim.z);
+    if (distance >= left) { const t = left / distance; aim = { x: aim.x + (b.x - aim.x) * t, z: aim.z + (b.z - aim.z) * t }; break; }
+    left -= distance; aim = b;
+    if (aimIndex === points.length - 1) break;
     aimIndex++;
   }
-  const aim = points[aimIndex]!;
   const target = localFrame(pose, aim);
   // True bearing, so a target behind the car reads as |bearing| > PI/2 instead
   // of being clamped to the side; only the exact-zero case needs a guard.
   const bearing = Math.atan2(target.x, Math.abs(target.x) + Math.abs(target.z) < 1e-6 ? .001 : target.z);
-  const behind = target.z < 0;
-  // Backing up is a last resort, taken only when the car has genuinely stopped
-  // making ground: keying it off the bearing alone made a car that merely had to
-  // straighten up reverse away from its own bay. Progress is measured against
-  // the closest approach to the bay so far.
-  const goalDistance = Math.hypot(last.x - pose.x, last.z - pose.z);
-  if (goalDistance < run.best - .2) { run.best = goalDistance; run.noProgress = 0; } else run.noProgress += dt;
-  if (!run.reversing && run.noProgress > 2 && Math.abs(speed) < 1.2) { run.reversing = true; run.reverseFor = 1.6; }
-  if (run.reversing) {
-    run.reverseFor -= dt;
-    if (run.reverseFor <= 0) { run.reversing = false; run.stuck = 0; run.noProgress = 0; run.best = Infinity; }
-    // While reversing the tail must point at the target: the error is the
-    // target direction measured from the tail, so a target dead astern means
-    // straight back with no lock at all.
-    const tailError = Math.atan2(Math.sin(bearing - Math.PI), Math.cos(bearing - Math.PI));
-    const steer = Math.max(-1, Math.min(1, tailError * 1.4 / limits.maxSteer));
-    return { input: { throttle: -0.6, steer, brake: false, handbrake: false }, run, arrived: false };
-  }
+  // A valid road route can initially lead AWAY from the bay. Measuring progress
+  // by Euclidean bay distance repeatedly cancelled useful reversing, producing
+  // a forward/reverse limit cycle with the stronger new drivetrain. Choose the
+  // travel direction by target bearing with hysteresis, not a 1.6-second timer.
+  const angle = Math.abs(bearing);
+  if (!run.reversing && angle > Math.PI / 2 + .22) run.reversing = true;
+  else if (run.reversing && angle < Math.PI / 2 - .22) run.reversing = false;
+  run.reverseFor = 0;
+  let routeRemaining = closestDistance + Math.hypot(points[Math.min(points.length - 1, closest + 1)]!.x - projection.x, points[Math.min(points.length - 1, closest + 1)]!.z - projection.z);
+  for (let i = closest + 1; i < points.length - 1; i++) routeRemaining += Math.hypot(points[i + 1]!.x - points[i]!.x, points[i + 1]!.z - points[i]!.z);
+  if (routeRemaining < run.best - .02) { run.best = routeRemaining; run.noProgress = 0; } else run.noProgress += dt;
   // Pure pursuit: curvature from the bearing to the look-ahead point. Positive
   // steer decreases yaw (villaDriving: right input rolls the nose right), so the
   // commanded steer carries the opposite sign of the bearing.
   const distance = Math.max(.6, Math.hypot(target.x, target.z));
-  const curvature = 2 * Math.sin(bearing) / Math.min(lookAhead, distance);
+  const curvature = 2 * Math.sin(bearing) / distance;
   const steerAngle = Math.atan(curvature * limits.wheelbase);
   const steer = Math.max(-1, Math.min(1, -steerAngle / limits.maxSteer));
   // Cap the speed by the corner coming up rather than only by the current
@@ -273,27 +255,18 @@ export function advanceVillaPark(vehicle: VillaParkVehicle, pose: VillaDrivingPo
   const cornerSpeed = Math.max(1.3, VILLA_PARK_CRUISE - bend * 1.35 - limits.wheelbase * .18);
   const finalLeg = aimIndex >= points.length - 1;
   const remaining = finalLeg ? Math.hypot(last.x - pose.x, last.z - pose.z) : Infinity;
-  const alignment = Math.max(0, Math.cos(Math.min(Math.PI, Math.abs(bearing))));
-  // On the last leg, creep while squaring the car up with the bay's own axis
-  // (either way round), so it finishes straight instead of parked at an angle.
-  let command = steer;
-  let squaring = 0;
-  if (finalLeg && remaining < 3.2) {
-    const axis = Math.abs(Math.atan2(Math.sin(pose.yaw), Math.cos(pose.yaw))) > Math.PI / 2 ? Math.PI : 0;
-    const headingError = Math.atan2(Math.sin(axis - pose.yaw), Math.cos(axis - pose.yaw));
-    squaring = Math.abs(headingError);
-    command = Math.max(-1, Math.min(1, steer - headingError * 1.7 / limits.maxSteer));
-  }
-  // The last leg creeps to a stop inside the bay instead of driving through it,
-  // but keeps a walking pace while the car is still squaring up: a stopped car
-  // cannot change its heading, so alignment needs the wheels turning.
-  const creep = squaring > .12 ? .85 : 0;
-  const cruise = finalLeg ? Math.max(creep, Math.min(1.5, Math.max(0, (remaining - .12) * .85))) : Math.min(cornerSpeed, VILLA_PARK_CRUISE * (.25 + .75 * alignment));
-  const wanted = Math.min(cruise, VILLA_PARK_CRUISE);
-  const throttle = Math.abs(speed) < wanted ? Math.min(1, .3 + (wanted - Math.abs(speed)) * .6) : 0;
-  if (Math.abs(speed) < .05 && throttle > 0) run.stuck += dt; else run.stuck = 0;
+  const alignment = Math.abs(Math.cos(bearing));
+  const cruise = finalLeg ? Math.min(1.3, remaining * .72) : Math.min(cornerSpeed, VILLA_PARK_CRUISE * (.25 + .75 * alignment));
+  const wanted = Math.min(cruise, run.reversing ? Math.min(2, limits.maxReverse) : VILLA_PARK_CRUISE);
+  const direction = run.reversing ? -1 : 1, alongSpeed = speed * direction;
+  // Parking commands at most 35% accelerator, regardless of highway capability.
+  // Signed speed feedback brakes a gear change before accelerating the other
+  // way; a much smaller low-speed error band avoids overshoot at the bay centre.
+  const error = wanted - alongSpeed;
+  const throttle = error > 0 ? direction * Math.min(.35, .06 + error * .45) : 0;
+  if (Math.abs(speed) < .05 && Math.abs(throttle) > .1) run.stuck += dt; else run.stuck = 0;
   if (run.stuck > 6) run.failed = 'blocked';
-  return { input: { throttle, steer: command, brake: Math.abs(speed) > wanted + .35, handbrake: false }, run, arrived: false };
+  return { input: { throttle, steer, brake: alongSpeed < -.04 || alongSpeed > wanted + Math.min(.12, wanted * .15), handbrake: false }, run, arrived: false };
 }
 /** Ground height at a route point, so the caller can keep the car seated. */
 export const villaParkHeight = (point: VillaParkPoint) => villaTerrainHeight(point.x, point.z);

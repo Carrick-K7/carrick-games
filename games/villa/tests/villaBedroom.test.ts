@@ -5,6 +5,8 @@ import {
   VILLA_MASTER_STOOL, VILLA_VANITY_ACCESSORIES,
 } from '../src/villaBedroom.js';
 import { villaCollides, type VillaCollider } from '../src/villaWorld.js';
+import { VILLA_BEDS } from '../src/villaSeating.js';
+import { VILLA_WEST_WALL } from '../src/villaEstateLayout.js';
 
 const intersects = (a: VillaCollider, b: VillaCollider) => a.minX < b.maxX && a.maxX > b.minX
   && a.minY < b.maxY && a.maxY > b.minY && a.minZ < b.maxZ && a.maxZ > b.minZ;
@@ -33,7 +35,7 @@ describe('north-wall master bedroom joinery', () => {
       expect(bay.position.x).toBeCloseTo(-11.2 + (i + 0.5) * 1.04);
       expect(bay.position.y).toBe(3.6);
     });
-    const wardrobeColliders = colliders.filter(c => c.maxX <= -6 + 1e-8);
+    const wardrobeColliders = colliders.filter(c => c.minX >= w.x - w.width / 2 - 1e-8 && c.maxX <= w.x + w.width / 2 + 1e-8);
     expect(Math.min(...wardrobeColliders.map(c => c.minX))).toBeCloseTo(-11.2);
     expect(Math.max(...wardrobeColliders.map(c => c.maxX))).toBeCloseTo(-6);
     expect(Math.min(...wardrobeColliders.map(c => c.minZ))).toBeCloseTo(0.15);
@@ -58,7 +60,10 @@ describe('north-wall master bedroom joinery', () => {
     const s = VILLA_MASTER_STOOL;
     expect(villaCollides({ x: s.x, y: s.y, z: s.z }, colliders)).toBe(true);
     expect(colliders[colliders.length - 1].maxY).toBeCloseTo(s.y + s.height);
-    const vanityColliders = colliders.filter(c => c.minX > -6);
+    const vanityColliders = colliders.filter(c => c.maxX < -20);
+    expect(v.width).toBeGreaterThanOrEqual(3.2);
+    expect(v.z - v.depth / 2).toBeGreaterThan(.11);
+    expect(v.z - v.depth / 2).toBeLessThan(.22); // Against the actual solid north wall.
     expect(vanityColliders).toHaveLength(10); // All four legs, brace, two drawers, top, mirror, stool.
     for (const c of vanityColliders) {
       expect(c.minX).toBeGreaterThanOrEqual(v.x - v.width / 2);
@@ -69,20 +74,23 @@ describe('north-wall master bedroom joinery', () => {
 
   it('fits entirely inside the master room and preserves doors, bed access and glazing', () => {
     for (const c of colliders) {
-      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(-4.11);
+      expect(c.minX).toBeGreaterThan(VILLA_WEST_WALL.inner + .11); expect(c.maxX).toBeLessThan(-4.11);
       expect(c.minZ).toBeGreaterThan(0.11); expect(c.maxZ).toBeLessThan(2);
       expect(c.minY).toBeGreaterThanOrEqual(3.6); expect(c.maxY).toBeLessThan(7);
     }
+    const bed = VILLA_BEDS[0];
     const clearZones: VillaCollider[] = [
-      { minX: -2.9, maxX: -1.5, minZ: 1.5, maxZ: 3.8, minY: 3.6, maxY: 6.6 },
+      { minX: -4.75, maxX: -3.25, minZ: 1.5, maxZ: 3.8, minY: 3.6, maxY: 6.6 },
       { minX: -8.5, maxX: -6.2, minZ: 8, maxZ: 9.3, minY: 3.6, maxY: 6.6 },
-      { minX: -9.435, maxX: -6.565, minZ: 3.6, maxZ: 7.47, minY: 3.6, maxY: 5.7 },
-      { minX: -11.9, maxX: -11.5, minZ: 1, maxZ: 8, minY: 3.6, maxY: 6.6 },
+      { minX: bed.origin.x - bed.width / 2 - .2, maxX: bed.origin.x + bed.width / 2 + .2,
+        minZ: .13, maxZ: bed.origin.z + bed.depth / 2, minY: 3.6, maxY: 5.7 },
+      { minX: VILLA_WEST_WALL.inner, maxX: VILLA_WEST_WALL.inner + .22, minZ: 1, maxZ: 8, minY: 3.6, maxY: 6.6 },
       { minX: -5.5, maxX: -2.5, minZ: 3.9, maxZ: 7.5, minY: 3.6, maxY: 6.6 },
     ];
     clearZones.forEach(zone => expect(colliders.some(c => intersects(c, zone))).toBe(false));
-    // Continuous route in from the east, along the foot of the bed and west side.
-    for (let x = -10.7; x <= -2; x += 0.15) expect(villaCollides({ x, y: 3.6, z: 2.65 }, colliders)).toBe(false);
+    // The joinery leaves the full dressing aisle clear. Real routes around all
+    // beds/seating are checked with the complete furnished scene separately.
+    for (let x = -23.3; x <= -4.6; x += 0.15) expect(villaCollides({ x, y: 3.6, z: 2.65 }, colliders)).toBe(false);
     for (let z = 2; z < 9; z += 0.15) expect(villaCollides({ x: -10.8, y: 3.6, z }, colliders)).toBe(false);
     for (let x = -10.8; x < -6.3; x += 0.15) expect(villaCollides({ x, y: 3.6, z: 8.1 }, colliders)).toBe(false);
   });

@@ -13,9 +13,9 @@ import {
 } from './villaWorld.js';
 import { advanceVillaMotion, createVillaMotion, jumpVillaMotion, toggleVillaCrouch, villaBodyHeight, villaEyeHeight } from './villaMotion.js';
 import { advanceVillaDriving, createVillaDriving, villaCarAnchors, villaCarDriverSide, villaCarExitClear, villaDrivingPoseBlocked, VILLA_CAR_LIMITS, VILLA_SCENIC_ROAD } from './villaDriving.js';
-import { advanceVillaScooter, createVillaScooter, villaScooterAnchors, villaScooterSafeExit, villaScooterExitClear, villaScooterPoseBlocked, VILLA_SCOOTER } from './villaScooter.js';
+import { advanceVillaScooter, createVillaScooter, villaScooterAnchors, villaScooterSafeExit, villaScooterExitClear, villaScooterPoseBlocked, VILLA_SCOOTER, VILLA_SCOOTER_LIMITS } from './villaScooter.js';
 import { VILLA_AQUARIUM, villaRelaxSeat, resolveVillaSeatPosition, villaSeatExitCandidates, villaSeatColliderId, type VillaRelaxSeat } from './villaSeating.js';
-import { advanceVillaRace, createVillaRace } from './villaRacing.js';
+import { advanceVillaRace, createVillaRace, VILLA_RACE_MAX_SPEED } from './villaRacing.js';
 import { advanceVillaSnooker, createVillaSnooker, shootVillaSnooker } from './villaSnooker.js';
 import { advanceVillaPets, createVillaPets, feedVillaPet, nearestVillaPet, villaPetLabel } from './villaPets.js';
 import { VILLA_FAUCET } from './villaFaucet.js';
@@ -38,6 +38,8 @@ import { VillaAudio, type VillaAudioEngine } from './villaAudio.js';
 import { advanceVillaBathDoors, createVillaBathDoors, toggleVillaBathDoor, type VillaBathDoorState } from './villaBathDoors.js';
 import { advanceVillaPark, createVillaParkRun, villaParkAvailable, villaParkRouteClear, villaVehicleParked, villaParkRoute, type VillaParkRun } from './villaAutopilot.js';
 import { VILLA_VERSION } from './villaVersion.js';
+import { villaAudioDriveDirection, type VillaInteractionCue } from './villaInteractionAudio.js';
+import { villaStreamDistance, VILLA_STREAM, VILLA_STREAM_BRIDGE, VILLA_STREAM_PATH, VILLA_STREAM_WATER_OUTLINE } from './villaStream.js';
 
 interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
@@ -81,7 +83,9 @@ export class VillaGame extends BaseGame {
   private audioEngine: VillaAudioEngine | null = null;
   private audioFocusLost = false;
   private stepDistance = 0;
-  private readonly roadDoorAudio = new Map<VillaRoadVehicle, boolean>();
+  private readonly driveAudioDirection = new Map<string, number>();
+  private elevatorAudioPhase = 'closed';
+  private rallyAudioHandbrake = false;
   private immersive = false;
   private promptAlpha = 0;
   private safetyBrake = true;
@@ -132,15 +136,19 @@ export class VillaGame extends BaseGame {
     this.useButton = createVillaUseButton(this.canvas, () => this.use());
     this.terminal = createVillaTerminal(this.canvas, {
       close: () => this.setTerminal(false),
-      light: (id, on) => { setVillaRoomLight(this.state.home, id, on); this.audio.lightClick(); this.terminalChanged(); },
-      allLights: on => { setVillaAllLights(this.state.home, on); this.state.aquariumOn = on; this.state.displayLights = on; this.audio.lightClick(); this.terminalChanged(); },
-      time: value => { setVillaTimeOfDay(this.state.home, value); this.terminalChanged(); },
-      weather: value => { setVillaWeather(this.state.home, value); this.terminalChanged(); },
+      light: (id, on) => { if (setVillaRoomLight(this.state.home, id, on)) this.audio.lightClick(); this.terminalChanged(); },
+      allLights: on => {
+        const changed = Object.values(this.state.home.roomLights).some(value => value !== on) || this.state.aquariumOn !== on || this.state.displayLights !== on;
+        setVillaAllLights(this.state.home, on); this.state.aquariumOn = on; this.state.displayLights = on;
+        if (changed) this.audio.lightClick(); this.terminalChanged();
+      },
+      time: value => { const before = this.state.home.timeOfDay; setVillaTimeOfDay(this.state.home, value); if (before !== this.state.home.timeOfDay) this.audio.cue('setting'); this.terminalChanged(); },
+      weather: value => { const before = this.state.home.weather; setVillaWeather(this.state.home, value); if (before !== this.state.home.weather) this.audio.cue('setting'); this.terminalChanged(); },
       sensitivity: value => this.saveSensitivity(value),
-      aimAssist: on => { this.state.snooker.aimAssist = on; this.terminalChanged(); },
-      fireplace: on => { this.state.fireplace = on; this.audio.lightClick(); this.terminalChanged(); },
-      aquarium: on => { this.state.aquariumOn = on; this.audio.lightClick(); this.terminalChanged(); },
-      sound: on => { this.audio.setEnabled(on); if (on) this.primeAudio(); this.terminalChanged(); },
+      aimAssist: on => { if (this.state.snooker.aimAssist !== on) this.audio.cue('setting'); this.state.snooker.aimAssist = on; this.terminalChanged(); },
+      fireplace: on => { this.setFireplace(on, true); this.terminalChanged(); },
+      aquarium: on => { if (this.state.aquariumOn !== on) this.audio.lightClick(); this.state.aquariumOn = on; this.terminalChanged(); },
+      sound: on => { const changed = this.audio.enabled !== on; this.audio.setEnabled(on); if (on) { this.primeAudio(); if (changed) this.audio.cue('setting'); } this.terminalChanged(); },
       park: id => { this.parkVehicleHome(id as VillaRoadVehicle); this.terminalChanged(); },
       // Isolated/older hosts have no game-action menu; keep touch access in
       // terminal Settings instead of restoring extra persistent HUD buttons.
@@ -148,6 +156,24 @@ export class VillaGame extends BaseGame {
         home: () => { this.setTerminal(false); this.activate('home'); },
         immersive: () => { this.setTerminal(false); this.activate('immersion'); },
       } : {}),
+    });
+    // Terminal-local navigation has no action callback. Observe only its two
+    // semantic selection families, after their real native callback commits;
+    // device/settings/close clicks already sound at their owning action above.
+    const selections = new WeakMap<Event, { node: Element; selected: string | null }>();
+    const rememberSelection = (event: Event) => {
+      const node = event.target instanceof Element ? event.target.closest('[data-villa-terminal-tab], [data-villa-camera]') : null;
+      if (node) selections.set(event, { node, selected: node.getAttribute('aria-pressed') });
+    };
+    const soundSelection = (event: Event) => {
+      const before = selections.get(event);
+      if (before && before.selected !== 'true' && before.node.getAttribute('aria-pressed') === 'true') this.audio.cue('ui-tab');
+    };
+    this.terminal.element.addEventListener('click', rememberSelection, true);
+    this.terminal.element.addEventListener('click', soundSelection);
+    this.registerCleanup(() => {
+      this.terminal?.element.removeEventListener('click', rememberSelection, true);
+      this.terminal?.element.removeEventListener('click', soundSelection);
     });
   }
 
@@ -234,7 +260,7 @@ export class VillaGame extends BaseGame {
   }
 
   init() {
-    this.audio.setPaused(true); this.audioEngine = null; this.stepDistance = 0; this.roadDoorAudio.clear();
+    this.audio.setPaused(true); this.audioEngine = null; this.stepDistance = 0; this.driveAudioDirection.clear(); this.elevatorAudioPhase = 'closed'; this.rallyAudioHandbrake = false;
     this.clearInput();
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;
     this.time = 0; this.mapOpen = false; this.mapFloor = 0;
@@ -381,18 +407,19 @@ export class VillaGame extends BaseGame {
   /** One-key parking: hand this car to its own autopilot and drive it home. */
   private parkVehicleHome(id: VillaRoadVehicle) {
     const key = this.parkVehicle(id), run = this.state.park[id], state = this.roadState(id);
-    if (run.active) { run.active = false; this.message(this.isZhLang() ? '已取消自动泊车。' : 'Auto-park cancelled.'); return; }
-    if (villaVehicleParked(key, state)) { this.message(this.isZhLang() ? '这辆车已经在自己的车位里。' : 'That car is already in its own bay.'); return; }
-    if (!villaParkAvailable(key, state)) { this.message(this.isZhLang() ? '车横在车库地面上：请先把它开出来再自动泊车。' : 'That car is sideways inside the garage: drive it out before auto-parking.'); return; }
+    if (run.active) { run.active = false; this.audio.cue('park-cancel'); this.message(this.isZhLang() ? '已取消自动泊车。' : 'Auto-park cancelled.'); return; }
+    if (villaVehicleParked(key, state)) { this.refuse(this.isZhLang() ? '这辆车已经在自己的车位里。' : 'That car is already in its own bay.'); return; }
+    if (!villaParkAvailable(key, state)) { this.refuse(this.isZhLang() ? '车横在车库地面上：请先把它开出来再自动泊车。' : 'That car is sideways inside the garage: drive it out before auto-parking.'); return; }
     if (this.state.seated === id) { this.cancelCarAccess(); this.closeCarAt = Infinity; }
     const points = villaParkRoute(key, state);
     // Never start a run that would scrape the estate: the route is validated with
     // the same blocking test the car itself uses before a wheel turns.
     if (!villaParkRouteClear(points, pose => this.roadApi(id).blocked(pose, this.roadObstacles(id)))) {
-      this.message(this.isZhLang() ? '到车库的路线被挡住了，无法自动泊车。' : 'The route home is blocked, so auto-park cannot start.');
+      this.refuse(this.isZhLang() ? '到车库的路线被挡住了，无法自动泊车。' : 'The route home is blocked, so auto-park cannot start.');
       return;
     }
     Object.assign(run, createVillaParkRun(), { active: true, points });
+    this.audio.cue('park-start');
     this.message(this.isZhLang() ? '已启动自动泊车：车辆正沿庄园道路返回自己的车位。' : 'Auto-park engaged: the car is driving itself back to its own bay.');
   }
   private nearestParkVehicle(): VillaRoadVehicle | null {
@@ -408,7 +435,7 @@ export class VillaGame extends BaseGame {
   }
   private messageFailedPark(id: VillaRoadVehicle, reason: string) {
     const zh = this.isZhLang(), name = zh ? (id === 'car' ? '轿车' : id === 'pickup' ? '皮卡' : 'SUV') : (id === 'car' ? 'Sedan' : id === 'pickup' ? 'Pickup' : 'SUV');
-    this.message(zh ? `${name}自动泊车中断（${reason === 'blocked' ? '前方受阻' : '路线丢失'}），请手动驾驶。` : `${name} auto-park stopped (${reason}); please take over.`);
+    this.refuse(zh ? `${name}自动泊车中断（${reason === 'blocked' ? '前方受阻' : '路线丢失'}），请手动驾驶。` : `${name} auto-park stopped (${reason}); please take over.`);
   }
   private roadState(id: VillaRoadVehicle) { return this.roadApi(id).state; }
   private roadAnchors(id: VillaRoadVehicle) { return this.roadApi(id).anchors(this.roadApi(id).state); }
@@ -416,8 +443,9 @@ export class VillaGame extends BaseGame {
   private roadDoorProgress(id: VillaRoadVehicle) { return this.roadApi(id).doorProgress; }
   private roadDoorOpen(id: VillaRoadVehicle) { return this.roadApi(id).doorOpen; }
   private setRoadDoor(id: VillaRoadVehicle, open: boolean) {
-    if (this.roadDoorAudio.get(id) !== open) { this.roadDoorAudio.set(id, open); this.audio.vehicleDoor(open); }
-    this.roadApi(id).setDoor(open);
+    const api = this.roadApi(id), changed = api.doorOpen !== open;
+    api.setDoor(open);
+    if (changed) this.audio.vehicleDoor(open);
   }
   private roadSafeExit(id: VillaRoadVehicle) { return this.roadApi(id).safeExit(this.roadApi(id).state, this.roadObstacles(id)); }
   private roadExitClear(id: VillaRoadVehicle) { return this.roadApi(id).exitClear(this.roadApi(id).state, this.roadObstacles(id)); }
@@ -443,6 +471,7 @@ export class VillaGame extends BaseGame {
   private terminalChanged() { this.terminal?.update(this.terminalSnapshot()); this.publishState(); }
   private setTerminal(open: boolean) {
     if (open && (!this.running || this.shellOpen() || this.helpOpen || this.unavailable)) return;
+    if (!!this.terminal?.visible !== open) this.audio.cue(open ? 'panel-open' : 'panel-close');
     this.cancelCarAccess(); this.clearInput(); this.unlock();
     if (open) {
       this.mapOpen = false; this.immersive = false; this.mouseLookEnabled = false;
@@ -455,13 +484,16 @@ export class VillaGame extends BaseGame {
     this.publishActions(); this.syncUseButton(); this.publishState();
   }
   private saveSensitivity(value: number) {
+    const before = this.state.home.lookSensitivity;
     setVillaLookSensitivity(this.state.home, value);
+    if (before !== this.state.home.lookSensitivity) this.audio.cue('setting');
     try { window.localStorage.setItem('carrick:villa:look-sensitivity', String(this.state.home.lookSensitivity)); } catch { /* Private browsing can reject storage. */ }
     this.terminalChanged();
   }
 
   private clearInput() {
     this.keys.clear(); this.touchActions.clear(); this.safetyBrake = true; this.lastMouse = null; this.joystick = null; this.lookTouch = null;
+    this.stepDistance = 0; this.rallyAudioHandbrake = false;
   }
 
   private unlock() {
@@ -484,15 +516,22 @@ export class VillaGame extends BaseGame {
   }
 
   update(dt: number) {
+    // Passive pause synchronization only; never create/resume audio in a frame.
+    this.syncAudioPause();
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 0;
     this.time += dt;
     this.audioEngine = null;
     advanceVillaHome(this.state.home, dt); this.state.evening = this.state.home.darkness > .2;
+    const teaPhase = this.state.tea.phase;
     advanceVillaTea(this.state.tea, dt);
+    if (this.state.tea.phase !== teaPhase && (this.state.tea.phase === 'ready' || this.state.tea.phase === 'empty'))
+      this.cueAt(this.state.tea.phase === 'ready' ? 'tea-ready' : 'tea-set-down', { x: VILLA_TEA_BAR.x, y: 1, z: VILLA_TEA_BAR.z }, 7);
     advanceVillaBathDoors(this.state.bathDoors, dt, { position: this.groundPosition(), height: villaBodyHeight(this.motion) + this.motion.offset });
     const wardrobeBefore = Object.fromEntries(Object.entries(this.state.wardrobes.wardrobes).map(([id, wardrobe]) => [id, wardrobe.progress]));
     const wardrobeChanged = advanceVillaWardrobes(this.state.wardrobes, dt);
+    const swingDirection = Math.sign(Math.cos(this.state.outdoor.swingPhase));
     advanceVillaOutdoor(this.state.outdoor, dt, this.state.relaxSeatId === 'swing');
+    if (this.state.relaxSeatId === 'swing' && swingDirection !== Math.sign(Math.cos(this.state.outdoor.swingPhase))) this.audio.cue('swing');
     if (this.shellOpen() || document.hidden) { this.cancelCarAccess(); this.clearInput(); this.mouseLookEnabled = false; this.unlock(); }
     if (this.mapOpen || this.terminal?.visible || this.helpOpen) this.cancelCarAccess();
     if (this.transition && this.time - this.transition.at >= 0.45) this.transition = null;
@@ -524,7 +563,7 @@ export class VillaGame extends BaseGame {
     if (this.time >= this.enterCarAt && this.roadDoorProgress(access) === 1) {
       this.enterCarAt = Infinity;
       if (!this.state.seated && (this.atDriverDoor(access) || this.doorClearedVehicle === access) && this.roadExitClear(access)) this.takeSeat(access);
-      else { this.setRoadDoor(access, false); this.message(this.isZhLang() ? '上车通道被挡住了，请重新靠近驾驶位。' : 'The entry is obstructed. Approach the driver door again.'); }
+      else { this.setRoadDoor(access, false); this.refuse(this.isZhLang() ? '上车通道被挡住了，请重新靠近驾驶位。' : 'The entry is obstructed. Approach the driver door again.'); }
     }
     if (this.time >= this.exitCarAt && this.roadDoorProgress(access) === 1) { this.exitCarAt = Infinity; this.leaveSeat(); }
     const ground = this.groundPosition(), lift = this.state.elevator;
@@ -532,11 +571,11 @@ export class VillaGame extends BaseGame {
     idleVillaElevator(lift, dt, !this.state.seated && villaElevatorCabinContains(ground, lift), obstruction);
     const wasRiding = lift.riding;
     advanceVillaElevator(lift, dt, obstruction);
-    if (!wasRiding && lift.riding) this.audio.elevatorMove();
     if (wasRiding) {
       this.position.y = lift.y; this.eyeY = this.position.y;
-      if (!lift.riding) { this.clearInput(); this.audio.elevatorArrive(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
+      if (!lift.riding) { this.clearInput(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
     }
+    this.syncElevatorAudio();
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
     if (wardrobeChanged && !this.state.seated && this.scene && villaCollides(this.groundPosition(), this.scene.colliders, villaBodyHeight(this.motion))) {
       for (const [id, progress] of Object.entries(wardrobeBefore)) this.state.wardrobes.wardrobes[id].progress = progress;
@@ -554,27 +593,36 @@ export class VillaGame extends BaseGame {
       const id = this.state.seated, car = this.roadState(id), oldYaw = car.yaw;
       const run = this.state.park[id];
       if (run.active && (forward || side || handbrake)) {
-        run.active = false;
+        run.active = false; this.audio.cue('park-cancel');
         this.message(this.isZhLang() ? '已接管驾驶，自动泊车取消。' : 'You took over, so auto-park is cancelled.');
       }
       const auto = run.active ? advanceVillaPark(id, car, car.speed, this.roadLimits(id), run, dt) : null;
       if (auto && run.failed) { run.active = false; this.messageFailedPark(id, run.failed); }
-      else if (auto?.arrived) this.message(this.isZhLang() ? '已自动泊入车库。' : 'Parked itself back in the garage.');
+      else if (auto?.arrived) { this.audio.cue('park-arrive'); this.message(this.isZhLang() ? '已自动泊入车库。' : 'Parked itself back in the garage.'); }
       const input = auto && run.active
         ? auto.input
         : { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
           steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
+      const beforeDrive = { collisions: car.collisions, handbrake: car.handbrake };
       this.roadApi(id).advance(car, input, dt, this.roadObstacles(id));
-      this.audioEngine = { kind: id, speed: car.speed, throttle: input.throttle };
+      if (enabled) this.driveFeedback(id, beforeDrive, car);
+      this.audioEngine = enabled ? { kind: id, speed: car.speed, throttle: input.throttle, maxSpeed: this.roadLimits(id).maxSpeed, handbrake: car.handbrake } : null;
       this.yaw += car.yaw - oldYaw;
       this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'scooter') {
-      const scooter = this.state.scooter, oldYaw = scooter.yaw;
+      const scooter = this.state.scooter, oldYaw = scooter.yaw, beforeDrive = { collisions: scooter.collisions, handbrake: scooter.handbrake };
       advanceVillaScooter(scooter, { throttle: forward, steer: side, brake, handbrake }, dt, this.scene?.scooterObstacles ?? []);
-      this.audioEngine = { kind: 'scooter', speed: scooter.speed, throttle: forward };
+      if (enabled) this.driveFeedback('scooter', beforeDrive, scooter);
+      this.audioEngine = enabled ? { kind: 'scooter', speed: scooter.speed, throttle: forward, maxSpeed: VILLA_SCOOTER_LIMITS.maxSpeed, handbrake: scooter.handbrake } : null;
       this.yaw += scooter.yaw - oldYaw; this.position = { ...villaScooterAnchors(scooter).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'racing' && enabled && this.state.screenSource === 'pc') {
-      advanceVillaRace(this.state.race, { throttle: forward, steer: side, brake: brake || handbrake }, dt);
+      const race = this.state.race, beforeRace = { collisions: race.crashes, handbrake: this.rallyAudioHandbrake }, checkpoint = race.checkpoint, laps = race.laps;
+      advanceVillaRace(race, { throttle: forward, steer: side, brake: brake || handbrake }, dt);
+      this.driveFeedback('rally', beforeRace, { speed: race.speed, collisions: race.crashes, handbrake });
+      this.rallyAudioHandbrake = handbrake;
+      if (race.laps > laps) this.audio.cue('rally-finish');
+      else if (race.checkpoint > checkpoint) this.audio.cue('rally-split');
+      this.audioEngine = { kind: 'rally', speed: race.speed, throttle: Math.max(0, forward), maxSpeed: VILLA_RACE_MAX_SPEED, handbrake };
     } else if (this.state.snookerActive) {
       if (enabled && !this.state.snooker.moving) {
         this.state.snooker.aim += (side * .6 + (Number(held('aim-right')) - Number(held('aim-left'))) * .25) * dt;
@@ -583,8 +631,10 @@ export class VillaGame extends BaseGame {
     } else if (this.state.seated && this.state.relaxSeatId === 'swing') {
       this.position = { ...villaSwingSeat(this.state.outdoor).seat }; this.eyeY = this.position.y;
     } else if (!this.state.seated && !lift.riding) {
-      const base = this.groundPosition();
+      const base = this.groundPosition(), airborne = this.motion.offset > .001 || this.motion.velocity !== 0;
       advanceVillaMotion(this.motion, dt, height => this.canFit(height, base));
+      const landed = airborne && this.motion.offset === 0 && this.motion.velocity === 0;
+      if (landed) { this.audio.cue('land'); this.stepDistance = 0; }
       if (enabled) {
         const magnitude = Math.hypot(forward, side);
         if (magnitude > 1) { forward /= magnitude; side /= magnitude; }
@@ -596,8 +646,11 @@ export class VillaGame extends BaseGame {
           (x, z, y) => this.supportAt(x, z, y, height), height) : base;
         this.position = { ...next, y: next.y + this.motion.offset };
         const running = this.keys.has('shift') && !this.motion.crouched;
-        if (this.motion.offset === 0 && !this.motion.velocity) this.stepDistance += Math.hypot(next.x - base.x, next.z - base.z);
-        if (this.stepDistance > (running ? 1.15 : 0.82)) { this.stepDistance = 0; this.audio.footstep(running); }
+        const travelled = Math.hypot(next.x - base.x, next.z - base.z);
+        if (!airborne && this.motion.offset === 0 && !this.motion.velocity && travelled > .0001 && (dx || dz)) {
+          this.stepDistance += travelled;
+          if (this.stepDistance > (running ? 1.15 : .82)) { this.stepDistance = 0; this.audio.footstep(running); }
+        } else this.stepDistance = 0;
       } else this.position.y = base.y + this.motion.offset;
       if (this.motion.offset > 0 || this.motion.velocity) this.eyeY = this.position.y;
       else this.eyeY += (this.position.y - this.eyeY) * Math.min(1, dt * 18);
@@ -611,10 +664,15 @@ export class VillaGame extends BaseGame {
       const state = this.roadState(id);
       const auto = advanceVillaPark(this.parkVehicle(id), state, state.speed, this.roadLimits(id), run, dt);
       if (run.failed) { run.active = false; this.messageFailedPark(id, run.failed); continue; }
-      if (auto.arrived) { this.message(this.isZhLang() ? '车辆已自动泊入车库。' : 'The car parked itself back in the garage.'); continue; }
+      if (auto.arrived) { this.audio.cue('park-arrive'); this.message(this.isZhLang() ? '车辆已自动泊入车库。' : 'The car parked itself back in the garage.'); continue; }
+      const collisions = state.collisions;
       this.roadApi(id).advance(state, auto.input, dt, this.roadObstacles(id));
+      if (state.collisions > collisions) this.cueAt('collision', this.roadAnchors(id).seat, 9);
     }
+    const pots = this.state.snooker.balls.filter(ball => ball.potted).length, foul = this.state.snooker.foul;
     advanceVillaSnooker(this.state.snooker, dt);
+    if (this.state.snooker.balls.filter(ball => ball.potted).length > pots) this.cueAt('snooker-pot', { ...VILLA_SNOOKER.center, y: .85 }, 7);
+    if (this.state.snooker.foul && this.state.snooker.foul !== foul) this.cueAt('reject', { ...VILLA_SNOOKER.center, y: .85 }, 7);
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
     // Current vehicle footprints and swept pet bounds keep all encounters peaceful.
     advanceVillaPets(this.state.pets, dt, this.scene?.colliders ?? [],
@@ -622,12 +680,15 @@ export class VillaGame extends BaseGame {
       { raining: this.state.home.weather === 'rain' || this.state.home.rain > .18 });
     this.scene?.updatePets(this.time, this.state.pets);
     this.promptAlpha += ((this.hotspot() && !this.state.seated && !this.state.snookerActive ? 1 : 0) - this.promptAlpha) * Math.min(1, dt * 10);
-    const listener = this.groundPosition();
+    const listener = this.groundPosition(), view = this.view(), earY = view.y + (view.eyeHeight ?? EYE_HEIGHT);
     this.audio.update({
       roomId: villaRoomAt(listener).id,
-      poolDistance: Math.hypot(listener.x - (POOL.minX + POOL.maxX) / 2, listener.y, listener.z - (POOL.minZ + POOL.maxZ) / 2),
-      fireDistance: Math.hypot(listener.x + 10, listener.y, listener.z - 0.95),
+      poolDistance: this.audioDistance({ x: (POOL.minX + POOL.maxX) / 2, y: 0, z: (POOL.minZ + POOL.maxZ) / 2 }),
+      fireDistance: this.audioDistance({ x: -10, y: .6, z: .95 }),
       fireplace: this.state.fireplace,
+      streamDistance: Math.hypot(villaStreamDistance(view.x, view.z), earY - VILLA_STREAM.waterY),
+      faucetOn: this.state.faucetOn, faucetDistance: this.audioDistance(VILLA_FAUCET.outlet),
+      elevator: { moving: lift.phase === 'moving', distance: this.audioDistance({ x: VILLA_ELEVATOR.centerX, y: lift.y + 1.2, z: VILLA_ELEVATOR.centerZ }) },
       rain: this.state.home.rain,
       engine: this.audioEngine,
     });
@@ -863,7 +924,7 @@ export class VillaGame extends BaseGame {
 
   private mapTabs(): Button[] {
     const p = this.panelRect(), s = this.uiScale();
-    const labels = this.isZhLang() ? ['1F  生活与花园', '2F  卧室与阅读', '3F  天台花园', '南向田园'] : ['1F  Living', '2F  Bedrooms', '3F  Rooftop', 'South estate'];
+    const labels = this.isZhLang() ? ['1F  生活与花园', '2F  卧室与阅读', '3F  天台花园', '庄园与溪流'] : ['1F  Living', '2F  Bedrooms', '3F  Rooftop', 'Estate & stream'];
     const compact = this.compactHud(), w = compact ? (p.w - 64 * s) / 4 - 4 * s : 146;
     return labels.map((label, f) => ({ id: String(f === 3 ? -1 : f), label: compact ? (f === 3 ? (this.isZhLang() ? '庭院' : 'Estate') : `${f + 1}F`) : label,
       x: p.x + (compact ? 8 * s + f * (w + 4 * s) : 28 + f * 156),
@@ -878,16 +939,16 @@ export class VillaGame extends BaseGame {
     if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
     if (id === 'bath-door-west' || id === 'bath-door-east') {
       const which = id === 'bath-door-west' ? 'west' : 'east';
-      toggleVillaBathDoor(this.state.bathDoors, which);
-      this.audio.lightClick();
+      if (!toggleVillaBathDoor(this.state.bathDoors, which)) return;
       const open = this.state.bathDoors[which];
-      this.message(this.isZhLang() ? (open ? '正在开门，请让开门扇。' : '正在关门，请让开门扇。') : open ? 'Opening. Please keep the swing clear.' : 'Closing. Please keep the swing clear.');
+      this.audio.cue(open ? 'slide-open' : 'slide-close');
+      this.message(this.isZhLang() ? (open ? '正在滑动开门，请保持滑轨通道畅通。' : '正在滑动关门，请保持滑轨通道畅通。') : open ? 'Sliding open. Please keep the sliding path clear.' : 'Sliding closed. Please keep the sliding path clear.');
       this.publishState(); return;
     }
     if (id === 'grill-west' || id === 'grill-centre' || id === 'grill-east') {
       const index = id === 'grill-west' ? 0 : id === 'grill-centre' ? 1 : 2;
       this.state.grillLids[index] = !this.state.grillLids[index];
-      this.audio.uiSelect();
+      this.audio.cue(this.state.grillLids[index] ? 'grill-open' : 'grill-close');
       this.message(this.isZhLang() ? (this.state.grillLids[index] ? '烤炉盖已打开。' : '烤炉盖已盖上。') : this.state.grillLids[index] ? 'The grill lid is open.' : 'The grill lid is closed.');
       this.publishState(); return;
     }
@@ -895,9 +956,10 @@ export class VillaGame extends BaseGame {
       case 'terminal': this.setTerminal(!this.terminal?.visible); break;
       case 'map':
         this.terminal?.hide(); this.mapOpen = !this.mapOpen; if (this.mapOpen) this.immersive = false;
+        this.audio.cue(this.mapOpen ? 'panel-open' : 'panel-close');
         this.mapFloor = this.position.z >= 24 ? -1 : villaFloor(this.position.y); this.clearInput();
         this.mouseLookEnabled = !this.mapOpen; if (this.mapOpen) this.unlock(); break;
-      case 'time': cycleVillaTimeOfDay(this.state.home); break;
+      case 'time': cycleVillaTimeOfDay(this.state.home); this.audio.cue('setting'); break;
       case 'home':
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
@@ -907,7 +969,8 @@ export class VillaGame extends BaseGame {
         this.motion = createVillaMotion(); this.state.snookerActive = false;
         this.resetRoadVehicles();
         this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false;
-        this.state.elevator = createVillaElevator(); this.scene?.updateActivities(this.time, this.state);
+        this.state.elevator = createVillaElevator(); this.elevatorAudioPhase = 'closed'; this.driveAudioDirection.clear(); this.scene?.updateActivities(this.time, this.state);
+        this.audio.cue('home');
         this.mapOpen = false; this.clearInput();
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
       case 'help':
@@ -919,30 +982,44 @@ export class VillaGame extends BaseGame {
       case 'interact': this.interact(); break;
       case 'secondary': this.secondaryInteraction(); break;
       case 'immersion':
-        this.immersive = !this.immersive; this.mapOpen = false; this.clearInput();
+        this.immersive = !this.immersive; this.mapOpen = false; this.clearInput(); this.audio.cue('setting');
         this.mouseLookEnabled = !this.shellOpen() && !this.terminal?.visible && !this.helpOpen;
         if (this.immersive) this.lockPointer(); break;
       case 'crouch':
-        if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !toggleVillaCrouch(this.motion, h => this.canFit(h)))
-          this.message(this.isZhLang() ? '上方空间不足，暂时不能站起。' : 'Not enough headroom to stand.');
+        if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding) {
+          if (toggleVillaCrouch(this.motion, h => this.canFit(h))) this.audio.cue(this.motion.crouched ? 'crouch' : 'rise');
+          else this.refuse(this.isZhLang() ? '上方空间不足，暂时不能站起。' : 'Not enough headroom to stand.');
+        }
         break;
-      case 'jump': if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition && this.enterCarAt === Infinity) jumpVillaMotion(this.motion); break;
-      case 'shoot': if (this.state.snookerActive && !this.transition && shootVillaSnooker(this.state.snooker)) this.audio.snookerHit(this.state.snooker.power); break;
+      case 'jump':
+        if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition && this.enterCarAt === Infinity) {
+          if (jumpVillaMotion(this.motion)) { this.stepDistance = 0; this.audio.cue('jump'); }
+          else this.audio.cue('busy');
+        }
+        break;
+      case 'shoot':
+        if (this.state.snookerActive && !this.transition) {
+          if (shootVillaSnooker(this.state.snooker)) this.audio.snookerHit(this.state.snooker.power);
+          else this.audio.cue('busy');
+        }
+        break;
       case 'reset-activity':
         this.clearInput();
-        if (this.state.snookerActive) this.state.snooker = createVillaSnooker();
-        else if (this.state.seated === 'racing') this.state.race = createVillaRace();
+        if (this.state.snookerActive) { this.state.snooker = createVillaSnooker(); this.audio.cue('reset'); }
+        else if (this.state.seated === 'racing') { this.state.race = createVillaRace(); this.driveAudioDirection.delete('rally'); this.rallyAudioHandbrake = false; this.audio.cue('reset'); }
         else if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv') {
           const id = this.state.seated, parked = this.roadApi(id).create();
           const blocked = this.roadApi(id).blocked(parked, this.roadObstacles(id));
-          if (blocked) { this.message(this.isZhLang() ? '车库原位被占用了，请先移开障碍。' : 'The garage space is occupied. Clear it before resetting.'); break; }
+          if (blocked) { this.refuse(this.isZhLang() ? '车库原位被占用了，请先移开障碍。' : 'The garage space is occupied. Clear it before resetting.'); break; }
+          this.audio.cue('reset'); this.driveAudioDirection.delete(id);
           if (id === 'pickup') this.state.pickup = parked; else if (id === 'suv') this.state.suv = parked; else this.state.driving = parked;
           this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
           this.yaw = Math.PI; this.pitch = -.035; this.transition = null; this.setRoadDoor(id, false); this.closeCarAt = this.enterCarAt = this.exitCarAt = Infinity;
           this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
         } else if (this.state.seated === 'scooter') {
           const parked = createVillaScooter();
-          if (villaScooterPoseBlocked(parked, this.scene?.scooterObstacles ?? [])) { this.message(this.isZhLang() ? '电动车原位被占用了，请先移开障碍。' : 'The scooter space is occupied. Clear it before resetting.'); break; }
+          if (villaScooterPoseBlocked(parked, this.scene?.scooterObstacles ?? [])) { this.refuse(this.isZhLang() ? '电动车原位被占用了，请先移开障碍。' : 'The scooter space is occupied. Clear it before resetting.'); break; }
+          this.audio.cue('reset'); this.driveAudioDirection.delete('scooter');
           this.state.scooter = parked; this.position = { ...villaScooterAnchors(parked).seat };
           this.yaw = Math.PI; this.pitch = -.12; this.transition = null; this.scene?.updateActivities(this.time, this.state);
         }
@@ -950,6 +1027,35 @@ export class VillaGame extends BaseGame {
     }
     this.publishActions();
     this.publishState();
+  }
+
+  private refuse(text: string) { this.audio.cue('reject'); this.message(text); }
+  private audioDistance(source: VillaPosition): number {
+    const view = this.view();
+    return Math.hypot(view.x - source.x, view.y + (view.eyeHeight ?? EYE_HEIGHT) - source.y, view.z - source.z);
+  }
+  private cueAt(cue: VillaInteractionCue, source: VillaPosition, range = 8) { this.audio.cue(cue, this.audioDistance(source), range); }
+  private setFireplace(on: boolean, remote = false) {
+    if (this.state.fireplace === on) return;
+    this.state.fireplace = on;
+    // The terminal confirms a remote command locally; hearth ignition itself
+    // remains spatial and must not sound in an upstairs listener's lap.
+    if (remote) this.audio.cue('setting');
+    this.cueAt(on ? 'fire-on' : 'fire-off', { x: -10, y: .6, z: .95 }, 7);
+  }
+  private syncElevatorAudio() {
+    const lift = this.state.elevator, before = this.elevatorAudioPhase;
+    this.elevatorAudioPhase = lift.phase;
+    if (before === lift.phase) return;
+    const source = { x: VILLA_ELEVATOR.centerX, y: lift.y + 1.2, z: VILLA_ELEVATOR.frontZ };
+    if (before === 'moving' && lift.phase === 'opening') this.cueAt('elevator-arrive', source, 12);
+    if (lift.phase === 'opening' || lift.phase === 'closing') this.cueAt(lift.phase === 'opening' ? 'elevator-open' : 'elevator-close', source, 9);
+  }
+  private driveFeedback(id: string, before: { collisions: number; handbrake: boolean }, after: { speed: number; collisions: number; handbrake: boolean }) {
+    if (after.collisions > before.collisions) this.audio.cue('collision');
+    if (before.handbrake !== after.handbrake) this.audio.cue(after.handbrake ? 'handbrake-on' : 'handbrake-off');
+    const direction = villaAudioDriveDirection(after.speed);
+    if (direction && direction !== this.driveAudioDirection.get(id)) { this.driveAudioDirection.set(id, direction); this.audio.cue('gear'); }
   }
 
   private message(text: string) {
@@ -984,6 +1090,7 @@ export class VillaGame extends BaseGame {
     this.yaw = Math.PI + (road ? this.roadState(seat).yaw : seat === 'scooter' ? this.state.scooter.yaw : 0);
     this.pitch = road ? -.035 : seat === 'scooter' ? -.12 : .225;
     if (seat === 'racing') this.state.screenSource = 'pc';
+    this.audio.cue('sit'); this.driveAudioDirection.delete(seat === 'racing' ? 'rally' : seat);
     this.transition = { from, at: this.time }; this.clearInput();
     if (road) { this.accessVehicle = seat; this.closeCarAt = this.time + .5; }
     this.message(this.isZhLang() ? (road ? '已坐进驾驶位，车门将自动关闭。' : seat === 'scooter' ? '已骑上电动车。' : '已坐进驾驶模拟器。')
@@ -997,6 +1104,7 @@ export class VillaGame extends BaseGame {
     this.state.relaxEntryPosition = { ...entry }; this.state.relaxSeatPosition = { ...resolved };
     this.position = { ...resolved }; this.eyeY = resolved.y; this.yaw = seat.yaw; this.pitch = seat.pitch;
     this.motion = createVillaMotion(); this.transition = { from, at: this.time }; this.clearInput();
+    this.audio.cue(seat.kind === 'bed' ? 'bed' : id === 'swing' ? 'swing' : 'sit');
     this.message(this.isZhLang() ? (seat.kind === 'bed' ? '已经躺好，可以慢慢环顾。' : id === 'swing' ? '坐稳了，秋千轻轻晃动。' : '坐下来歇一会儿。')
       : (seat.kind === 'bed' ? 'Resting on the bed. Feel free to look around.' : id === 'swing' ? 'Settled into a gentle swing.' : 'Take a quiet seat.'));
   }
@@ -1005,7 +1113,7 @@ export class VillaGame extends BaseGame {
     const seat = this.state.seated; if (!seat) return;
     const road = seat === 'car' || seat === 'pickup' || seat === 'suv', scooter = seat === 'scooter', from = this.view(), rest = this.currentRelaxSeat();
     if ((road && Math.abs(this.roadState(seat).speed) > .12) || (scooter && Math.abs(this.state.scooter.speed) > .12)) {
-      this.message(this.isZhLang() ? '请先停稳，再下车。' : 'Stop completely before getting off.'); return;
+      this.refuse(this.isZhLang() ? '请先停稳，再下车。' : 'Stop completely before getting off.'); return;
     }
     const exit = road ? this.roadSafeExit(seat) : scooter ? villaScooterSafeExit(this.state.scooter, this.scene?.scooterObstacles ?? [])
       : rest ? villaSeatExitCandidates(rest, this.position, this.state.relaxEntryPosition ?? undefined)
@@ -1014,7 +1122,7 @@ export class VillaGame extends BaseGame {
           .find(p => this.canFit(1.75, p) && this.approachClear(p, 'racing'));
     if (!exit || !this.canFit(1.75, exit)) {
       if (road) { this.accessVehicle = seat; this.closeCarAt = this.time + .25; }
-      this.message(this.isZhLang() ? '旁边没有安全的站立空间，请稍候或换个位置。' : 'There is no safe standing space beside you. Wait or reposition.'); return;
+      this.refuse(this.isZhLang() ? '旁边没有安全的站立空间，请稍候或换个位置。' : 'There is no safe standing space beside you. Wait or reposition.'); return;
     }
     this.position = { ...exit }; this.state.seated = null; this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
     this.eyeY = exit.y; this.motion = createVillaMotion(); this.pitch = -.06;
@@ -1026,7 +1134,7 @@ export class VillaGame extends BaseGame {
       this.yaw = Math.atan2(exit.x - this.state.scooter.x, exit.z - this.state.scooter.z);
       this.state.scooter.speed = 0; this.state.scooter.steering = 0; this.state.scooter.handbrake = false;
     }
-    this.transition = { from, at: this.time }; this.clearInput();
+    this.transition = { from, at: this.time }; this.clearInput(); this.audio.cue('stand');
     this.message(this.isZhLang() ? (road ? '已下车，车门会自动关好。' : '已起身，可以继续参观。')
       : (road ? 'Stepped outside. The door will close automatically.' : 'Back on your feet. Continue exploring.'));
   }
@@ -1055,11 +1163,12 @@ export class VillaGame extends BaseGame {
   private selectElevatorFloor(floor: number) {
     if (!this.inElevator() || this.state.seated || this.transition || this.motion.offset > .001 || this.motion.velocity) return;
     if (villaElevatorDoorwayObstructed(this.position, this.state.elevator)) {
-      this.message(this.isZhLang() ? '请完全走进轿厢，给电梯门留出空间。' : 'Step fully inside and clear the doorway.'); return;
+      this.refuse(this.isZhLang() ? '请完全走进轿厢，给电梯门留出空间。' : 'Step fully inside and clear the doorway.'); return;
     }
     if (!requestVillaElevator(this.state.elevator, floor, true)) {
-      this.message(this.isZhLang() ? '电梯运行中，请稍候。' : 'Please wait for the elevator.'); return;
+      this.refuse(this.isZhLang() ? '电梯运行中，请稍候。' : 'Please wait for the elevator.'); return;
     }
+    this.audio.cue('elevator-select'); this.syncElevatorAudio();
     this.clearInput();
     this.message(this.isZhLang() ? (this.state.elevator.riding ? `前往 ${floor + 1}F，可以自由环顾。` : '已在这一层，可以走出电梯。')
       : (this.state.elevator.riding ? `Going to ${floor + 1}F. Feel free to look around.` : 'Already on this floor. You may step out.'));
@@ -1069,13 +1178,14 @@ export class VillaGame extends BaseGame {
   private controlElevatorDoor(open: boolean) {
     const zh = this.isZhLang(), lift = this.state.elevator;
     if (this.state.seated || this.transition || this.motion.offset > .001 || this.motion.velocity) return;
-    if (open && villaElevatorDoorwayObstructed(this.position, lift)) {
-      this.message(zh ? '门口有人，暂时无法关门。' : 'Someone is in the doorway.'); return;
+    if (!open && villaElevatorDoorwayObstructed(this.position, lift)) {
+      this.refuse(zh ? '门口有人，暂时无法关门。' : 'Someone is in the doorway.'); return;
     }
     if (!requestVillaElevatorDoor(lift, open)) {
-      this.message(zh ? (lift.phase === 'moving' ? '电梯运行中，请稍候。' : '门已经关好了。') : (lift.phase === 'moving' ? 'Please wait for the elevator.' : 'The doors are already closed.'));
+      this.refuse(zh ? (lift.phase === 'moving' ? '电梯运行中，请稍候。' : '门已经关好了。') : (lift.phase === 'moving' ? 'Please wait for the elevator.' : 'The doors are already closed.'));
       this.publishState(); return;
     }
+    this.audio.cue('elevator-select'); this.syncElevatorAudio();
     this.clearInput();
     this.message(zh ? (open ? '正在开门。' : '正在关门。') : (open ? 'Opening the doors.' : 'Closing the doors.'));
     this.publishState();
@@ -1178,17 +1288,17 @@ export class VillaGame extends BaseGame {
   private requestCarAccess(id: VillaRoadVehicle = this.state.seated === 'pickup' ? 'pickup' : this.state.seated === 'suv' ? 'suv' : 'car') {
     const zh = this.isZhLang(), leaving = this.state.seated === id;
     if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) return;
-    if (this.state.outdoor.camping.carried) { this.message(zh ? '请先放下露营椅。' : 'Put the camping chair down first.'); return; }
-    if (Math.abs(this.roadState(id).speed) > .12) { this.message(zh ? '请先刹停，再打开车门。' : 'Stop the car before opening the door.'); return; }
+    if (this.state.outdoor.camping.carried) { this.refuse(zh ? '请先放下露营椅。' : 'Put the camping chair down first.'); return; }
+    if (Math.abs(this.roadState(id).speed) > .12) { this.refuse(zh ? '请先刹停，再打开车门。' : 'Stop the car before opening the door.'); return; }
     if (!leaving && !this.atDriverDoor(id)) {
-      this.message(zh ? '请走到驾驶位车门旁再上车。' : 'Walk up to the driver door to get in.'); return;
+      this.refuse(zh ? '请走到驾驶位车门旁再上车。' : 'Walk up to the driver door to get in.'); return;
     }
     if (!(leaving ? this.roadSafeExit(id) : this.roadExitClear(id))) {
       // The swing is blocked: back the player off to a clear spot first, then
       // open. Only a genuinely sealed bay has no such spot.
       const spot = this.stepBackFromDriverDoor(id);
       if (!spot) {
-        this.message(zh ? '车门完全被挡住了，请把车挪到空旷位置。' : 'The door has no room to open. Move the vehicle to a clear space.'); return;
+        this.refuse(zh ? '车门完全被挡住了，请把车挪到空旷位置。' : 'The door has no room to open. Move the vehicle to a clear space.'); return;
       }
       this.beginDoorStepBack(spot, id, leaving);
       return;
@@ -1209,6 +1319,7 @@ export class VillaGame extends BaseGame {
     this.clearInput(); this.transition = null;
     this.doorStepBack = { from: { ...from }, to: { ...spot }, at: this.time, seconds: .45 };
     this.doorStepBackLeaving = leaving; this.doorStepBackVehicle = id;
+    this.audio.cue('busy');
     this.message(this.isZhLang() ? '车门会挡住，先退开一点再开门。' : 'The door would be blocked, so step back first.');
     this.publishState();
   }
@@ -1218,13 +1329,15 @@ export class VillaGame extends BaseGame {
     if (this.state.seated || this.motion.offset > .001 || this.motion.velocity) return;
     if (this.state.outdoor.camping.carried) {
       const placed = placeVillaCampingChair(this.state.outdoor, this.groundPosition(), this.yaw, this.scene?.colliders ?? []);
+      this.audio.cue(placed ? 'place-chair' : 'reject');
       this.message(zh ? (placed ? '露营椅已放稳，可以坐下。' : '这里放不稳，请找一块空旷平整的地面。')
         : (placed ? 'Chair placed safely. Take a seat.' : 'Find clear, level ground to place the chair.'));
     } else if (this.hotspot()?.id === 'camping-chair') {
       const chair = villaCampingSeat(this.state.outdoor);
-      if (this.approachClear(chair.seat, chair.id) && pickUpVillaCampingChair(this.state.outdoor, this.groundPosition()))
+      if (this.approachClear(chair.seat, chair.id) && pickUpVillaCampingChair(this.state.outdoor, this.groundPosition())) {
+        this.audio.cue('carry-chair');
         this.message(zh ? '已拿起露营椅，走到喜欢的地方再放下。' : 'Carrying the chair. Find your favourite spot.');
-      else this.message(zh ? '请走近露营椅，不要隔着障碍搬动。' : 'Move closer with a clear reach to the chair.');
+      } else this.refuse(zh ? '请走近露营椅，不要隔着障碍搬动。' : 'Move closer with a clear reach to the chair.');
     }
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw); this.publishState();
   }
@@ -1236,9 +1349,9 @@ export class VillaGame extends BaseGame {
     if (this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv' || (!this.state.seated && (id === 'car' || id === 'pickup' || id === 'suv'))) {
       this.requestCarAccess((this.state.seated as VillaRoadVehicle) ?? id); return;
     } else if (this.state.relaxSeatId === 'chair-pc' || (!this.state.seated && id === 'chair-pc')) {
-      this.state.gaming = !this.state.gaming;
+      this.state.gaming = !this.state.gaming; this.audio.cue(this.state.gaming ? 'device-on' : 'device-off');
     } else if (this.state.seated === 'racing' || (!this.state.seated && (id === 'media' || id === 'racing'))) {
-      this.state.screenSource = nextVillaScreen(this.state.screenSource);
+      this.state.screenSource = nextVillaScreen(this.state.screenSource); this.audio.cue('media');
       const name = this.state.screenSource === 'pc' ? 'PC' : this.state.screenSource === 'ps' ? 'PlayStation' : 'Switch';
       this.message(this.isZhLang() ? `大屏虚拟信号源：${name}` : `Virtual screen input: ${name}`);
     }
@@ -1269,15 +1382,18 @@ export class VillaGame extends BaseGame {
   }
 
   private interact() {
-    if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) { this.message(this.isZhLang() ? '正在切换位置，请稍候。' : 'Please wait for the movement to finish.'); return; }
-    if (this.motion.offset > .001 || this.motion.velocity) { this.message(this.isZhLang() ? '请先落地，再互动。' : 'Land before interacting.'); return; }
+    if (this.transition || this.enterCarAt !== Infinity || this.exitCarAt !== Infinity) { this.refuse(this.isZhLang() ? '正在切换位置，请稍候。' : 'Please wait for the movement to finish.'); return; }
+    if (this.motion.offset > .001 || this.motion.velocity) { this.refuse(this.isZhLang() ? '请先落地，再互动。' : 'Land before interacting.'); return; }
     if (this.state.snookerActive) {
-      const from = this.view(); this.state.snookerActive = false; this.transition = { from, at: this.time }; this.clearInput(); this.publishState(); return;
+      const from = this.view(); this.state.snookerActive = false; this.transition = { from, at: this.time }; this.clearInput(); this.audio.cue('stand'); this.publishState(); return;
     }
     const hotspot = this.hotspot();
     const zh = this.isZhLang();
     if (this.inElevator()) {
-      if (this.state.elevator.phase === 'closed') requestVillaElevator(this.state.elevator, this.state.elevator.floor);
+      if (hotspot?.id.startsWith('elevator-')) { this.activate(hotspot.id); return; }
+      if (this.state.elevator.phase === 'closed') {
+        if (requestVillaElevator(this.state.elevator, this.state.elevator.floor)) { this.audio.cue('elevator-select'); this.syncElevatorAudio(); }
+      } else this.audio.cue('busy');
       this.message(this.interactionHint() ?? ''); this.publishState(); return;
     }
     if (this.state.outdoor.camping.carried) { this.toggleCampingCarry(); return; }
@@ -1289,54 +1405,50 @@ export class VillaGame extends BaseGame {
     const rest = villaOutdoorSeat(this.state.outdoor, hotspot.id) ?? villaRelaxSeat(hotspot.id);
     if (rest) {
       if (this.approachClear(resolveVillaSeatPosition(rest, this.groundPosition()), rest.id)) this.takeRelaxSeat(rest.id);
-      else this.message(zh ? '请从座位前方或侧面靠近，不要隔着家具入座。' : 'Approach the front or side of the seat, without furniture in between.');
+      else this.refuse(zh ? '请从座位前方或侧面靠近，不要隔着家具入座。' : 'Approach the front or side of the seat, without furniture in between.');
       this.publishState(); return;
     }
     if (VILLA_WARDROBES.some(wardrobe => wardrobe.id === hotspot.id)) {
-      toggleVillaWardrobe(this.state.wardrobes, hotspot.id);
-      this.message(zh ? (this.state.wardrobes.wardrobes[hotspot.id].open ? '正在打开衣柜。' : '正在关闭衣柜。') : (this.state.wardrobes.wardrobes[hotspot.id].open ? 'Opening the wardrobe.' : 'Closing the wardrobe.'));
+      if (!toggleVillaWardrobe(this.state.wardrobes, hotspot.id)) { this.audio.cue('reject'); return; }
+      const open = this.state.wardrobes.wardrobes[hotspot.id].open, fridge = hotspot.id === VILLA_FRIDGE_FREEZER.id;
+      this.audio.cue(fridge ? open ? 'fridge-open' : 'fridge-close' : open ? 'wardrobe-open' : 'wardrobe-close');
+      this.message(zh ? (fridge ? open ? '正在打开冰箱。' : '正在关闭冰箱。' : open ? '正在打开衣柜。' : '正在关闭衣柜。')
+        : fridge ? open ? 'Opening the fridge.' : 'Closing the fridge.' : open ? 'Opening the wardrobe.' : 'Closing the wardrobe.');
       this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw); this.publishState(); return;
     }
     const pet = this.state.pets.pets.find(p => `pet-${p.id}` === hotspot.id);
     if (pet) {
       const labels = villaPetLabel(pet), name = zh ? labels.zh : labels.en;
-      if (feedVillaPet(this.state.pets, pet.id)) this.message(zh ? `给${name}添了${labels.foodZh}。` : `${name} has some ${labels.foodEn.toLowerCase()}.`);
-      else this.message(zh ? (pet.cooldown > 0 ? `${name}吃饱了，先歇一会儿。` : '再靠近一点，等它停稳。')
+      if (feedVillaPet(this.state.pets, pet.id)) {
+        this.audio.cue(`feed-${pet.kind}`);
+        this.message(zh ? `给${name}添了${labels.foodZh}。` : `${name} has some ${labels.foodEn.toLowerCase()}.`);
+      } else this.refuse(zh ? (pet.cooldown > 0 ? `${name}吃饱了，先歇一会儿。` : '再靠近一点，等它停稳。')
         : (pet.cooldown > 0 ? `${name} is full. Let it rest a little.` : 'Come a little closer and let it settle.'));
       this.scene?.updatePets(this.time, this.state.pets); this.publishState(); return;
     }
     switch (hotspot.id) {
       case 'tea-bar': {
         const action = interactVillaTea(this.state.tea);
+        this.audio.cue(action === 'brewing' ? 'tea-brew' : action === 'drinking' ? 'tea-drink' : 'busy');
         if (action === 'brewing') { this.state.teaUntil = this.time + VILLA_TEA_BAR.duration; this.message(zh ? '从空杯开始，慢慢冲一杯茶。' : 'Brewing a fresh cup from empty.'); }
         else if (action === 'drinking') this.message(zh ? '端起茶杯，慢慢喝。' : 'Lift the cup and enjoy the tea.');
         else this.message(zh ? (this.state.tea.phase === 'brewing' ? '茶正在泡着，稍等片刻。' : '正在喝茶。') : (this.state.tea.phase === 'brewing' ? 'The tea is steeping.' : 'Enjoying the tea.'));
         break;
       }
       case 'faucet':
-        this.state.faucetOn = !this.state.faucetOn;
+        this.state.faucetOn = !this.state.faucetOn; this.audio.cue(this.state.faucetOn ? 'faucet-on' : 'faucet-off');
         this.message(zh ? (this.state.faucetOn ? '水龙头打开了，清水流入水槽。' : '水龙头关好了。') : (this.state.faucetOn ? 'Fresh water is flowing into the sink.' : 'The tap is off.')); break;
-      case 'bath-door-west': case 'bath-door-east': {
-        const which = hotspot.id === 'bath-door-west' ? 'west' : 'east';
-        toggleVillaBathDoor(this.state.bathDoors, which); this.audio.lightClick();
-        const open = this.state.bathDoors[which];
-        this.message(zh ? (open ? '正在开门，请让开门扇。' : '正在关门，请让开门扇。') : open ? 'Opening. Please keep the swing clear.' : 'Closing. Please keep the swing clear.');
-        this.publishState(); break;
-      }
-      case 'grill-west': case 'grill-centre': case 'grill-east': {
-        const index = hotspot.id === 'grill-west' ? 0 : hotspot.id === 'grill-centre' ? 1 : 2;
-        this.state.grillLids[index] = !this.state.grillLids[index];
-        this.audio.uiSelect();
-        this.message(zh ? (this.state.grillLids[index] ? '烤炉盖已打开。' : '烤炉盖已盖上。') : this.state.grillLids[index] ? 'The grill lid is open.' : 'The grill lid is closed.');
-        this.publishState(); break;
-      }
+      case 'bath-door-west': case 'bath-door-east':
+      case 'grill-west': case 'grill-centre': case 'grill-east':
+        this.activate(hotspot.id); return;
       case 'snooker': {
         const from = this.view(); this.state.snookerActive = true; this.motion = createVillaMotion();
-        this.transition = { from, at: this.time }; this.clearInput();
+        this.transition = { from, at: this.time }; this.clearInput(); this.audio.cue('snooker-enter');
         this.message(zh ? '练习开始，先瞄准红球。' : 'Ready for practice. Aim for a red.'); break;
       }
       case 'elevator': {
         const accepted = requestVillaElevator(this.state.elevator, villaFloor(this.position.y));
+        this.audio.cue(accepted ? 'elevator-call' : 'reject'); this.syncElevatorAudio();
         this.message(zh ? (accepted ? '电梯已呼叫。开门后走入，按 1 / 2 / 3 选层。' : '电梯正在运行，请稍候。')
           : (accepted ? 'Elevator called. Walk inside, then press 1 / 2 / 3.' : 'The elevator is busy. Please wait.'));
         break;
@@ -1347,28 +1459,30 @@ export class VillaGame extends BaseGame {
         const clear = villaScooterAnchors(bike).exits.some((exit, i) =>
           villaScooterExitClear(bike, this.scene?.scooterObstacles ?? [], i === 0 ? 1 : -1) && this.approachClear(exit));
         if (clear) this.takeSeat('scooter');
-        else this.message(zh ? '请从电动车旁的空旷位置靠近。' : 'Approach a clear side of the electric scooter.');
+        else this.refuse(zh ? '请从电动车旁的空旷位置靠近。' : 'Approach a clear side of the electric scooter.');
         break;
       }
       case 'racing':
         if (this.canFit(1.75) && this.approachClear(VILLA_RACING.seat, 'racing')) this.takeSeat('racing');
-        else this.message(zh ? '请从没有障碍的一侧靠近模拟器。' : 'Approach the simulator through a clear route.');
+        else this.refuse(zh ? '请从没有障碍的一侧靠近模拟器。' : 'Approach the simulator through a clear route.');
         break;
       case 'media': this.secondaryInteraction(); break;
       case 'figures': case 'replicas':
-        this.state.displayLights = !this.state.displayLights;
+        this.state.displayLights = !this.state.displayLights; this.audio.lightClick();
         this.message(zh ? (this.state.displayLights ? '收藏柜灯光已开启。' : '收藏柜灯光已关闭。') : (this.state.displayLights ? 'Collection lights on.' : 'Collection lights off.')); break;
       case 'aquarium':
-        this.state.fedUntil = this.time + 8;
+        this.state.fedUntil = this.time + 8; this.audio.cue('feed-fish');
         this.message(zh ? '小鱼们游过来了。今天也要好好吃饭。' : 'The fish gather for dinner. A little everyday happiness.'); break;
       case 'fireplace':
-        this.state.fireplace = !this.state.fireplace;
+        this.setFireplace(!this.state.fireplace);
         this.message(zh ? (this.state.fireplace ? '炉火亮起来了，屋子又暖了一点。' : '壁炉已经熄灭。') : (this.state.fireplace ? 'The fire is lit. A little warmer, a little slower.' : 'The fireplace is off.')); break;
       case 'gaming':
-        this.state.gaming = !this.state.gaming;
+        this.state.gaming = !this.state.gaming; this.audio.cue(this.state.gaming ? 'device-on' : 'device-off');
         this.message(zh ? (this.state.gaming ? '电竞设备已开启，今晚一起玩。' : '设备已关闭，好好休息。') : (this.state.gaming ? 'The setup is on. One more game together?' : 'Screens off. Time to unwind.')); break;
-      case 'tea': this.message(zh ? '热茶刚好。把今天的疲惫留在门外。' : 'Your tea is warm. Leave the busy day at the door.'); break;
-      case 'roof': setVillaTimeOfDay(this.state.home, 'evening'); this.message(zh ? '晚风、灯串，还有一个属于你的家。' : 'An evening breeze, warm lights, and a place of your own.'); break;
+      case 'tea': this.audio.cue('moment'); this.message(zh ? '热茶刚好。把今天的疲惫留在门外。' : 'Your tea is warm. Leave the busy day at the door.'); break;
+      case 'roof':
+        this.audio.cue(this.state.home.timeOfDay !== 'evening' ? 'setting' : 'moment');
+        setVillaTimeOfDay(this.state.home, 'evening'); this.message(zh ? '晚风、灯串，还有一个属于你的家。' : 'An evening breeze, warm lights, and a place of your own.'); break;
     }
     this.publishState();
   }
@@ -1382,11 +1496,12 @@ export class VillaGame extends BaseGame {
     if (this.mapOpen || this.helpOpen) {
       const p = this.panelRect();
       if (!this.hit(point, p) || this.hit(point, this.closeButton())) {
+        if (this.mapOpen) this.audio.cue('panel-close');
         this.mapOpen = false; this.clearInput(); this.mouseLookEnabled = true; this.publishState(); return true;
       }
       if (this.mapOpen) {
         const tab = this.mapTabs().find(tab => this.hit(point, tab));
-        if (tab) { this.mapFloor = Number(tab.id); this.publishState(); }
+        if (tab) { if (this.mapFloor !== Number(tab.id)) this.audio.cue('ui-tab'); this.mapFloor = Number(tab.id); this.publishState(); }
       }
       return true;
     }
@@ -1423,9 +1538,12 @@ export class VillaGame extends BaseGame {
       if (key === 'escape') {
         if (this.terminal?.visible) { this.setTerminal(false); return; }
         const wasPanel = this.mapOpen || this.terminal?.visible || this.helpOpen;
+        if (this.mapOpen) this.audio.cue('panel-close');
         this.mapOpen = false; this.clearInput(); this.unlock(); this.mouseLookEnabled = wasPanel;
       }
-      else if (this.mapOpen && ['1', '2', '3'].includes(key)) this.mapFloor = Number(key) - 1;
+      else if (this.mapOpen && ['1', '2', '3'].includes(key)) {
+        if (this.mapFloor !== Number(key) - 1) this.audio.cue('ui-tab'); this.mapFloor = Number(key) - 1;
+      }
       else if (!this.helpOpen && ['1', '2', '3'].includes(key) && this.inElevator()) this.selectElevatorFloor(Number(key) - 1);
       else if (!this.helpOpen && (key === 'o' || key === 'k') && this.inElevator()) this.controlElevatorDoor(key === 'o');
       // Under pointer lock the browser reports no cursor, so the HUD is only
@@ -1441,7 +1559,7 @@ export class VillaGame extends BaseGame {
         const target = this.state.seated === 'car' || this.state.seated === 'pickup' || this.state.seated === 'suv'
           ? this.state.seated : this.nearestParkVehicle();
         if (target) this.parkVehicleHome(target);
-        else this.message(this.isZhLang() ? '附近没有可以自动泊车的车辆。' : 'No car nearby that can park itself.');
+        else this.refuse(this.isZhLang() ? '附近没有可以自动泊车的车辆。' : 'No car nearby that can park itself.');
       }
       else if (key === 'm') this.activate('map');
       else if (key === 't') this.activate('time');
@@ -1714,11 +1832,18 @@ export class VillaGame extends BaseGame {
     rect(WEST.outer, EAST.outer, NORTH.outer, SOUTH.outer, dark ? '#c2b79c' : '#ece1c9');
     rect(VILLA_GARAGE_EXTENT.minX, VILLA_GARAGE_EXTENT.maxX, VILLA_GARAGE_EXTENT.minZ, VILLA_GARAGE_EXTENT.maxZ, '#aaa58f');
     rect(POOL.minX, POOL.maxX, POOL.minZ, POOL.maxZ, '#75afb6');
+    const bridge = VILLA_STREAM_BRIDGE, path = VILLA_STREAM_PATH;
+    rect(-path.halfWidth, path.halfWidth, path.minZ, bridge.approachMinZ, '#baae91');
+    rect(-path.halfWidth, path.halfWidth, bridge.approachMaxZ, path.maxZ, '#baae91');
+    ctx.fillStyle = '#629b9b'; ctx.beginPath();
+    VILLA_STREAM_WATER_OUTLINE.forEach((point, i) => i ? ctx.lineTo(mx(point.x), mz(point.z)) : ctx.moveTo(mx(point.x), mz(point.z)));
+    ctx.closePath(); ctx.fill();
+    rect(bridge.minX, bridge.maxX, bridge.approachMinZ, bridge.approachMaxZ, '#a9825c');
     for (const field of VILLA_ESTATE_FIELDS) rect(field.minX, field.maxX, field.minZ, field.maxZ, field.crop === 'lavender' ? '#978ca1' : field.crop === 'corn' ? '#a2aa64' : '#7e9463');
     const pond = VILLA_POND_BOUNDS;
     ctx.fillStyle = '#70a3a4'; ctx.beginPath(); ctx.ellipse(mx((pond.minX + pond.maxX) / 2), mz((pond.minZ + pond.maxZ) / 2), (pond.maxX - pond.minX) * scale / 2, (pond.maxZ - pond.minZ) * scale / 2, 0, 0, Math.PI * 2); ctx.fill();
     ctx.font = `500 ${Math.min(12 * s, Math.max(9, scale * 4.8))}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = dark ? '#fff2d9' : '#354a3b';
-    for (const [x, z, en, cn] of [[0, 0, 'Home', '主屋'], [39.6, -6, 'Garage', '车库'], [-17.6, 48, 'Fields', '田地'], [-13, 78, 'Pond', '池塘'], [14, 126, 'Viewpoint', '缓坡观景']] as const) ctx.fillText(zh ? cn : en, mx(x), mz(z), Math.max(34, 20 * scale));
+    for (const [x, z, en, cn] of [[0, 0, 'Home', '主屋'], [39.6, -6, 'Garage', '车库'], [17, -46, 'North stream', '北侧小溪'], [-17.6, 48, 'Fields', '田地'], [-13, 78, 'Pond', '池塘'], [14, 126, 'Viewpoint', '缓坡观景']] as const) ctx.fillText(zh ? cn : en, mx(x), mz(z), Math.max(34, 20 * scale));
     const vehicle = (pose: { x: number; z: number; yaw: number }, color: string, width: number, length: number) => {
       ctx.save(); ctx.translate(mx(pose.x), mz(pose.z)); ctx.rotate(-pose.yaw); ctx.fillStyle = color;
       ctx.fillRect(-width * scale / 2, -length * scale / 2, Math.max(3, width * scale), Math.max(4, length * scale)); ctx.restore();
@@ -1730,7 +1855,7 @@ export class VillaGame extends BaseGame {
     ctx.fillStyle = dark ? '#d1d4c0' : '#5b6654'; ctx.font = `${12 * s}px ${UI_FONT}`; ctx.textAlign = 'left';
     ctx.fillText(zh ? '↑ 北 N' : '↑ N', panel.x + 14 * s, top + 17 * s);
     ctx.fillText(zh ? '南 S ↓' : 'S ↓', panel.x + 14 * s, top + 39 * s);
-    ctx.fillText(zh ? '西：田地与池塘 · 东：车库 · 南：缓坡环路' : 'West: fields & pond · East: garage · South: scenic hills', panel.x + 8 * s, panel.y + panel.h - 12 * s, panel.w - 16 * s);
+    ctx.fillText(zh ? '北溪 · 西侧田地与池塘 · 东车库 · 南环路' : 'N stream · W fields & pond · E garage · S scenic loop', panel.x + 8 * s, panel.y + panel.h - 12 * s, panel.w - 16 * s);
   }
 
   private drawMap(ctx: CanvasRenderingContext2D) {

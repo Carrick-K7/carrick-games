@@ -1,5 +1,5 @@
 /** Game-owned manual visual audit. Run after build:game -- villa.
- * Outputs stay OUTSIDE the repository by default. No shell screenshot fixtures
+ * Outputs stay in the game's ignored test-results directory. No shell screenshot fixtures
  * or user work are modified. The captured camera/frame is verified, never a
  * cached software-GL frame wearing a new HUD label.
  * VILLA_AUDIT_BASE=http://127.0.0.1:8091 node games/villa/tests/map-audit.mjs [name ...]
@@ -8,7 +8,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const base = process.env.VILLA_AUDIT_BASE ?? 'http://127.0.0.1:8091';
-const out = process.env.VILLA_AUDIT_OUT ?? '/tmp/carrick-villa-audit';
+const out = process.env.VILLA_AUDIT_OUT ?? path.resolve('games/villa/test-results/map-audit');
 export const views = [
   ['entrance', 0, 0, 21, 0, 0, .1],
   ['pool', -26, 0, 11, -32, 0, -.08],
@@ -16,7 +16,15 @@ export const views = [
   ['vegetables', -1, 0, 24, -8, 18, -.18],
   ['garage-apron', 48, 0, 12, 41, -1, -.02],
   ['garage', 49.7, 0, .6, 39, -5, -.05],
-  ['suv', 50, 0, -1.1, 47, -3, -.08],
+  ['sedan', 29.4, 0, 1.5, 32.4, -2.6, -.10],
+  ['sedan-rear', 34.4, 0, -6.9, 32.4, -2.6, -.14],
+  ['pickup', 40.7, 0, .9, 37.7, -2.6, -.09],
+  ['pickup-bed', 40.2, 0, -7.5, 37.7, -3.6, -.25],
+  ['suv', 50.25, 0, 1.2, 46.9, -2.6, -.08],
+  ['suv-rear', 50.1, 0, -6.9, 46.9, -2.6, -.12],
+  ['sedan-cockpit', 32.4, 0, -2.6, 32.4, 4, -.24, 'car'],
+  ['pickup-cockpit', 37.7, 0, -2.6, 37.7, 4, -.27, 'pickup'],
+  ['suv-cockpit', 46.9, 0, -2.6, 46.9, 4, -.25, 'suv'],
   ['living', -14, 0, 8, -7, 1, -.08],
   ['kitchen', -17, 0, -1.3, -7, -7, -.08],
   ['tea-room', -16, 0, -10.8, -19, -15.8, -.16],
@@ -28,14 +36,18 @@ export const views = [
   ['empty-lounge', 24, 0, 6.5, 20, -6, -.05],
   ['robot', 3.2, 0, -9, 4.45, -7.7, -.68],
   ['upstairs-hall', 6.9, 3.6, -9, 0, -12, -.08],
-  ['master', -13, 3.6, 2.8, -6, 6, -.12],
-  ['master-vanity', -5.5, 3.6, 3.4, -5.05, .6, -.18],
-  ['guest', -14, 3.6, -10.5, -8, -14, -.06],
+  ['master', -12.5, 3.6, 7.7, -17.5, 2.1, -.10],
+  ['master-vanity', -20.1, 3.6, 3.3, -22.1, .59, -.15],
+  ['master-lounge', -14.9, 3.6, 6.0, -9.4, 6.1, -.10],
+  ['guest', -13.6, 3.6, -14.7, -21.3, -11.1, -.09],
+  ['guest-entry', -2.7, 3.6, -14.7, -12, -14.7, -.04],
+  ['guest-lounge', -16, 3.6, -13.9, -9, -13.8, -.1],
   ['dressing', -14, 3.6, -1.2, -19, -5.5, -.08],
   ['ensuite', -5, 3.6, -3.65, -10, -7, -.08],
   ['study', 15.8, 3.6, -10, 12.5, -16, -.08],
   ['bath', 9.2, 3.6, -.3, 14, -6, -.12],
   ['bath-west', 6.2, 3.6, -4.8, 12, -4.8, -.04],
+  ['bath-open', 6.8, 3.6, -4.8, 11, -5.2, -.06],
   ['reading-hall', 26.5, 3.6, 7.5, 20, -4.6, -.03],
   ['massage', 24, 3.6, -10.5, 22.6, -14.5, -.05],
   ['balcony', -6, 3.6, 10.4, -10, 19, -.15],
@@ -43,6 +55,10 @@ export const views = [
   ['roof-west', -2, 7.2, 4, -18, -3, -.1],
   ['roof-east', 6, 7.2, -1, 13, -8, -.06],
   ['roof-flowers', 21, 7.2, 5, 26, -10, -.07],
+  ['stream', 9, 0, -30, 0, -38, -.08],
+  ['stream-west', -20, 0, -30, -15, -39, -.1],
+  ['stream-bridge', 0, 0, -31, 0, -38, -.14],
+  ['north-garden', 0, 0, -51, 0, -20, -.02],
   ['north-estate', -4, 0, 28, -8, 46, -.02],
   ['south-fields', -17, 0, 49, -10, 60, -.1],
   ['pond', -2, 0, 69, -14, 80, -.08],
@@ -78,8 +94,11 @@ try {
   }, process.env.VILLA_AUDIT_TIME ?? 'day');
   for (const pose of poses) {
     const record = await page.evaluate(pose => {
-      const [name, x, y, z, tx, tz, pitch] = pose, g = window.__auditGame;
+      const [name, x, y, z, tx, tz, pitch, driver] = pose, g = window.__auditGame;
       g.state.seated = null; g.state.relaxSeatId = null; g.transition = null;
+      // Pose fixtures reset transient feedback with controller state, so a
+      // previous cockpit's entry toast cannot label a later bedroom image.
+      g.toast = ''; g.toastUntil = 0; g.toastTarget = ''; g.hudHintShown = true;
       g.motion.offset = 0; g.motion.velocity = 0;
       g.position = { x, y, z }; g.eyeY = y;
       g.yaw = Math.atan2(x - tx, z - tz); g.pitch = pitch;
@@ -91,16 +110,23 @@ try {
         for (let h = -2; h < 15 && support === null; h += .2) support = g.supportAt(x, z, h, 1.75);
       }
       if (support !== null && y === 0) g.position.y = g.eyeY = support;
-      g.time += 1;
+      if (driver) {
+        g.takeSeat(driver); g.transition = null; g.pitch = pitch;
+        support = g.supportAt(g.position.x, g.position.z, g.position.y, 1.75);
+      }
+      const open = name === 'bath-open';
+      Object.assign(g.state.bathDoors, { west: open, east: open, progressW: open ? 1 : 0, progressE: open ? 1 : 0 });
+      g.time = name === 'robot' ? 0 : g.time + 1;
       g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity;
       const before = g.scene.renderer.info.render.frame;
       g.renderFrame();
       const after = g.scene.renderer.info.render.frame;
       if (after <= before) throw new Error(`${name}: stale GL frame`);
       const eye = g.view();
-      if (Math.abs(g.scene.camera.position.x - eye.x) > .001 || Math.abs(g.scene.camera.position.z - eye.z) > .001) throw new Error(`${name}: wrong camera`);
+      if (Math.abs(g.scene.camera.position.x - eye.x) > .001 || Math.abs(g.scene.camera.position.z - eye.z) > .001
+        || Math.abs(g.scene.camera.position.y - eye.y - (eye.eyeHeight ?? 1.65)) > .001) throw new Error(`${name}: wrong camera`);
       return { name, position: { ...g.position }, camera: g.scene.camera.position.toArray(), yaw: g.yaw,
-        floorSupport: support, standable: g.canFit(1.75), frame: after,
+        floorSupport: support, occupancy: driver ?? 'standing', standable: driver ? null : g.canFit(1.75), frame: after,
         drawCalls: g.scene.renderer.info.render.calls, triangles: g.scene.renderer.info.render.triangles,
         png: g.canvas.toDataURL('image/png') };
     }, pose);

@@ -1,7 +1,8 @@
+import { VILLA_STREAM_BOUNDS, villaStreamTerrainHeight, villaStreamBridgeHeight } from './villaStream.js';
 /** Authoritative metre-scale estate layout. +Z south/front, +X east.
- * Intentionally dependency-free: World, vehicles and scene all consume this file.
+ * Pure game-local datums: World, vehicles and scene all consume this file.
  */
-export const VILLA_ESTATE_BOUNDS = { minX: -40, maxX: 62, minZ: -26, maxZ: 162 } as const;
+export const VILLA_ESTATE_BOUNDS = { minX: -40, maxX: 62, minZ: -58, maxZ: 162 } as const;
 export const VILLA_GARAGE_EXTENT = { minX: 28.2, maxX: 51, minZ: -12, maxZ: 2, roofY: 3.5 } as const;
 /** Bays keep their 16.2 m setback from the house's east wall and their spacing,
  *  so the four doors, the pickup's own anchors and every approach stay valid. */
@@ -11,7 +12,7 @@ export const VILLA_GARAGE_BAYS = [
   { id: 'reserved-1', x: 42.2, z: -2.6, doorMinX: 40.3, doorMaxX: 44.2 },
   { id: 'reserved-2', x: 46.9, z: -2.6, doorMinX: 44.9, doorMaxX: 49 },
 ] as const;
-export const VILLA_PICKUP_LIMITS = { halfWidth: 1.2, halfLength: 2.86, height: 1.98, wheelbase: 3.45, maxSpeed: 6.5, maxReverse: 2.4, maxSteer: .53 } as const;
+export const VILLA_PICKUP_LIMITS = { halfWidth: 1.2, halfLength: 2.86, height: 1.98, wheelbase: 3.45, maxSpeed: 140 / 3.6, maxReverse: 3.5, maxSteer: .53 } as const;
 const pickupBay = VILLA_GARAGE_BAYS[1];
 export const VILLA_PICKUP = {
   center: { x: pickupBay.x, y: 0, z: pickupBay.z },
@@ -21,7 +22,7 @@ export const VILLA_PICKUP = {
   body: { minX: pickupBay.x - 1.2, maxX: pickupBay.x + 1.2, minZ: pickupBay.z - 2.86, maxZ: pickupBay.z + 2.86, minY: 0, maxY: 1.98 },
   eyeHeight: 1.58, yaw: Math.PI,
 } as const;
-export const VILLA_SUV_LIMITS = { halfWidth: .99, halfLength: 2.46, height: 1.72, wheelbase: 2.9, maxSpeed: 7, maxReverse: 2.6, maxSteer: .55 } as const;
+export const VILLA_SUV_LIMITS = { halfWidth: .99, halfLength: 2.46, height: 1.72, wheelbase: 2.9, maxSpeed: 160 / 3.6, maxReverse: 4, maxSteer: .55 } as const;
 // The coupe-SUV parks in the second reserved bay; the first reserved bay stays
 // empty because the pets' shelter route crosses the sill there.
 const suvBay = VILLA_GARAGE_BAYS[3];
@@ -58,11 +59,13 @@ export const VILLA_SOUTH_WALL = { inner: 9, outer: 9.2 } as const;
 export const POOL = { minX: -36.4, maxX: -27.7, minZ: -7.5, maxZ: 6.5 } as const;
 /** Fence runs live just beyond support bounds, so they never bisect the old
  * garden or expanded garage. Parent samples rail/post Y with terrainHeight. */
+const fenceWest = VILLA_ESTATE_BOUNDS.minX - .3, fenceEast = VILLA_ESTATE_BOUNDS.maxX + .3;
+const fenceNorth = VILLA_ESTATE_BOUNDS.minZ - .3, fenceSouth = VILLA_ESTATE_BOUNDS.maxZ + .3;
 export const VILLA_ESTATE_FENCE_SEGMENTS = [
-  { from: { x: -40.3, z: -26.3 }, to: { x: -40.3, z: 162.3 } },
-  { from: { x: 62.3, z: -26.3 }, to: { x: 62.3, z: 162.3 } },
-  { from: { x: -40.3, z: -26.3 }, to: { x: 62.3, z: -26.3 } },
-  { from: { x: -40.3, z: 162.3 }, to: { x: 62.3, z: 162.3 } },
+  { from: { x: fenceWest, z: fenceNorth }, to: { x: fenceWest, z: fenceSouth } },
+  { from: { x: fenceEast, z: fenceNorth }, to: { x: fenceEast, z: fenceSouth } },
+  { from: { x: fenceWest, z: fenceNorth }, to: { x: fenceEast, z: fenceNorth } },
+  { from: { x: fenceWest, z: fenceSouth }, to: { x: fenceEast, z: fenceSouth } },
 ] as const;
 export const VILLA_POND_BOUNDS = { minX: -20, maxX: -6, minZ: 67, maxZ: 88 } as const;
 export const VILLA_POND = { x: -13, z: 77.5, radiusX: 7, radiusZ: 10.5, waterY: -.10 } as const;
@@ -105,18 +108,28 @@ export function villaPondIntersectsPolygon(points: readonly { x: number; z: numb
 /** C2-continuous positive rolls; exactly flat near every existing house/garden
  * object. Broad gaussian hills total <2.8m, never steep stair-like height bands.
  * A level pond shelf blends back into the meadow over a generous bank. */
-export function villaTerrainHeight(x: number, z: number): number {
-  if (!Number.isFinite(x) || !Number.isFinite(z) || z <= 35) return 0;
+export function villaTerrainGroundHeight(x: number, z: number): number {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
+  if (z >= VILLA_STREAM_BOUNDS.minZ && z <= VILLA_STREAM_BOUNDS.maxZ) {
+    const bank = villaStreamTerrainHeight(x, z); if (bank !== null) return bank;
+  }
+  if (z <= 35) return 0;
   const hill = (cx: number, cz: number, sx: number, sz: number) => Math.exp(-(((x - cx) / sx) ** 2 + ((z - cz) / sz) ** 2));
   const hills = 1.85 * hill(17, 122, 35, 34) + .65 * hill(-10, 151, 30, 26) + .30 * hill(29, 68, 30, 23);
   const pondDistance = Math.hypot((x - VILLA_POND.x) / 10, (z - VILLA_POND.z) / 14);
   return hills * smooth((z - 35) / 26) * smooth((pondDistance - 1) / .75);
 }
-export function villaTerrainNormal(x: number, z: number) {
-  const e = .025, dx = (villaTerrainHeight(x + e, z) - villaTerrainHeight(x - e, z)) / (2 * e);
-  const dz = (villaTerrainHeight(x, z + e) - villaTerrainHeight(x, z - e)) / (2 * e), length = Math.hypot(dx, 1, dz);
+/** Traversable surface includes timber, while the lawn mesh uses raw ground. */
+export function villaTerrainHeight(x: number, z: number): number {
+  return villaStreamBridgeHeight(x, z) ?? villaTerrainGroundHeight(x, z);
+}
+function normalAt(x: number, z: number, height: (x: number, z: number) => number) {
+  const e = .025, dx = (height(x + e, z) - height(x - e, z)) / (2 * e);
+  const dz = (height(x, z + e) - height(x, z - e)) / (2 * e), length = Math.hypot(dx, 1, dz);
   return { x: -dx / length, y: 1 / length, z: -dz / length };
 }
+export const villaTerrainNormal = (x: number, z: number) => normalAt(x, z, villaTerrainHeight);
+export const villaTerrainGroundNormal = (x: number, z: number) => normalAt(x, z, villaTerrainGroundHeight);
 /** Three Euler order YXZ: yaw stays the driver's heading; pitch/roll align the
  * chassis up axis to the common terrain normal. Never integrate vertical drift. */
 export function villaTerrainOrientation(x: number, z: number, yaw = 0) {

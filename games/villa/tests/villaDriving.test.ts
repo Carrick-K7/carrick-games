@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaActivities, VILLA_CAR } from '../src/villaActivities.js';
-import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD, VILLA_DRIVING_BOUNDS } from '../src/villaDriving.js';
+import { advanceVillaDriving, createVillaDriving, isVillaVehicleCollider, villaCarAnchors, villaCarExitClear, villaCarFootprint, villaCarOverlaps, villaDrivingPoseBlocked, VILLA_SCENIC_ROAD, VILLA_DRIVING_BOUNDS, VILLA_CAR_LIMITS } from '../src/villaDriving.js';
 import { VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout.js';
 import { createVillaVehicle } from '../src/villaVehicle.js';
 import { createVillaDrivingCourse } from '../src/villaDrivingCourse.js';
@@ -18,7 +18,8 @@ describe('Villa driving physics', () => {
     expect(state).toMatchObject({ x: VILLA_CAR.center.x, z: VILLA_CAR.center.z, yaw: 0, speed: 0 });
     tick(state, { ...idle, throttle: 1 }, 6, VILLA_WALL_COLLIDERS);
     expect(state.z).toBeGreaterThan(25); expect(state.x).toBe(VILLA_CAR.center.x);
-    expect(state.speed).toBeLessThanOrEqual(7); expect(state.collisions).toBe(0);
+    expect(state.speed * 3.6).toBeGreaterThan(60); // Real acceleration, not merely a higher HUD number.
+    expect(state.speed).toBeLessThanOrEqual(VILLA_CAR_LIMITS.maxSpeed); expect(state.collisions).toBe(0);
   });
   it('reverses slowly, brakes smoothly without changing direction, and coasts', () => {
     const state = createVillaDriving(); tick(state, { ...idle, throttle: -1 }, 1);
@@ -34,7 +35,7 @@ describe('Villa driving physics', () => {
     tick(coast, idle, .25); tick(service, { ...idle, throttle: 1, brake: true }, .25); tick(hand, { ...idle, throttle: 1, handbrake: true }, .25);
     expect(hand.speed).toBeLessThan(service.speed); expect(service.speed).toBeLessThan(coast.speed); expect(coast.speed).toBeLessThan(7);
     expect(hand.handbrake).toBe(true); expect(service.handbrake).toBe(false); expect(coast.handbrake).toBe(false);
-    expect(hand.speed).toBeCloseTo(7 - 8.5 * .25); expect(service.speed).toBeCloseTo(7 - 5.5 * .25);
+    expect(hand.speed).toBeCloseTo(7 - 12.5 * .25); expect(service.speed).toBeCloseTo(7 - 9.5 * .25);
     tick(hand, { ...idle, throttle: 1, handbrake: true }, 1); expect(hand.speed).toBe(0);
     const stopped = hand.distance; tick(hand, { ...idle, throttle: 1, handbrake: true }); expect(hand.distance).toBe(stopped);
     // Omitted optional handbrake must clear it, not retain a latched brake.
