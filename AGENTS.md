@@ -4,7 +4,7 @@ This is the repository's development authority. `README.md` is for external read
 
 **Release evidence:** this document records contracts and required closure, not proof of a verified deployment. Use exact-SHA CI results and live component descriptors. A documentation-only delegation does not authorize builds, commits, pushes or production mutation.
 
-**Last reconciled with production:** 2026-09-13, games and shell both at revision `809eafa18ec4d0d16b35e99046c15a9e267793bd`. This line is a claim like any other: re-check live `/games/index.json` and `/manifest.json` before trusting it, and update it whenever a statement here is verified or corrected.
+**Last reconciled with production:** 2026-09-19, scoped to Villa `1.10.0` at `da8256e0464256636f739575538fb64527b69100` and its pinned published shell `0.4.0` at `831408bdee7070d459bf0190e4db8154ded6da0c`. Exact-SHA Actions run `35456377822` and live inventories passed; Villa `1.9.1` remains reachable. Other games were not republished or independently reverified in this check. This line is a claim like any other: re-check live `/games/index.json` and `/manifest.json` before trusting it, and update it whenever a statement here is verified or corrected.
 
 ## Workspace Ownership
 
