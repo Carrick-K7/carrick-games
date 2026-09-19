@@ -6,14 +6,14 @@ import { createVillaWardrobe, VILLA_MASTER_WARDROBE, type VillaWardrobeState } f
 import { registerVillaSeatCollider, villaRelaxSeat } from './villaSeating.js';
 export { VILLA_MASTER_WARDROBE } from './villaWardrobe.js';
 export const VILLA_MASTER_VANITY = {
-  x: -4.35, y: 3.6, z: 0.65, width: 2.05, depth: 0.72, height: 0.82,
+  x: -5.05, y: 3.6, z: 0.65, width: 1.6, depth: 0.72, height: 0.82,
   kneeWidth: 0.94, kneeHeight: 0.69,
 } as const;
 export const VILLA_MASTER_MIRROR = {
-  x: -4.35, y: 5.38, z: 0.205, width: 1.4, height: 1.28, depth: 0.065,
+  x: -5.05, y: 5.38, z: 0.205, width: 1.3, height: 1.28, depth: 0.065,
 } as const;
 export const VILLA_MASTER_STOOL = {
-  x: -4.35, y: 3.6, z: 1.58, width: 0.6, depth: 0.54, height: 0.49,
+  x: -5.05, y: 3.6, z: 1.58, width: 0.6, depth: 0.54, height: 0.49,
 } as const;
 export const VILLA_VANITY_ACCESSORIES = ['brush-cup', 'lipstick', 'compact', 'perfume-bottle', 'jewelry-tray'] as const;
 

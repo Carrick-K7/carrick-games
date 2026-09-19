@@ -58,7 +58,7 @@ describe('north-wall master bedroom joinery', () => {
     const s = VILLA_MASTER_STOOL;
     expect(villaCollides({ x: s.x, y: s.y, z: s.z }, colliders)).toBe(true);
     expect(colliders[colliders.length - 1].maxY).toBeCloseTo(s.y + s.height);
-    expect(colliders.filter(c => c.minX > -6)).toHaveLength(10); // Vanity legs/brace/drawers/top; mirror; stool.
+    expect(colliders.filter(c => c.minX > -6)).toHaveLength(7); // Narrower vanity: legs/brace/drawers/top; mirror; stool.
   });
 
   it('fits entirely inside the master room and preserves doors, bed access and glazing', () => {

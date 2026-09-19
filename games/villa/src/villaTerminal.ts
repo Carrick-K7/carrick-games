@@ -3,6 +3,7 @@ import { VILLA_HOME_LIGHTS, VILLA_SECURITY_CAMERAS, VILLA_LOOK_SENSITIVITY, type
 export interface VillaTerminalSnapshot {
   home: VillaHomeState; zh: boolean; dark: boolean; version: string;
   aimAssist: boolean; fireplace: boolean; aquarium: boolean; petsSheltered: number; petCount: number;
+  sound: boolean;
   /** One row per road vehicle: where it is and whether it can drive itself home. */
   vehicles: { id: string; name: string; zh: string; parked: boolean; canPark: boolean; driving: boolean }[];
 }
@@ -18,6 +19,7 @@ export interface VillaTerminalActions {
   park(id: string): void;
   fireplace(on: boolean): void;
   aquarium(on: boolean): void;
+  sound(on: boolean): void;
   /** Only older/isolation hosts without presentation.setActions need these. */
   home?(): void;
   immersive?(): void;
@@ -174,6 +176,7 @@ div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3
   sensitivity.addEventListener('input', () => { sensitivityValue.value = `${Number(sensitivity.value).toFixed(2)}×`; actions.sensitivity(Number(sensitivity.value)); });
   text('p', 'Applies to mouse and touch camera movement; does not change walking or driving speed.', '同时作用于鼠标和触屏视角，不改变步行或驾驶速度。', settings, 'vt-note');
   const guide = button('Snooker aiming guide', '斯诺克辅助线', settings, () => actions.aimAssist(!current?.aimAssist)); guide.dataset.villaAimGuide = ''; guide.style.marginTop = '18px';
+  const sound = button('Ambient sound', '环境音效', settings, () => actions.sound(!current?.sound)); sound.dataset.villaSound = ''; sound.style.marginTop = '9px';
   if (actions.home || actions.immersive) {
     const fallback = document.createElement('div'); fallback.className = 'vt-row'; fallback.style.marginTop = '18px'; settings.append(fallback);
     if (actions.home) button('Return to entrance', '回到门口', fallback, actions.home).dataset.villaFallbackAction = 'villa-home';
@@ -192,6 +195,7 @@ div[data-villa-terminal] .vt-weather{display:grid;grid-template-columns:repeat(3
     for (const [id, item] of timeButtons) item.setAttribute('aria-pressed', String(snapshot.home.timeOfDay === id));
     for (const [id, item] of weatherButtons) item.setAttribute('aria-pressed', String(snapshot.home.weather === id));
     fire.setAttribute('aria-pressed', String(snapshot.fireplace)); aquarium.setAttribute('aria-pressed', String(snapshot.aquarium)); guide.setAttribute('aria-pressed', String(snapshot.aimAssist));
+    sound.setAttribute('aria-pressed', String(snapshot.sound));
     if (document.activeElement !== sensitivity) sensitivity.value = String(snapshot.home.lookSensitivity);
     sensitivityValue.value = `${snapshot.home.lookSensitivity.toFixed(2)}×`;
     shelter.textContent = snapshot.zh ? `已在室内：${snapshot.petsSheltered} / ${snapshot.petCount} 只小动物` : `Indoors: ${snapshot.petsSheltered} / ${snapshot.petCount} pets`;

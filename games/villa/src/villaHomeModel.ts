@@ -57,9 +57,9 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
     b.box(-1.7, floor * 3.6 + 3.27, 0, .028, .025, 17.35, glow(`gallery-${floor}`), .006);
   }
   const roof = glow('terrace');
-  // Both an inward rail strip and an outward fascia strip remain visible at night.
-  for (const z of [-8.85, 8.85]) b.box(0, 7.3, z, 23.5, .035, .035, roof, .006);
-  for (const x of [-11.75, 11.75]) b.box(x, 7.3, 0, .035, .035, 17.7, roof, .006);
+  // The old inward "rail strips" (four thin glowing boxes lying on the terrace
+  // floor) read as redundant white lines by day and are gone; only the outer
+  // fascia band below the parapet remains, visible from the driveway at night.
   // A continuous recessed diffuser on the OUTER fascia, not a subpixel wire
   // above the eave: still visibly lit from the driveway at software render scale.
   // The storeys widen east to x=16 in 1.1.0, so the roof band follows them.

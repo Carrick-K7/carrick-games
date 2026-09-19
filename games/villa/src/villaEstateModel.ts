@@ -144,14 +144,16 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
     workshop.geometry(new THREE.TorusGeometry(.045, .013, 6, 12, Math.PI * 1.5), metal, [x, 1.76 + (i % 3) * .09, gz(-7.58)]);
   }
   workshop.collide(gx(28.8), 0, gz(-7.28), 3.7, 2.14, .85);
-  // Tool trolley along east wall, real drawers, casters and push handle.
-  workshop.box(gx(33.8), .55, -3.7, .62, .72, 1.03, red, .026);
-  workshop.box(gx(33.8), .93, -3.7, .68, .055, 1.09, charcoal, .014);
-  for (let i = 0; i < 5; i++) workshop.box(gx(33.475), .30 + i * .12, -3.7, .018, .027, .69, metal, .006);
+  // Tool trolley along east wall, real drawers, casters and push handle. It
+  // parks north of the east window, clear of the SUV's door/exit corridor: at
+  // the old z=-3.8 spot it clipped the reserved-2 exit anchor and blocked boarding.
+  workshop.box(gx(33.8), .55, -8.0, .62, .72, 1.03, red, .026);
+  workshop.box(gx(33.8), .93, -8.0, .68, .055, 1.09, charcoal, .014);
+  for (let i = 0; i < 5; i++) workshop.box(gx(33.475), .30 + i * .12, -8.0, .018, .027, .69, metal, .006);
   // Casters touch the slab: a wheel floating 5 cm read as clipping, not height.
-  for (const x of [33.6, 34]) for (const z of [-4.1, -3.3]) workshop.cylinder(gx(x), .075, z, .075, .075, .06, charcoal, [0, 0, Math.PI / 2], 12);
-  workshop.beam([gx(33.52), .83, -4.2], [gx(33.52), .83, -4.45], .019, metal); workshop.beam([gx(33.52), .83, -4.45], [gx(34.05), .83, -4.45], .019, metal);
-  workshop.collide(gx(33.8), 0, -3.8, .75, .98, 1.4);
+  for (const x of [33.6, 34]) for (const z of [-8.4, -7.6]) workshop.cylinder(gx(x), .075, z, .075, .075, .06, charcoal, [0, 0, Math.PI / 2], 12);
+  workshop.beam([gx(33.52), .83, -8.5], [gx(33.52), .83, -8.75], .019, metal); workshop.beam([gx(33.52), .83, -8.75], [gx(34.05), .83, -8.75], .019, metal);
+  workshop.collide(gx(33.8), 0, -8.1, .75, .98, 1.4);
   // Floor jack stays parked against the northern wall, not under a spawn vehicle.
   workshop.box(gx(32.6), .06, gz(-6.9), .44, .12, .95, red, .025);
   workshop.beam([gx(32.6), .1, gz(-6.8)], [gx(32.6), .28, gz(-7.12)], .075, metal);

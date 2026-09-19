@@ -170,7 +170,7 @@ describe('Villa snooker dimensions and actual mounting walls', () => {
     expect(villaRoomAt(center).id).toBe('snooker');
   });
   it.each([
-    { name: 'cue rack', x: 10.45, y: 1.4, z: -9 },
+    { name: 'cue rack', x: 17, y: 1.4, z: -12 },
     { name: 'extractor hood', x: -8.11, y: 2.04, z: -9 },
   ])('$name is mounted to solid plaster rather than glazing or an opening', ({ x, y, z }) => {
     const covering = VILLA_BLOCKS.filter(b => Math.abs(x - b.x) <= b.w / 2 && Math.abs(y - b.y) <= b.h / 2 && Math.abs(z - b.z) <= b.d / 2);

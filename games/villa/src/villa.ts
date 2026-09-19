@@ -34,6 +34,8 @@ import { createVillaSuv, advanceVillaSuv, villaSuvAnchors, villaSuvDriverSide, v
 import { villaCarSafeExit } from './villaDriving.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT, VILLA_POND_BOUNDS, VILLA_ESTATE_FIELDS, villaTerrainOrientation } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS } from './villaDrivingCourse.js';
+import { VillaAudio } from './villaAudio.js';
+import { advanceVillaBathDoors, createVillaBathDoors, toggleVillaBathDoor, type VillaBathDoorState } from './villaBathDoors.js';
 import { advanceVillaPark, createVillaParkRun, villaParkAvailable, villaParkRouteClear, villaVehicleParked, villaParkRoute, type VillaParkRun } from './villaAutopilot.js';
 import { VILLA_VERSION } from './villaVersion.js';
 
@@ -41,7 +43,7 @@ interface Point { x: number; y: number }
 interface Button { id: string; x: number; y: number; w: number; h: number; label: string }
 const UI_FONT = 'system-ui, -apple-system, sans-serif';
 type VillaRoadVehicle = 'car' | 'pickup' | 'suv';
-type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; suv: VillaSuvState; aquariumOn: boolean;
+type VillaGameState = VillaSceneState & { home: VillaHomeState; outdoor: VillaOutdoorState; tea: VillaTeaState; wardrobes: VillaWardrobeState; pickup: VillaPickupState; suv: VillaSuvState; aquariumOn: boolean; bathDoors: VillaBathDoorState; grillLids: boolean[];
   /** One self-driving run per road vehicle; only ever active when sent home. */
   park: Record<VillaRoadVehicle, VillaParkRun> };
 const initialVillaState = (): VillaGameState => ({
@@ -49,6 +51,7 @@ const initialVillaState = (): VillaGameState => ({
   elevator: createVillaElevator(), driving: createVillaDriving(), pickup: createVillaPickup(), suv: createVillaSuv(), scooter: createVillaScooter(), race: createVillaRace(),
   snooker: createVillaSnooker(), snookerActive: false, pets: createVillaPets(), faucetOn: false, teaUntil: 0,
   home: createVillaHome(), outdoor: createVillaOutdoor(), tea: createVillaTea(), wardrobes: createVillaWardrobes(), aquariumOn: true,
+  bathDoors: createVillaBathDoors(), grillLids: [false, false, false],
   park: { car: createVillaParkRun(), pickup: createVillaParkRun(), suv: createVillaParkRun() },
 });
 
@@ -73,6 +76,11 @@ export class VillaGame extends BaseGame {
   private accessVehicle: VillaRoadVehicle = 'car';
   private readonly keys = new Set<string>();
   private motion = createVillaMotion();
+  private readonly audio = new VillaAudio();
+  /** Vehicle drive snapshot for the engine loop; null on foot. */
+  private audioEngine: { speed: number; throttle: number } | null = null;
+  private stepDistance = 0;
+  private readonly roadDoorAudio = new Map<VillaRoadVehicle, boolean>();
   private immersive = false;
   private promptAlpha = 0;
   private safetyBrake = true;
@@ -123,14 +131,15 @@ export class VillaGame extends BaseGame {
     this.useButton = createVillaUseButton(this.canvas, () => this.use());
     this.terminal = createVillaTerminal(this.canvas, {
       close: () => this.setTerminal(false),
-      light: (id, on) => { setVillaRoomLight(this.state.home, id, on); this.terminalChanged(); },
-      allLights: on => { setVillaAllLights(this.state.home, on); this.state.aquariumOn = on; this.state.displayLights = on; this.terminalChanged(); },
+      light: (id, on) => { setVillaRoomLight(this.state.home, id, on); this.audio.lightClick(); this.terminalChanged(); },
+      allLights: on => { setVillaAllLights(this.state.home, on); this.state.aquariumOn = on; this.state.displayLights = on; this.audio.lightClick(); this.terminalChanged(); },
       time: value => { setVillaTimeOfDay(this.state.home, value); this.terminalChanged(); },
       weather: value => { setVillaWeather(this.state.home, value); this.terminalChanged(); },
       sensitivity: value => this.saveSensitivity(value),
       aimAssist: on => { this.state.snooker.aimAssist = on; this.terminalChanged(); },
-      fireplace: on => { this.state.fireplace = on; this.terminalChanged(); },
-      aquarium: on => { this.state.aquariumOn = on; this.terminalChanged(); },
+      fireplace: on => { this.state.fireplace = on; this.audio.lightClick(); this.terminalChanged(); },
+      aquarium: on => { this.state.aquariumOn = on; this.audio.lightClick(); this.terminalChanged(); },
+      sound: on => { this.audio.prime(); this.audio.setEnabled(on); this.terminalChanged(); },
       park: id => { this.parkVehicleHome(id as VillaRoadVehicle); this.terminalChanged(); },
       // Isolated/older hosts have no game-action menu; keep touch access in
       // terminal Settings instead of restoring extra persistent HUD buttons.
@@ -292,6 +301,7 @@ export class VillaGame extends BaseGame {
   }
 
   private lockPointer() {
+    this.audio.prime(); // pointer-lock requests come from a real gesture.
     if (this.touchMode || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
     this.mouseLookEnabled = true; this.lastMouse = null; this.wantPointerLock = true;
     const version = ++this.lockVersion;
@@ -376,7 +386,10 @@ export class VillaGame extends BaseGame {
   private roadObstacles(id: VillaRoadVehicle) { return this.roadApi(id).obstacles ?? []; }
   private roadDoorProgress(id: VillaRoadVehicle) { return this.roadApi(id).doorProgress; }
   private roadDoorOpen(id: VillaRoadVehicle) { return this.roadApi(id).doorOpen; }
-  private setRoadDoor(id: VillaRoadVehicle, open: boolean) { this.roadApi(id).setDoor(open); }
+  private setRoadDoor(id: VillaRoadVehicle, open: boolean) {
+    if (this.roadDoorAudio.get(id) !== open) { this.roadDoorAudio.set(id, open); this.audio.vehicleDoor(open); }
+    this.roadApi(id).setDoor(open);
+  }
   private roadSafeExit(id: VillaRoadVehicle) { return this.roadApi(id).safeExit(this.roadApi(id).state, this.roadObstacles(id)); }
   private roadExitClear(id: VillaRoadVehicle) { return this.roadApi(id).exitClear(this.roadApi(id).state, this.roadObstacles(id)); }
   private currentRelaxSeat(): VillaRelaxSeat | null { return villaOutdoorSeat(this.state.outdoor, this.state.relaxSeatId) ?? villaRelaxSeat(this.state.relaxSeatId); }
@@ -390,6 +403,7 @@ export class VillaGame extends BaseGame {
   private terminalSnapshot(): VillaTerminalSnapshot {
     return { home: this.state.home, zh: this.isZhLang(), dark: this.isDarkTheme(), version: VILLA_VERSION,
       aimAssist: this.state.snooker.aimAssist, fireplace: this.state.fireplace, aquarium: this.state.aquariumOn,
+      sound: this.audio.enabled,
       petsSheltered: this.state.pets.pets.filter(pet => pet.sheltered).length, petCount: this.state.pets.pets.length,
       vehicles: (['car', 'pickup', 'suv'] as const).map(id => ({ id, name: id === 'car' ? 'Sedan' : id === 'pickup' ? 'Pickup' : 'SUV',
         zh: id === 'car' ? '轿车' : id === 'pickup' ? '皮卡' : 'SUV',
@@ -443,8 +457,9 @@ export class VillaGame extends BaseGame {
   update(dt: number) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.05, dt)) : 0;
     this.time += dt;
+    this.audioEngine = null;
     advanceVillaHome(this.state.home, dt); this.state.evening = this.state.home.darkness > .2;
-    advanceVillaTea(this.state.tea, dt);
+    advanceVillaTea(this.state.tea, dt); advanceVillaBathDoors(this.state.bathDoors, dt);
     const wardrobeBefore = Object.fromEntries(Object.entries(this.state.wardrobes.wardrobes).map(([id, wardrobe]) => [id, wardrobe.progress]));
     const wardrobeChanged = advanceVillaWardrobes(this.state.wardrobes, dt);
     advanceVillaOutdoor(this.state.outdoor, dt, this.state.relaxSeatId === 'swing');
@@ -487,9 +502,10 @@ export class VillaGame extends BaseGame {
     idleVillaElevator(lift, dt, !this.state.seated && villaElevatorCabinContains(ground, lift), obstruction);
     const wasRiding = lift.riding;
     advanceVillaElevator(lift, dt, obstruction);
+    if (!wasRiding && lift.riding) this.audio.elevatorMove();
     if (wasRiding) {
       this.position.y = lift.y; this.eyeY = this.position.y;
-      if (!lift.riding) { this.clearInput(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
+      if (!lift.riding) { this.clearInput(); this.audio.elevatorArrive(); this.message(this.isZhLang() ? '已到达，电梯门已打开。' : 'Arrived. The doors are open.'); }
     }
     this.scene?.updateActivities(this.time, this.state, this.groundPosition(), this.yaw);
     if (wardrobeChanged && !this.state.seated && this.scene && villaCollides(this.groundPosition(), this.scene.colliders, villaBodyHeight(this.motion))) {
@@ -519,11 +535,13 @@ export class VillaGame extends BaseGame {
         : { throttle: this.roadDoorProgress(id) === 0 && this.exitCarAt === Infinity ? forward : 0,
           steer: side, brake: brake || this.roadDoorOpen(id) || this.exitCarAt !== Infinity, handbrake };
       this.roadApi(id).advance(car, input, dt, this.roadObstacles(id));
+      this.audioEngine = { speed: car.speed, throttle: input.throttle };
       this.yaw += car.yaw - oldYaw;
       this.position = { ...this.roadAnchors(id).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'scooter') {
       const scooter = this.state.scooter, oldYaw = scooter.yaw;
       advanceVillaScooter(scooter, { throttle: forward, steer: side, brake, handbrake }, dt, this.scene?.scooterObstacles ?? []);
+      this.audioEngine = { speed: scooter.speed, throttle: forward };
       this.yaw += scooter.yaw - oldYaw; this.position = { ...villaScooterAnchors(scooter).seat }; this.eyeY = this.position.y;
     } else if (this.state.seated === 'racing' && enabled && this.state.screenSource === 'pc') {
       advanceVillaRace(this.state.race, { throttle: forward, steer: side, brake: brake || handbrake }, dt);
@@ -547,6 +565,9 @@ export class VillaGame extends BaseGame {
         const next = this.scene && (dx || dz) ? moveVillaPlayer(base, dx, dz, this.scene.colliders,
           (x, z, y) => this.supportAt(x, z, y, height), height) : base;
         this.position = { ...next, y: next.y + this.motion.offset };
+        const running = this.keys.has('shift') && !this.motion.crouched;
+        this.stepDistance += Math.hypot(dx, dz);
+        if (this.stepDistance > (running ? 1.15 : 0.82)) { this.stepDistance = 0; this.audio.footstep(running); }
       } else this.position.y = base.y + this.motion.offset;
       if (this.motion.offset > 0 || this.motion.velocity) this.eyeY = this.position.y;
       else this.eyeY += (this.position.y - this.eyeY) * Math.min(1, dt * 18);
@@ -571,6 +592,15 @@ export class VillaGame extends BaseGame {
       { raining: this.state.home.weather === 'rain' || this.state.home.rain > .18 });
     this.scene?.updatePets(this.time, this.state.pets);
     this.promptAlpha += ((this.hotspot() && !this.state.seated && !this.state.snookerActive ? 1 : 0) - this.promptAlpha) * Math.min(1, dt * 10);
+    const listener = this.groundPosition();
+    this.audio.update({
+      roomId: villaRoomAt(listener).id,
+      poolDistance: Math.hypot(listener.x - (POOL.minX + POOL.maxX) / 2, listener.z - (POOL.minZ + POOL.maxZ) / 2),
+      fireDistance: Math.hypot(listener.x + 10, listener.z - 0.95),
+      fireplace: this.state.fireplace,
+      rain: this.state.home.rain,
+      engine: this.audioEngine,
+    });
     this.publishState();
   }
 
@@ -813,6 +843,21 @@ export class VillaGame extends BaseGame {
     if (id === 'elevator-close') { this.controlElevatorDoor(false); return; }
     if (id.startsWith('elevator-floor-')) { this.selectElevatorFloor(Number(id.slice(15))); return; }
     if (id.startsWith('elevator-')) { this.selectElevatorFloor(Number(id.slice(9))); return; }
+    if (id === 'bath-door-west' || id === 'bath-door-east') {
+      const which = id === 'bath-door-west' ? 'west' : 'east';
+      toggleVillaBathDoor(this.state.bathDoors, which);
+      this.audio.lightClick();
+      const open = this.state.bathDoors[which];
+      this.message(this.isZhLang() ? (open ? '浴室门已打开。' : '浴室门已关好。') : open ? 'The bath door is open.' : 'The bath door is closed.');
+      this.publishState(); return;
+    }
+    if (id === 'grill-west' || id === 'grill-centre' || id === 'grill-east') {
+      const index = id === 'grill-west' ? 0 : id === 'grill-centre' ? 1 : 2;
+      this.state.grillLids[index] = !this.state.grillLids[index];
+      this.audio.uiSelect();
+      this.message(this.isZhLang() ? (this.state.grillLids[index] ? '烤炉盖已打开。' : '烤炉盖已盖上。') : this.state.grillLids[index] ? 'The grill lid is open.' : 'The grill lid is closed.');
+      this.publishState(); return;
+    }
     switch (id) {
       case 'terminal': this.setTerminal(!this.terminal?.visible); break;
       case 'map':
@@ -849,7 +894,7 @@ export class VillaGame extends BaseGame {
           this.message(this.isZhLang() ? '上方空间不足，暂时不能站起。' : 'Not enough headroom to stand.');
         break;
       case 'jump': if (!this.state.seated && !this.state.snookerActive && !this.state.elevator.riding && !this.transition && this.enterCarAt === Infinity) jumpVillaMotion(this.motion); break;
-      case 'shoot': if (this.state.snookerActive && !this.transition) shootVillaSnooker(this.state.snooker); break;
+      case 'shoot': if (this.state.snookerActive && !this.transition) { shootVillaSnooker(this.state.snooker); this.audio.snookerHit(this.state.snooker.power); } break;
       case 'reset-activity':
         this.clearInput();
         if (this.state.snookerActive) this.state.snooker = createVillaSnooker();
@@ -1238,6 +1283,20 @@ export class VillaGame extends BaseGame {
       case 'faucet':
         this.state.faucetOn = !this.state.faucetOn;
         this.message(zh ? (this.state.faucetOn ? '水龙头打开了，清水流入水槽。' : '水龙头关好了。') : (this.state.faucetOn ? 'Fresh water is flowing into the sink.' : 'The tap is off.')); break;
+      case 'bath-door-west': case 'bath-door-east': {
+        const which = hotspot.id === 'bath-door-west' ? 'west' : 'east';
+        toggleVillaBathDoor(this.state.bathDoors, which); this.audio.lightClick();
+        const open = this.state.bathDoors[which];
+        this.message(zh ? (open ? '浴室门已打开。' : '浴室门已关好。') : open ? 'The bath door is open.' : 'The bath door is closed.');
+        this.publishState(); break;
+      }
+      case 'grill-west': case 'grill-centre': case 'grill-east': {
+        const index = hotspot.id === 'grill-west' ? 0 : hotspot.id === 'grill-centre' ? 1 : 2;
+        this.state.grillLids[index] = !this.state.grillLids[index];
+        this.audio.uiSelect();
+        this.message(zh ? (this.state.grillLids[index] ? '烤炉盖已打开。' : '烤炉盖已盖上。') : this.state.grillLids[index] ? 'The grill lid is open.' : 'The grill lid is closed.');
+        this.publishState(); break;
+      }
       case 'snooker': {
         const from = this.view(); this.state.snookerActive = true; this.motion = createVillaMotion();
         this.transition = { from, at: this.time }; this.clearInput();
@@ -1720,7 +1779,7 @@ export class VillaGame extends BaseGame {
   destroy() {
     this.terminal?.destroy(); this.terminal = null;
     this.useButton?.destroy();
-    super.destroy(); this.scene?.dispose(); this.scene = null; this.unlock();
+    super.destroy(); this.audio.close(); this.scene?.dispose(); this.scene = null; this.unlock();
     for (const key of Object.keys(this.canvas.dataset)) if (key.startsWith('villa')) delete this.canvas.dataset[key];
     if (this.oldAriaLabel == null) this.canvas.removeAttribute('aria-label'); else this.canvas.setAttribute('aria-label', this.oldAriaLabel);
   }

@@ -32,7 +32,8 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
     const stop = () => { key('w', false); key('d', false); key('a', false); key(' '); tick(24); key(' ', false); };
     // Enter through the middle of the sedan's own bay door, then step across to
     // the driver's standing exit; the exit anchor sits just outside the door span.
-    key('h'); walk(0, 1.4); walk(carExit.x, 1.4); walk(carExit.x, 1.5); walk(carExit.x, carExit.z);
+    // The snooker/lounge wall came down for z<1, so the crossing sits in that band.
+    key('h'); walk(0, 0.9); walk(carExit.x, 0.9); walk(carExit.x, 1.5); walk(carExit.x, carExit.z);
     key('e'); // One action opens, automatically boards, then closes the door.
     // Wait for the seat rather than a fixed number of frames: a blocked door
     // swing legitimately inserts a step-back before it opens.

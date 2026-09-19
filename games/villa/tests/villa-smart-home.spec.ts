@@ -162,6 +162,8 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
     await expect(page.locator('[data-villa-aim-guide]')).toHaveAttribute('aria-pressed', 'true'); await page.locator('[data-villa-aim-guide]').click();
     expect(JSON.parse((await canvas(page).getAttribute('data-villa-snooker'))!).aimAssist).toBe(false);
     // Focus stays within the native dialog and Escape returns focus without pointer capture.
+    await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-sound]')).toBeFocused();
+    await expect(page.locator('[data-villa-sound]')).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-fallback-action="villa-home"]')).toBeFocused();
     await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-fallback-action="villa-immersive"]')).toBeFocused();
     await page.keyboard.press('Tab'); await expect(page.locator('[data-villa-terminal-close]')).toBeFocused();

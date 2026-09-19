@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   createVillaGarden, VILLA_FLOWER_SPECIES, VILLA_FRUIT_SPECIES, VILLA_GARDEN_TREES,
-  VILLA_ROOF_PLANTERS, VILLA_VEGETABLE_BEDS, VILLA_VEGETABLE_SPECIES,
+  VILLA_ROOF_PLANTERS, VILLA_ROOF_POTS, VILLA_VEGETABLE_BEDS, VILLA_VEGETABLE_SPECIES,
 } from '../src/villaGarden.js';
 import { STAIR_HOLE, VILLA_SPAWN, villaCollides, type VillaCollider } from '../src/villaWorld.js';
 import { VILLA_EAST_WALL, VILLA_NORTH_WALL, VILLA_SOUTH_WALL, VILLA_WEST_WALL } from '../src/villaEstateLayout';
@@ -172,7 +172,8 @@ describe('authored villa garden', () => {
       expect(markers[i].position.y).toBe(7.2);
       const c = roofColliders[i];
       expect(c.minY).toBe(7.2); expect(c.maxY).toBeCloseTo(7.63);
-      expect(c.minX).toBeGreaterThan(-11.9); expect(c.maxX).toBeLessThan(15.9);
+      // The planter beds now hug the outer parapets (expanded outward).
+      expect(c.minX).toBeGreaterThan(-21.5); expect(c.maxX).toBeLessThan(24.5);
       expect(c.minZ).toBeGreaterThan(-8.9); expect(c.maxZ).toBeLessThan(8.9);
       expect(Math.abs(p.x) > 10 || Math.abs(p.z) > 7.7).toBe(true);
       keepClear.forEach(r => expect(overlaps(c, r, 0.23)).toBe(false));
@@ -209,7 +210,7 @@ describe('authored villa garden', () => {
     expect(parent.children).toHaveLength(1); expect(root.name).toBe('Villa garden');
     expect(meshes.length).toBeGreaterThan(15); expect(meshes.length).toBeLessThanOrEqual(28);
     expect(new Set(meshes.map(m => m.material)).size).toBe(meshes.length);
-    expect(root.children.filter(n => !(n instanceof THREE.Mesh))).toHaveLength(VILLA_GARDEN_TREES.length + VILLA_ROOF_PLANTERS.length + VILLA_VEGETABLE_BEDS.length);
+    expect(root.children.filter(n => !(n instanceof THREE.Mesh))).toHaveLength(VILLA_GARDEN_TREES.length + VILLA_ROOF_PLANTERS.length + VILLA_ROOF_POTS.length + VILLA_VEGETABLE_BEDS.length);
     let vertices = 0;
     for (const mesh of meshes) {
       const p = mesh.geometry.getAttribute('position'); vertices += p.count;

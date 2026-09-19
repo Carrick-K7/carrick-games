@@ -125,9 +125,11 @@ describe('Villa doors and furniture-free room reachability', () => {
     { name: 'garage rolling door', from: [VILLA_GARAGE_BAYS[0].x, 0, 3.5], to: [VILLA_GARAGE_BAYS[0].x, 0] },
     { name: 'gaming room', from: [4.2, 0, 1.5], to: [4.2, 4.5] },
     { name: 'primary bedroom', from: [-0.5, STOREY, 2.6], to: [-3.5, 2.6] },
-    { name: 'guest bedroom', from: [-1.5, STOREY, -3.6], to: [-3.5, -3.6] },
-    { name: 'family room', from: [4.2, STOREY, 1.5], to: [4.2, 4.5] },
-    { name: 'bathroom', from: [9.5, STOREY, 2], to: [9.5, -0.5] },
+    { name: 'guest bedroom', from: [-3.5, STOREY, -3.6], to: [-5.5, -3.6] },
+    // The family-room walls are demolished, so its floor is open hall now.
+    { name: 'open family floor', from: [4.2, STOREY, 1.5], to: [4.2, 4.5] },
+    { name: 'bathroom west door', from: [7.2, STOREY, -4.8], to: [9.5, -4.8] },
+    { name: 'bathroom east door', from: [17.8, STOREY, -2], to: [15.5, -2] },
     { name: 'bedroom balcony', from: [-7.3, STOREY, 7.5], to: [-7.3, 10] },
   ];
   it.each(doors)('$name is passable in both directions', ({ from, to }) => {
@@ -143,7 +145,7 @@ describe('Villa doors and furniture-free room reachability', () => {
       // The studio opens off the west aisle; the open stairwell blocks a straight line.
       { route: [[-1.4, 6], [-1.4, -12], [-5, -12]], room: 'utility' },
       // The study opens off the kitchen through its own cased opening.
-      { route: [[0, 6], [-5, 6], [-18, 6], [-18, -13]], room: 'studio' },
+      { route: [[0, 6], [-5, 6], [-18, 6], [-18, -13]], room: 'tea-room' },
       { route: [[0, 1.3], [4.2, 1.3], [4.2, 5]], room: 'gaming' },
       { route: [[0, 1.3], [8, 1.3], [8, 0.5], [VILLA_GARAGE_BAYS[2].x, 0.5]], room: 'garage' },
     ];
@@ -154,10 +156,14 @@ describe('Villa doors and furniture-free room reachability', () => {
   it('connects upstairs stair exit to both bedrooms, bathroom, family room and balcony', () => {
     const destinations: { route: Waypoint[]; room: string }[] = [
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-5, 2.6]], room: 'master' },
-      { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -3.6], [-5, -3.6]], room: 'guest' },
+      { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -15], [-8, -15]], room: 'guest' },
+      { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -3.65], [-8, -3.65]], room: 'ensuite' },
+      { route: [[2.06, 1.3], [-1.5, 1.3], [-1.5, -3.65], [-8, -3.65], [-8, -4.9], [-18, -4.9]], room: 'wardrobe' },
       // Clear the bathroom wall's 0.11m half-thickness plus player radius before turning east.
-      { route: [[2.06, 1.3], [6.4, 1.6], [9.5, 1.6], [9.5, -3]], room: 'bath' },
-      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5]], room: 'family' },
+      { route: [[2.06, 1.3], [6.4, 1.6], [6.4, -4.8], [7.2, -4.8], [9.5, -4.8]], room: 'bath' },
+      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5]], room: 'gallery' },
+      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5], [20, 5]], room: 'reading-hall' },
+      { route: [[2.06, 1.3], [4.2, 1.3], [4.2, 5], [21.5, 5], [21.5, -11]], room: 'massage' },
       { route: [[2.06, 1.3], [0, 1.3], [0, 2.6], [-7.3, 2.6], [-7.3, 10]], room: 'balcony' },
     ];
     for (const { route, room } of destinations) {
@@ -170,9 +176,9 @@ describe('Villa collision, support and safe boundaries', () => {
   it('keeps every room a room: one study per storey and no 22 m halls', () => {
     for (const floor of [0, STOREY]) {
       const rooms = VILLA_ROOMS.filter(room => room.floor === (floor ? 1 : 0) && room.id !== 'gallery' && room.id !== 'balcony');
-      // The ground-floor study is 'studio' and the upstairs one 'study'.
+      // The ground-floor study became the tea room; only the upstairs study keeps 书房.
       const studies = rooms.filter(room => room.zh.includes('书房'));
-      expect(studies, `floor ${floor ? 1 : 0} studies`).toHaveLength(1);
+      expect(studies, `floor ${floor ? 1 : 0} studies`).toHaveLength(floor ? 1 : 0);
       for (const room of rooms) {
         expect(Math.min(room.maxX - room.minX, room.maxZ - room.minZ), `${room.id} shorter side`).toBeGreaterThan(2.4);
         expect(Math.max(room.maxX - room.minX, room.maxZ - room.minZ), `${room.id} longer side`).toBeLessThanOrEqual(23);

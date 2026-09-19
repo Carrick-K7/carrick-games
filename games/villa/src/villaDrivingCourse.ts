@@ -46,7 +46,9 @@ const VILLA_FRONT_LINK: readonly RoadPoint[] = [
   { x: 13, z: 16.2 }, { x: 19, z: 21.2 }, { x: 25, z: 27.4 }];
 /** A second descent down the east side, so the garage apron is not a dead end. */
 const VILLA_EAST_LINK: readonly RoadPoint[] = [
-  { x: 40, z: 3 }, { x: 41.5, z: 14 }, { x: 39.5, z: 28 }, { x: 35, z: 45 }, { x: 31.4, z: 60 }];
+  // The north end now starts on the apron right at the SUV's bay-4 door instead
+  // of 7 m west of it: the old x=40 line left no road outside bay 4 at all.
+  { x: 46.9, z: 4 }, { x: 44.5, z: 13 }, { x: 40.5, z: 26 }, { x: 35, z: 45 }, { x: 31.4, z: 60 }];
 /** Short spur from the front link to the entrance forecourt. */
 const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
 export const VILLA_ESTATE_ROAD_PATHS: readonly (readonly RoadPoint[])[] = [
@@ -95,7 +97,7 @@ export function createVillaDrivingCourse(parent: THREE.Object3D): { colliders: V
   // Four-bay apron in front of the garage, stopping north of the preserved lemon
   // trunk now that the garage's west end has moved east with the house.
   ribbon([{ x: 39.6, z: 2 }, { x: 39.6, z: 3.5 }, { x: 39.6, z: 5 }], 21.2, .048, asphalt);
-  const apron = [{ x: 40, z: 4.5 }, { x: 41, z: 13 }, { x: 39.5, z: 22 }, { x: 36, z: 27 }];
+  const apron = [{ x: 46.5, z: 4.5 }, { x: 44, z: 13 }, { x: 41, z: 22 }, { x: 38, z: 30 }];
   ribbon(apron, 7, .024, shoulder); ribbon(apron, 6.3, .049, asphalt);
   // Paint stays on the old oval's quiet outer edge, interrupted at all merges.
   for (const side of [-1, 1]) for (let i = 0; i < VILLA_SCENIC_ROAD_SAMPLES.length - 1; i++) {

@@ -147,6 +147,9 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
     for (const [index, path] of VILLA_ESTATE_ROAD_PATHS.entries()) {
       for (const end of [path[0]!, path[path.length - 1]!]) {
         if (path === VILLA_GARAGE_DRIVE && end.z <= 3) continue;
+        // The east-link's north end now terminates on the four-bay apron at the
+        // SUV's door, exactly like the garage drive: both are apron-fed.
+        if (names[index] === 'east-link' && end.z <= 4) continue;
         let nearest = Infinity;
         VILLA_ESTATE_ROAD_PATHS.forEach((other, j) => {
           if (j === index) return;

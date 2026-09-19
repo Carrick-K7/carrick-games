@@ -49,7 +49,7 @@ export function villaTreadLayers(top: number) {
   return { bodyBottom: top - STAIR_TREAD_THICKNESS, bodyTop: top - STAIR_FINISH_THICKNESS, finishBottom: top - STAIR_FINISH_THICKNESS, finishTop: top };
 }
 export const VILLA_ROOMS: VillaRoom[] = [
-  { id: 'studio', name: 'Study', zh: '书房', floor: 0, minX: WEST.inner, maxX: -13, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'tea-room', name: 'Tea room', zh: '茶室', floor: 0, minX: WEST.inner, maxX: -13, minZ: NORTH.inner, maxZ: -9 },
   { id: 'utility', name: 'Laundry & utility', zh: '洗衣 · 杂物间', floor: 0, minX: -13, maxX: -2, minZ: NORTH.inner, maxZ: -9 },
   { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房 · 餐厅', floor: 0, minX: WEST.inner, maxX: -2, minZ: -9, maxZ: 0 },
   { id: 'living', name: 'Living room', zh: '客厅 · 壁炉与茶', floor: 0, minX: WEST.inner, maxX: -2, minZ: 0, maxZ: SOUTH.inner },
@@ -61,13 +61,14 @@ export const VILLA_ROOMS: VillaRoom[] = [
   { id: 'garage', name: 'Garage & workshop', zh: '车库 · 工具间', floor: 0, ...VILLA_GARAGE_EXTENT },
   { id: 'study', name: 'Study & library', zh: '书房', floor: 1, minX: 8, maxX: 17, minZ: NORTH.inner, maxZ: -9 },
   { id: 'bath', name: 'Bath & laundry', zh: '浴室 · 洗衣间', floor: 1, minX: 8, maxX: 17, minZ: -9, maxZ: 1 },
-  { id: 'family', name: 'Family room', zh: '家庭厅', floor: 1, minX: 2, maxX: 17, minZ: 3, maxZ: SOUTH.inner },
-  { id: 'playroom', name: 'Play & hobby room', zh: '活动室', floor: 1, minX: 17, maxX: EAST.inner, minZ: NORTH.inner, maxZ: -9 },
-  { id: 'east-suite', name: 'Guest suite', zh: '东侧客房', floor: 1, minX: 17, maxX: EAST.inner, minZ: -9, maxZ: SOUTH.inner },
-  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: WEST.inner, maxX: -2, minZ: 0, maxZ: SOUTH.inner },
-  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: WEST.inner, maxX: -2, minZ: -9, maxZ: 0 },
-  { id: 'wardrobe', name: 'Dressing room', zh: '衣帽间', floor: 1, minX: WEST.inner, maxX: -13, minZ: NORTH.inner, maxZ: -9 },
-  { id: 'ensuite', name: 'Ensuite bath', zh: '主卫', floor: 1, minX: -13, maxX: -2, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'massage', name: 'Massage room', zh: '按摩室', floor: 1, minX: 17, maxX: EAST.inner, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'reading-hall', name: 'Reading hall', zh: '阅读厅', floor: 1, minX: 17, maxX: EAST.inner, minZ: -9, maxZ: SOUTH.inner },
+  { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, minX: WEST.inner, maxX: -4, minZ: 0, maxZ: SOUTH.inner },
+  // After the swap the guest bedroom takes the whole north strip and the
+  // dressing room + ensuite share the band between it and the master suite.
+  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, minX: WEST.inner, maxX: -4, minZ: NORTH.inner, maxZ: -9 },
+  { id: 'wardrobe', name: 'Dressing room', zh: '衣帽间', floor: 1, minX: WEST.inner, maxX: -13, minZ: -9, maxZ: 0 },
+  { id: 'ensuite', name: 'Ensuite bath', zh: '主卫', floor: 1, minX: -13, maxX: -4, minZ: -9, maxZ: 0 },
   { id: 'balcony', name: 'Bedroom balcony', zh: '卧室阳台', floor: 1, minX: -11.5, maxX: 1.5, minZ: 9, maxZ: 11.5 },
   { id: 'terrace', name: 'Roof garden', zh: '天台 · 空中花园', floor: 2, minX: WEST.inner, maxX: EAST.inner, minZ: NORTH.inner, maxZ: SOUTH.inner },
 ];
@@ -140,13 +141,16 @@ wall('z', -2, NORTH.inner, -9, 0, [{ from: -16, to: -10.5, door: true }]);
 // The west north band is 22 m deep; a single room that long is not a study.
 // A divider makes a real study and a utility room, each with its own door.
 wall('z', -13, NORTH.inner, -9, 0, [{ from: -15.5, to: -12.5, door: true }]);
-// East rooms are divided from the hall by one full-depth wall with a wide arch.
-wall('z', 17, NORTH.inner, SOUTH.inner, 0, [{ from: -3.5, to: 2.5, door: true }, { from: 4.5, to: 7.5, door: true }]);
+// East rooms: the snooker band now flows into the lounge without a wall, so the
+// x=17 line only keeps the cinema's west wall and the gaming-room divider.
+wall('z', 17, NORTH.inner, -9, 0);
+// The retained segment starts where the gaming room starts, so the old arch's
+// reach into the hall strip survives as open plan.
+wall('z', 17, 3, SOUTH.inner, 0, [{ from: 4.5, to: 7.5, door: true }]);
 wall('x', 3, 2, 17, 0, [{ from: 3, to: 5.5, door: true }]);
 wall('z', 2, 3, 9, 0);
-// The snooker lounge keeps a real north wall to hang its cue rack on, and the
-// band behind it becomes the ground floor's flexible room.
-wall('x', -9, 5.65, 17, 0, [{ from: 12, to: 15, door: true }]);
+// The gym/snooker divider is gone: gym, snooker lounge and east lounge read as
+// one continuous east band on the ground floor (item: open plan).
 // The east wing was a 27 m run; the same z=-9 line divides it on both storeys.
 wall('x', -9, 17, EAST.inner, 0, [{ from: 20, to: 23, door: true }]);
 // Two private bedrooms, a bathroom and a library off the upstairs gallery.
@@ -161,21 +165,26 @@ wall('x', NORTH.inner, WEST.inner, EAST.inner, STOREY, [
   { from: 10, to: 15.5 }, { from: 20, to: 27 }]);
 wall('z', WEST.inner, NORTH.inner, SOUTH.inner, STOREY, [{ from: -17, to: -10 }, { from: -8, to: -1 }, { from: 1, to: 8 }]);
 wall('z', EAST.inner, NORTH.inner, SOUTH.inner, STOREY, [{ from: -8, to: -2 }, { from: 4, to: 8 }, { from: -16, to: -11.5 }]);
-// Gallery wall: one door per west room, and a wide opening onto the stair hall.
-wall('z', -2, NORTH.inner, SOUTH.inner, STOREY, [
+// Gallery wall moved west to x=-4 (item: more breathing room by the stairs):
+// one door per west room, and a wide opening onto the stair hall.
+wall('z', -4, NORTH.inner, SOUTH.inner, STOREY, [
   { from: -16.5, to: -13.5, door: true }, { from: -4.8, to: -2.5, door: true }, { from: 1.5, to: 3.8, door: true }]);
-wall('x', 0, WEST.inner, -2, STOREY);
-wall('x', -9, WEST.inner, -2, STOREY, [{ from: -19, to: -15, door: true }]);
-// Same 22 m band upstairs: a dressing room and an ensuite, not one long room.
-wall('z', -13, NORTH.inner, -9, STOREY, [{ from: -15.5, to: -12.5, door: true }]);
+wall('x', 0, WEST.inner, -4, STOREY);
+// After the room swap this z=-9 wall joins the guest bedroom (north) with the
+// dressing room (south-west): guests reach the wardrobe directly.
+wall('x', -9, WEST.inner, -4, STOREY, [{ from: -19, to: -15, door: true }]);
+// Same 22 m band upstairs, now split between the dressing room and the ensuite.
+wall('z', -13, -9, 0, STOREY, [{ from: -5.5, to: -4.3, door: true }]);
 wall('z', 17, NORTH.inner, SOUTH.inner, STOREY, [{ from: -4, to: 0, door: true }, { from: 4, to: 7.5, door: true }]);
-wall('x', 3, 2, 17, STOREY, [{ from: 3, to: 5.5, door: true }]);
-wall('z', 2, 3, 9, STOREY);
+// The family room's west and north walls are demolished: its floor is open hall
+// now and its furniture moved to the reading hall.
 // Wet rooms sit behind the lift lobby; the study takes the new north band.
+// Bath keeps exactly two closable frosted-glass doors (west + east); the north
+// and south openings are walled up.
 wall('z', 8, NORTH.inner, 1, STOREY, [{ from: -6.2, to: -3.4, door: true }, { from: -15, to: -12, door: true }]);
-wall('x', -9, 8, 17, STOREY, [{ from: 11, to: 14, door: true }]);
+wall('x', -9, 8, 17, STOREY);
 wall('x', -9, 17, EAST.inner, STOREY, [{ from: 20, to: 23, door: true }]);
-wall('x', 1, 8, 17, STOREY, [{ from: 9.2, to: 11.3, door: true }]);
+wall('x', 1, 8, 17, STOREY);
 // Four south-facing bays: sedan, pickup, and two genuinely empty spare spaces.
 const garage = VILLA_GARAGE_EXTENT;
 wall('z', garage.maxX, garage.minZ, garage.maxZ, 0, [{ from: -6.5, to: -3 }]);
@@ -194,10 +203,10 @@ for (const y of [STOREY, STOREY * 2]) {
   // while STAIR_HOLE.minX is -0.85 left a 15 cm slit down the full depth of the
   // upper storeys, which read as a seam in the floor.
   add(-12.6, cy, -4.6, 23.6, 0.2, 27.6, finish, false);
-  add(1.15, cy, -12.7, 3.9, 0.2, 11.4, 'stone', false);
+  add(1.15, cy, -12.7, 3.9, 0.2, 11.4, finish, false);
   add(1.15, cy, 4.85, 3.9, 0.2, 8.7, finish, false);
   add(3.275, cy, -4.6, 0.35, 0.2, 27.6, finish, false);
-  add(4.55, cy, -12.7, 2.2, 0.2, 11.4, 'stone', false);
+  add(4.55, cy, -12.7, 2.2, 0.2, 11.4, finish, false);
   add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false);
   add(17.025, cy, -4.6, 22.75, 0.2, 27.6, finish, false);
 }
@@ -219,6 +228,10 @@ add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false);
 wall('z', -1.15, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
 wall('z', 3.27, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
 wall('x', -7.35, -1.15, 3.27, 7.2, [{ from: -0.8, to: 2.92 }]);
+// The stair hole's NON-walkable half (over the descending flight) keeps its open
+// south edge guarded by a frosted glass balustrade: see through, never step through.
+add(0.165, 7.75, 0.5, 2.07, 1.06, 0.05, 'glass', true);
+add(0.165, 8.315, 0.5, 2.11, 0.05, 0.08, 'bronze', true);
 add(1.06, 10.6, -3.05, 4.82, 0.2, 9.1, 'roof', false);
 
 /** Rail collision matches the visible handrails and glass guards. */
@@ -359,7 +372,7 @@ export function moveVillaPlayer(position: VillaPosition, dx: number, dz: number,
   return p;
 }
 
-export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'elevator-open' | 'elevator-close' | `elevator-floor-${number}` | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'suv' | 'swing' | 'camping-chair' | 'wardrobe-master' | 'fridge-freezer' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
+export interface VillaHotspot { id: 'fireplace' | 'aquarium' | 'gaming' | 'tea' | 'roof' | 'car' | 'racing' | 'scooter' | 'media' | 'figures' | 'replicas' | 'elevator' | 'elevator-open' | 'elevator-close' | `elevator-floor-${number}` | 'snooker' | 'faucet' | 'tea-bar' | 'pickup' | 'suv' | 'swing' | 'camping-chair' | 'wardrobe-master' | 'fridge-freezer' | 'bath-door-west' | 'bath-door-east' | 'grill-west' | 'grill-centre' | 'grill-east' | `sofa-${string}` | `lounger-${string}` | `chair-${string}` | `stool-${string}` | `bed-${string}` | `pet-${VillaPetId}`; x: number; y: number; z: number; name: string; zh: string; radius?: number }
 export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   ...VILLA_ELEVATOR.floors.map(y => ({ id: 'elevator' as const, x: VILLA_ELEVATOR.centerX, y, z: VILLA_ELEVATOR.frontZ + 0.72, radius: 1.05, name: 'Call the elevator', zh: '呼叫电梯' })),
   { id: 'fireplace', x: -10, y: 0, z: 1.7, name: 'Light / extinguish the fireplace', zh: '点燃 / 熄灭壁炉' },
@@ -381,6 +394,11 @@ export const VILLA_HOTSPOTS: readonly VillaHotspot[] = [
   { id: 'replicas', x: 10.35, y: 0, z: 4.1, radius: 1.15, name: 'Replica collection · display lights', zh: '仿真武器收藏 · 开关柜灯' },
   { id: 'tea', x: -8, y: 0, z: 3.6, name: 'A moment for warm tea', zh: '喝一杯热茶' },
   { id: 'roof', x: -7, y: 7.2, z: 3.4, name: 'Enjoy the rooftop evening', zh: '享受天台晚风' },
+  { id: 'bath-door-west', x: 8, y: 3.6, z: -4.8, radius: 1.35, name: 'Open / close the west bath door', zh: '开关浴室西门' },
+  { id: 'bath-door-east', x: 17, y: 3.6, z: -2, radius: 1.35, name: 'Open / close the east bath door', zh: '开关浴室东门' },
+  { id: 'grill-west', x: 10.4, y: 7.2, z: -6.4, radius: 1.5, name: 'Open / close the west grill', zh: '开合西侧烤炉' },
+  { id: 'grill-centre', x: 13.4, y: 7.2, z: -6.4, radius: 1.5, name: 'Open / close the centre grill', zh: '开合中间烤炉' },
+  { id: 'grill-east', x: 11.9, y: 7.2, z: -9.2, radius: 1.5, name: 'Open / close the north grill', zh: '开合北侧烤炉' },
 ];
 export function nearestVillaHotspot(p: VillaPosition, car?: { door: VillaPosition; driverSide: boolean }, scooter?: VillaPosition, pickup?: { door: VillaPosition; driverSide: boolean }, suv?: { door: VillaPosition; driverSide: boolean }): VillaHotspot | null {
   let nearest: VillaHotspot | null = null;

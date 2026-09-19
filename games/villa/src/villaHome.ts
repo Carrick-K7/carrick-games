@@ -12,7 +12,7 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   // and the four new rooms each get their own switchable light.
   { id: 'living', name: 'Living room', zh: '客厅', floor: 0, fixtures: [{ x: -18, y: 3.12, z: 4.4 }, { x: -7.7, y: 3.12, z: 4.1 }] },
   { id: 'kitchen', name: 'Kitchen & dining', zh: '厨房餐厅', floor: 0, fixtures: [{ x: -18, y: 3.1, z: -4.5 }, { x: -7.3, y: 3.1, z: -4.3 }] },
-  { id: 'studio', name: 'Study', zh: '书房', floor: 0, fixtures: [{ x: -18.6, y: 3.1, z: -13.6 }] },
+  { id: 'tea-room', name: 'Tea room', zh: '茶室', floor: 0, fixtures: [{ x: -18.6, y: 3.1, z: -13.6 }] },
   { id: 'utility', name: 'Laundry & utility', zh: '洗衣杂物间', floor: 0, fixtures: [{ x: -7.5, y: 3.1, z: -13.6 }] },
   { id: 'gaming', name: 'Gaming room', zh: '电竞房', floor: 0, fixtures: [{ x: 7.2, y: 3.1, z: 6.1 }, { x: 13.4, y: 3.1, z: 6.1 }] },
   { id: 'snooker', name: 'Snooker lounge', zh: '斯诺克厅', floor: 0, fixtures: [{ x: 9.2, y: 3.12, z: -3.8 }, { x: 13.4, y: 3.12, z: -3.8 }] },
@@ -22,17 +22,18 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   { id: 'garage', name: 'Garage & workshop', zh: '车库工坊', floor: 0, fixtures: [{ x: 32.4, y: 3.24, z: -2.8 }, { x: 40, y: 3.24, z: -2.8 }, { x: 47, y: 3.24, z: -2.8 }] },
   { id: 'gallery-0', name: 'Ground floor hall', zh: '一楼走廊', floor: 0, fixtures: [{ x: 0, y: 3.14, z: 5.8 }, { x: 0, y: 3.14, z: -8.0 }, { x: 0, y: 3.14, z: -15.5 }] },
   { id: 'master', name: 'Primary bedroom', zh: '主卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: 4.4 }, { x: -7.4, y: 6.72, z: 4.4 }] },
-  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: -4.6 }, { x: -7.5, y: 6.72, z: -4.6 }] },
-  { id: 'wardrobe', name: 'Dressing room', zh: '衣帽间', floor: 1, fixtures: [{ x: -18.6, y: 6.72, z: -13.6 }] },
-  { id: 'ensuite', name: 'Ensuite bath', zh: '主卫', floor: 1, fixtures: [{ x: -7.5, y: 6.72, z: -13.6 }] },
+  // Swapped west wing: the guest bedroom now owns the north strip, the dressing
+  // room and ensuite share the band south of it.
+  { id: 'guest', name: 'Guest bedroom', zh: '次卧', floor: 1, fixtures: [{ x: -16, y: 6.72, z: -13.6 }, { x: -7.5, y: 6.72, z: -13.6 }] },
+  { id: 'wardrobe', name: 'Dressing room', zh: '衣帽间', floor: 1, fixtures: [{ x: -18.6, y: 6.72, z: -4.5 }] },
+  { id: 'ensuite', name: 'Ensuite bath', zh: '主卫', floor: 1, fixtures: [{ x: -8.6, y: 6.72, z: -4.5 }] },
   { id: 'bath', name: 'Bathroom', zh: '浴室', floor: 1, fixtures: [{ x: 10, y: 6.72, z: -4.2 }, { x: 14.6, y: 6.72, z: -4.2 }] },
   { id: 'study', name: 'Study & library', zh: '书房', floor: 1, fixtures: [{ x: 12.5, y: 6.72, z: -13.6 }] },
-  { id: 'family', name: 'Family room', zh: '家庭厅', floor: 1, fixtures: [{ x: 7.1, y: 6.72, z: 6 }, { x: 13.4, y: 6.72, z: 6 }] },
-  { id: 'playroom', name: 'Play & hobby room', zh: '活动室', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -13.6 }] },
-  { id: 'east-suite', name: 'Guest suite', zh: '东侧客房', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -4.5 }, { x: 22.6, y: 6.72, z: 5 }] },
+  { id: 'massage', name: 'Massage room', zh: '按摩室', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -13.6 }] },
+  { id: 'reading-hall', name: 'Reading hall', zh: '阅读厅', floor: 1, fixtures: [{ x: 22.6, y: 6.72, z: -4.5 }, { x: 22.6, y: 6.72, z: 5 }, { x: 22.4, y: 6.72, z: -3 }] },
   { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }] },
   { id: 'gallery-2', name: 'Roof access', zh: '天台楼梯间', floor: 2, fixtures: [{ x: 1.06, y: 10.32, z: -2.4 }] },
-  { id: 'terrace', name: 'Roof light strips', zh: '天台灯带', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
+  { id: 'terrace', name: 'Roof terrace', zh: '天台', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
   { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }] },
 ];export interface VillaSecurityCamera {
   id: string; name: string; zh: string; position: VillaPosition; target: VillaPosition;

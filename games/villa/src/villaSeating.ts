@@ -43,10 +43,10 @@ export const VILLA_BEDS = [
     pillow: p(-8, 4.55, 6.75), pillowWidth: 1.15,
     rest: p(-8, 3.6, 6.65), eyeHeight: 1.12, pitch: 0.16,
     exits: [p(-6.05, 3.6, 5.3), p(-10, 3.6, 5.3), p(-8, 3.6, 3.1)] },
-  { id: 'bed-guest', origin: p(-8, 3.6, -5.5), width: 2.1, depth: 3.8, yaw: Math.PI,
-    pillow: p(-8, 4.55, -6.75), pillowWidth: 1.05,
-    rest: p(-8, 3.6, -6.65), eyeHeight: 1.12, pitch: 0.16,
-    exits: [p(-6.25, 3.6, -5.3), p(-9.8, 3.6, -5.3), p(-8, 3.6, -3.1)] },
+  { id: 'bed-guest', origin: p(-8, 3.6, -13.6), width: 2.1, depth: 3.8, yaw: Math.PI,
+    pillow: p(-8, 4.55, -14.85), pillowWidth: 1.05,
+    rest: p(-8, 3.6, -14.75), eyeHeight: 1.12, pitch: 0.16,
+    exits: [p(-6.25, 3.6, -13.3), p(-9.8, 3.6, -13.3), p(-8, 3.6, -11.2)] },
 ] as const;
 export function villaBedRestPose(id: string) {
   const bed = VILLA_BEDS.find(b => b.id === id);
@@ -56,9 +56,9 @@ export function villaBedRestPose(id: string) {
 /** All authored non-vehicle seats. The original seven IDs/order remain compatible. */
 export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
   sofa('sofa-living', -8, 0, 5.8, 4.2, 0, [p(-5.25, 0, 5.45), p(-6.1, 0, 4.6), p(-10.75, 0, 4.5)]),
-  sofa('sofa-master', -4, 3.6, 6, 1.25, -0.3, [p(-2.75, 3.6, 5.45), p(-3.05, 3.6, 4.8), p(-5.15, 3.6, 5.5)]),
-  sofa('sofa-library-west', 4.2, 3.6, 6.4, 1.4, 0.4, [p(3.35, 3.6, 5.25), p(3, 3.6, 6.3)]),
-  sofa('sofa-library-east', 6.9, 3.6, 6.9, 1.5, -0.4, [p(8.3, 3.6, 6.5), p(7.1, 3.6, 5.55)]),
+  sofa('sofa-master', -5.2, 3.6, 8, 1.25, 0, [p(-5.2, 3.6, 6.9), p(-6.4, 3.6, 8), p(-4.6, 3.6, 7)]),
+  sofa('sofa-library-west', 18.6, 3.6, -4.6, 1.4, -Math.PI / 2, [p(18.6, 3.6, -3.2), p(18.6, 3.6, -6.1), p(17.55, 3.6, -3.2)]),
+  sofa('sofa-library-east', 23.1, 3.6, -4.6, 1.5, Math.PI / 2, [p(23.1, 3.6, -3.3), p(23.1, 3.6, -6.1), p(24.3, 3.6, -4.6)]),
   sofa('sofa-roof', -7, 7.2, 5.5, 4.15, 0, [p(-4.25, 7.2, 5.1), p(-5.1, 7.2, 4.3), p(-9.75, 7.2, 4.3)]),
   // The loungers sit on the pool's south deck, so they are anchored to the pool
   // rectangle rather than to a remembered coordinate.
@@ -67,12 +67,15 @@ export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
     approach: p(x + (i ? 1.05 : -1.05), 0, 9.5), exits: [p(x + (i ? 1.05 : -1.05), 0, 9.5), p(x, 0, 10.85), p(x + (i ? -1.05 : 1.05), 0, 9.5)],
     yaw: 0, pitch: 0.08, eyeHeight: 0.94, freeLook: true })),
   // 1.1.0 east wing: the widened reading bay and roof lounge are real seats.
-  sofa('sofa-library-bay', 13.4, 3.6, 6.9, 1.3, 0.5, [p(13.85, 3.6, 8.05), p(14.85, 3.6, 7.05), p(12.35, 3.6, 8.15)]),
+  sofa('sofa-library-bay', 20.2, 3.6, 6.4, 1.3, 0.5, [p(20.2, 3.6, 7.75), p(18.9, 3.6, 6.4), p(21.4, 3.6, 7.6)]),
   // The doubled plan's upstairs guest suite needed somewhere to sit.
   sofa('sofa-east-suite', 24.6, 3.6, 6.9, 3.2, 0, [p(24.6, 3.6, 5.5), p(27.1, 3.6, 6.9), p(22.2, 3.6, 6.9)]),
-  // The ground-floor media lounge: the screen wall faces the rug, so this sofa
-  // sits on that rug looking north at it, like the suite arrangement above.
-  sofa('sofa-media-lounge', 22.6, 0, 4.6, 3.4, 0, [p(22.6, 0, 3.4), p(20.5, 0, 4.6), p(24.7, 0, 4.6)]),
+  // (The old ground-floor media-lounge sofa went with that hall's furniture.)
+  // Home-cinema tier: three-seat sofa, double loveseat and a single recliner,
+  // all facing the screen wall on the room's north side.
+  sofa('sofa-cinema-three', 22.6, 0, -12.9, 2.6, 0, [p(22.6, 0, -11.85), p(21.0, 0, -12.9), p(24.2, 0, -12.9)]),
+  sofa('sofa-cinema-double', 25.9, 0, -12.6, 1.9, 0.55, [p(25.9, 0, -11.2), p(24.4, 0, -12.6), p(27.35, 0, -12.6)]),
+  small('chair-cinema-single', 'chair', 19.3, 0, -12.6, -0.55, 1.06, 1.0, 1.18, [p(19.3, 0, -11.45), p(20.5, 0, -12.6), p(18.1, 0, -12.6)]),
   small('chair-roof-east-1', 'chair', 14.4, 7.2, 2.85, 0, 0.52, 0.52, 1.2, [p(14.4, 7.2, 1.75), p(15.5, 7.2, 2.85)]),
   small('chair-roof-east-2', 'chair', 14.4, 7.2, 5.75, Math.PI, 0.52, 0.52, 1.2, [p(14.4, 7.2, 6.85), p(13.3, 7.2, 5.75)]),
   ...[-9.33, -7.67].flatMap((x, col) => [-3.88, -1.72].map((z, row) =>
@@ -85,8 +88,8 @@ export const VILLA_RELAX_SEATS: readonly VillaRelaxSeat[] = [
     return small(`chair-roof-${i + 1}`, 'chair', origin.x, origin.y, origin.z, yaw, 0.65, 0.68, 1.08,
       [local(origin, yaw, 0.75, 0.18), local(origin, yaw, -0.75, 0.18), local(origin, yaw, 0, 0.82)]);
   }),
-  small('chair-guest', 'chair', -4.05, 3.6, -5.65, 0, 0.65, 0.68, 1.08, [p(-3.2, 3.6, -5.55), p(-4.05, 3.6, -4.8)]),
-  small('stool-dressing', 'stool', -4.35, 3.6, 1.58, 0, 0.604, 0.544, 1.04, [p(-4.35, 3.6, 2.32), p(-3.58, 3.6, 1.7)]),
+  small('chair-guest', 'chair', -5.3, 3.6, -13.2, 0, 0.65, 0.68, 1.08, [p(-6.15, 3.6, -13.25), p(-5.3, 3.6, -12.4)]),
+  small('stool-dressing', 'stool', -5.05, 3.6, 1.58, 0, 0.604, 0.544, 1.04, [p(-5.05, 3.6, 2.32), p(-4.28, 3.6, 1.7)]),
   { ...small('chair-pc', 'chair', 7.25, 0, 5.1, 0, 0.7, 0.75, 1.11, [p(6.35, 0, 5.2), p(7.25, 0, 5.97), p(8.15, 0, 5.2)]), controller: 'pc' },
   ...VILLA_BEDS.map((bed): VillaRelaxSeat => ({ id: bed.id, kind: 'bed', origin: { ...bed.origin }, width: bed.width + 0.15, depth: bed.depth,
     seat: { ...bed.rest }, approach: { ...bed.exits[0] }, exits: bed.exits.map(e => ({ ...e })), yaw: bed.yaw,

@@ -39,13 +39,24 @@ export const VILLA_GARDEN_TREES = [
 
 export const VILLA_FLOWER_SPECIES = ['rose', 'lavender', 'daisy', 'tulip', 'hydrangea', 'sunflower'] as const;
 export const VILLA_ROOF_PLANTERS = [
-  { x: -11, z: -5, y: 7.2, w: 0.72, d: 2.2, species: 'rose' },
-  { x: -11, z: -1, y: 7.2, w: 0.72, d: 2.2, species: 'lavender' },
-  { x: 15, z: -3, y: 7.2, w: 0.72, d: 2.2, species: 'daisy' },
-  { x: 15, z: 1.5, y: 7.2, w: 0.72, d: 2.2, species: 'tulip' },
-  { x: 15, z: 5, y: 7.2, w: 0.72, d: 2.2, species: 'hydrangea' },
-  { x: 0, z: 8.1, y: 7.2, w: 2.2, d: 0.72, species: 'sunflower' },
+  // The planter beds sit against the outer parapets now: the flower zone spread
+  // outward from its old mid-terrace strip.
+  { x: -20.5, z: -5, y: 7.2, w: 0.72, d: 2.2, species: 'rose' },
+  { x: -20.5, z: -1, y: 7.2, w: 0.72, d: 2.2, species: 'lavender' },
+  { x: 23.5, z: -3, y: 7.2, w: 0.72, d: 2.2, species: 'daisy' },
+  { x: 23.5, z: 1.5, y: 7.2, w: 0.72, d: 2.2, species: 'tulip' },
+  { x: 23.5, z: 5, y: 7.2, w: 0.72, d: 2.2, species: 'hydrangea' },
+  { x: 0, z: 8.15, y: 7.2, w: 2.2, d: 0.72, species: 'sunflower' },
 ] as const;
+/** One pot per position rings the terrace perimeter, each a single species. */
+export const VILLA_ROOF_POTS = (() => {
+  const edge = (from: number, to: number, count: number) => Array.from({ length: count }, (_, i) => from + (to - from) * i / (count - 1));
+  const north = edge(-20, 26, 7).map(x => ({ x, z: -17.3 }));
+  const south = edge(-20, 26, 7).map(x => ({ x, z: 8.15 }));
+  const west = edge(-14, 6, 4).map(z => ({ x: -23.2, z }));
+  const east = edge(-14, 6, 4).map(z => ({ x: 27.3, z }));
+  return [...north, ...south, ...west, ...east].map((p, i) => ({ ...p, y: 7.2, species: VILLA_FLOWER_SPECIES[i % VILLA_FLOWER_SPECIES.length] }));
+})();
 export const VILLA_VEGETABLE_SPECIES = ['tomato', 'lettuce', 'carrot', 'eggplant'] as const;
 // The patch stays on the lawn the pets, the player's spawn and the garden tests
 // all expect. The front link's west approach is routed around it instead: that
@@ -214,6 +225,44 @@ export function createVillaGarden(parent: THREE.Object3D): { colliders: VillaCol
             orb(px + Math.cos(a) * radius, h + (sunflower ? Math.sin(a) * radius : 0), pz + (sunflower ? 0 : Math.sin(a) * radius), 0.064, sunflower ? 0.09 : 0.03, sunflower ? 0.025 : 0.078, sunflower ? yellow : white, sunflower ? -a : 0);
           }
           orb(px, h + (sunflower ? 0 : 0.025), pz - (sunflower ? 0.02 : 0), sunflower ? 0.103 : 0.054, sunflower ? 0.103 : 0.044, sunflower ? 0.045 : 0.054, sunflower ? soil : yellow);
+        }
+      }
+    });
+  }
+
+  // The perimeter ring: one terracotta pot per position, each planted with a
+  // single species so the ring reads as a changing colour band around the roof.
+  for (const pot of VILLA_ROOF_POTS) {
+    const { x, y, z, species } = pot;
+    marker('flower-pot', species, x, y, z, { width: 0.5, depth: 0.5, plants: 1 });
+    b.at(x, y, z, 0, () => {
+      b.cylinder(0, 0.16, 0, 0.25, 0.19, 0.32, terra, [0, 0, 0], 10);
+      b.cylinder(0, 0.33, 0, 0.215, 0.215, 0.03, soil, [0, 0, 0], 10);
+      const height = species === 'sunflower' ? 0.94 : species === 'lavender' ? 0.66 : 0.56;
+      const potOrb = (ox: number, oy: number, oz: number, sx: number, sy: number, sz: number, mat: THREE.Material, tilt = 0) => {
+        const g = new THREE.SphereGeometry(1, 6, 4); g.scale(sx, sy, sz); b.geometry(g, mat, [ox, oy, oz], [0, 0, tilt]);
+      };
+      b.beam([0, 0.3, 0], [0, height, 0], 0.013, stem, 5);
+      leaf(0.06, 0.42, 0, 0.2, 0.06, stem, Math.PI / 2, -0.1);
+      if (species === 'hydrangea') {
+        for (let floret = 0; floret < 6; floret++) {
+          const a = floret * 2.399, r = Math.sqrt(floret / 6) * 0.14;
+          potOrb(Math.cos(a) * r, height + 0.09 * (1 - r / 0.15), Math.sin(a) * r, 0.06, 0.045, 0.06, floret % 3 ? blue : purple);
+        }
+      } else if (species === 'daisy') {
+        for (let p = 0; p < 6; p++) { const a = p * Math.PI * 2 / 6; potOrb(Math.cos(a) * 0.075, height, Math.sin(a) * 0.075, 0.045, 0.022, 0.045, white, -a); }
+        potOrb(0, height + 0.01, 0, 0.04, 0.033, 0.04, yellow);
+      } else if (species === 'sunflower') {
+        for (let p = 0; p < 8; p++) { const a = p * Math.PI * 2 / 8; potOrb(Math.cos(a) * 0.12, height + Math.sin(a) * 0.12, 0, 0.05, 0.07, 0.02, yellow, -a); }
+        potOrb(0, height, 0, 0.08, 0.08, 0.035, soil);
+      } else if (species === 'lavender') {
+        for (let bud = 0; bud < 4; bud++) potOrb(0, height - 0.1 + bud * 0.06, 0, 0.04 - bud * 0.003, 0.045, 0.04 - bud * 0.003, purple);
+      } else if (species === 'tulip') {
+        for (let p = 0; p < 4; p++) { const a = p * Math.PI * 0.5; potOrb(Math.cos(a) * 0.05, height, Math.sin(a) * 0.05, 0.045, 0.1, 0.045, p % 2 ? yellow : rose); }
+      } else {
+        for (let ring = 0; ring < 2; ring++) for (let p = 0; p < 4; p++) {
+          const a = p * Math.PI * 0.5 + ring * 0.5, r = ring ? 0.04 : 0.075;
+          potOrb(Math.cos(a) * r, height + ring * 0.045, Math.sin(a) * r, ring ? 0.05 : 0.075, ring ? 0.06 : 0.058, ring ? 0.05 : 0.075, ring ? rose : tomato);
         }
       }
     });

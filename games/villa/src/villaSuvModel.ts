@@ -80,57 +80,99 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   body.box(0, .6, -2.5, .8, .1, .06, dark, .02);
   body.box(0, .48, -2.45, 1.9, .16, .18, paint, .05);
   body.box(0, 1.58, -.02, 1.0, .03, .06, trim, .01);
-  // ---- Cabin interior: floor, footwells, seats, dashboard, console, headliner ----
-  // Plain boxes throughout: the earlier cabin was a placeholder slab that sat
-  // below the seated eye and hid the whole interior from the driver's view.
-  const upholstery = villaMaterial(0x9a8d78, .9);
-  cabin.box(0, .30, -.25, 1.72, .06, 2.32, dark, .02);
+  // ---- Cabin interior: a luxury two-tone cockpit ----
+  // Semi-aniline cognac leather with perforated centres and contrast piping, a
+  // leather-wrapped dash with open-pore walnut, a curved dual-screen cockpit and
+  // warm ambient strips — a full redesign of the old placeholder slab interior.
+  const leather = villaMaterial(0x77563c, .82), leatherLight = villaMaterial(0x9a7c5c, .86), piping = villaMaterial(0xd8c7a4, .6);
+  const dashSoft = villaMaterial(0x22262a, .7), wood = villaMaterial(0x4c3826, .55), speaker = villaMaterial(0x6b7176, .35, .6);
+  const screenGlass = new THREE.MeshStandardMaterial({ color: 0x0d141a, roughness: .16, metalness: .25 });
+  const screenGlow = new THREE.MeshStandardMaterial({ color: 0x16232c, emissive: 0x2c4e60, emissiveIntensity: .6, roughness: .3 });
+  const ambient = new THREE.MeshStandardMaterial({ color: 0x3a2c1c, emissive: 0xffb46b, emissiveIntensity: .45, roughness: .5 });
+  screenGlass.name = 'suv-screen-glass'; screenGlow.name = 'suv-screen-glow'; ambient.name = 'suv-ambient-glow';
+  cabin.box(0, .30, -.25, 1.72, .06, 2.32, dashSoft, .02);
+  // Deep-pile floor mats with a heel pad on the driver's side.
   for (const side of [-1, 1]) {
-    cabin.box(side * .52, .335, .55, .54, .012, .52, rubber, .015);
-    // Seat: cushion, reclined backrest, headrest and a visible rail. The hip
-    // sits at the middle of the door, not at the windshield base.
-    cabin.box(side * .52, .50, -.30, .56, .16, .62, upholstery, .05);
-    cabin.box(side * .52, .84, -.64, .54, .60, .13, upholstery, .05);
-    cabin.box(side * .52, 1.19, -.69, .26, .17, .12, upholstery, .04);
-    cabin.box(side * .52, .375, -.30, .40, .045, .50, dark, .01);
+    cabin.box(side * .52, .335, .55, .56, .02, .56, fabric, .015);
+    cabin.box(side * .52, .335, -1.3, .56, .02, .5, fabric, .015);
   }
-  // Rear bench behind the front seats.
-  cabin.box(0, .50, -1.22, 1.62, .16, .48, upholstery, .05);
-  cabin.box(0, .84, -1.50, 1.62, .56, .13, upholstery, .05);
-  for (const side of [-1, 1]) cabin.box(side * .48, 1.17, -1.55, .26, .17, .12, upholstery, .04);
-  // Dashboard with a driver cluster and a centred landscape touchscreen standing
-  // on the dash top, so neither crosses the steering wheel's rim.
-  cabin.box(0, .92, .52, 1.76, .30, .34, dark, .035);
-  cabin.box(0, 1.015, .665, 1.74, .035, .05, trim, .02);
-  cabin.box(.52, 1.105, .58, .34, .13, .025, dark, .012);
-  cabin.box(.52, 1.105, .566, .30, .10, .004, metal, .002);
-  cabin.box(.02, 1.14, .55, .42, .24, .03, dark, .012);
-  cabin.box(.02, 1.14, .533, .38, .20, .004, dark, .002);
+  cabin.box(.52, .352, .68, .22, .006, .18, speaker, .004);
+  // Luxury bucket seats: bolstered cushion, perforated centre, shoulder wings,
+  // contrast piping and an articulated headrest, on a hard back shell and rails.
+  const bucketSeat = (side: number, z: number, front: boolean) => {
+    const sx = side * .52;
+    cabin.box(sx, .50, z, .56, .16, .62, leather, .06);
+    cabin.box(sx - .21, .545, z, .10, .21, .58, leather, .05);
+    cabin.box(sx + .21, .545, z, .10, .21, .58, leather, .05);
+    cabin.box(sx, .512, z + .03, .34, .155, .46, leatherLight, .05);
+    cabin.box(sx, .86, z - .34, .54, .62, .13, leather, .05);
+    cabin.box(sx - .205, .93, z - .33, .11, .5, .14, leather, .05);
+    cabin.box(sx + .205, .93, z - .33, .11, .5, .14, leather, .05);
+    cabin.box(sx, .89, z - .325, .32, .46, .12, leatherLight, .04);
+    cabin.box(sx, .545, z + .30, .5, .03, .02, piping, .008);
+    cabin.box(sx, 1.165, z - .36, .38, .03, .03, piping, .008);
+    cabin.box(sx, 1.23, z - .36, .26, .18, .11, leather, .045);
+    cabin.box(sx, 1.23, z - .328, .18, .12, .05, leatherLight, .03);
+    cabin.box(sx, .86, z - .42, .5, .62, .04, dashSoft, .02);
+    cabin.box(sx, .375, z, .42, .05, .52, dashSoft, .012);
+    if (front) for (const dz of [-.18, .18]) cabin.box(sx, .345, z + dz, .44, .03, .05, speaker, .004);
+  };
+  bucketSeat(1, -.30, true); bucketSeat(-1, -.30, true);
+  // Rear bench: sculpted twin outer seats with a fold-down centre armrest.
+  cabin.box(0, .50, -1.26, 1.62, .16, .5, leather, .06);
   for (const side of [-1, 1]) {
-    cabin.box(side * .66, .95, .70, .16, .07, .05, dark, .015);
-    cabin.box(side * .66, .95, .735, .13, .04, .012, metal, .004);
+    cabin.box(side * .47, .53, -1.26, .5, .19, .48, leatherLight, .05);
+    cabin.box(side * .47, .85, -1.5, .52, .58, .13, leather, .05);
+    cabin.box(side * .47, 1.19, -1.55, .24, .16, .11, leather, .04);
   }
-  // Centre console with an armrest, a shifter and a pair of cup holders.
-  cabin.box(0, .56, -.10, .30, .48, .92, dark, .035);
-  cabin.box(0, .83, -.52, .28, .07, .46, upholstery, .025);
-  cabin.box(0, .86, -.08, .10, .13, .09, metal, .02);
-  cabin.beam([0, .92, -.08], [0, .99, -.08], .022, dark);
-  for (const z of [.12, .24]) cabin.cylinder(0, .85, z, .045, .038, .05, dark, [0, 0, 0], 12);
-  // Pedals sit in the driver's footwell below the dash, as in the other cars.
+  cabin.box(0, .84, -1.5, .42, .5, .11, leather, .04);
+  cabin.box(0, .72, -1.44, .3, .08, .16, leatherLight, .03);
+  // Leather-wrapped dash: soft top, walnut inlay, and a full-width curved cockpit
+  // of two joined screens under one glass pane, plus a driver cluster hood.
+  cabin.box(0, .90, .52, 1.78, .26, .34, dashSoft, .05);
+  cabin.box(0, 1.015, .55, 1.76, .05, .3, dashSoft, .03);
+  cabin.box(0, .985, .68, 1.7, .06, .05, wood, .015);
+  cabin.box(0, 1.10, .60, 1.04, .16, .04, screenGlass, .012);
+  cabin.box(-.20, 1.10, .583, .58, .12, .006, screenGlow, .002);
+  cabin.box(.36, 1.10, .583, .28, .12, .006, screenGlow, .002);
+  cabin.box(.52, 1.13, .56, .42, .06, .1, dashSoft, .02);
+  // Slim turbine air vents and a row of milled climate toggles under the screen.
+  for (const side of [-1, 1]) {
+    cabin.cylinder(side * .80, .98, .685, .05, .05, .05, speaker, [Math.PI / 2, 0, 0], 16);
+    cabin.cylinder(side * .80, .98, .71, .03, .03, .012, dashSoft, [Math.PI / 2, 0, 0], 12);
+  }
+  for (let i = 0; i < 6; i++) cabin.box(-.30 + i * .06, .935, .695, .035, .02, .012, speaker, .003);
+  // Floating centre console: open-pore wood bridge, hidden cup holders, a crystal
+  // drive selector and a wireless charging pad, with an ambient strip beneath.
+  cabin.box(0, .52, -.10, .32, .42, .96, dashSoft, .045);
+  cabin.box(0, .755, -.10, .30, .05, .9, wood, .025);
+  cabin.box(0, .83, -.48, .28, .08, .42, leather, .03);
+  cabin.ellipsoid(0, .80, .02, .05, .075, .05, screenGlass);
+  cabin.box(0, .745, .02, .07, .05, .07, screenGlass, .015);
+  cabin.box(0, .79, .28, .12, .01, .18, dashSoft, .01);
+  for (const z of [.34, .46]) cabin.cylinder(0, .775, z, .042, .036, .045, dashSoft, [0, 0, 0], 14);
+  cabin.box(0, .62, .36, .26, .02, .02, ambient, .004);
+  cabin.box(0, .985, .70, 1.66, .012, .012, ambient, .002);
+  // Pedals in the driver's footwell below the dash.
   for (const [x, w] of [[.44, .11], [.61, .08]] as const) {
-    cabin.box(x, .46, .76, w, .13, .02, metal, .004);
+    cabin.box(x, .46, .76, w, .13, .02, speaker, .004);
     cabin.box(x, .47, .745, w - .03, .10, .012, rubber, .003);
   }
-  // The roof panel is double-sided, so only the interior mirror is added here.
-  cabin.beam([0, 1.552, .02], [0, 1.478, .10], .012, dark);
-  cabin.box(0, 1.452, .115, .25, .072, .034, dark, .012);
-  cabin.box(0, 1.452, .098, .22, .055, .004, metal, .002);
+  // Panoramic-roof console: mirror, SOS/light touch panel and twin reading lights.
+  cabin.beam([0, 1.552, .02], [0, 1.478, .10], .012, dashSoft);
+  cabin.box(0, 1.452, .115, .25, .072, .034, dashSoft, .012);
+  cabin.box(0, 1.452, .098, .22, .055, .004, speaker, .002);
+  cabin.box(0, 1.53, -.28, .34, .012, .1, dashSoft, .01);
+  for (const side of [-1, 1]) cabin.box(side * .1, 1.522, -.28, .08, .006, .05, ambient, .002);
   const wheel = new VillaModelBuilder(root, 'suv-steering-wheel');
-  wheel.beam([.52, .84, .66], [.52, 1.03, .44], .033, dark);
-  wheel.geometry(new THREE.TorusGeometry(.19, .021, 10, 36), fabric, [.52, 1.06, .40], [Math.PI / 2.3, 0, 0]);
-  wheel.box(.52, 1.06, .40, .10, .075, .045, dark, .018);
-  for (const x of [-.14, .14]) wheel.beam([.52 + x, 1.06, .40], [.52 + x * .18, 1.072, .40], .017, fabric);
-  wheel.beam([.52, 1.045, .40], [.52, .985, .40], .017, fabric);
+  // Three-spoke leather wheel with a slim hub, metal spokes and shift paddles.
+  wheel.beam([.52, .84, .66], [.52, 1.03, .44], .033, dashSoft);
+  wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather, [.52, 1.06, .40], [Math.PI / 2.3, 0, 0]);
+  wheel.box(.52, 1.06, .40, .11, .08, .05, dashSoft, .02);
+  wheel.box(.52, 1.06, .385, .05, .04, .012, speaker, .004);
+  for (const x of [-.15, .15]) wheel.beam([.52 + x, 1.06, .40], [.52 + x * .16, 1.072, .40], .016, speaker);
+  wheel.beam([.52, 1.045, .40], [.52, .985, .40], .016, speaker);
+  for (const x of [-.12, .12]) wheel.box(.52 + x, 1.10, .435, .03, .06, .01, speaker, .002);
   wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
   for (const side of [1, -1]) {
@@ -138,8 +180,15 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     const door = new VillaModelBuilder(pivot, `suv-door-${side}`);
     door.at(-side * .99, 0, -1.05, 0, () => {
       door.box(side * .97, .88, -.1, .08, .62, 1.5, paint, .02);
-      door.box(side * .92, 1.0, -.16, .04, .2, 1.3, trim, .014);
-      door.box(side * .86, 1.0, -.2, .12, .06, .58, fabric, .018);
+      // Luxury door card: leather insert over a walnut strip, a stitched armrest,
+      // a round speaker grille, a pull handle and an ambient accent.
+      door.box(side * .92, .82, -.16, .04, .44, 1.34, leather, .014);
+      door.box(side * .90, 1.0, -.16, .03, .1, 1.3, wood, .012);
+      door.box(side * .86, .98, -.2, .12, .07, .58, leatherLight, .018);
+      door.cylinder(side * .905, .78, -.62, .07, .07, .02, speaker, [0, 0, Math.PI / 2], 18);
+      door.cylinder(side * .90, .78, -.62, .045, .045, .012, dashSoft, [0, 0, Math.PI / 2], 14);
+      door.box(side * .90, 1.0, .12, .05, .045, .18, dashSoft, .012);
+      door.box(side * .905, .74, .28, .012, .02, .5, ambient, .002);
       quad(door, [[side * .95, 1.16, .38], [side * .95, 1.16, -1.0], [side * .86, 1.42, -1.0], [side * .87, 1.48, .1]], glass);
       door.beam([side * .95, 1.16, -1.0], [side * .86, 1.42, -1.0], .012, dark);
       door.beam([side * .86, 1.42, -1.0], [side * .87, 1.48, .1], .012, dark);

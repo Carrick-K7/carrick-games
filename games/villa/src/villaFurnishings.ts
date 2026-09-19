@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VILLA_SNOOKER } from './villaActivities.js';
 import { createVillaSnookerTable } from './villaSnookerModel.js';
+import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { createVillaFaucet } from './villaFaucet.js';
 import { createVillaBedroom } from './villaBedroom.js';
 import { createVillaTeaBar } from './villaTeaBar.js';
@@ -12,6 +13,7 @@ import { VILLA_ESTATE_BOUNDS, VILLA_WEST_WALL } from './villaEstateLayout.js';
 import { createVillaAquariumLife } from './villaAquarium.js';
 import type { VillaTeaState } from './villaTea.js';
 import type { VillaWardrobeState } from './villaWardrobe.js';
+import { createVillaBathDoorModel, type VillaBathDoorState } from './villaBathDoors.js';
 import { villaRoomAt, type VillaCollider } from './villaWorld.js';
 import { createVillaFridge } from './villaWardrobe.js';
 
@@ -25,6 +27,8 @@ export interface VillaFurnishingState {
   teaUntil?: number;
   tea?: VillaTeaState;
   wardrobes?: VillaWardrobeState;
+  bathDoors?: VillaBathDoorState;
+  grillLids?: boolean[];
   roomLights?: Readonly<Record<string, boolean>>;
   nightFactor?: number;
   aquariumOn?: boolean;
@@ -330,53 +334,137 @@ export function furnishVilla(scene: THREE.Scene): {
   // Snooker: six apertures pierce cloth AND slate, not painted-on pockets.
   const snookerWalnut = mat('#382218', 0.42); snookerWalnut.map = oak.map;
   const snookerTable = createVillaSnookerTable(root); colliders.push(...snookerTable.colliders);
-  // Shallow north-wall cue rack, west of the doorway and outside the cue sweep.
-  for (const y of [0.3, 1.53]) box(7.6, y, -8.78, 1.06, 0.12, 0.15, snookerWalnut, 0.015);
+  // Cue rack relocated onto the cinema's west wall after the gym/snooker divider
+  // came down: still west of the play line and outside the cue sweep.
+  for (const y of [0.3, 1.53]) box(16.8, y, -12, 0.15, 0.12, 1.06, snookerWalnut, 0.015);
   for (let i = 0; i < 5; i++) {
-    const x = 7.2 + i * 0.2;
-    cyl(x, 0.62, -8.64, 0.016, 0.022, 0.6, snookerWalnut); cyl(x, 1.25, -8.64, 0.007, 0.016, 0.66, oak);
-    cyl(x, 1.59, -8.64, 0.008, 0.008, 0.025, cream); cyl(x, 1.608, -8.64, 0.008, 0.008, 0.011, blue);
+    const z = -12.4 + i * 0.2;
+    cyl(16.66, 0.62, z, 0.016, 0.022, 0.6, snookerWalnut); cyl(16.66, 1.25, z, 0.007, 0.016, 0.66, oak);
+    cyl(16.66, 1.59, z, 0.008, 0.008, 0.025, cream); cyl(16.66, 1.608, z, 0.008, 0.008, 0.011, blue);
   }
-  hit(7.6, 0, -8.73, 1.08, 1.65, 0.25);
+  hit(16.8, 0, -12, 0.25, 1.65, 1.08);
   root.userData.snooker = { ...VILLA_SNOOKER, ballCount: 22, redCount: 15, colorCount: 6, whiteCount: 1, pocketCount: 6, baulkOffset: 0.737, dRadius: 0.292,
     // Derived from the same table constants the model builds from, so a moved
     // or resized table cannot leave a stale hand-copied collider behind.
     collider: { minX: VILLA_SNOOKER.center.x - VILLA_SNOOKER.width / 2, maxX: VILLA_SNOOKER.center.x + VILLA_SNOOKER.width / 2,
       minZ: VILLA_SNOOKER.center.z - VILLA_SNOOKER.length / 2, maxZ: VILLA_SNOOKER.center.z + VILLA_SNOOKER.length / 2,
       minY: VILLA_SNOOKER.center.y, maxY: VILLA_SNOOKER.center.y + 0.92 },
-    cueRack: { x: 7.6, z: -8.73, cueCount: 5 } };
+    cueRack: { x: 16.8, z: -12, cueCount: 5 } };
 
   // First floor bedrooms and library.
   bed(VILLA_BEDS[0]); box(-8, 3.617, 5.3, 5.4, 0.026, 5.4, rugMat, 0);
   // ---- The rooms the doubled plan added ----
-  // Ground-floor study: 11 x 9 m, desk under the north light, shelves on the
-  // east wall, whose only solid stretch is south of its door.
+  // Ground-floor tea room (was the study): a low ceremonial tea table with a
+  // full service, floor cushions, a tea-ware shelf and a bonsai on its stand.
   at(-18.6, 0, -13.6, 0, () => {
-    at(0, 0, -2.9, 0, () => { table(2.2, 1, 0.75, walnut); box(-0.5, 0.81, 0, 0.42, 0.03, 0.3, cream); orb(0.35, 0.85, 0.06, 0.11, 0.13, 0.11, brass); });
-    at(0, 0, -1.8, Math.PI, () => chair(sage));
-    at(5.29, 0, 2.85, 0, () => {
-      box(0, 1.02, 0, 0.34, 2.04, 3.2, walnut, 0.02);
-      for (let i = 0; i < 4; i++) box(0.09, 0.32 + i * 0.52, 0, 0.28, 0.035, 3.04, oak, 0.01);
+    at(0, 0, -2.2, 0, () => {
+      for (const [x, z] of [[-0.72, -0.48], [0.72, -0.48], [-0.72, 0.48], [0.72, 0.48]]) cyl(x, 0.19, z, 0.045, 0.055, 0.38, walnut);
+      box(0, 0.4, 0, 1.9, 0.06, 1.25, walnut, 0.03);
+      box(0, 0.445, 0, 1.55, 0.025, 0.95, dark, 0.01);
+      cyl(-0.5, 0.58, -0.25, 0.16, 0.185, 0.26, black);
+      cyl(-0.5, 0.73, -0.25, 0.06, 0.09, 0.035, black);
+      orb(-0.5, 0.77, -0.25, 0.028, 0.05, 0.028, brass);
+      orb(0.1, 0.53, -0.28, 0.14, 0.095, 0.12, terra);
+      rod(new THREE.Vector3(0.2, 0.56, -0.28), new THREE.Vector3(0.38, 0.53, -0.2), 0.016, terra);
+      rod(new THREE.Vector3(0.02, 0.6, -0.32), new THREE.Vector3(0.02, 0.6, -0.12), 0.012, dark);
+      for (const [x, z] of [[0.42, 0.12], [0.58, 0.28], [0.34, 0.36], [0.62, 0.06]]) cyl(x, 0.49, z, 0.045, 0.036, 0.06, cream);
+      hit(0, 0, 0, 1.95, 0.62, 1.3);
     });
-    at(0, 0, -4.1, 0, () => lamp(true));
+    for (const [x, z, yaw] of [[-1.75, -2.2, Math.PI / 2], [1.75, -2.7, -Math.PI / 2], [0.1, -0.35, Math.PI]] as const) {
+      at(x, 0, z, yaw, () => { box(0, 0.09, 0, 0.74, 0.18, 0.74, terra, 0.09); box(0, 0.195, 0.03, 0.52, 0.08, 0.52, linen, 0.06); });
+    }
+    at(-5.29, 0, 2.2, 0, () => {
+      box(0, 1.05, 0, 0.34, 2.1, 3, walnut, 0.02);
+      for (let i = 0; i < 4; i++) {
+        box(0.09, 0.34 + i * 0.52, 0, 0.3, 0.035, 2.84, oak, 0.01);
+        for (let c = 0; c < 4; c++) cyl(0.24, 0.44 + i * 0.52, -1.15 + c * 0.6, 0.05, 0.038, 0.09, i % 2 ? cream : sage);
+      }
+      hit(0, 0, 0, 0.4, 2.1, 3.05);
+    });
+    at(-2.6, 0, -4.05, 0, () => { cyl(0, 0.22, 0, 0.26, 0.32, 0.44, walnut); plant(0, 0.44, 0, 0.6); });
+    at(2.8, 0, -4.1, 0, () => lamp(true));
   });
   box(-18.6, 0.017, -12.4, 5.4, 0.028, 4, rugMat, 0.01);
   plant(-14.2, 0, -16.6, 1.35); plant(-22.8, 0, -10.4, 1.2);
-  // Ground-floor laundry and utility room: paired machines, sink run and shelves.
+  // Ground-floor laundry and utility room: a matched front-loader washer and
+  // heat-pump dryer under a shelf run, plus a folding table and basket.
   at(-7.5, 0, -13.6, 0, () => {
-    for (const x of [-2.6, -1.5]) { box(x, 0.44, -3.3, 0.62, 0.88, 0.66, white, 0.03); box(x, 0.5, -2.96, 0.44, 0.44, 0.04, steel, 0.02); }
+    const laundryUnit = (x: number, z: number, dryer: boolean) => {
+      box(x, 0.47, z, 0.64, 0.94, 0.7, white, 0.035);
+      // Porthole: steel rim, dark glass, and a visible drum behind it.
+      cyl(x, 0.5, z + 0.352, 0.215, 0.215, 0.025, steel, Math.PI / 2);
+      cyl(x, 0.5, z + 0.368, 0.17, 0.17, 0.012, dark, Math.PI / 2);
+      cyl(x, 0.5, z + 0.378, 0.12, 0.12, 0.006, steel, Math.PI / 2);
+      // Control panel: dial, buttons and a small glow display.
+      box(x, 0.86, z + 0.348, 0.58, 0.11, 0.025, steel, 0.01);
+      cyl(x + 0.19, 0.86, z + 0.362, 0.036, 0.036, 0.014, white, Math.PI / 2);
+      for (let i = 0; i < 3; i++) cyl(x - 0.02 - i * 0.09, 0.87, z + 0.362, 0.014, 0.014, 0.008, dark, Math.PI / 2);
+      box(x - 0.14, 0.845, z + 0.364, 0.1, 0.035, 0.005, lampGlow, 0.003);
+      // Detergent drawer with a chrome pull, and a plinth under the feet.
+      box(x - 0.14, 0.73, z + 0.35, 0.3, 0.075, 0.018, steel, 0.008);
+      box(x, 0.03, z, 0.56, 0.06, 0.6, steel, 0.012);
+      if (dryer) box(x + 0.24, 0.5, z + 0.355, 0.07, 0.09, 0.01, steel, 0.006);
+    };
+    laundryUnit(-2.6, -3.3, false); laundryUnit(-1.5, -3.3, true);
     at(1.2, 0, -3.6, 0, () => { table(3.4, 0.72, 0.9, oak); box(0, 0.95, 0, 2.6, 0.06, 0.5, steel, 0.02); box(-0.6, 1.0, 0, 0.42, 0.05, 0.4, steel, 0.02); });
     for (let i = 0; i < 4; i++) box(-3.9, 0.5 + i * 0.6, 1.6, 0.36, 0.04, 2.6, oak, 0.01);
     box(-4.05, 1.1, 1.6, 0.1, 2.4, 0.1, steel, 0.01);
     box(3.6, 0.24, 2.9, 1.1, 0.48, 0.72, sage, 0.04);
   });
+  // Hall runner by the lift lobby warms the stone strip behind the stairs, and a
+  // robot vacuum works its cleaning loop there.
+  box(1.1, 0.022, -12.4, 3.4, 0.028, 8.6, rugMat, 0.01);
+  let vacuumLidar: THREE.Mesh | undefined;
+  const vacuum = new THREE.Group(); vacuum.name = 'robot-vacuum'; root.add(vacuum);
+  {
+    const shell = villaMaterial('#e8e6e1', .38), vacTrim = villaMaterial('#2a2e31', .5), lens = villaMaterial('#1b2124', .2, .3);
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, y: number, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(0, y, z); vacuum.add(m); return m; };
+    add(new THREE.CylinderGeometry(.175, .18, .09, 24), shell, .047);
+    add(new THREE.CylinderGeometry(.181, .181, .028, 24, 1, true), vacTrim, .052);
+    add(new THREE.CylinderGeometry(.172, .172, .02, 24), vacTrim, .012);
+    add(new THREE.CylinderGeometry(.048, .054, .045, 16), vacTrim, .115);
+    vacuumLidar = add(new THREE.CylinderGeometry(.05, .05, .014, 16), shell, .144);
+    add(new THREE.CylinderGeometry(.03, .03, .006, 12), lens, .1);
+    add(new THREE.BoxGeometry(.05, .008, .02), vacTrim, .095, .13);
+    for (const x of [-0.05, 0.05]) add(new THREE.CylinderGeometry(.014, .014, .006, 10), x < 0 ? vacTrim : shell, .095, x);
+  }
+  // Charging dock against the lift-shaft wall, just off the cleaning loop.
+  box(4.35, 0.045, -8.5, 0.34, 0.09, 0.2, villaMaterial('#2a2e31', .5), 0.02);
   at(-11.4, 0, -9.9, 0, () => lamp(true));
-  // Ground-floor gym: a treadmill, yoga mats and one bench, plus rack + mirror.
+  // Ground-floor gym: weight rack, cable crossover, dumbbell tree, kettlebells,
+  // a treadmill, one bench and a neat row of yoga mats, under a wall mirror.
   at(11.3, 0, -13.6, 0, () => {
     // Freestanding weight rack and plate trees, parallel to the north wall.
     box(-4.2, 0.5, -3.3, 2.6, 1, 0.16, steel, 0.02);
     for (let i = 0; i < 5; i++) box(-5.1 + i * 0.45, 0.55, -3.12, 0.08, 1.1, 0.08, dark, 0.01);
     hit(-4.2, 0, -3.3, 2.7, 1.1, 0.3);
+    // Cable crossover: two towers with weight stacks, top pulleys and a bar.
+    at(1.2, 0, -4.05, 0, () => {
+      for (const side of [-1, 1]) {
+        box(side * 0.85, 1.1, 0, 0.5, 2.2, 0.62, dark, 0.03);
+        for (let i = 0; i < 8; i++) box(side * 0.85, 0.5 + i * 0.21, 0.3, 0.36, 0.05, 0.1, black, 0.008);
+        cyl(side * 0.85, 2.14, 0.24, 0.06, 0.06, 0.05, steel, Math.PI / 2);
+        rod(new THREE.Vector3(side * 0.85, 1.9, 0.24), new THREE.Vector3(side * 0.85, 1.1, 0.4), 0.012, steel);
+        box(side * 0.85, 1.06, 0.42, 0.3, 0.05, 0.12, steel, 0.01);
+      }
+      box(0, 2.28, 0, 2.2, 0.08, 0.08, steel, 0.02);
+      hit(0, 0, 0, 2.25, 2.3, 0.7);
+    });
+    // Dumbbell tree: two tiers of paired dumbbells with knurled handles.
+    at(-2.6, 0, -1.15, 0, () => {
+      box(0, 0.24, 0, 1.5, 0.1, 0.5, dark, 0.02); box(0, 0.66, 0, 1.5, 0.1, 0.5, dark, 0.02);
+      for (const side of [-1, 1]) box(side * 0.72, 0.45, 0, 0.08, 0.9, 0.08, steel, 0.01);
+      for (let i = 0; i < 3; i++) {
+        const x = -0.45 + i * 0.45, r = 0.055 + i * 0.008;
+        cyl(x, 0.34, 0, 0.022, 0.022, 0.24, steel, 0, Math.PI / 2);
+        for (const s of [-1, 1]) cyl(x + s * 0.12, 0.34, 0, r, r, 0.09, black, 0, Math.PI / 2);
+        cyl(x, 0.76, 0, 0.02, 0.02, 0.22, steel, 0, Math.PI / 2);
+        for (const s of [-1, 1]) cyl(x + s * 0.11, 0.76, 0, 0.05, 0.05, 0.08, black, 0, Math.PI / 2);
+      }
+      hit(0, 0, 0, 1.6, 0.95, 0.6);
+    });
+    // Kettlebells lined up by the rack.
+    for (let i = 0; i < 4; i++) { const x = -0.4 + i * 0.34, r = 0.09 + i * 0.012; orb(x, r, -1.15, r, r * 1.15, r, black); cyl(x, r * 2.1, -1.15, 0.018, 0.022, 0.09, steel, 0, Math.PI / 2); }
     // Treadmill facing north, with rails and a real console.
     at(2.7, 0, -2.4, 0, () => {
       box(0, 0.14, 0, 0.62, 0.18, 1.8, dark, 0.03);
@@ -389,10 +477,11 @@ export function furnishVilla(scene: THREE.Scene): {
       box(0, 1.16, -0.9, 0.46, 0.18, 0.03, steel, 0.01);
     });
     hit(2.7, 0, -2.4, 0.7, 1.3, 1.9);
-    // Yoga mats fanned over the floor, each with a rolled end.
-    for (const [x, z, yaw] of [[-1.9, 0.9, 0.12], [-0.4, 1.5, -0.06], [1.1, 0.7, 0.2]] as const) {
-      box(x, 0.012, z, 0.62, 0.024, 1.75, sage, 0.008, yaw);
-      box(x, 0.11, z + 0.82, 0.62, 0.2, 0.12, sage, 0.04, yaw);
+    // Yoga mats in a tidy, evenly spaced row, each with its rolled end east.
+    for (let i = 0; i < 3; i++) {
+      const x = -1.9 + i * 1.35;
+      box(x, 0.012, 0.9, 0.62, 0.024, 1.75, i % 2 ? sage : terra, 0.008);
+      box(x + 0.95, 0.065, 0.9, 0.22, 0.11, 0.62, i % 2 ? sage : terra, 0.05);
     }
     // One bench, not a row of chairs.
     box(-3.6, 0.22, 1.4, 0.5, 0.44, 1.9, dark, 0.04); box(-3.6, 0.5, 1.4, 0.34, 0.14, 1.7, sage, 0.03);
@@ -401,18 +490,9 @@ export function furnishVilla(scene: THREE.Scene): {
     // the treadmill across the room instead of floating over the floor.
     box(4.2, 1.45, -4.57, 2.4, 1.9, 0.06, steel, 0.01);
   });
-  // Ground-floor media lounge behind the hall arch. The screen faces the rug, so
-  // the sofa and its low table sit on that rug looking north at it.
-  at(22.6, 0, 0, 0, () => {
-    box(0, 1.35, -1.9, 5.2, 2.7, 0.3, walnut, 0.02);
-    box(0, 1.45, -1.7, 3.4, 1.9, 0.08, black, 0.02);
-    hit(0, 1.35, -1.9, 5.2, 2.7, 0.3);
-    for (let i = 0; i < 5; i++) box(-2.3 + i * 0.12, 0.5, -1.72, 0.04, 0.9, 0.03, i % 2 ? cream : sage, 0.005);
-  });
-  box(22.6, 0.017, 3.4, 5.4, 0.028, 4.2, rugMat, 0.01);
-  at(22.6, 0, 4.6, 0, () => sofa(3.4, linen, false, 'sofa-media-lounge'));
-  at(22.6, 0, 2.5, 0, () => { table(1.5, 0.9, 0.42, walnut); tea(0.34, 0.43, 0); });
-  at(20.4, 0, 5.4, 0, () => lamp(true)); plant(26.4, 0, 7.4, 1.4); plant(26.4, 0, -14.6, 1.3);
+  // The east lounge (起居厅) is deliberately left bare for now: an unfurnished
+  // hall the family can arrange later. Only the cinema's plant keeps its spot.
+  plant(26.4, 0, -14.6, 1.3);
   // Upstairs study: writing desk under the north light, books on both returns.
   at(12.5, 3.6, -13.6, 0, () => {
     at(0, 0, -3.1, 0, () => { table(2, 0.92, 0.75, oak); box(-0.46, 0.81, 0, 0.4, 0.03, 0.28, cream); orb(0.42, 0.84, 0.05, 0.1, 0.12, 0.1, brass); });
@@ -420,57 +500,102 @@ export function furnishVilla(scene: THREE.Scene): {
     for (const x of [-3.6, 3.6]) { box(x, 1.1, -3.3, 1.8, 2.2, 0.32, walnut, 0.02); for (let i = 0; i < 4; i++) box(x, 0.4 + i * 0.52, -3.16, 1.7, 0.035, 0.26, oak, 0.01); }
   });
   box(12.5, 3.617, -11.4, 4.8, 0.028, 3.2, rugMat, 0.01);
-  // Upstairs dressing room: wardrobe runs, an island and a full-height mirror.
-  at(-18.6, 3.6, -13.6, 0, () => {
+  // Upstairs dressing room (moved here with the guest swap): wardrobe runs, an
+  // island and a full-height mirror, now in the band south of the guest room.
+  at(-18.6, 3.6, -4.5, 0, () => {
     at(0, 0, -4.05, 0, () => { box(0, 1.25, 0, 8.4, 2.5, 0.5, walnut, 0.02); for (let i = 0; i < 6; i++) box(-3.5 + i * 1.4, 1.25, 0.26, 0.03, 2.4, 0.03, brass, 0.004); });
     at(-5.32, 0, 0.4, 0, () => box(0, 1.25, 0, 0.5, 2.5, 5.6, walnut, 0.02));
     at(0, 0, 0.6, 0, () => { box(0, 0.52, 0, 2.4, 0.9, 1.1, oak, 0.05); box(0, 0.99, 0, 2.5, 0.06, 1.2, stone, 0.03); });
     at(3.4, 0, 1.1, 0, () => { box(0, 0.9, 0, 0.08, 1.8, 1.2, steel, 0.01); box(0, 0.95, 0.07, 0.05, 1.7, 1.1, white, 0.01); });
-    plant(4.6, 0, -3.6, 1.2);
+    plant(4.4, 0, -3.6, 1.2);
   });
-  // Upstairs ensuite: a second bathroom for the same suite.
-  at(-7.5, 3.6, -13.6, 0, () => {
+  // Upstairs ensuite (moved with the same swap): double vanity, small bath, a
+  // glass-front shower and a mirror on the gallery wall.
+  at(-8.6, 3.6, -4.5, 0, () => {
     at(0, 0, -3.6, 0, () => { box(0, 0.42, 0, 4.2, 0.84, 0.62, white, 0.05); box(0, 0.87, 0, 4.3, 0.06, 0.68, stone, 0.03); box(1.2, 0.95, 0, 0.5, 0.08, 0.4, steel, 0.03); });
     at(-3.4, 0, 2.6, Math.PI / 2, () => { box(0, 0.26, 0, 1.7, 0.52, 0.8, white, 0.06); box(0, 0.56, 0, 1.6, 0.08, 0.72, stone, 0.04); });
     at(2.8, 0, 2.4, 0, () => { box(0, 1.1, 0, 1.1, 2.2, 1.1, white, 0.05); box(0, 0.95, 0.58, 0.92, 1.9, 0.06, steel, 0.01); });
-    at(4.4, 0, -1.4, 0, () => box(0, 0.9, 0, 0.5, 1.8, 0.04, steel, 0.01));
-    plant(-4.4, 0, -3.4, 1);
+    at(4.1, 0, -1.4, 0, () => box(0, 0.9, 0, 0.5, 1.8, 0.04, steel, 0.01));
+    plant(-3.8, 0, -3.4, 1);
   });
-  // A small indoor fountain against the lounge's east wall, where the window
-  // into the garage used to be.
-  at(26.9, 0, -5, 0, () => {
-    cyl(0, 0.28, 0, 0.98, 1.04, 0.56, stone, 28);
-    cyl(0, 0.58, 0, 0.9, 0.9, 0.1, stone, 28);
-    const poolMat = mat('#8fc4c6', 0.3); poolMat.transparent = true; poolMat.opacity = 0.85;
-    put(new THREE.CylinderGeometry(0.84, 0.84, 0.03, 28), poolMat, 0, 0.6, 0);
-    cyl(0, 0.82, 0, 0.17, 0.22, 0.55, stone, 14);
-    cyl(0, 1.06, 0, 0.34, 0.26, 0.09, stone, 18);
-    put(new THREE.CylinderGeometry(0.27, 0.27, 0.02, 18), poolMat, 0, 1.09, 0);
-    cyl(0, 1.22, 0, 0.035, 0.05, 0.22, brass, 10);
-    for (let i = 0; i < 3; i++) orb(Math.cos(i * 2.1) * 0.5, 0.63, Math.sin(i * 2.1) * 0.5, 0.09, 0.045, 0.09, cream);
-    plant(0.62, 0.6, 0.3, 0.35, false);
-  });
-  hit(26.9, 0, -5, 2.1, 1.2, 2.1);
-  // Ground-floor home cinema in the north-east band.
+  // The lounge's old indoor fountain went with the rest of the east lounge's
+  // furniture when that hall was cleared for now.
+  // Ground-floor home cinema in the north-east band: a 5.2 m screen over a real
+  // AV rack, tower L/R + surround speakers with acoustic panels, and a tiered
+  // leather row — a three-seat sofa, a double loveseat and a single recliner.
+  const avGlow = mat('#8fb8c9', .3); avGlow.emissive.set('#6fb3c9'); avGlow.emissiveIntensity = .8;
+  const acoustic = mat('#3a3f3c', .95);
   at(22.6, 0, -13.6, 0, () => {
     at(0, 0, -4, 0, () => { box(0, 1.3, 0, 5.6, 2.6, 0.24, dark, 0.02); box(0, 1.35, 0.14, 5.2, 2.2, 0.05, white, 0.02); });
-    for (const [x, z] of [[-2.2, 0.6], [0, 0.6], [2.2, 0.6]]) {
-      box(x, 0.24, z, 1.9, 0.48, 0.9, dark, 0.05);
-      box(x, 0.56, z - 0.3, 1.85, 0.22, 0.34, sage, 0.05);
-      box(x, 0.72, z - 0.5, 1.85, 0.12, 0.22, cream, 0.04);
+    // AV rack under the screen: centre channel on a walnut console, a receiver
+    // with a glow display, a source deck and a vinyl nook.
+    at(0, 0, -3.9, 0, () => {
+      box(0, 0.36, 0, 3.2, 0.72, 0.52, walnut, 0.03);
+      box(0, 0.735, 0, 3.26, 0.03, 0.56, dark, 0.02);
+      box(0, 0.96, -0.04, 1.3, 0.32, 0.32, dark, 0.03);
+      for (let i = 0; i < 3; i++) cyl(-0.26 + i * 0.26, 0.96, 0.13, 0.052, 0.052, 0.02, steel, Math.PI / 2);
+      box(-1.02, 0.52, 0.05, 0.9, 0.17, 0.36, black, 0.02);
+      box(-1.02, 0.525, 0.235, 0.74, 0.08, 0.012, avGlow, 0.004);
+      for (const x of [-1.3, -0.74]) cyl(x, 0.635, 0.24, 0.032, 0.032, 0.014, steel, Math.PI / 2);
+      box(-1.02, 0.26, 0.05, 0.9, 0.15, 0.36, black, 0.02);
+      box(0.95, 0.5, 0.02, 1.05, 0.32, 0.36, dark, 0.02);
+      hit(0, 0, -0.1, 3.3, 1.1, 0.75);
+    });
+    for (const side of [-1, 1]) {
+      // Tower speakers: three real drivers plus a tweeter on a plinth.
+      at(side * 3.5, 0, -3.95, 0, () => {
+        box(0, 0.56, 0, 0.44, 1.12, 0.4, dark, 0.03);
+        for (const [y, r] of [[0.34, 0.125], [0.63, 0.105], [0.87, 0.065]]) { cyl(0, y, 0.21, r, r, 0.02, black, Math.PI / 2); cyl(0, y, 0.222, r * 0.55, r * 0.55, 0.008, steel, Math.PI / 2); }
+        box(0, 0.045, 0, 0.4, 0.09, 0.36, steel, 0.012);
+        hit(0, 0, 0, 0.5, 1.15, 0.46);
+      });
+      // Surround speakers high on the side walls, angled toward the row, over
+      // fabric acoustic panels.
+      at(side * 5.42, 2.0, -0.6, side > 0 ? -0.6 : 0.6, () => box(0, 0, 0, 0.24, 0.4, 0.3, dark, 0.02));
+      for (let i = 0; i < 4; i++) box(side * 5.54, 1.5, -3.2 + i * 1.8, 0.07, 1.5, 1.1, acoustic, 0.02);
     }
+    // Tiered leather seating, all three seats registered as sittable.
+    at(0, 0, 0.7, 0, () => sofa(2.6, terra, false, 'sofa-cinema-three'));
+    at(3.3, 0, 1.0, 0.55, () => sofa(1.9, terra, false, 'sofa-cinema-double'));
+    at(-3.3, 0, 1.0, -0.55, () => {
+      // Plush recliner: deep seat, angled backrest, winged headrest, arms.
+      box(0, 0.28, 0, 1.06, 0.3, 1.0, terra, 0.08);
+      box(0, 0.47, 0.06, 0.94, 0.17, 0.8, terra, 0.07);
+      box(0, 0.8, -0.4, 1.0, 0.74, 0.28, terra, 0.09);
+      box(0, 1.22, -0.5, 0.62, 0.3, 0.22, terra, 0.08);
+      box(-0.55, 0.56, -0.02, 0.2, 0.62, 0.9, terra, 0.07);
+      box(0.55, 0.56, -0.02, 0.2, 0.62, 0.9, terra, 0.07);
+      hit(0, 0, 0, 1.3, 1.35, 1.1, 'chair-cinema-single');
+      seatMarker('chair-cinema-single', 1.06, 1.0);
+    });
     box(0, 0.02, 2.6, 6.6, 0.03, 3.4, rugMat, 0.01);
-    box(4.2, 1.1, -2.2, 0.5, 0.6, 0.5, black, 0.03);
+    // Powered subwoofer in the east corner with a bass port and glow LED.
+    at(4.6, 0, -2.2, 0, () => { box(0, 0.31, 0, 0.52, 0.62, 0.5, black, 0.03); cyl(0, 0.3, 0.26, 0.14, 0.14, 0.02, steel, Math.PI / 2); box(0.2, 0.5, 0.252, 0.06, 0.02, 0.01, avGlow, 0.003); hit(0, 0, 0, 0.56, 0.62, 0.54); });
   });
   at(26.6, 0, -10.2, 0, () => lamp(true));
-  // Upstairs play and hobby room above it.
+  // Upstairs massage room (was the play & hobby room — its mattress is gone):
+  // a padded massage table with a face cradle, a warm-towel shelf, oil and
+  // stone bowls, soft lighting and a bench for robes.
   at(22.6, 3.6, -13.6, 0, () => {
-    at(0, 0, -1.6, 0, () => { table(2.4, 1.3, 0.6, oak); for (const [x, z] of [[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]]) box(x, 0.24, z, 0.4, 0.48, 0.4, sage, 0.04); });
-    at(0, 0, 2.4, 0, () => box(0, 0.28, 0, 3.6, 0.56, 2, linen, 0.12));
-    for (let i = 0; i < 4; i++) box(-3.6, 0.5 + i * 0.6, -3.35, 0.32, 0.04, 2.4, i % 2 ? cream : sage, 0.01);
-    box(-3.75, 1.1, -3.35, 0.1, 2.4, 0.1, steel, 0.01);
-    box(2.6, 0.9, -3.7, 2.2, 0.045, 0.3, walnut, 0.01);
-    for (let i = 0; i < 6; i++) orb(1.7 + i * 0.36, 1.02, -3.6, 0.09, 0.11, 0.09, bookMats[i % bookMats.length]!);
+    at(0, 0, -0.6, 0, () => {
+      for (const [x, z] of [[-0.72, -0.8], [0.72, -0.8], [-0.72, 0.8], [0.72, 0.8]]) cyl(x, 0.35, z, 0.05, 0.065, 0.7, walnut);
+      box(0, 0.76, 0, 1.86, 0.1, 1.98, walnut, 0.03);
+      box(0, 0.9, 0, 2, 0.16, 2.14, cream, 0.07);
+      box(0, 1, 0.78, 0.94, 0.12, 0.42, cream, 0.06);
+      box(0, 0.99, -0.88, 0.64, 0.12, 0.3, sage, 0.06);
+      box(0.55, 1.01, -0.1, 0.4, 0.07, 0.28, walnut, 0.02);
+      for (let i = 0; i < 3; i++) orb(0.45 + i * 0.11, 1.08, -0.1, 0.045, 0.038, 0.045, stone);
+      hit(0, 0, 0, 2.1, 1.1, 2.24);
+    });
+    at(-4.1, 0, -3.8, 0, () => {
+      for (let i = 0; i < 3; i++) box(0, 0.42 + i * 0.58, 0, 1.7, 0.05, 0.44, oak);
+      box(-0.45, 0.6, 0, 0.52, 0.17, 0.38, linen, 0.05); box(0.4, 1.18, 0, 0.52, 0.17, 0.38, sage, 0.05); box(-0.25, 1.78, 0, 0.6, 0.15, 0.38, linen, 0.05);
+      box(0.55, 0.62, 0, 0.18, 0.12, 0.18, brass, 0.02); box(0.55, 1.2, 0, 0.18, 0.12, 0.18, brass, 0.02);
+      hit(0, 0, 0, 1.8, 1.9, 0.5);
+    });
+    at(3.9, 0, -3.9, 0, () => { box(0, 0.3, 0, 1.3, 0.44, 0.5, oak, 0.05); box(0, 0.56, 0, 1.36, 0.09, 0.56, cream, 0.05); hit(0, 0, 0, 1.4, 0.65, 0.6); });
+    at(4.1, 0, 1.9, 0, () => lamp()); plant(-4.3, 0, 1.8, 1.25); plant(4.3, 0, 3.9, 1.1);
+    at(-2.1, 0, 2.6, 0.3, () => { box(0, 0.26, 0, 0.5, 0.52, 0.5, walnut, 0.05); box(0, 0.55, 0, 0.56, 0.06, 0.56, stone, 0.04); orb(0, 0.62, 0, 0.1, 0.06, 0.1, water); hit(0, 0, 0, 0.6, 0.65, 0.6); });
   });
   box(22.6, 3.617, -11.6, 5.2, 0.028, 4, rugMat, 0.01);
   at(19.4, 3.6, -10.4, 0, () => lamp(true)); plant(26.8, 3.6, -16.6, 1.3);
@@ -480,29 +605,59 @@ export function furnishVilla(scene: THREE.Scene): {
   box(24.6, 3.617, 5.6, 5, 0.028, 4, rugMat, 0.01);
   at(27.2, 3.6, -4.6, 0, () => lamp(true)); plant(18.6, 3.6, -16.6, 1.45);
   const bedroom = createVillaBedroom(root); colliders.push(...bedroom.colliders);
-  at(-4, 3.6, 6, -0.3, () => sofa(1.25, sage, false, 'sofa-master')); at(-3.05, 3.6, 6.75, 0, () => lamp(true)); at(-4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-2.14, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
+  const bathDoorModel = createVillaBathDoorModel(root);
+  at(-5.2, 3.6, 8, 0, () => sofa(1.25, sage, false, 'sofa-master')); at(-4.45, 3.6, 6.75, 0, () => lamp(true)); at(-5.4, 3.6, 4.7, 0, () => { table(0.7, 0.7, 0.48); tea(0, 0.49, 0); }); artwork(-4.25, 5.65, 5.1, 2.1, 1.2, -Math.PI / 2);
   // Soft gathered linen curtains flank the glazing without blocking the balcony door.
   for (const x of [-11.05, -8.97, -5.72, -2.8]) {
     for (let i = 0; i < 4; i++) cyl(x + (i - 1.5) * 0.075, 5.13, 8.72, 0.055, 0.065, 2.77, linen);
   }
   bed(VILLA_BEDS[1]);
-  at(-4.05, 3.6, -6.65, 0, () => { table(1.75, 0.75); books(-0.75, 0.77, -0.08, 4); at(0.62, 0.77, -0.05, 0, () => lamp()); box(0, 0.775, 0.1, 0.55, 0.013, 0.33, cream, 0); });
-  at(-4.05, 3.6, -5.65, 0, () => chair(sage, 'chair-guest')); at(-9.8, 3.6, -0.55, Math.PI, () => shelf(2.4)); plant(-3, 3.6, -8.1, 1.1);
-  at(10.7, 3.6, 3.45, 0, () => shelf(1.9)); at(11.48, 3.6, 6.4, -Math.PI / 2, () => shelf(2.8)); at(6.9, 3.6, 6.9, -0.4, () => sofa(1.5, terra, false, 'sofa-library-east')); at(4.2, 3.6, 6.4, 0.4, () => sofa(1.4, linen, false, 'sofa-library-west'));
-  at(5.5, 3.6, 5.6, 0, () => { table(1.25, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(5.7, 3.617, 6.3, 4.6, 0.028, 3.5, rugMat, 0); plant(3, 3.6, 8.1, 1.55); at(8.45, 3.6, 7.6, 0, () => lamp(true));
-  // 1.1.0 widened the reading wing east over the garage: a second study bay and
-  // a run of low bookcases fill the new floor rather than leaving a bare strip.
-  at(14.4, 3.6, 5.6, 0, () => { table(1.15, 0.75, 0.46); tea(0.3, 0.47, 0); books(-0.36, 0.47, 0, 3); });
-  at(13.4, 3.6, 6.9, 0.5, () => sofa(1.3, linen, false, 'sofa-library-bay'));
-  box(14.2, 3.617, 6.2, 3.1, 0.028, 3, rugMat, 0);
-  at(15.4, 3.6, 3.6, -Math.PI / 2, () => shelf(2.2)); at(15.4, 3.6, 7.9, -Math.PI / 2, () => shelf(2.2));
-  plant(12.6, 3.6, 8.1, 1.4); at(12.4, 3.6, 4.1, 0, () => lamp(true));
+  // Guest bedroom, now the whole north strip after the swap: bedside reading
+  // table, chair and a bookcase against the north wall.
+  at(-5.4, 3.6, -14.75, 0, () => { table(1.75, 0.75); books(-0.75, 0.77, -0.08, 4); at(0.62, 0.77, -0.05, 0, () => lamp()); box(0, 0.775, 0.1, 0.55, 0.013, 0.33, cream, 0); });
+  at(-5.3, 3.6, -13.2, 0, () => chair(sage, 'chair-guest')); at(-9.8, 3.6, -17.55, 0, () => shelf(2.4)); plant(-5.2, 3.6, -16.4, 1.1);
+  // Reading hall (阅读厅): every element of the old family room moved here after
+  // its walls came down. North half is the library, south half the lounge.
+  at(20.5, 3.6, -8.62, 0, () => shelf(1.9)); at(24.7, 3.6, -8.62, 0, () => shelf(2.8));
+  at(17.68, 3.6, -1.1, -Math.PI / 2, () => shelf(2.2)); at(17.68, 3.6, 2.2, -Math.PI / 2, () => shelf(2.2));
+  at(20.8, 3.6, -4.6, 0, () => { table(1.75, 0.8, 0.46); tea(0.28, 0.47, 0); books(-0.4, 0.47, 0, 3); }); box(21, 3.617, -4.6, 4.2, 0.028, 3, rugMat, 0);
+  at(18.6, 3.6, -4.6, -Math.PI / 2, () => sofa(1.4, linen, false, 'sofa-library-west'));
+  at(23.1, 3.6, -4.6, Math.PI / 2, () => sofa(1.5, terra, false, 'sofa-library-east'));
+  plant(18.2, 3.6, -8.1, 1.55); at(18.9, 3.6, -6.9, 0, () => lamp(true)); plant(26.9, 3.6, -8.1, 1.4);
+  // South lounge corner: the original guest-suite sofa plus the moved bay sofa.
+  at(20.2, 3.6, 6.4, 0.5, () => sofa(1.3, linen, false, 'sofa-library-bay'));
+  at(20.4, 3.6, 3.2, 0, () => { table(1.15, 0.75, 0.46); tea(0.3, 0.47, 0); books(-0.36, 0.47, 0, 3); });
+  box(21, 3.617, 5, 3.4, 0.028, 3, rugMat, 0);
+  plant(18, 3.6, 8.1, 1.4); at(19.2, 3.6, 1.6, 0, () => lamp(true));
 
-  // Bathroom/laundry, with an open tub basin and a metallic (non-render-target) mirror.
-  at(10.6, 3.6, -5.8, 0, () => {
-    box(0, 0.17, 0, 1.6, 0.34, 2.9, white, 0.16); for (const x of [-0.7, 0.7]) box(x, 0.44, 0, 0.2, 0.6, 2.8, white, 0.09); for (const z of [-1.3, 1.3]) box(0, 0.44, z, 1.38, 0.6, 0.2, white, 0.09);
-    box(0, 0.24, 0, 1.32, 0.04, 2.43, water, 0.02); cyl(0.6, 0.88, -1.12, 0.025, 0.025, 0.6, brass); cyl(0.43, 1.17, -1.12, 0.025, 0.025, 0.34, brass, 0, Math.PI / 2); box(0, 0.77, 0.48, 1.63, 0.055, 0.3, oak); tea(0.25, 0.8, 0.48); hit(0, 0, 0, 1.65, 0.8, 2.95);
+  // Bathroom: the tub grew 50 % in both plan dimensions and a walk-in shower
+  // with frosted panels fills the north-east corner.
+  const frosted = mat('#cfe4e8', .12); frosted.transparent = true; frosted.opacity = .32; frosted.roughness = .3; frosted.depthWrite = false;
+  at(11.4, 3.6, -4.4, 0, () => {
+    box(0, 0.17, 0, 2.4, 0.34, 4.35, white, 0.16);
+    for (const x of [-1.05, 1.05]) box(x, 0.44, 0, 0.3, 0.6, 4.2, white, 0.09);
+    for (const z of [-2.02, 2.02]) box(0, 0.44, z, 2.1, 0.6, 0.3, white, 0.09);
+    box(0, 0.24, 0, 1.98, 0.04, 3.65, water, 0.02);
+    cyl(0.9, 0.88, -1.68, 0.025, 0.025, 0.6, brass);
+    cyl(0.645, 1.17, -1.68, 0.025, 0.025, 0.51, brass, 0, Math.PI / 2);
+    box(0, 0.77, 0.9, 2.2, 0.055, 0.34, oak); tea(0.3, 0.8, 0.9);
+    hit(0, 0, 0, 2.45, 0.8, 4.4);
   });
+  // Walk-in shower: tiled tray, two frosted panels with chrome stabilizers, a
+  // rain head on a wall arm and a linear drain. Entry gaps face the door.
+  at(15.85, 3.6, -7.85, 0, () => {
+    box(0, 0.06, 0, 1.9, 0.12, 1.9, stone, 0.02);
+    cyl(0, 0.14, 0, 0.07, 0.07, 0.02, steel);
+    box(-0.925, 1.2, 0, 0.05, 2.15, 1.9, frosted, 0.02);
+    box(-0.925, 2.32, 0, 0.07, 0.05, 1.95, steel);
+    box(-0.475, 1.2, 0.925, 0.95, 2.15, 0.05, frosted, 0.02);
+    box(-0.475, 2.32, 0.925, 1.0, 0.05, 0.07, steel);
+    hit(-0.925, 0, 0, 0.1, 2.4, 1.9);
+    hit(-0.475, 0, 0.925, 0.95, 2.4, 0.1);
+  });
+  cyl(16.62, 2.06, -7.85, 0.022, 0.022, 0.5, steel, 0, Math.PI / 2);
+  cyl(16.38, 2.28, -7.85, 0.14, 0.14, 0.025, steel);
+  for (let i = 0; i < 4; i++) cyl(16.38, 2.24, -7.85, 0.004, 0.004, 0.05, steel);
   at(14.2, 3.6, -1.65, -Math.PI / 2, () => {
     box(0, 0.42, 0, 1.9, 0.84, 0.85, oak); box(0, 0.89, 0, 2, 0.1, 0.94, white); cyl(0, 1.015, 0, 0.31, 0.23, 0.2, white); cyl(0, 1.12, 0, 0.24, 0.24, 0.007, stone); cyl(0, 1.13, -0.32, 0.022, 0.022, 0.42, brass); cyl(0, 1.34, -0.22, 0.022, 0.022, 0.2, brass, Math.PI / 2);
     box(0, 1.96, -0.39, 1.48, 1.38, 0.05, brass); box(0, 1.96, -0.355, 1.37, 1.27, 0.018, steel, 0.01);
@@ -518,10 +673,34 @@ export function furnishVilla(scene: THREE.Scene): {
     cyl(0, 0.36, 0, 0.07, 0.07, 0.72, black); cyl(0, 0.04, 0, 0.48, 0.48, 0.08, black); cyl(0, 0.77, 0, 0.88, 0.88, 0.1, oak); hit(0, 0, 0, 1.76, 0.83, 1.76); plant(0, 0.83, 0, 0.42, true);
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; at(Math.sin(a) * 1.3, 0, Math.cos(a) * 1.3, a, () => chair(sage, `chair-roof-${i + 1}`)); }
   });
-  at(8.5, 7.2, -6, 0, () => {
-    legs(1.65, 0.85, 0.77, black, 0.045); box(0, 0.63, 0, 1.5, 0.45, 0.78, black, 0.06); box(0, 1.04, 0, 1.6, 0.42, 0.86, steel, 0.17); box(0, 1.1, 0.47, 0.67, 0.035, 0.055, black);
-    for (const x of [-0.5, 0, 0.5]) cyl(x, 0.77, 0.42, 0.045, 0.045, 0.04, brass, Math.PI / 2); for (const x of [-1.06, 1.06]) box(x, 0.86, 0, 0.5, 0.07, 0.76, oak); hit(0, 0, 0, 2.62, 1.27, 0.93);
-  });
+  // Three BBQ grills beside the east roof lounge, each with a hinged lid that
+  // opens and closes (grill hotspots toggle them individually).
+  const grillLids: THREE.Group[] = [];
+  const buildGrill = (x: number, z: number) => {
+    at(x, 7.2, z, 0, () => {
+      legs(1.65, 0.85, 0.77, black, 0.045);
+      box(0, 0.63, 0, 1.5, 0.45, 0.78, black, 0.06);
+      box(0, 0.885, 0, 1.56, 0.05, 0.84, steel, 0.03);
+      for (let i = 0; i < 5; i++) cyl(-0.6 + i * 0.3, 0.915, 0, 0.012, 0.012, 0.8, steel, 0, Math.PI / 2);
+      for (const sx of [-1.06, 1.06]) box(sx, 0.86, 0, 0.5, 0.07, 0.76, oak);
+      hit(0, 0, 0, 2.62, 1.27, 0.93);
+    });
+    // Lid pivot sits on the hinge line at the grill's back edge.
+    const lidPivot = new THREE.Group();
+    lidPivot.position.set(x, 8.13, z - 0.42);
+    lidPivot.userData = { animated: true, progress: 0 };
+    root.add(lidPivot);
+    const lid = new VillaModelBuilder(lidPivot, 'grill-lid');
+    lid.at(0, 0, 0, 0, () => {
+      lid.box(0, 0.05, 0.42, 1.56, 0.1, 0.8, steel, 0.04);
+      lid.box(0, 0.13, 0.42, 1.38, 0.09, 0.68, steel, 0.06);
+      lid.box(0, 0.21, 0.74, 0.67, 0.035, 0.05, black);
+      cyl(0, 0.16, 0.32, 0.045, 0.045, 0.02, black, Math.PI / 2);
+    });
+    lid.finish();
+    grillLids.push(lidPivot);
+  };
+  buildGrill(10.4, -6.4); buildGrill(13.4, -6.4); buildGrill(11.9, -9.2);
   // East roof lounge: the table sits against the south parapet so the walking
   // route from the pavilion to the lounge stays open.
   at(14.4, 7.2, 4.3, 0, () => {
@@ -582,7 +761,7 @@ export function furnishVilla(scene: THREE.Scene): {
   const aquariumMarker = new THREE.Object3D(); aquariumMarker.name = 'aquarium/cabinet';
   aquariumMarker.position.set(VILLA_AQUARIUM.x, 0, VILLA_AQUARIUM.z); aquariumMarker.userData = { ...VILLA_AQUARIUM };
   root.add(aquariumMarker);
-  root.userData.furnishings = { colliders: colliders.length, staticBatches: batches.size, staticVertices, fish: aquariumLife.metadata.fish.count, shrimp: aquariumLife.metadata.shrimp.count, pointLights: 2 };
+  root.userData.furnishings = { colliders: colliders.length, staticBatches: batches.size, staticVertices, fish: aquariumLife.metadata.fish.count, pointLights: 2 };
   let previousTime = 0;
   const update = (time: number, state: VillaFurnishingState): boolean => {
     const t = Number.isFinite(time) ? Math.max(0, time) : 0, feeding = t < state.fedUntil;
@@ -591,6 +770,20 @@ export function furnishVilla(scene: THREE.Scene): {
     aquariumLife.update(t, dt, feeding);
     const shadowChanged = bedroom.update(state.wardrobes, state.roomLights?.master !== false)
       || fridge.update(state.wardrobes);
+    if (state.bathDoors) bathDoorModel.update(state.bathDoors);
+    // The robot vacuum loops the hall; the LiDAR turret keeps spinning.
+    const va = t * 0.22;
+    vacuum.position.set(4.4 + Math.sin(va) * 0.85, 0, -10.3 + Math.cos(va) * 0.85);
+    vacuum.rotation.y = Math.atan2(Math.cos(va), -Math.sin(va));
+    if (vacuumLidar) vacuumLidar.rotation.y = t * 5;
+    // Grill lids ease toward their open/closed targets.
+    for (let i = 0; i < grillLids.length; i++) {
+      const target = state.grillLids?.[i] ? 1 : 0;
+      const current = grillLids[i].userData.progress as number;
+      const next = current + Math.sign(target - current) * Math.min(Math.abs(target - current), dt / 0.7);
+      grillLids[i].userData.progress = next;
+      grillLids[i].rotation.x = -1.25 * next;
+    }
     for (let i = 0; i < flames.length; i++) { flames[i].visible = state.fireplace; flames[i].scale.y = 0.2 + 0.16 * (0.5 + Math.sin(t * 8 + i * 1.9) * 0.5); flames[i].position.y = 0.48 + flames[i].scale.y * 0.67; flames[i].rotation.z = Math.sin(t * 5 + i) * 0.16; }
     const night = state.nightFactor ?? (state.evening ? 1 : 0);
     fireLight.intensity = state.fireplace ? (1.8 + night * 1.7) * (0.9 + Math.sin(t * 11) * 0.06 + Math.sin(t * 7.3) * 0.04) : 0;
