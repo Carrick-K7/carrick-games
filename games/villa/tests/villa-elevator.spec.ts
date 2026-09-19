@@ -154,7 +154,9 @@ test('a real click on the lift panel works while the pointer is locked', async (
   expect(aimed).toBe('elevator-floor-2');
   await page.mouse.down(); await page.mouse.up();
   await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
-    { message: 'a locked click on the aimed panel button must select the floor' }).toBe(2);
+    // Software rasterisation starves the frame loop in a long single-worker run,
+    // so the press can take far longer than a nominal frame to be processed.
+    { message: 'a locked click on the aimed panel button must select the floor', timeout: 30_000 }).toBe(2);
   // And the mouse keeps steering the view inside the car: the panel no longer
   // owns it.
   const yawBefore = await page.evaluate(() => (window as any).__liftPanel.yaw);

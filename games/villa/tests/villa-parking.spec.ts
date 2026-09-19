@@ -46,20 +46,26 @@ test('one-key parking drives a car from the estate back into its own bay', async
   expect(errors).toEqual([]);
 });
 
-test('one-key parking refuses a route its own obstacles block instead of driving through them', async ({ page }) => {
-  test.setTimeout(120_000);
+test('one-key parking drives home from the scenic oval now the front link is clear', async ({ page }) => {
+  test.setTimeout(300_000);
   await fixture(page);
   const result = await page.evaluate(() => {
     const { game, canvas } = (window as any).__villaPark as { game: any; canvas: HTMLCanvasElement };
-    // The scenic-oval approach crosses the front link, where a vegetable bed
-    // stands inside the road corridor: the run must refuse, not scrape past.
+    // This approach crosses the front link, whose west arm used to run through
+    // the vegetable patch and made the car refuse the whole estate.
     Object.assign(game.state.driving, { x: 24, z: 34, yaw: -.4, speed: 0, steering: 0 });
     game.handleInput(new KeyboardEvent('keydown', { key: 'v' }));
-    return { engaged: game.state.park.car.active, collisions: game.state.driving.collisions, telemetry: JSON.parse(canvas.dataset.villaPark ?? '[]') };
+    let steps = 0;
+    for (; steps < 60 * 300 && game.state.park.car.active; steps++) game.update(1 / 60);
+    return { engaged: steps > 0, steps, parked: { x: game.state.driving.x, z: game.state.driving.z },
+      collisions: game.state.driving.collisions, failed: game.state.park.car.failed,
+      telemetry: JSON.parse(canvas.dataset.villaPark ?? '[]') };
   });
-  expect(result.engaged).toBe(false);
+  expect(result.engaged, JSON.stringify(result)).toBe(true);
+  expect(result.failed).toBe('');
+  expect(Math.hypot(result.parked.x - 32.4, result.parked.z + 2.6), JSON.stringify(result)).toBeLessThan(.1);
   expect(result.collisions).toBe(0);
-  expect(result.telemetry.find((v: any) => v.id === 'car')).toMatchObject({ canPark: true, active: false });
+  expect(result.telemetry.find((v: any) => v.id === 'car')).toMatchObject({ parked: true, active: false });
 });
 
 test('one-key parking refuses a car that is already home and offers the ones outside', async ({ page }) => {

@@ -21,7 +21,9 @@ export const VILLA_GARDEN_TREES = [
   { x: -30.2, z: 8.2, scale: 1, species: 'orange' },
   { x: -22, z: 19, scale: 1.25, species: 'cherry' },
   { x: -14, z: 22.8, scale: 1, species: 'mango' },
-  { x: 8, z: 23, scale: 1.15, species: 'apple' },
+  // Moved 1.5 m east: the rerouted front link's shoulder reached within 0.7 m
+  // of this trunk, and it now sits 5.7 m clear of every road centreline.
+  { x: 9.5, z: 23, scale: 1.15, species: 'apple' },
   { x: 16.5, z: 60, scale: 1.2, species: 'orange' },
   { x: 22, z: 14.5, scale: 1, species: 'lemon' },
   { x: 34.4, z: -15.6, scale: 1.2, species: 'mango' },
@@ -45,13 +47,9 @@ export const VILLA_ROOF_PLANTERS = [
   { x: 0, z: 8.1, y: 7.2, w: 2.2, d: 0.72, species: 'sunflower' },
 ] as const;
 export const VILLA_VEGETABLE_SPECIES = ['tomato', 'lettuce', 'carrot', 'eggplant'] as const;
-// The east column stands inside the front link's 8.4 m corridor: its corner is
-// 0.19 m from the centreline, so the asphalt runs through the plants. A move must
-// satisfy five constraints at once - road corridor (>= 4.65 m), the pets' lawn
-// anchors, the camping-chair placement probe, the garden test's own bounds, and
-// the pets' rain-shelter timing (a site west of the lawn delays the two indoor
-// seekers past the test's window). Until they are solved together the car's own
-// route check refuses that stretch rather than driving over a bed.
+// The patch stays on the lawn the pets, the player's spawn and the garden tests
+// all expect. The front link's west approach is routed around it instead: that
+// road was the newcomer that ran through the plants.
 export const VILLA_VEGETABLE_BEDS = [
   { x: -10, z: 18, w: 2.6, d: 1.55, species: 'tomato' },
   { x: -5.8, z: 18, w: 2.6, d: 1.55, species: 'lettuce' },

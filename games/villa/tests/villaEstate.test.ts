@@ -4,6 +4,9 @@ import { furnishVilla } from '../src/villaFurnishings.js';
 import { VILLA_EAST_WALL as EAST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_WEST_WALL as WEST } from '../src/villaEstateLayout.js';
 import { VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FIELDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_GARAGE_BAYS, VILLA_GARAGE_EXTENT, VILLA_POND, VILLA_SCOOTER_PARKING, villaEstateContains, villaPondContains, villaPondIntersectsPolygon, villaTerrainBounds, villaTerrainHeight, villaTerrainLocalPoint, villaTerrainNormal, villaTerrainOrientation } from '../src/villaEstateLayout.js';
 import { createVillaEstateModel } from '../src/villaEstateModel.js';
+import { furnishVilla } from '../src/villaFurnishings.js';
+import { createVillaGarden } from '../src/villaGarden.js';
+import { VILLA_WALL_COLLIDERS, type VillaCollider } from '../src/villaWorld.js';
 import { createVillaTerrainGeometry, createVillaEstateFence } from '../src/villaTerrainModel.js';
 import { createVillaDrivingCourse, VILLA_SOUTH_ROAD_SAMPLES, villaDistanceToRoad } from '../src/villaDrivingCourse.js';
 import { villaDrivingPoseBlocked, villaCarAnchors, villaCarExitClear, createVillaDriving, advanceVillaDriving } from '../src/villaDriving.js';
@@ -104,6 +107,59 @@ describe('Villa estate terrain-sampled static models and scenic routes', () => {
         }
       }
     } finally { dispose(scene); }
+  });
+  it('keeps every road lane free of ground-level obstacles and every end connected', () => {
+    // Lane-wise, not edge-only: the vegetable patch that used to stand here sat
+    // on the centreline, which an edge-only check cannot see.
+    const paint = new Proxy({}, { get: () => () => undefined, set: () => true });
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => paint }) });
+    const scene = new THREE.Scene();
+    let colliders: VillaCollider[] = [];
+    try { const f = furnishVilla(scene); const g = createVillaGarden(scene); colliders = [...VILLA_WALL_COLLIDERS, ...f.colliders, ...g.colliders]; }
+    finally { vi.unstubAllGlobals(); }
+    colliders = [...colliders, ...createVillaEstateModel(new THREE.Group()).colliders];
+    const names = ['scenic-oval', 'south-road', 'garage-drive', 'front-link', 'east-link', 'entry-spur'];
+    const blocked: string[] = [];
+    VILLA_ESTATE_ROAD_PATHS.forEach((path, index) => {
+      const half = ((path === VILLA_GARAGE_DRIVE ? VILLA_SCENIC_ROAD.drivewayWidth : VILLA_SCENIC_ROAD.width) / 2) + .45;
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1]!, b = path[i]!;
+        const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
+        const steps = Math.max(1, Math.ceil(len / .3));
+        for (let step = 0; step <= steps; step++) {
+          const t = step / steps, x = a.x + dx * t, z = a.z + dz * t;
+          for (const lane of [-1, -.5, 0, .5, 1]) {
+            const px = x + (dz / len) * lane * half, pz = z - (dx / len) * lane * half;
+            for (const c of colliders) {
+              // Painted kerbs are flat and bay headers are overhead: neither is
+              // something a car can hit at its own height.
+              if (c.maxY < .25 || c.minY > 2) continue;
+              if (px > c.minX - .23 && px < c.maxX + .23 && pz > c.minZ - .23 && pz < c.maxZ + .23)
+                blocked.push(`${names[index]} seg${i} lane${lane} vs box[${c.minX.toFixed(1)}..${c.maxX.toFixed(1)} x ${c.minZ.toFixed(1)}..${c.maxZ.toFixed(1)} y${c.minY.toFixed(2)}..${c.maxY.toFixed(2)}]`);
+            }
+          }
+        }
+      }
+    });
+    expect([...new Set(blocked)]).toEqual([]);
+    // Ends must reach another path, except the garage drive, which ends on the
+    // paved apron in front of its own bays by design.
+    for (const [index, path] of VILLA_ESTATE_ROAD_PATHS.entries()) {
+      for (const end of [path[0]!, path[path.length - 1]!]) {
+        if (path === VILLA_GARAGE_DRIVE && end.z <= 3) continue;
+        let nearest = Infinity;
+        VILLA_ESTATE_ROAD_PATHS.forEach((other, j) => {
+          if (j === index) return;
+          for (let i = 1; i < other.length; i++) {
+            const a = other[i - 1]!, b = other[i]!;
+            const dx = b.x - a.x, dz = b.z - a.z;
+            const t = Math.max(0, Math.min(1, ((end.x - a.x) * dx + (end.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+            nearest = Math.min(nearest, Math.hypot(end.x - a.x - t * dx, end.z - a.z - t * dz));
+          }
+        });
+        expect(nearest, `${names[index]} end ${end.x},${end.z} is cut off`).toBeLessThan(6.5);
+      }
+    }
   });
   it('keeps every road edge clear of the buildings, water and every tree trunk', () => {
     // The shoulder is wider than the asphalt; clip the OUTER edge, not the line.

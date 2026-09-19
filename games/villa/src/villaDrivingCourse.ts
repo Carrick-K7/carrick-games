@@ -31,12 +31,17 @@ const VILLA_SCENIC_ROAD_SAMPLES: readonly RoadPoint[] = Array.from({ length: 145
 export const VILLA_GARAGE_DRIVE: readonly RoadPoint[] = [
   // Centred east of the house's east wall: the old x=32.4 line let the shoulder
   // reach x=27.5, inside the east lounge — a real clip, not a cosmetic one.
-  { x: 34, z: 2 }, { x: 34, z: 12 }, { x: 31, z: 22 }, { x: 25.5, z: 29 }];
+  // The north end stops 1 m short of the garage facade so its 8.8 m ribbon no
+  // longer overlaps the wall piers beside the 4.5 m bay opening.
+  { x: 34, z: 3 }, { x: 34, z: 12 }, { x: 31, z: 22 }, { x: 25.5, z: 29 }];
 /** A through-road across the front of the house, joining both ends of the long
  *  southern branch. With it the estate has two independent loops instead of one
  *  out-and-back line, which is the point of the added roads. */
 const VILLA_FRONT_LINK: readonly RoadPoint[] = [
-  { x: -9, z: 28 }, { x: -6.5, z: 22.5 }, { x: -2, z: 18 }, { x: 5, z: 15.6 },
+  // The west approach swings north of the vegetable patch: the old line ran
+  // through the beds, its centreline 0.19 m from their corner, which left the
+  // asphalt growing crops and no car able to pass.
+  { x: -9, z: 33 }, { x: -2, z: 28 }, { x: 3, z: 22 }, { x: 5, z: 15.6 },
   // The east approach swings wide of the orange tree at (23.2, 19).
   { x: 13, z: 16.2 }, { x: 19, z: 21.2 }, { x: 25, z: 27.4 }];
 /** A second descent down the east side, so the garage apron is not a dead end. */
