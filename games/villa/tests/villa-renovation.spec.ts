@@ -4,16 +4,22 @@ import { VILLA_SUV } from '../src/villaSuv.js';
 import { villaStreamSectionAt } from '../src/villaStream.js';
 
 async function fixture(page: Page) {
-  await page.route('**/__villa-renovation', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body style="margin:0"><main id="gameApp" style="position:relative;width:960px;height:600px"><canvas id="gameCanvas" tabindex="0"></canvas></main></body></html>' }));
-  await page.goto('/__villa-renovation');
-  await page.evaluate(async url => {
-    const { VillaGame } = await import(url);
-    const canvas = document.querySelector('canvas')!;
-    const game = new VillaGame({ canvas, logicalWidth: 960, logicalHeight: 600, isDarkTheme: () => false, isZhLang: () => true,
-      isPixelMode: () => false, getRecord: () => null, reportScore() {}, requestShellRender() {} }) as any;
-    game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
-    (window as any).__villaRenovation = game;
-  }, gameModuleUrl('villa'));
+  // Playwright's Chromium page.evaluate(function) sets CDP userGesture:true.
+  // Starting inside it falsely grants activation on a fast CI renderer (while a
+  // slow software renderer used to let that activation expire). A real static
+  // module boot has no input gesture, regardless of construction speed.
+  const moduleUrl = JSON.stringify(gameModuleUrl('villa'));
+  await page.route('**/__villa-renovation', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body style="margin:0"><main id="gameApp" style="position:relative;width:960px;height:600px"><canvas id="gameCanvas" tabindex="0"></canvas></main>
+    <script type="module">
+      import { VillaGame } from ${moduleUrl};
+      window.__villaBootHadActivation = navigator.userActivation?.isActive === true;
+      const canvas = document.querySelector('canvas');
+      const game = new VillaGame({ canvas, logicalWidth: 960, logicalHeight: 600, isDarkTheme: () => false, isZhLang: () => true,
+        isPixelMode: () => false, getRecord: () => null, reportScore() {}, requestShellRender() {} });
+      game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
+      window.__villaRenovation = game;
+    </script></body></html>` }));
+  await page.goto('/__villa-renovation', { waitUntil: 'load' });
 }
 
 test('native audio activation, mute, pause and destroy follow the game lifecycle', async ({ page }) => {
@@ -24,8 +30,8 @@ test('native audio activation, mute, pause and destroy follow the game lifecycle
     const g = (window as any).__villaRenovation;
     for (let i = 0; i < 30; i++) g.update(.05);
     g.handleInput(new KeyboardEvent('keydown', { key: 'w' })); g.keys.clear();
-    return g.audio.ctx === null;
-  })).toBe(true);
+    return { gestureAtBoot: (window as any).__villaBootHadActivation, contextAbsent: g.audio.ctx === null };
+  })).toEqual({ gestureAtBoot: false, contextAbsent: true });
   await page.keyboard.press('w');
   await expect.poll(() => page.evaluate(() => (window as any).__villaRenovation.audio.ctx?.state)).toBe('running');
   await page.evaluate(() => { const g = (window as any).__villaRenovation; g.update(.05); g.setTerminal(true); });
