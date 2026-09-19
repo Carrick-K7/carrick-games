@@ -1,8 +1,12 @@
 import * as T from 'three';
 import {buildReferenceWeapon} from './csReferenceWeapons.js';
+import {createViewHand,poseViewHand,poseFirearmHand,poseClassicKnifeGrip} from './csViewHands.js';
+import {DEFAULT_KNIFE_MODEL,normalizeKnifeModel} from './csKnifeStyles.js';
+import {buildButterflyKnife} from './csButterflyKnife.js';
+import {karambitMaterials} from './csKarambitMaterials.js';
 
 const mat=(color,metalness=.0,roughness=.7)=>new T.MeshStandardMaterial({color,metalness,roughness});
-const M={steel:mat(0x30373a,.8,.35),dark:mat(0x111719,.45,.53),edge:mat(0x697375,.82,.33),polymer:mat(0x252925,.06,.88),olive:mat(0x66714b,.04,.89),wood:mat(0x824521,.03,.61),woodLight:mat(0xa16531,.02,.66),rubber:mat(0x171a19,.0,.96),brass:mat(0xb49449,.74,.31),glass:mat(0x276076,.68,.15),glove:mat(0x333c39,.02,.96),sleeve:mat(0x3b4b51,.0,.98)};
+const M={steel:mat(0x30373a,.8,.35),dark:mat(0x111719,.45,.53),edge:mat(0x697375,.82,.33),polymer:mat(0x252925,.06,.88),olive:mat(0x66714b,.04,.89),wood:mat(0x824521,.03,.61),woodLight:mat(0xa16531,.02,.66),knifeScale:mat(0x6e705b,.06,.82),rubber:mat(0x171a19,.0,.96),brass:mat(0xb49449,.74,.31),glass:mat(0x276076,.68,.15),glove:mat(0x333c39,.02,.96),sleeve:mat(0x3b4b51,.0,.98)};
 const Y=new T.Vector3(0,1,0);
 function mesh(g,geo,material,x=0,y=0,z=0){const o=new T.Mesh(geo,material);o.position.set(x,y,z);g.add(o);return o;}
 function box(g,x,y,z,w,h,l,m=M.steel){return mesh(g,new T.BoxGeometry(w,h,l),m,x,y,z);}
@@ -122,13 +126,114 @@ function pistol(r,id,w){const g=r.fixed,eagle=false,front=-.124,width=.031;
   if(w.silencer){r.suppressor=part(r.core,'suppressor');cylinder(r.suppressor,0,.031,front-.068,.017,.124,M.dark);cylinder(r.suppressor,0,.031,front-.133,.011,.002,M.rubber);r.muzzleBare=new T.Vector3(0,.031,front-.009);}
   r.magazine.position.set(0,-.119,.061);profile(r.magazine,[[-.020,.103],[.016,.101],[.032,-.013],[-.012,-.02]],width*.83,M.dark);box(r.magazine,0,-.016,.01,width+.004,.009,.052,M.polymer);r.restRight.set(.012,-.074,.067);r.restLeft.set(-.021,-.071,.038);r.ejectPort.set(.019,.043,-.04);r.muzzle.set(0,.031,front-(w.silencer?.13:.009));
 }
+let classicGrip;
+function classicKnife(r){
+  const frame=part(r.core,'classic-knife-grip-frame');r.knifeFrame=frame;
+  const pivot=part(frame,'classic-knife-grip');r.knifePivot=pivot;
+  const body=part(pivot,'classic-knife-body');
+  // Authored CS 1.6 silhouette: broad clipped point, short toothed spine,
+  // bright cutting bevel, small guard and a dark, straight scale handle.
+  const handle=[[-.013,-.064],[.014,-.064],[.020,-.050],[.016,-.023],[.017,.034],[.013,.060],[-.014,.060],[-.020,.034],[-.018,-.028],[-.021,-.050]];
+  profile(body,handle,.014,M.steel);
+  profile(body,handle.map(([z,y])=>[z*.90,y*.93]),.018,M.rubber);
+  const inlay=[[-.010,-.050],[.010,-.050],[.010,.047],[-.010,.047],[-.014,.027],[-.012,-.029]];
+  const scaleMaterial=M.knifeScale;
+  for(const sign of [-1,1]){
+    const panel=profile(body,inlay,.0015,scaleMaterial);panel.position.x=sign*.010;
+    for(const y of [-.039,.033])screw(body,sign*.0125,y,0,.0034);
+    for(let i=0;i<7;i++)rod(body,[sign*.0117,-.022+i*.006,-.009],[sign*.0117,-.019+i*.006,.009],.00055,M.dark);
+  }
+  profile(body,[[-.034,.059],[.034,.059],[.032,.068],[-.030,.072]],.025,M.steel);
+  const blade=part(pivot,'classic-knife-blade');r.knifeBlade=blade;
+  const outline=[[-.017,.068],[.018,.068],[.022,.093]];
+  for(let i=0;i<7;i++){const y=.094+i*.008;outline.push([.022,y],[.017,y+.003],[.022,y+.006]);}
+  outline.push([.022,.185],[-.004,.265],[-.019,.236],[-.030,.194],[-.030,.088],[-.021,.074]);
+  profile(blade,outline,.0025,M.edge);
+  profile(blade,[[-.013,.072],[.015,.072],[.015,.182],[-.004,.254],[-.013,.223],[-.020,.188],[-.020,.095]],.0052,M.steel);
+  batch(blade);batch(body);
+  if(!classicGrip){
+    const hand=createViewHand(M.glove,'r'),grip=poseClassicKnifeGrip(hand);
+    classicGrip={...grip,rotation:hand.group.quaternion.clone()};hand.mesh.geometry.dispose();hand.skeleton.dispose();
+  }
+  r.knifePalm=classicGrip.palm.clone();r.knifeHandRotation=classicGrip.rotation.clone();
+  r.knifeTip=new T.Vector3(0,.265,-.004);r.knifeRest=pivot.quaternion.clone();
+  frame.rotation.set(.10,1.10,-.20,'YXZ');
+  r.restRight.copy(r.knifePalm).applyQuaternion(frame.quaternion);r.restLeft.set(-.27,-.05,.025);
+  r.muzzle.copy(r.knifeTip).applyQuaternion(frame.quaternion);
+}
+function karambit(r){
+  const metal=karambitMaterials();
+  // Original game mesh: reverse grip, open index ring, curved scales and a
+  // separately bevelled claw. The long-knife slab/guard are not reused.
+  const frame=part(r.core,'karambit-grip-frame');r.knifeFrame=frame;
+  const pivot=part(frame,'karambit-ring-pivot',0,.037,.028);r.knifePivot=pivot;
+  const g=part(pivot,'karambit-body',0,-.037,-.028);
+  const ring=mesh(g,new T.TorusGeometry(.0147,.0035,12,40),metal.ring,0,.037,.028);ring.rotation.y=Math.PI/2;
+  profile(g,[[.010,.023],[.044,.023],[.057,.007],[.059,-.031],[.044,-.074],[.012,-.087],[-.002,-.070],[.003,-.044],[-.002,-.025],[.003,-.008]],.013,metal.frame);
+  const handle=[[.012,.016],[.039,.017],[.049,.003],[.049,-.029],[.037,-.067],[.013,-.075],[.008,-.060],[.013,-.042],[.008,-.025],[.013,-.009]];
+  profile(g,handle,.021,M.rubber);
+  for(const x of [-.013,.013]){
+    for(const [z,y]of [[.028,.007],[.029,-.054]])screw(g,x,y,z,.0034);
+    for(let i=0;i<6;i++)rod(g,[x,-.009-i*.008,.021],[x,-.015-i*.008,.041],.0009,M.dark);
+  }
+  const blade=new T.Shape();blade.moveTo(.030,-.072);blade.quadraticCurveTo(.022,-.147,-.066,-.184);blade.quadraticCurveTo(-.119,-.202,-.154,-.176);blade.quadraticCurveTo(-.072,-.178,-.027,-.105);blade.quadraticCurveTo(-.014,-.078,.001,-.066);blade.lineTo(.030,-.072);
+  const bladeGroup=part(g,'karambit-blade');r.knifeBlade=bladeGroup;
+  profile(bladeGroup,blade.getPoints(18).map(p=>[p.x,p.y]),.0045,metal.edge);
+  const flat=new T.Shape();flat.moveTo(.017,-.079);flat.quadraticCurveTo(.006,-.139,-.071,-.175);flat.quadraticCurveTo(-.117,-.193,-.145,-.179);flat.quadraticCurveTo(-.072,-.178,-.030,-.111);flat.quadraticCurveTo(-.014,-.084,.017,-.079);
+  profile(bladeGroup,flat.getPoints(18).map(p=>[p.x,p.y]),.0058,metal.face);
+  bladeGroup.scale.z=.85;bladeGroup.position.z=.003;
+  batch(bladeGroup);batch(g);r.knifePalm=new T.Vector3(.034,-.014,.028);r.restLeft.set(-.30,-.020,-.07);
+  r.knifeTip=new T.Vector3(0,-.176,-.154*.85+.003);r.knifeRest=pivot.quaternion.clone();
+  // The blade exits the little-finger side of the fist. In the right-handed
+  // view its hook is outside the wrist and curls upward, not into the forearm.
+  frame.rotation.set(0,-Math.PI/2,1.16,'ZYX');
+  r.restRight.copy(r.knifePalm).applyQuaternion(frame.quaternion);
+  r.muzzle.copy(r.knifeTip).applyQuaternion(frame.quaternion);
+}
+function makeKnifeHands(g,r){
+  r.knifeRight=createViewHand(M.glove,'r');r.knifeFrame.add(r.knifeRight.group);
+  r.knifeIndex=new T.Vector3(0,.037,.028);r.knifeWrist=new T.Vector3();
+  r.knifeCuff=mesh(g,new T.CylinderGeometry(.034,.037,.043,16),M.rubber);
+  r.knifeForearm=mesh(g,new T.CylinderGeometry(.027,.050,1,16),M.sleeve);
+  if(r.knifeModel!=='karambit')r.knifeUpperArm=mesh(g,new T.CylinderGeometry(.049,.062,1,16),M.sleeve);
+  r.knifeElbow=new T.Vector3(.43,-.29,.24);r.knifeElbowRest=r.knifeElbow.clone();
+  const root=part(g,'karambit-off-hand-root'),skin=createViewHand(M.glove,'l'),left=skin.group;root.add(left);
+  poseViewHand(skin,{open:1,thumb:.80,relaxed:true});
+  left.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(0,-1,0),new T.Vector3(0,0,-1),new T.Vector3(1,0,0)));
+  left.rotateY(-.18);left.rotateZ(-.10);
+  const cuff=mesh(root,new T.CylinderGeometry(.034,.037,.043,16),M.rubber),arm=mesh(root,new T.CylinderGeometry(.027,.050,1,16),M.sleeve);
+  const rest=new T.Vector3(-.27,-.05,.025);left.position.copy(rest);
+  r.knifeLeft={root,hand:left,skin,arm,cuff,elbow:new T.Vector3(-.52,-.24,.30),rest};
+}
 function makeArm(g,side,rest){const hand=part(g,side+'-hand');const palm=sphere(hand,0,0,0,.034,M.glove);palm.scale.set(.77,1.10,.74);for(let i=0;i<4;i++){const finger=mesh(hand,new T.CapsuleGeometry(.007,.028,4,8),M.glove,0,.022-i*.014,-.020);finger.rotation.z=Math.PI/2;box(hand,.017,.022-i*.014,-.018,.008,.008,.017,M.rubber);}const thumb=mesh(hand,new T.CapsuleGeometry(.009,.023,4,8),M.glove,side==='right'?-.022:.022,.013,.014);thumb.rotation.z=side==='right'?-.5:.5;const wrist=mesh(hand,new T.CylinderGeometry(.025,.030,.029,12),M.rubber,0,-.042,.02);wrist.rotation.x=-.5;batch(hand);
   const arm=mesh(g,new T.CylinderGeometry(.032,.058,1,14),M.sleeve);const elbow=new T.Vector3(side==='right'?.22:-.19,-.30,.34);hand.position.copy(rest);return{hand,arm,elbow,rest:rest.clone()};
 }
-export function buildWeapon(id,w,hands=false){
+function makeGripArm(g,side,rest,style){
+  const left=side==='left',skin=createViewHand(M.glove,left?'l':'r',true),hand=skin.group;g.add(hand);
+  const gripStyle=left?style:'pistol';poseFirearmHand(skin,gripStyle);
+  const under=left&&style==='underhand',y=under?new T.Vector3(.60,.20,-.775).normalize():new T.Vector3(0,-.45,-.893).normalize();
+  // Both palms face into the weapon. The left glove already has mirrored
+  // anatomy; mirroring its frame again pointed its fingers away from the grip.
+  const x=under?new T.Vector3(0,1,0).addScaledVector(y,-y.y).normalize():new T.Vector3(1,0,0);
+  const rotation=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,new T.Vector3().crossVectors(x,y)));
+  const magazineRotation=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(1,0,0),new T.Vector3(0,.25,-.968).normalize(),new T.Vector3(0,.968,.25).normalize()));
+  const arm=mesh(g,new T.CylinderGeometry(.028,.052,1,16),M.sleeve),cuff=mesh(g,new T.CylinderGeometry(.031,.034,.038,16),M.rubber);
+  const upperArm=mesh(g,new T.CylinderGeometry(.050,.064,1,16),M.sleeve);
+  return{hand,skin,arm,cuff,upperArm,gripStyle,elbow:new T.Vector3(left?-.27:.25,-.30,.31),rest:rest.clone(),rotation,magazineRotation,palm:new T.Vector3(0,.056,.005).multiplyScalar(skin.scale)};
+}
+export function buildWeapon(id,w,hands=false,knifeModel=DEFAULT_KNIFE_MODEL){
   const g=new T.Group(),core=part(g,'weapon-core'),fixed=part(core,'receiver'),magazine=part(core,'magazine'),action=part(core,'bolt'),boltHandle=part(action,'bolt-handle'),slide=part(core,'slide'),cover=part(core,'feed-cover'),pump=part(core,'fore-end');
-  const r={id,core,fixed,magazine,bolt:action,boltHandle,slide,cover,pump,restLeft:new T.Vector3(),restRight:new T.Vector3(),ejectPort:new T.Vector3(),muzzle:new T.Vector3()};
+  const r={id,knifeModel:normalizeKnifeModel(knifeModel),core,fixed,magazine,bolt:action,boltHandle,slide,cover,pump,restLeft:new T.Vector3(),restRight:new T.Vector3(),ejectPort:new T.Vector3(),muzzle:new T.Vector3()};
   const reference=buildReferenceWeapon(r);
+  if(reference&&id==='m249'){
+    r.belt=part(core,'linked-ammunition');
+    for(let i=0;i<7;i++){const x=-.10+i*.009,y=.018+Math.sin(i/6*Math.PI/2)*.023;cylinder(r.belt,x,y,-.008,.0038,.039,M.brass);const tip=mesh(r.belt,new T.ConeGeometry(.0037,.012,10),M.brass,x,y,-.034);tip.rotation.x=-Math.PI/2;box(r.belt,x,y+.001,.003,.008,.002,.009,M.dark);}
+    batch(r.belt);
+  }
+  if(reference&&['m3','xm1014'].includes(id)){
+    r.shell=part(core,'loading-shell');const hull=mat(0x813b27,.08,.65);hull.userData.ownedCsWeaponMaterial=true;
+    cylinder(r.shell,0,0,0,.0095,.040,hull);cylinder(r.shell,0,0,.019,.010,.009,M.brass);batch(r.shell);r.shell.visible=false;
+  }
   if(id==='c4'){
     // A compact game prop: taped blocks, an olive carrier and a readable keypad.
     box(fixed,0,-.02,0,.205,.10,.265,M.olive);for(const z of [-.078,.078])box(fixed,0,-.012,z,.212,.115,.029,M.rubber);
@@ -137,10 +242,26 @@ export function buildWeapon(id,w,hands=false){
     for(const x of [-.082,.082])rod(fixed,[x,.048,-.10],[x*.5,.051,-.065],.003,M.brass);
     r.restLeft.set(-.104,-.015,.019);r.restRight.set(.104,-.010,.039);r.muzzle.set(0,.08,-.10);batch(fixed);
   }
-  if(!reference&&id!=='c4'){if(w.boltAction)boltRifle(r,id);else if(id==='tmp')mp9(r);else if(w.pistol)pistol(r,id,w);else if(id==='he'){sphere(fixed,0,0,0,.045,M.olive);box(fixed,0,.050,0,.025,.029,.026,M.dark);box(fixed,.028,.030,0,.010,.068,.018,M.edge);r.pin=part(fixed,'grenade-pin');mesh(r.pin,new T.TorusGeometry(.012,.0024,8,20),M.edge,-.025,.063,0);r.restRight.set(.018,-.018,.02);r.restLeft.set(-.07,-.07,.07);}else if(id==='armor'){box(fixed,0,0,0,.42,.49,.14,M.olive);for(let i=-1;i<=1;i++)box(fixed,i*.13,-.04,-.095,.10,.19,.063,M.dark);}else if(id==='knife'){cylinder(fixed,0,0,.075,.022,.12,M.rubber);box(fixed,0,0,.003,.105,.014,.014,M.steel);profile(fixed,[[0,.020],[-.193,.018],[-.243,0],[-.184,-.017],[0,-.019]],.004,M.edge);r.restRight.set(.018,-.023,.075);r.restLeft.set(-.07,-.07,.07);}else rifle(r,id,w);
+  if(!reference&&id!=='c4'){if(w.boltAction)boltRifle(r,id);else if(id==='tmp')mp9(r);else if(w.pistol)pistol(r,id,w);else if(id==='he'){
+    const body=new T.LatheGeometry([new T.Vector2(0,-.043),new T.Vector2(.021,-.040),new T.Vector2(.031,-.030),new T.Vector2(.035,-.009),new T.Vector2(.034,.016),new T.Vector2(.027,.034),new T.Vector2(.016,.041),new T.Vector2(0,.041)],32);
+    mesh(fixed,body,M.olive);const stripe=mesh(fixed,new T.CylinderGeometry(.031,.033,.006,32),mat(0xb8a54b,.05,.83),0,.024,0);stripe.material.userData.ownedCsWeaponMaterial=true;
+    mesh(fixed,new T.CylinderGeometry(.013,.016,.015,20),M.dark,0,.047,0);
+    for(const y of [-.02,.008])mesh(fixed,new T.TorusGeometry(.034,.0007,5,32),M.dark,0,y,0).rotation.x=Math.PI/2;
+    r.lever=part(fixed,'safety-lever',0,.055,0);
+    profile(r.lever,[[-.014,.006],[.026,.006],[.042,-.024],[.043,-.077],[.038,-.077],[.037,-.026],[.022,.001],[-.014,.001]],.012,M.edge);
+    r.pin=part(fixed,'grenade-pin');rod(r.pin,[-.020,.050,0],[.016,.050,0],.0017,M.edge);
+    mesh(r.pin,new T.TorusGeometry(.011,.0015,8,24),M.edge,-.028,.050,0).rotation.y=Math.PI/2;
+    r.restRight.set(.018,-.009,.028);r.restLeft.set(-.17,-.07,.08);r.supportGrip='pistol';r.muzzle.set(0,.025,-.04);
+  }else if(id==='armor'){box(fixed,0,0,0,.42,.49,.14,M.olive);for(let i=-1;i<=1;i++)box(fixed,i*.13,-.04,-.095,.10,.19,.063,M.dark);}else if(id==='knife'){if(r.knifeModel==='butterfly')buildButterflyKnife(r,{part,profile,mesh,rod,screw,batch,M});else(r.knifeModel==='classic'?classicKnife:karambit)(r);}else rifle(r,id,w);
     for(const p of [fixed,magazine,action,boltHandle,slide,cover,pump,r.shell,r.suppressor].filter(Boolean))batch(p);
   }
   for(const p of [magazine,action,boltHandle,slide,cover,pump]){p.userData.restPosition=p.position.clone();p.userData.restQuaternion=p.quaternion.clone();}
-  if(hands&&id!=='armor'){r.left=makeArm(g,'left',r.restLeft.clone().multiply(core.scale));r.right=makeArm(g,'right',r.restRight.clone().multiply(core.scale));const casing=part(g,'ejected-case');cylinder(casing,0,0,0,.0045,w.pistol?.019:.030,M.brass);batch(casing);r.casing=casing;casing.visible=false;}
+  if(hands&&id==='knife')makeKnifeHands(g,r);
+  else if(hands&&id!=='armor'){const firearm=(!w.utility&&id!=='knife')||id==='he',style=r.supportGrip||(w.pistol||id==='tmp'?'vertical':'underhand'),arm=firearm?makeGripArm:makeArm;r.left=arm(g,'left',r.restLeft.clone().multiply(core.scale),style);r.right=arm(g,'right',r.restRight.clone().multiply(core.scale),style);const casing=part(g,'ejected-case');cylinder(casing,0,0,0,.0045,w.pistol?.019:.030,M.brass);batch(casing);r.casing=casing;casing.visible=false;
+    if(id==='he')for(const a of [r.left,r.right]){
+      const left=a===r.left,y=new T.Vector3(left?.62:-.40,.60,-.65).normalize(),x=new T.Vector3(0,0,left?1:-1);x.addScaledVector(y,-x.dot(y)).normalize();
+      a.rotation.setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,new T.Vector3().crossVectors(x,y)));a.grenadeArm=true;
+    }
+  }
   r.muzzleSuppressed=r.muzzle.clone();g.userData={rig:r,id};g.traverse(o=>{if(o.isMesh){o.castShadow=!hands;o.receiveShadow=!hands;}});return g;
 }

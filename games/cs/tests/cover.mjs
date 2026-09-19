@@ -3,6 +3,11 @@ export async function prepare(page) {
   await page.waitForFunction(() => window.__CSX_DEBUG__?.info()?.ready, null, { timeout: 60_000 });
   await tapPainted(page, /enter (?:the )?arena|进入战场/);
   await page.waitForFunction(() => window.__CSX_DEBUG__?.info()?.playerAlive, null, { timeout: 45_000 });
-  await page.evaluate(() => window.__CSX_DEBUG__.skipFreeze());
+  const start = await page.evaluate(() => {
+    window.__CSX_DEBUG__.skipFreeze();
+    return window.__CSX_DEBUG__.info().clock;
+  });
+  // Wait for the real v28 deploy animation, not a machine-dependent wall delay.
+  await page.waitForFunction(clock => window.__CSX_DEBUG__?.info()?.clock > clock + 1.2, start, { timeout: 60_000 });
 }
-export const settleMs = 1200;
+export const settleMs = 100;

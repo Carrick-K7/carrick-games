@@ -1,6 +1,7 @@
 import * as T from 'three';
 import {buildWeapon} from './csWeaponModels.js';
 import {buildSoldier} from './csSoldierModels.js';
+import {DEFAULT_KNIFE_MODEL} from './csKnifeStyles.js';
 export {attachSoldierWeapon,poseSoldierWeapon} from './csSoldierModels.js';
 export const WEAPONS={
   c4:{name:'C4 Explosive',type:'包点内按住左键安放 · 5 切换 · G 丢弃',mag:1,reserve:0,damage:0,rate:0,reload:0,spread:0,recoil:0,range:0,auto:false,utility:true},
@@ -25,6 +26,6 @@ export const WEAPONS={
   glock:{name:'Glock-18',type:'手枪 · 半自动',mag:20,reserve:60,damage:22,rate:.15,reload:1.9,spread:.008,recoil:.013,range:80,auto:false,pistol:true},
   knife:{name:'Knife',type:'左键挥砍 · 右键重刺',mag:0,reserve:0,damage:40,rate:.5,reload:0,spread:0,recoil:0,range:1.8,auto:false}
 };
-export function makeWeapon(id='ak47',hands=false){return buildWeapon(id,WEAPONS[id],hands);}
+export function makeWeapon(id='ak47',hands=false,knifeModel=DEFAULT_KNIFE_MODEL){return buildWeapon(id,WEAPONS[id],hands,knifeModel);}
 export const SOLDIER_HITBOX={neck:1.52,top:1.81,halfWidth:.115,halfDepth:.155};
-export function makeSoldier(team){return buildSoldier(team,makeWeapon);}
+export function makeSoldier(team,library){return buildSoldier(team,makeWeapon,library);}

@@ -81,6 +81,8 @@ export interface CsHudView {
   scopeLabel: string;
   hitOpacity: number;
   hitHead: boolean;
+  hitKind: 'body' | 'head' | 'kill';
+  hitConfirmation: string;
   damageOpacity: number;
   location: string;
   roundLabel: string;
@@ -133,6 +135,7 @@ export class CsHud {
   private safeArea: HudSafeArea = normalizeSafeArea(null);
   private readonly menuScroll = new HudScroll();
   private readonly buyScroll = new HudScroll();
+  private readonly settingsScroll = new HudScroll();
   /** Vertical offset applied to hit regions while drawing scrolled content. */
   private regionDy = 0;
   /** Visible clip rect (screen space) for scrolled hit regions. */
@@ -164,13 +167,15 @@ export class CsHud {
   /** True when the wheel should scroll a HUD panel instead of switching weapons. */
   wantsWheel(): boolean {
     const e = this.engine;
+    if (e.settingsOpen) return true;
     if (e.phase === 'menu' && this.menuScroll.active) return true;
     if (e.buyOpen && this.buyScroll.active) return true;
     return false;
   }
 
   onWheel(deltaY: number) {
-    if (this.engine.phase === 'menu' && this.menuScroll.active) this.menuScroll.wheel(deltaY);
+    if (this.engine.settingsOpen) this.settingsScroll.wheel(deltaY);
+    else if (this.engine.phase === 'menu' && this.menuScroll.active) this.menuScroll.wheel(deltaY);
     else if (this.engine.buyOpen && this.buyScroll.active) this.buyScroll.wheel(deltaY);
   }
 
@@ -381,10 +386,10 @@ export class CsHud {
     py += 44;
 
     // Start button
-    const startLabel = e.mapLoading
+    const startLabel = e.bootLoading ? e.hud.menuStart.label : e.mapLoading
       ? this.L('正在装载 ', 'Loading ') + mapName + '…'
       : e.ready ? this.L('进入战场', 'Enter the Arena') + ' ↗' : this.L('重试加载地图', 'Retry Map Load');
-    this.button(ctx, left + 24, py, panelW - 48, 44, startLabel, () => e.primaryAction(), { primary: true, disabled: e.mapLoading });
+    this.button(ctx, left + 24, py, panelW - 48, 44, startLabel, () => e.primaryAction(), { primary: true, disabled: e.bootLoading || e.mapLoading });
     py += 58;
     this.text(ctx, this.modeNote(), left + 24, py, 11, C.dim, 'left', false);
     py += 24;
@@ -520,10 +525,10 @@ export class CsHud {
     cy += TOUCH_TARGET + 14;
 
     // Start button
-    const startLabel = e.mapLoading
+    const startLabel = e.bootLoading ? e.hud.menuStart.label : e.mapLoading
       ? this.L('正在装载 ', 'Loading ') + mapName + '…'
       : e.ready ? this.L('进入战场', 'Enter the Arena') + ' ↗' : this.L('重试加载地图', 'Retry Map Load');
-    this.button(ctx, x + pad, cy, cw, 48, startLabel, () => e.primaryAction(), { primary: true, disabled: e.mapLoading });
+    this.button(ctx, x + pad, cy, cw, 48, startLabel, () => e.primaryAction(), { primary: true, disabled: e.bootLoading || e.mapLoading });
     cy += 48 + 12;
     this.text(ctx, ellipsize(ctx, this.modeNote(), cw), x + pad, cy, 11, C.dim, 'left', false);
     cy += 24;
@@ -654,7 +659,9 @@ export class CsHud {
     }
     if (hud.hitOpacity > 0) {
       ctx.globalAlpha = hud.hitOpacity;
-      this.text(ctx, '×', W / 2, H / 2 - 26, 22, hud.hitHead ? C.gold : '#ffffff');
+      const color = hud.hitKind === 'kill' ? C.gold : hud.hitHead ? C.amber : '#ffffff';
+      this.text(ctx, '×', W / 2, H / 2 - 26, hud.hitKind === 'kill' ? 26 : 22, color, 'center');
+      if (hud.hitConfirmation) this.text(ctx, hud.hitConfirmation, W / 2, H / 2 + 32, 13, color, 'center');
       ctx.globalAlpha = 1;
     }
 
@@ -945,58 +952,69 @@ export class CsHud {
   private drawSettings(ctx: Ctx, Lyt: HudLayout) {
     const e = this.engine;
     const { W, H } = Lyt;
-    const w = Math.min(520, Lyt.availW), h = Math.min(380, Lyt.availH);
-    const x = W / 2 - w / 2, y = Math.max(Lyt.top, H / 2 - h / 2);
-    // Vertical compression factor for short screens (1 = original spacing).
-    const k = Math.min(1, (h - 66) / 314);
-    const Y = (v: number) => y + 26 + (v - 26) * k;
+    const w = Math.min(520, Lyt.availW), h = Math.min(680, Lyt.bottom - Lyt.contentTop);
+    const x = Lyt.left + (Lyt.availW - w) / 2, y = Math.max(Lyt.contentTop, H / 2 - h / 2);
+    const pad = w < 360 ? 16 : 28, left = x + pad, sw = w - pad * 2 - 12;
+    // The settings dialog owns input; uncovered menu rows must not activate.
+    this.regions = [];
     this.dimScreen(ctx, W, H);
     this.panel(ctx, x, y, w, h);
-    this.text(ctx, 'SETTINGS', x + 28, Y(30), 11, C.amber);
-    this.text(ctx, this.L('设置', 'Settings'), x + 28, Y(56), 20, C.text);
-    const setBtnH = e.touchMode ? TOUCH_TARGET : 32;
-    this.button(ctx, x + w - 140, y + 16, 116, setBtnH, this.L('关闭 · ESC', 'Close · ESC'), () => e.closeSettings(), { small: true });
+    this.text(ctx, this.L('设置', 'Settings'), left, y + 37, 20, C.text);
+    const close = () => { this.settingsScroll.setMax(0); e.closeSettings(); };
+    this.button(ctx, x + w - 116, y + 12, 100, TOUCH_TARGET, this.L('关闭', 'Close'), close, { small: true });
 
-    const slider = (label: string, value: number, min: number, max: number, yPos: number, fmt: (v: number) => string, apply: (v: number) => void) => {
-      this.text(ctx, label, x + 28, yPos, 12, C.text, 'left', false);
-      this.text(ctx, fmt(value), x + w - 28, yPos, 12, C.amber, 'right');
-      const sy = yPos + 26 * k, sw = w - 56;
+    const bodyY = y + 72, bodyH = Math.max(1, h - 140);
+    this.settingsScroll.setMax(Math.max(0, 648 - bodyH));
+    this.beginScroll(ctx, left, bodyY, sw, bodyH, this.settingsScroll);
+    let cy = bodyY + 14;
+    const slider = (label: string, value: number, min: number, max: number, fmt: (v: number) => string, apply: (v: number) => void) => {
+      this.text(ctx, label, left, cy, 13, C.text, 'left', false);
+      this.text(ctx, fmt(value), left + sw, cy, 13, C.amber, 'right');
+      const sy = cy + 30, t = (value - min) / (max - min);
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(x + 28, sy, sw, 6);
-      const t = (value - min) / (max - min);
+      ctx.fillRect(left, sy, sw, 6);
       ctx.fillStyle = C.amber;
-      ctx.fillRect(x + 28, sy, sw * t, 6);
+      ctx.fillRect(left, sy, sw * t, 6);
       ctx.fillStyle = C.text;
-      ctx.fillRect(x + 28 + sw * t - 4, sy - 6, 8, 18);
-      this.push({
-        x: x + 28, y: sy - 10, w: sw, h: e.touchMode ? TOUCH_TARGET : Math.max(26, TOUCH_TARGET - 14),
-        down: (px) => apply(min + Math.max(0, Math.min(1, (px - x - 28) / sw)) * (max - min)),
-        drag: (px) => apply(min + Math.max(0, Math.min(1, (px - x - 28) / sw)) * (max - min)),
-      });
+      ctx.fillRect(left + sw * t - 4, sy - 6, 8, 18);
+      const change = (px: number) => apply(min + Math.max(0, Math.min(1, (px - left) / sw)) * (max - min));
+      this.push({ x: left, y: sy - 18, w: sw, h: TOUCH_TARGET, down: change, drag: change });
+      cy += 84;
     };
-    slider(this.L('鼠标灵敏度', 'Mouse sensitivity'), e.controlSettings.sensitivity, .1, 4, Y(96), v => v.toFixed(2), v => e.setSensitivity(v));
-    if (k > 0.6) this.text(ctx, this.L('控制未开镜时的转向速度。', 'Turn speed while unscoped.'), x + 28, Y(152), 10, C.faint, 'left', false);
-    slider(this.L('开镜灵敏度倍率', 'Scoped sensitivity multiplier'), e.controlSettings.scopeSensitivity, .1, 2, Y(178), v => v.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
-    if (k > 0.6) this.text(ctx, this.L('基于鼠标灵敏度与开镜视野调整。', 'Scaled from base sensitivity and scoped FOV.'), x + 28, Y(234), 10, C.faint, 'left', false);
-
-    // Quality + sound rows; stacked on narrow panels.
-    if (w >= 480) {
-      this.text(ctx, this.L('画质', 'Quality'), x + 28, Y(266), 12, C.text, 'left', false);
-      this.button(ctx, x + 120, Y(266) - setBtnH / 2, 90, setBtnH, this.L('高', 'High'), () => e.setQuality('high'), { selected: e.quality === 'high', small: true });
-      this.button(ctx, x + 218, Y(266) - setBtnH / 2, 90, setBtnH, this.L('流畅', 'Low'), () => e.setQuality('low'), { selected: e.quality === 'low', small: true });
-      this.text(ctx, this.L('音效', 'Sound'), x + 330, Y(266), 12, C.text, 'left', false);
-      this.button(ctx, x + 392, Y(266) - setBtnH / 2, 96, setBtnH, e.audio.enabled ? this.L('开', 'On') : this.L('关', 'Off'), () => e.toggleSound(), { selected: e.audio.enabled, small: true });
-    } else {
-      this.text(ctx, this.L('画质', 'Quality'), x + 28, Y(258), 12, C.text, 'left', false);
-      this.button(ctx, x + 100, Y(258) - setBtnH / 2 - 1, (w - 128 - 8) / 2, setBtnH, this.L('高', 'High'), () => e.setQuality('high'), { selected: e.quality === 'high', small: true });
-      this.button(ctx, x + 100 + (w - 128 - 8) / 2 + 8, Y(258) - setBtnH / 2 - 1, (w - 128 - 8) / 2, setBtnH, this.L('流畅', 'Low'), () => e.setQuality('low'), { selected: e.quality === 'low', small: true });
-      this.text(ctx, this.L('音效', 'Sound'), x + 28, Y(300), 12, C.text, 'left', false);
-      this.button(ctx, x + 100, Y(300) - setBtnH / 2 - 1, w - 128, setBtnH, e.audio.enabled ? this.L('开', 'On') : this.L('关', 'Off'), () => e.toggleSound(), { selected: e.audio.enabled, small: true });
-    }
-
-    if (k > 0.6) this.text(ctx, this.L('灵敏度自动保存在此浏览器', 'Sensitivity persists in this browser'), x + 28, Y(312), 10, C.faint, 'left', false);
-    if (e.settingsNote) this.text(ctx, e.settingsNote, x + 28, Y(332), 10, C.green, 'left', false);
-    this.button(ctx, x + w - 200, y + h - setBtnH - 8, 176, setBtnH, this.L('恢复默认灵敏度', 'Reset sensitivity'), () => e.resetSettings(), { small: true });
+    const choices = (label: string, options: { label: string; selected: boolean; action: () => void }[]) => {
+      this.text(ctx, label, left, cy, 13, C.text, 'left', false);
+      const bw = (sw - (options.length - 1) * 8) / options.length;
+      options.forEach((option, i) => this.button(ctx, left + i * (bw + 8), cy + 14, bw, TOUCH_TARGET,
+        option.label, option.action, { selected: option.selected, small: true }));
+      cy += 84;
+    };
+    slider(this.L('鼠标灵敏度', 'Mouse sensitivity'), e.controlSettings.sensitivity, .1, 4, v => v.toFixed(2), v => e.setSensitivity(v));
+    slider(this.L('开镜灵敏度', 'Scoped sensitivity'), e.controlSettings.scopeSensitivity, .1, 2, v => v.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
+    choices(this.L('近战模型', 'Knife model'), [
+      { label: this.L('经典刀', 'Classic'), selected: e.controlSettings.knifeModel === 'classic', action: () => e.setKnifeModel('classic') },
+      { label: this.L('爪刀', 'Karambit'), selected: e.controlSettings.knifeModel === 'karambit', action: () => e.setKnifeModel('karambit') },
+      { label: this.L('蝴蝶刀', 'Butterfly'), selected: e.controlSettings.knifeModel === 'butterfly', action: () => e.setKnifeModel('butterfly') },
+    ]);
+    choices(this.L('初始手枪 · 下次出生生效', 'Starting pistol · next spawn'), [
+      { label: this.L('阵营默认', 'Faction'), selected: e.selectedPistol === 'default', action: () => e.setPistol('default') },
+      { label: 'Desert Eagle', selected: e.selectedPistol === 'deagle', action: () => e.setPistol('deagle') },
+    ]);
+    choices(this.L('命中反馈', 'Hit feedback'), [
+      { label: this.L('关闭', 'Off'), selected: e.controlSettings.hitFeedback === 'off', action: () => e.setHitFeedback('off') },
+      { label: this.L('视觉', 'Visual'), selected: e.controlSettings.hitFeedback === 'visual', action: () => e.setHitFeedback('visual') },
+      { label: this.L('完整', 'Full'), selected: e.controlSettings.hitFeedback === 'full', action: () => e.setHitFeedback('full') },
+    ]);
+    choices(this.L('画质', 'Quality'), [
+      { label: this.L('高', 'High'), selected: e.quality === 'high', action: () => e.setQuality('high') },
+      { label: this.L('流畅', 'Low'), selected: e.quality === 'low', action: () => e.setQuality('low') },
+    ]);
+    choices(this.L('音效', 'Sound'), [
+      { label: e.audio.enabled ? this.L('开', 'On') : this.L('关', 'Off'), selected: e.audio.enabled, action: () => e.toggleSound() },
+    ]);
+    this.text(ctx, ellipsize(ctx, e.settingsNote || this.L('设置自动保存在此浏览器', 'Settings persist in this browser'), sw), left, cy + 16, 12, C.dim, 'left', false);
+    this.endScroll(ctx);
+    this.drawScrollbar(ctx, this.settingsScroll, left + sw + 10, bodyY, bodyH, 648);
+    this.button(ctx, left, y + h - 56, sw, TOUCH_TARGET, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { small: true });
   }
 
   private drawMatchEnd(ctx: Ctx, Lyt: HudLayout) {

@@ -1,4 +1,4 @@
-// csEngine.js — carrick-cs v13 game core, restructured as a DOM-free class.
+// csEngine.js — carrick-cs v28 game core, restructured as a DOM-free class.
 //
 // This is a faithful port of the standalone app's game.js: same simulation,
 // same round/economy/bot logic, same rendering. The original module-level
@@ -10,18 +10,22 @@
 import * as T from 'three';
 import { SnowWorld } from './csWorld.js';
 import { WEAPONS, SOLDIER_HITBOX, makeWeapon, makeSoldier, attachSoldierWeapon, poseSoldierWeapon } from './csWeapons.js';
-import { applyWeaponAnimation, reloadCues, reloadLabel } from './csWeaponMotion.js';
-import { DEPLOY, deployCues } from './csWeaponDeploy.js';
+import { preloadSoldiers, updateSkinnedSoldier, poseSkinnedSoldierDeath } from './csSkinnedSoldier.js';
+import { applyWeaponAnimation, reloadCues, reloadLabel, inspectDuration, placeWeaponView, WEAPON_VIEW_FOV } from './csWeaponMotion.js';
+import { DEPLOY, deployCues, actionCues } from './csWeaponDeploy.js';
+import { GRENADE_PIN_TIME, GRENADE_RELEASE_TIME, GRENADE_RECOVER_TIME, GRENADE_RADIUS, grenadeLaunch, advanceGrenade } from './csGrenade.js';
+import { knifeName, normalizeKnifeModel } from './csKnifeStyles.js';
+import { chooseButterflyVariant, BUTTERFLY_DEPLOY_DURATION, BUTTERFLY_DRAW_CUES, BUTTERFLY_INSPECT_CUES } from './csButterflyKnife.js';
 import { GameAudio } from './csAudio.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, lookSensitivity } from './csSettings.js';
 import { GameFocusGuard } from './csInputFocus.js';
 import { RECOIL, shotRecoil, recoverRecoil, viewMuzzle, actorMuzzle, KEY_ACTIONS } from './csWeaponBehavior.js';
-import { assignRoute, routeDestination, chooseRespawn, assignDustRoute, createDustPlan, dustGuardPoint } from './csTactics.js';
+import { assignRoute, routeDestination, chooseRespawn, assignDustRoute, createDustPlan, dustGuardPoint, dustSearchPoint, dustCombatMove } from './csTactics.js';
 import { MAPS } from './csMaps.js';
 import { BombRound, BOMB_RULES } from './csBombMode.js';
 import { SHOP, BUY_CATEGORIES, awardMoney, settleRound } from './csEconomy.js';
 
-const RESPAWN_DELAY = 3, PICKUP_REFRESH = 8, GRENADE_PIN_TIME = .42;
+const RESPAWN_DELAY = 3, PICKUP_REFRESH = 8;
 const CONFIGS = { easy: { reaction: .65, accuracy: .26, damage: .68, speed: 2.8 }, normal: { reaction: .4, accuracy: .43, damage: .82, speed: 3.2 }, hard: { reaction: .23, accuracy: .64, damage: 1, speed: 3.6 } };
 const BOT_NAMES = { ct: ['FROST', 'NOVA', 'ECHO', 'GHOST', 'ATLAS'], t: ['VIPER', 'RAZE', 'EMBER', 'WOLF', 'HAVOC'] };
 const RADIO = {
@@ -36,11 +40,23 @@ const RADIO_EN = {
 };
 const RADIO_FOLLOW = ['跟我来', '重新集合', '集合行动', '需要增援', '请求支援'];
 
-export function freeGeometry(group) { group?.traverse(o => { if (o.isMesh) o.geometry?.dispose(); }); }
+export function freeGeometry(group) {
+  const skeletons = new Set(), ownedMaterials = new Set();
+  group?.userData.skinned?.mixer.stopAllAction();
+  group?.traverse(o => {
+    if (o.isMesh && !o.geometry?.userData.sharedCharacter) o.geometry?.dispose();
+    if (o.isSkinnedMesh) skeletons.add(o.skeleton);
+    for (const material of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (material?.userData.ownedCsWeaponMaterial) ownedMaterials.add(material);
+    }
+  });
+  for (const skeleton of skeletons) skeleton.dispose();
+  for (const material of ownedMaterials) material.dispose();
+}
 
 export class CsEngine {
   /**
-   * @param opts { width, height, isZh: () => boolean, hooks: {
+   * Options: { width, height, isZh: () => boolean, hooks: {
    *   requestCapture?: () => void, releaseCapture?: () => void,
    *   pointerLocked?: () => boolean, onMatchEnd?: (result) => void } }
    */
@@ -54,7 +70,12 @@ export class CsEngine {
 
     this.audio = new GameAudio(this.assetUrl);
     this.controlSettings = loadSettings();
-    this.quality = 'high';
+    this.quality = this.controlSettings.quality;
+    this.softwareRendering = false;
+    this.disposed = false; this.bootLoading = false;
+    this.loadController = new AbortController();
+    this.soldierLibrary = null;
+    this.pendingWorld = null;
 
     this.scene = new T.Scene();
     this.scene.background = new T.Color(0xa9c4d8);
@@ -63,7 +84,7 @@ export class CsEngine {
     this.camera = new T.PerspectiveCamera(76, aspect, .045, 250);
     this.camera.rotation.order = 'YXZ';
     this.gunScene = new T.Scene();
-    this.gunCamera = new T.PerspectiveCamera(62, aspect, .01, 10);
+    this.gunCamera = new T.PerspectiveCamera(WEAPON_VIEW_FOV, aspect, .01, 10);
     this.gunScene.add(new T.HemisphereLight(0xf2f8ff, 0x54718b, 2.4));
     const gunLight = new T.DirectionalLight(0xffedcf, 3);
     gunLight.position.set(-2, 4, 3);
@@ -93,7 +114,7 @@ export class CsEngine {
     /** @type {any[]} */ this.pickupItems = [];
     this.effects = []; this.selectedPickup = null; this.clock = 0;
     this.frameCount = 0; this.fpsTime = 0; this.fps = 60;
-    this.hitOpacity = 0; this.hitHead = false; this.damageOpacity = 0; this.noticeTime = 0;
+    this.hitOpacity = 0; this.hitHead = false; this.hitKind = 'body'; this.damageOpacity = 0; this.noticeTime = 0;
     this.gun = null; this.gunId = ''; this.recoil = 0; this.kickPitch = 0; this.kickYaw = 0;
     this.zoom = 0; this.sensitivity = this.controlSettings.sensitivity;
     this.fireHeld = false; this.shotPressed = false; this.mouseLocked = false;
@@ -108,7 +129,7 @@ export class CsEngine {
     this.settingsOpen = false; this.settingsOrigin = 'menu'; this.mapOpen = false;
     this.selectedMode = 'elimination'; this.mode = 'elimination';
     this.selectedKillLimit = 50; this.killLimit = 50; this.matchElapsed = 0;
-    this.selectedMap = 'fy_snow'; this.selectedPistol = 'default';
+    this.selectedMap = 'fy_snow'; this.selectedPistol = this.controlSettings.startingPistol;
     this.radarBase = null; this.bootError = '';
     this.settingsNote = '';
 
@@ -122,7 +143,7 @@ export class CsEngine {
       health: 100, armor: 100, killCount: 0, grenadeCount: 0,
       weaponName: '', ammoText: '', reserveText: '', reloadState: '',
       slots: [], pickup: null, crosshairHidden: true, crosshairGap: 2,
-      scope: false, scopeLabel: '', hitOpacity: 0, hitHead: false, damageOpacity: 0,
+      scope: false, scopeLabel: '', hitOpacity: 0, hitHead: false, hitKind: 'body', hitConfirmation: '', damageOpacity: 0,
       location: '', roundLabel: '', timerText: '', timerUrgent: false,
       ctScore: 0, tScore: 0, alivePips: { ct: [], t: [] },
       objective: null, objectiveAction: null, money: null,
@@ -149,9 +170,12 @@ export class CsEngine {
   // ── Boot / renderer ──────────────────────────────────────────────────────
 
   async init() {
+    if (this.disposed || this.bootLoading) return;
+    this.bootLoading = true;
     this.audio.preload();
     try {
-      this.renderer = new T.WebGLRenderer({ canvas: this.canvas3d, antialias: true, powerPreference: 'high-performance' });
+      this.renderer?.dispose();
+      this.renderer = new T.WebGLRenderer({ canvas: this.canvas3d, antialias: !this.softwareRendering, powerPreference: 'high-performance' });
       this.renderer.setSize(this.width, this.height, false);
       this.renderer.outputColorSpace = T.SRGBColorSpace;
       this.renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -160,41 +184,62 @@ export class CsEngine {
       this.renderer.shadowMap.type = T.PCFSoftShadowMap;
       this.renderer.autoClear = false;
       this.applyQuality();
+      this.hud.menuStart = { enabled: false, label: this.L('正在装载人物…', 'Loading characters…') };
+      const library = await preloadSoldiers(this.assetUrl, { signal: this.loadController.signal });
+      if (this.disposed) { library?.dispose(); return; }
+      this.soldierLibrary?.dispose(); this.soldierLibrary = library;
+      this.bootError = ''; this.hud.menuError = '';
       await this.loadMap(this.selectedMap);
     } catch (e) {
+      if (this.disposed) return;
       console.error(e);
       this.bootError = e?.message || String(e);
       this.hud.menuError = this.bootError.includes('WebGL')
         ? this.L('请启用浏览器硬件加速，然后重新开始。', 'Enable browser hardware acceleration, then restart.')
         : this.L('地图或渲染器加载失败，请重新开始。', 'Map or renderer failed to load. Restart the game.');
       this.notify(this.L('未能加载游戏：', 'Failed to load: ') + this.bootError, 120);
-    }
+      this.hud.menuStart = { enabled: true, label: this.L('重试加载', 'Retry loading') };
+    } finally { this.bootLoading = false; }
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true; this.ready = false;
+    this.clearHeldInput();
+    this.audio.stopKnifeAction();
+    this.audio.dispose?.();
     try { this.renderer?.setAnimationLoop(null); } catch { /* noop */ }
     try {
       for (const a of this.all) if (a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); }
-      this.clearEffects(); this.clearCorpses();
-      for (const p of this.pickupItems) { this.scene.remove(p.mesh); freeGeometry(p.mesh); }
+      this.clearEffects(); this.clearCorpses(); this.clearBomb();
+      for (const p of this.pickupItems) { this.scene.remove(p.mesh); freeGeometry(p.mesh); p.ring?.material.dispose(); }
       if (this.gun) { this.gunScene.remove(this.gun); freeGeometry(this.gun); }
       this.world?.dispose?.();
       this.renderer?.dispose();
-    } catch { /* best effort */ }
-    this.renderer = null;
+    } finally {
+      // Clones release their skeletons above; immutable template GPU resources
+      // stay alive until every instance's explicit library lease is released.
+      this.loadController.abort();
+      this.soldierLibrary?.dispose();
+      this.soldierLibrary = null;
+      this.renderer = null;
+    }
   }
 
   applyQuality() {
     if (!this.renderer) return;
     const low = this.quality === 'low';
     const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
-    this.renderer.setPixelRatio(Math.min(dpr, low ? 1 : 2, Math.sqrt(4500000 / (this.width * this.height))));
-    this.renderer.shadowMap.enabled = !low;
+    // Software GL must read the offscreen WebGL canvas back into the shared
+    // shell canvas. Bound that transfer without changing logical HUD geometry.
+    const pixels = this.softwareRendering ? 230400 : 4500000;
+    this.renderer.setPixelRatio(Math.min(dpr, low || this.softwareRendering ? 1 : 2, Math.sqrt(pixels / (this.width * this.height))));
+    this.renderer.shadowMap.enabled = !low && !this.softwareRendering;
     this.sun.shadow.needsUpdate = true;
     if (this.world?.snow) this.world.snow.visible = !low;
   }
 
-  setQuality(q) { this.quality = q === 'low' ? 'low' : 'high'; this.applyQuality(); }
+  setQuality(q) { this.controlSettings.quality = q === 'low' ? 'low' : 'high'; this.applySettings(); }
   toggleSound() { this.audio.enabled = !this.audio.enabled; this.audio.init(); }
 
   /**
@@ -218,14 +263,16 @@ export class CsEngine {
   // ── Map loading ──────────────────────────────────────────────────────────
 
   async loadMap(id) {
-    if (this.mapLoading || this.matchActive || !MAPS[id]) return false;
+    if (this.disposed || this.mapLoading || this.matchActive || !MAPS[id]) return false;
     if (this.ready && this.world?.config.id === id) return true;
     this.mapLoading = true; this.ready = false;
     this.hud.menuStart = { enabled: false, label: this.L('正在装载 ', 'Loading ') + MAPS[id].name + '…' };
     const candidate = new SnowWorld(this.scene, MAPS[id], this.assetUrl);
+    this.pendingWorld = candidate;
     candidate.mapGroup.visible = false; candidate.environment.visible = false;
     try {
       await candidate.load(MAPS[id].asset);
+      if (this.disposed) { candidate.dispose?.(); return false; }
       if (!candidate.spawns.ct.length || !candidate.spawns.t.length || (id === 'de_dust2' && candidate.bombSites.length !== 2)) throw new Error(this.L('地图出生点或包点不完整', 'Map spawns or bomb sites incomplete'));
       for (const a of this.all) { if (a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); } }
       this.all = []; this.bots = []; this.player = null; this.clearEffects(); this.clearCorpses(); this.clearBomb();
@@ -249,20 +296,25 @@ export class CsEngine {
       return true;
     } catch (e) {
       candidate.dispose?.();
+      if (this.disposed) return false;
       this.ready = !!this.world;
       this.hud.menuStart = { enabled: true, label: this.ready ? this.L('进入战场', 'Enter the Arena') + ' ↗' : this.L('重试加载地图', 'Retry Map Load') };
       this.notify(this.L('地图加载失败：', 'Map load failed: ') + e.message + this.L(' · 可重新选择或重试', ' · pick another map or retry'), 8);
       return false;
-    } finally { this.mapLoading = false; }
+    } finally { this.mapLoading = false; this.pendingWorld = null; }
   }
 
-  selectMap(id) { if (id !== this.selectedMap) this.loadMap(id); }
+  selectMap(id) { if (!this.bootLoading && !this.bootError && id !== this.selectedMap) return this.loadMap(id); }
   selectMode(m) { if (MAPS[this.selectedMap].modes.includes(m)) this.selectedMode = m; }
   selectTeam(t) { this.selectedTeam = t === 't' ? 't' : 'ct'; }
   setDifficulty(d) { if (CONFIGS[d]) this.difficulty = d; }
-  setPistol(v) { this.selectedPistol = v === 'deagle' ? 'deagle' : 'default'; }
+  setPistol(v) { this.controlSettings.startingPistol = v === 'deagle' ? 'deagle' : 'default'; this.applySettings(); }
   setKillLimit(v) { this.selectedKillLimit = [30, 50, 100].includes(+v) ? +v : 50; }
-  primaryAction() { if (this.ready) this.startMatch(); else this.loadMap(this.selectedMap); }
+  primaryAction() {
+    if (this.disposed || this.bootLoading) return;
+    if (this.bootError || !this.renderer) return this.init();
+    if (this.ready) this.startMatch(); else return this.loadMap(this.selectedMap);
+  }
 
   // ── HUD events ───────────────────────────────────────────────────────────
 
@@ -271,7 +323,7 @@ export class CsEngine {
   hideCenter() { this.hud.center = null; }
 
   addKill(a, b, w, head) {
-    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weapon: WEAPONS[w]?.name || w, head, time: this.clock });
+    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weapon: this.weaponDisplayName(w, a), head, time: this.clock });
     while (this.hud.killfeed.length > 6) this.hud.killfeed.shift();
   }
 
@@ -392,18 +444,19 @@ export class CsEngine {
     } : null;
   }
 
-  updateBotObjective(b) {
-    b.objectiveUse = false;
+  updateBotObjective(b, dt) {
+    b.objectiveUse = false; b.crouching = false;
     if (!this.bomb || this.mode !== 'defusal') return false;
     const bomb = this.bomb, clock = this.clock;
     const danger = b.target?.alive && b.pos.distanceTo(b.target.pos) < 18,
       plant = bomb.carrier === b && bomb.canPlant(b) && (!danger || bomb.remaining < 5),
       defuse = bomb.canDefuse(b) && (!danger || bomb.fuse < (b.defuseKit ? 7 : 12));
     if (plant || defuse) {
-      b.objectiveUse = true; b.moveSpeed = 0; b.moveVel.set(0, 0, 0);
+      b.objectiveUse = true; b.crouching = !!b.mesh.userData.skinned; b.moveSpeed = 0; b.moveVel.set(0, 0, 0);
       if (plant && b.slot !== 'bomb') { b.slot = 'bomb'; this.equipBotModel(b); }
       b.mesh.position.copy(b.pos); b.mesh.position.y += b.mesh.userData.groundOffset || 0;
       for (const leg of b.mesh.userData.legs) leg.rotation.x = 0;
+      updateSkinnedSoldier(b.mesh, dt, { crouched: b.crouching, grounded: true });
       this.updateBotWeapon(b);
       return true;
     }
@@ -412,18 +465,22 @@ export class CsEngine {
   }
 
   botGuard(b, pos) {
-    if (!b.guardPoint || this.clock >= b.guardUntil) { b.guardPoint = dustGuardPoint(this.world, b, pos); b.guardUntil = this.clock + 5 + Math.random() * 7; }
+    if (!b.guardPoint || this.clock >= b.guardUntil) { b.guardPoint = dustGuardPoint(this.world, b, pos); b.guardUntil = this.clock + 2.5 + Math.random() * 3.5; }
     return b.pos.distanceTo(b.guardPoint) > .65 ? b.guardPoint : null;
   }
 
   objectiveDestination(b, opponents) {
     const bomb = this.bomb, world = this.world, clock = this.clock;
+    const report = this.all.filter(a => a.alive && a.team === b.team && a.lastSeen && clock - a.lastSeen.time < 5).sort((a, c) => c.lastSeen.time - a.lastSeen.time)[0]?.lastSeen;
     if (!bomb || this.mode !== 'defusal') {
-      if (world.theme === 'desert' && !routeDestination(b, []) && clock >= (b.patrolAt || 0)) {
-        assignDustRoute(world, b, this.bots.indexOf(b), this.round);
-        b.openingWait = 0; b.patrolAt = clock + 10 + Math.random() * 10;
+      if (world.theme !== 'desert') return routeDestination(b, opponents);
+      if (report && b.pos.distanceTo(report.pos) > 1.5) return report.pos;
+      const opening = routeDestination(b, []);
+      if (opening) return opening;
+      if (!b.searchPoint || b.pos.distanceTo(b.searchPoint) < 1.2 || clock >= b.patrolAt) {
+        b.searchPoint = dustSearchPoint(world, b); b.patrolAt = clock + 8 + Math.random() * 5;
       }
-      return routeDestination(b, opponents);
+      return b.searchPoint;
     }
     if (bomb.status === 'planted') {
       if (b.team === 'ct') {
@@ -434,15 +491,24 @@ export class CsEngine {
       return this.botGuard(b, bomb.pos);
     }
     if (bomb.status === 'dropped' && b.team === 't') return bomb.pos;
+    if (b.lastSeen && clock - b.lastSeen.time < 4 && b.pos.distanceTo(b.lastSeen.pos) > 1.4 && b.role !== 'anchor') return b.lastSeen.pos;
+    // Only rotate on recent visible squad contact, never unseen enemy positions.
     if (b.team === 'ct' && clock >= b.tacticAt) {
-      b.tacticAt = clock + 3 + Math.random() * 4;
+      b.tacticAt = clock + 1.5 + Math.random() * 2;
       const sighting = this.all.filter(a => a.team === b.team && a.alive && a.lastSeen && clock - a.lastSeen.time < 6).sort((a, c) => c.lastSeen.time - a.lastSeen.time)[0]?.lastSeen;
       const hot = sighting && world.bombSites.find(site => site.pos.distanceTo(sighting.pos) < 20);
       const guards = this.bots.filter(a => a.alive && a.team === 'ct' && a.objectiveSite === b.objectiveSite);
-      if (hot && hot.id !== b.objectiveSite && guards.length > 1 && Math.random() < .72) { b.objectiveSite = hot.id; b.route = []; b.routeIndex = 0; b.guardPoint = null; b.path = []; }
+      if (hot && hot.id !== b.objectiveSite && (guards.length > 1 || b.role !== 'anchor')) { b.objectiveSite = hot.id; b.route = []; b.routeIndex = 0; b.guardPoint = null; b.path = []; }
     }
     const opening = routeDestination(b, []);
     if (opening) return opening;
+    if (b.team === 'ct' && b.role !== 'anchor') {
+      if (report && b.pos.distanceTo(report.pos) > 1.4) return report.pos;
+      if (!b.searchPoint || b.pos.distanceTo(b.searchPoint) < 1.2 || clock >= b.patrolAt) {
+        b.searchPoint = dustSearchPoint(world, b); b.patrolAt = clock + 7 + Math.random() * 5;
+      }
+      return b.searchPoint;
+    }
     const site = b.team === 't' ? bomb.targetSite : world.bombSites.find(s => s.id === b.objectiveSite) || world.bombSites[0];
     if (bomb.carrier === b) return b.pos.distanceTo(site.pos) > 1 ? site.pos : null;
     return this.botGuard(b, site.pos);
@@ -572,19 +638,29 @@ export class CsEngine {
     this.settingsOpen = true;
     this.settingsNote = '';
   }
-  closeSettings() {
+  closeSettings(capture = true) {
     if (!this.settingsOpen) return;
     this.settingsOpen = false;
-    if (this.phase === 'paused' && this.settingsOrigin !== 'menu') this.resumeGame();
+    if (this.phase === 'paused' && !['menu', 'paused'].includes(this.settingsOrigin)) this.resumeGame(capture);
   }
   applySettings() {
     this.sensitivity = this.controlSettings.sensitivity;
+    this.quality = this.controlSettings.quality;
+    this.selectedPistol = this.controlSettings.startingPistol;
+    this.applyQuality();
+    if (this.controlSettings.hitFeedback === 'off') this.hitOpacity = 0;
+    if (this.player?.alive && this.gunId === 'knife' && this.gun?.userData.rig.knifeModel !== this.controlSettings.knifeModel) {
+      this.player.inspectAt = -99; this.setGun();
+    }
+    this.computeHud();
     this.settingsNote = saveSettings(this.controlSettings)
-      ? this.L('灵敏度已保存', 'Sensitivity saved')
+      ? this.L('设置已保存', 'Settings saved')
       : this.L('已应用本次设置，浏览器未允许保存', 'Applied for this session; the browser blocked saving');
   }
   setSensitivity(v) { this.controlSettings.sensitivity = Math.max(.1, Math.min(4, +v || .8)); this.applySettings(); }
   setScopeSensitivity(v) { this.controlSettings.scopeSensitivity = Math.max(.1, Math.min(2, +v || 1)); this.applySettings(); }
+  setKnifeModel(v) { this.controlSettings.knifeModel = normalizeKnifeModel(v); this.applySettings(); }
+  setHitFeedback(v) { this.controlSettings.hitFeedback = ['off', 'visual', 'full'].includes(v) ? v : 'full'; this.applySettings(); }
   resetSettings() { Object.assign(this.controlSettings, DEFAULT_SETTINGS); this.applySettings(); }
   currentLookSensitivity() {
     const d = this.player ? WEAPONS[this.weaponOf(this.player).id] : {};
@@ -606,8 +682,13 @@ export class CsEngine {
     };
   }
   inventoryWeapon(id) { return { id, ammo: WEAPONS[id].mag, reserve: WEAPONS[id].reserve, readyAt: 0, shotAt: -99, cycleAt: -99, cyclePending: false, resumeScope: 0, suppressed: !!WEAPONS[id].silencer, burst: false, burstRemaining: 0 }; }
+  weaponDisplayName(id, actor = this.player) {
+    if (id !== 'knife') return WEAPONS[id]?.name || id;
+    const model = normalizeKnifeModel(actor?.isPlayer ? this.controlSettings.knifeModel : 'classic');
+    return this.L(knifeName(model), { classic: 'Classic knife', karambit: 'Karambit', butterfly: 'Butterfly knife' }[model]);
+  }
   weaponOf(a) { return a.inventory[a.slot] || a.inventory.pistol || a.inventory.knife; }
-  eyeOf(a) { return a.pos.clone().add(new T.Vector3(0, a.isPlayer && this.crouching ? 1.03 : 1.61, 0)); }
+  eyeOf(a) { return a.pos.clone().add(new T.Vector3(0, (a.isPlayer ? this.crouching : a.crouching) ? 1.03 : 1.61, 0)); }
 
   populatePickups() {
     for (const p of this.pickupItems) { this.scene.remove(p.mesh); freeGeometry(p.mesh); p.ring && p.ring.material.dispose(); }
@@ -666,17 +747,17 @@ export class CsEngine {
   }
 
   spawnActor(a, spawn, primaryId = null, respawning = false) {
-    if (respawning) { this.storeCorpse(a); if (!a.isPlayer) { a.mesh = makeSoldier(a.team); this.scene.add(a.mesh); } }
+    if (respawning) { this.storeCorpse(a); if (!a.isPlayer) { a.mesh = makeSoldier(a.team, this.soldierLibrary); this.scene.add(a.mesh); } }
     a.pos.copy(spawn.pos); a.pos.y += .04;
     const enemy = this.world.spawns[a.team === 'ct' ? 't' : 'ct'][0].pos;
     a.yaw = Math.atan2(a.pos.x - enemy.x, a.pos.z - enemy.z);
     a.pitch = 0; a.vy = 0; a.moveVel.set(0, 0, 0); a.moveSpeed = 0; a.grounded = true; a.alive = true;
     a.health = 100; a.armor = 100; a.cooldown = 0; this.cancelReload(a); a.shotsFired = 0; a.lastShot = -99;
     a.target = null; a.path = []; a.pathTime = 0; a.aiThink = Math.random() * .3; a.reaction = 0;
-    a.stuckTime = 0; a.deathTime = 0; a.ragdoll = null; a.inspectAt = -99; a.respawnAt = 0;
+    a.stuckTime = 0; a.deathTime = 0; a.ragdoll = null; a.searchPoint = null; a.lastSeen = null; a.strafeAt = 0; a.inspectAt = -99; a.respawnAt = 0;
     a.spawnShield = respawning ? this.clock + 1.2 : 0; a.spawnCount++;
     a.grenades = this.mode === 'tdm' && respawning ? 1 : 0; a.defuseKit = false;
-    a.helmet = this.mode !== 'defusal'; a.objectiveUse = false;
+    a.helmet = this.mode !== 'defusal'; a.objectiveUse = false; a.crouching = false;
     a.inventory = {
       primary: primaryId ? this.inventoryWeapon(primaryId) : null,
       pistol: this.inventoryWeapon(a.isPlayer && this.selectedPistol === 'deagle' ? 'deagle' : a.team === 'ct' ? 'usp' : 'glock'),
@@ -688,11 +769,12 @@ export class CsEngine {
       a.mesh.visible = true; a.mesh.rotation.set(0, a.yaw, 0); a.mesh.scale.setScalar(ud.baseScale || 1);
       a.mesh.position.copy(a.pos); a.mesh.position.y += ud.groundOffset || 0;
       for (const limb of [...(ud.legs || []), ...(ud.arms || [])]) limb.rotation.set(0, 0, 0);
+      updateSkinnedSoldier(a.mesh, 0, { speed: 0, grounded: true });
       this.equipBotModel(a);
     }
     if (!a.isPlayer) {
       const index = this.bots.filter(b => b.team === a.team).indexOf(a);
-      assignRoute(this.world, a, index, this.round - 1 + (respawning ? a.spawnCount - 1 : 0));
+      assignRoute(this.world, a, index, this.round - 1 + (respawning ? a.spawnCount - 1 : 0), this.mode);
     }
     if (a.isPlayer && respawning) {
       this.selectedPickup = null; this.spectating = null; this.grenadePrime = null;
@@ -719,7 +801,7 @@ export class CsEngine {
     const player = this.player;
     if (!player?.alive || !['active', 'freeze'].includes(this.phase)) return;
     const slot = player.slot, w = this.weaponOf(player);
-    if (w.id === 'knife') return;
+    if (w.id === 'knife' || slot === 'grenade' && !player.grenades) return;
     if (w.id === 'c4') { this.bomb?.drop(player); this.syncBombInventory(); this.notify(this.L('已丢下 C4 · 队友可路过拾取', 'Dropped the C4 · teammates can pick it up'), 2); return; }
     this.cancelReload(player); w.burstRemaining = 0;
     const forward = new T.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)), pos = player.pos.clone().addScaledVector(forward, .9);
@@ -744,7 +826,7 @@ export class CsEngine {
   // ── Match flow ───────────────────────────────────────────────────────────
 
   startMatch() {
-    if (!this.ready) return;
+    if (this.disposed || !this.ready) return;
     this.audio.init();
     this.mode = MAPS[this.selectedMap].modes.includes(this.selectedMode) ? this.selectedMode : MAPS[this.selectedMap].defaultMode;
     this.closeBuy(false); this.clearBomb();
@@ -760,7 +842,7 @@ export class CsEngine {
       const n = team === this.selectedTeam ? 4 : 5;
       for (let i = 0; i < n; i++) {
         const b = this.makeActor(team, BOT_NAMES[team][i]);
-        b.mesh = makeSoldier(team);
+        b.mesh = makeSoldier(team, this.soldierLibrary);
         this.scene.add(b.mesh);
         this.bots.push(b); this.all.push(b);
       }
@@ -809,7 +891,7 @@ export class CsEngine {
       }
     }
     if (this.mode === 'defusal') {
-      this.dustPlan = createDustPlan(this.world);
+      this.dustPlan = createDustPlan(this.world, Math.random, this.bots.filter(b => b.team === 'ct').length);
       this.bomb = new BombRound(this.world);
       this.bomb.reset(this.all, this.round, this.dustPlan.site);
       for (const a of this.bots) assignDustRoute(this.world, a, this.bots.filter(b => b.team === a.team).indexOf(a), this.round - 1, this.bomb.targetSite.id, this.dustPlan);
@@ -824,18 +906,25 @@ export class CsEngine {
     );
   }
 
-  beginDeploy(a) { const w = this.weaponOf(a); a.deployAt = this.clock; a.deployFor = DEPLOY[w.id].duration; a.deployWeapon = w.id; a.deployCues = deployCues(w.id); a.deployCue = 0; a.cooldown = Math.max(a.cooldown, a.deployFor); a.inspectAt = -99; }
+  beginDeploy(a) {
+    const w = this.weaponOf(a), butterfly = w.id === 'knife' && a.isPlayer && this.controlSettings.knifeModel === 'butterfly';
+    if (butterfly) a.butterflyDrawVariant = chooseButterflyVariant('draw');
+    a.deployAt = this.clock;
+    a.deployFor = butterfly ? BUTTERFLY_DEPLOY_DURATION : DEPLOY[w.id].duration;
+    a.deployWeapon = w.id; a.deployAudio = butterfly ? 'butterfly' : w.id;
+    a.deployCues = butterfly ? BUTTERFLY_DRAW_CUES : deployCues(w.id); a.deployCue = 0;
+    a.cooldown = Math.max(a.cooldown, a.deployFor); a.inspectAt = -99;
+  }
   isDeploying(a) { return a.deployAt >= 0 && a.deployWeapon === this.weaponOf(a).id && this.clock < a.deployAt + a.deployFor; }
 
   setGun(animate = true) {
     if (!this.player) return;
+    this.audio.stopKnifeAction();
     const id = this.weaponOf(this.player).id;
     if (animate) this.beginDeploy(this.player); else { this.player.deployAt = -99; this.player.deployCues = []; }
     if (this.gun) { this.gunScene.remove(this.gun); freeGeometry(this.gun); }
-    this.gun = makeWeapon(id, true); this.gunId = id;
-    this.gun.position.set(.25, -.225, -.40);
-    this.gun.rotation.set(.012, -.04, 0);
-    applyWeaponAnimation(this.gun, this.weaponAnimationState(this.player));
+    this.gun = makeWeapon(id, true, this.controlSettings.knifeModel); this.gunId = id;
+    placeWeaponView(this.gun, applyWeaponAnimation(this.gun, this.weaponAnimationState(this.player)));
     this.gunScene.add(this.gun);
     this.zoom = 0;
     this.computeHud();
@@ -853,20 +942,28 @@ export class CsEngine {
     this.cancelReload(player);
     player.inspectAt = -99; player.shotsFired = 0; player.lastShot = -99;
     this.recoil = this.kickPitch = this.kickYaw = 0;
-    player.lastSlot = player.slot; player.slot = slot; player.cooldown = .24;
+    player.lastSlot = player.slot;
+    if (player.slot === 'grenade' && !player.grenades) player.inventory.grenade = null;
+    player.slot = slot; player.cooldown = .24;
     this.setGun();
     this.audio.mechanic('cloth');
   }
   lastWeapon() { this.switchWeapon(this.player.inventory[this.player.lastSlot] ? this.player.lastSlot : 'knife'); }
-  inspectWeapon() { if (this.player?.alive && this.player.reload <= 0 && !this.isDeploying(this.player) && !this.isCycling(this.weaponOf(this.player))) { this.player.inspectAt = this.clock; this.zoom = 0; } }
+  inspectWeapon() {
+    if (this.player?.alive && this.player.reload <= 0 && !this.isDeploying(this.player) && !this.isCycling(this.weaponOf(this.player))) {
+      this.audio.stopKnifeAction(); this.player.inspectAt = this.clock; this.player.inspectCue = 0;
+      if (this.weaponOf(this.player).id === 'knife' && this.controlSettings.knifeModel === 'butterfly') this.player.butterflyInspectVariant = chooseButterflyVariant('inspect');
+      this.zoom = 0;
+    }
+  }
 
   secondaryAttack() {
     const player = this.player;
-    if (!player?.alive || !['active', 'freeze'].includes(this.phase)) return;
+    if (!player?.alive || !['active', 'freeze', 'round-end'].includes(this.phase) || this.overlayOpen()) return;
     const w = this.weaponOf(player), d = WEAPONS[w.id];
     if (d.scope || d.optics) { this.toggleZoom(); return; }
     if (w.id === 'knife') { this.fire(true); return; }
-    if (w.id === 'he') { this.throwGrenade(.35); return; }
+    if (w.id === 'he') { this.primeGrenade(2); return; }
     if (player.reload > 0 || player.cooldown > 0 || this.clock < (w.readyAt || 0)) return;
     if (w.id === 'glock') { w.burst = !w.burst; w.burstRemaining = 0; player.cooldown = .3; this.notify(w.burst ? 'Glock-18 · ' + this.L('三连发模式', 'burst mode') : 'Glock-18 · ' + this.L('半自动模式', 'semi-auto'), 1.4); }
     if (['m4a1', 'usp'].includes(w.id)) { w.suppressed = !w.suppressed; w.readyAt = this.clock + 1.5; player.inspectAt = this.clock; this.notify(w.suppressed ? this.L('安装消音器', 'Suppressor on') : this.L('卸下消音器', 'Suppressor off'), 1.5); }
@@ -880,7 +977,7 @@ export class CsEngine {
       if (id === 'he') {
         if (player.grenades >= 1) { this.notify(this.L('已携带 HE Grenade', 'Already carrying an HE Grenade'), 1.2); return; }
         player.grenades++; player.inventory.grenade = this.inventoryWeapon('he');
-        this.notify(this.L('已拾取 HE Grenade · 按 4 切换，按住左键拉环，松开投掷', 'Picked up HE Grenade · press 4, hold fire to pull the pin, release to throw'), 2);
+        this.notify(this.L('已拾取 HE Grenade · 按 4 切换，左键远投 / 右键近投 / 双键中投，松开投掷', 'Picked up HE Grenade · 4 to equip, left far / right short / both medium; release to throw'), 2);
       } else { player.armor = 100; this.notify(this.L('护甲已补满', 'Armor topped up'), 1.6); }
       this.consumePickup(item); this.selectedPickup = null; this.audio.reload(); this.computeHud();
       return;
@@ -889,7 +986,9 @@ export class CsEngine {
     if (old) this.dropWeapon(old.id, player.pos.clone().add(new T.Vector3(.5, .1, .5)), false, old, player);
     player.inventory[slot] = { ...this.inventoryWeapon(id), ...(item.state || {}), burstRemaining: 0 };
     this.consumePickup(item); this.selectedPickup = null;
-    player.lastSlot = player.slot; player.slot = slot; this.cancelReload(player);
+    player.lastSlot = player.slot;
+    if (player.slot === 'grenade' && !player.grenades) player.inventory.grenade = null;
+    player.slot = slot; this.cancelReload(player);
     player.inspectAt = -99; player.cooldown = .22; this.recoil = this.kickPitch = this.kickYaw = 0;
     this.setGun(); this.audio.reload();
     this.notify(this.L('已拾取 ', 'Picked up ') + WEAPONS[id].name, 1.6);
@@ -909,18 +1008,22 @@ export class CsEngine {
     if (a.isPlayer) { this.zoom = 0; this.computeHud(); }
     return true;
   }
-  reload() { if (!this.player?.alive || !['active', 'freeze'].includes(this.phase)) return; this.beginReload(this.player); }
+  reload() { if (!this.player?.alive || !['active', 'freeze', 'round-end'].includes(this.phase) || this.overlayOpen()) return; this.beginReload(this.player); }
 
   weaponAnimationState(a) {
     const w = this.weaponOf(a), d = WEAPONS[w.id], clock = this.clock;
     return {
+      grenadeThrowProgress: a.isPlayer && this.grenadePrime?.released && clock >= this.grenadePrime.throwAt ? (clock - this.grenadePrime.throwAt) / GRENADE_RECOVER_TIME : -1,
+      grenadeStrength: this.grenadePrime?.strength ?? 1,
       grenadeProgress: a.isPlayer && this.grenadePrime && clock >= this.grenadePrime.startAt ? Math.min(1, (clock - this.grenadePrime.startAt) / GRENADE_PIN_TIME) : -1,
       deployProgress: this.isDeploying(a) ? (clock - a.deployAt) / a.deployFor : -1,
       reloadProgress: a.reload > 0 ? 1 - a.reload / a.reloadTotal : -1,
       empty: !!a.reloadEmpty, rounds: a.reloadRounds || 1,
       cycleProgress: this.isCycling(w) ? (clock - w.cycleAt) / d.rate : -1,
-      shotAge: clock - (w.shotAt ?? -99), ammo: w.ammo,
-      inspectProgress: a.inspectAt >= 0 ? (clock - a.inspectAt) / 2.5 : -1,
+      shotAge: clock - (w.shotAt ?? -99), knifeHeavy: !!w.knifeHeavy,
+      butterflyDrawVariant: a.butterflyDrawVariant ?? 0,
+      butterflyInspectVariant: a.butterflyInspectVariant ?? 0, ammo: w.ammo,
+      inspectProgress: a.inspectAt >= 0 ? (clock - a.inspectAt) / inspectDuration(w.id, a.isPlayer ? this.controlSettings.knifeModel : 'classic') : -1,
       suppressed: w.suppressed,
     };
   }
@@ -938,18 +1041,32 @@ export class CsEngine {
   updateWeapon(a, dt) {
     if (a.deployAt >= 0 && a.deployWeapon === this.weaponOf(a).id) {
       const p = (this.clock - a.deployAt) / a.deployFor;
-      while (a.deployCue < a.deployCues.length && p >= a.deployCues[a.deployCue].at) { if (a.isPlayer) this.audio.mechanic(a.deployCues[a.deployCue].sound); a.deployCue++; }
+      while (a.deployCue < a.deployCues.length && p >= a.deployCues[a.deployCue].at) {
+        const cue = a.deployCues[a.deployCue];
+        if (a.isPlayer) this.audio.mechanic(cue.sound === 'cloth' && cue.at === .10 ? 'draw' : cue.sound, a.deployAudio || a.deployWeapon);
+        a.deployCue++;
+      }
+    }
+    if (a.isPlayer && a.inspectAt >= 0 && this.weaponOf(a).id === 'knife' && this.controlSettings.knifeModel === 'butterfly') {
+      const p = (this.clock - a.inspectAt) / inspectDuration('knife', 'butterfly');
+      while ((a.inspectCue || 0) < BUTTERFLY_INSPECT_CUES.length && p >= BUTTERFLY_INSPECT_CUES[a.inspectCue || 0].at) {
+        if (p < 1) this.audio.mechanic(BUTTERFLY_INSPECT_CUES[a.inspectCue || 0].sound, 'butterfly');
+        a.inspectCue = (a.inspectCue || 0) + 1;
+      }
     }
     a.cooldown = Math.max(0, a.cooldown - dt);
     if (this.clock - a.lastShot > (RECOIL[this.weaponOf(a).id]?.reset || .4)) a.shotsFired = 0;
     for (const w of Object.values(a.inventory)) {
       if (!w?.cyclePending) continue;
       const d = WEAPONS[w.id], p = (this.clock - w.cycleAt) / d.rate;
-      const marks = d.boltAction ? [[.25, 'bolt-lift'], [.42, 'bolt-open'], [.72, 'bolt-close'], [.87, 'bolt-lock']] : [[.39, 'bolt-open'], [.80, 'bolt-close']];
-      while ((w.cycleCue || 0) < marks.length && p >= marks[w.cycleCue || 0][0]) { if (a.isPlayer && w === this.weaponOf(a)) this.audio.mechanic(marks[w.cycleCue || 0][1]); w.cycleCue = (w.cycleCue || 0) + 1; }
+      const marks = actionCues(w.id, 'cycle');
+      while ((w.cycleCue || 0) < marks.length && p >= marks[w.cycleCue || 0].at) {
+        if (a.isPlayer && w === this.weaponOf(a)) this.audio.mechanic(marks[w.cycleCue || 0].sound, w.id);
+        w.cycleCue = (w.cycleCue || 0) + 1;
+      }
       if (p >= 1) {
         w.cyclePending = false;
-        if (a.isPlayer && w === this.weaponOf(a) && w.resumeScope && w.ammo > 0 && a.reload <= 0 && this.phase === 'active') this.zoom = w.resumeScope;
+        if (a.isPlayer && w === this.weaponOf(a) && w.resumeScope && w.ammo > 0 && a.reload <= 0 && ['active', 'round-end'].includes(this.phase)) this.zoom = w.resumeScope;
         w.resumeScope = 0;
       }
     }
@@ -959,7 +1076,7 @@ export class CsEngine {
       const previous = 1 - a.reload / a.reloadTotal;
       a.reload = Math.max(0, a.reload - dt);
       const p = 1 - a.reload / a.reloadTotal;
-      for (const cue of a.reloadCues || []) { if (previous < cue.at && p >= cue.at && a.isPlayer) this.audio.mechanic(cue.sound); }
+      for (const cue of a.reloadCues || []) { if (previous < cue.at && p >= cue.at && a.isPlayer) this.audio.mechanic(cue.sound, w.id); }
       const loaded = d.pellets ? Math.min(a.reloadRounds, Math.max(0, Math.floor((p - .20) / .60 * a.reloadRounds + .20))) : p >= .71 ? a.reloadRounds : 0;
       if (loaded > a.reloadInserted) {
         const n = Math.min(loaded - a.reloadInserted, d.mag - w.ammo, w.reserve);
@@ -981,10 +1098,11 @@ export class CsEngine {
 
   // ── Pointer capture / focus (shell hooks) ────────────────────────────────
 
-  requestCapture() { this.audio.init(); if (this.touchMode || this.hooks.pointerLocked?.()) return; this.hooks.requestCapture?.(); }
+  requestCapture() { if (this.disposed) return; this.audio.init(); if (this.touchMode || this.hooks.pointerLocked?.()) return; this.hooks.requestCapture?.(); }
   releaseCapture() { if (this.hooks.pointerLocked?.()) { this.skipPointerPause = true; this.hooks.releaseCapture?.(); } }
 
   clearHeldInput() {
+    this.audio.stopKnifeAction();
     this.fireHeld = this.shotPressed = this.dragLook = false;
     this.grenadePrime = null;
     this.keys.clear();
@@ -998,6 +1116,7 @@ export class CsEngine {
     this.closeMap(false); this.closeBuy(false); this.bomb?.cancel();
     if (!['active', 'freeze', 'round-end', 'spectate'].includes(this.phase)) return;
     this.phaseBeforePause = this.phase; this.phase = 'paused';
+    this.audio.stopKnifeAction();
     this.fireHeld = false; this.shotPressed = false; this.grenadePrime = null; this.radioMenu = null;
     this.keys.clear(); this.touchMove.x = this.touchMove.y = 0;
     this.releaseCapture();
@@ -1010,7 +1129,8 @@ export class CsEngine {
   }
 
   toMenu() {
-    this.closeSettings(); this.closeMap(false); this.closeBuy(false); this.clearBomb();
+    this.closeSettings(false); this.closeMap(false); this.closeBuy(false); this.clearBomb();
+    this.audio.stopKnifeAction();
     this.grenadePrime = null; this.radioMenu = null;
     this.matchActive = false; this.phase = 'menu';
     this.releaseCapture();
@@ -1067,7 +1187,7 @@ export class CsEngine {
     const bbox = new T.Box3();
     for (const a of this.all) {
       if (!a.alive || a === shooter) continue;
-      const crouched = a.isPlayer && this.crouching, top = crouched ? 1.26 : SOLDIER_HITBOX.top, neck = crouched ? .98 : SOLDIER_HITBOX.neck;
+      const crouched = a.isPlayer ? this.crouching : !!a.crouching, top = crouched ? 1.26 : SOLDIER_HITBOX.top, neck = crouched ? .98 : SOLDIER_HITBOX.neck;
       for (const volume of [{ x: .34, z: .30, low: .10, high: neck, head: false }, { x: SOLDIER_HITBOX.halfWidth, z: SOLDIER_HITBOX.halfDepth, low: neck, high: top, head: true }]) {
         bbox.set(a.pos.clone().add(new T.Vector3(-volume.x, volume.low, -volume.z)), a.pos.clone().add(new T.Vector3(volume.x, volume.high, volume.z)));
         const point = actorRay.intersectBox(bbox, new T.Vector3());
@@ -1077,16 +1197,22 @@ export class CsEngine {
     return closest ? { actor: closest, distance: best, head } : null;
   }
 
+  showHitFeedback(head = false, killed = false) {
+    if (this.controlSettings.hitFeedback === 'off') return;
+    this.hitOpacity = 1; this.hitHead = head; this.hitKind = killed ? 'kill' : head ? 'head' : 'body';
+    if (this.controlSettings.hitFeedback === 'full') this.audio.hit(head, killed);
+  }
+
   fire(secondary = false, burstContinuation = false) {
     const player = this.player;
-    if (!player?.alive || this.phase !== 'active' || this.overlayOpen() || this.isDeploying(player) || this.bomb?.action?.actor === player) return;
+    if (!player?.alive || !['active', 'round-end'].includes(this.phase) || this.overlayOpen() || this.isDeploying(player) || (this.phase === 'active' && this.bomb?.action?.actor === player)) return;
     const w = this.weaponOf(player), def = WEAPONS[w.id];
     if (w.id === 'he') { this.primeGrenade(secondary ? 2 : 1); return; }
     if (def.utility) return;
     if (player.reload > 0) { if (def.pellets && w.ammo > 0) { this.cancelReload(player); player.cooldown = .18; } return; }
     if (player.cooldown > 0 || this.clock < (w.readyAt || 0)) return;
     if (w.id !== 'knife' && w.ammo <= 0) { this.reload(); return; }
-    player.inspectAt = -99; player.spawnShield = 0;
+    player.inspectAt = -99; this.audio.stopKnifeAction(); player.spawnShield = 0;
     const scoped = !!this.zoom, index = player.shotsFired, profile = RECOIL[w.id];
     this.syncPlayerView(0, false);
     const origin = this.eyeOf(player), baseDir = new T.Vector3(0, 0, -1).applyEuler(new T.Euler(player.pitch + this.kickPitch, player.yaw + this.kickYaw, 0, 'YXZ'));
@@ -1094,12 +1220,14 @@ export class CsEngine {
     let spread = def.spread + speed * speed * (profile?.move || 0) + (player.grounded ? 0 : .045) + index * (profile?.growth || 0);
     if (this.crouching) spread *= .72;
     if (scoped) spread *= def.scope ? .12 : .5; else if (def.scope) spread += .045;
-    if (w.id !== 'knife') w.ammo--;
+    if (w.id === 'knife') { w.shotAt = this.clock; w.knifeHeavy = secondary; } else w.ammo--;
     player.cooldown = secondary && w.id === 'knife' ? 1 : def.rate;
     player.shotsFired++;
-    this.audio.shot(w.id, 1, 0, w.suppressed);
+    if (w.id === 'knife' && this.controlSettings.knifeModel === 'butterfly') this.audio.mechanic(secondary ? 'stab' : 'slash', 'butterfly');
+    else this.audio.shot(w.id, 1, 0, w.suppressed);
     if (w.id !== 'knife') this.flash(muzzle, true);
     const obstruction = this.world.raycast(origin, muzzle.clone().sub(origin).normalize(), origin.distanceTo(muzzle));
+    let confirmation = null;
     for (let pellet = 0; pellet < (def.pellets || 1); pellet++) {
       const dir = baseDir.clone().add(new T.Vector3((Math.random() - .5) * spread, (Math.random() - .5) * spread, (Math.random() - .5) * spread)).normalize();
       const range = secondary && w.id === 'knife' ? 1.5 : def.range, mapHit = this.world.raycast(origin, dir, range), max = mapHit ? mapHit.distance : range;
@@ -1115,13 +1243,14 @@ export class CsEngine {
           const falloff = def.pellets ? Math.max(.3, 1 - hit.distance / 50) : 1,
             damage = secondary && w.id === 'knife' ? 90 : def.damage,
             applied = this.damageActor(hit.actor, damage * (hit.head && w.id !== 'knife' ? 3.8 : 1) * falloff, player, w.id, hit.head);
-          if (applied) { this.hitOpacity = 1; this.hitHead = hit.head; this.audio.hit(hit.head); }
+          if (applied) confirmation = { head: hit.head || !!confirmation?.head, killed: !hit.actor.alive || !!confirmation?.killed };
         } else if (pellet === 0) this.notify(this.L('队友 · 友军伤害已关闭', 'Teammate · friendly fire is off'), 1);
       } else if ((blocked || mapHit) && w.id !== 'knife') {
         const h = blocked || mapHit;
         this.impact(h.point, h.face?.normal);
       }
     }
+    if (confirmation) this.showHitFeedback(confirmation.head, confirmation.killed);
     if (w.id !== 'knife') {
       const kick = shotRecoil(w.id, index), scale = (this.crouching ? .88 : 1) * (scoped && def.optics ? .65 : 1);
       this.recoil = Math.min(.18, this.recoil + kick.view);
@@ -1146,78 +1275,83 @@ export class CsEngine {
     if (this.grenadePrime?.released) return true;
     if (!this.grenadePrime) {
       const startAt = Math.max(this.clock + Math.max(0, player.cooldown), this.isDeploying(player) ? player.deployAt + player.deployFor : this.clock);
-      this.grenadePrime = { buttons: 0, strength: button === 2 ? .35 : 1, startAt, readyAt: startAt + GRENADE_PIN_TIME, released: false, cue: false };
+      this.grenadePrime = { buttons: 0, strength: button === 2 ? 0 : 1, startAt, readyAt: startAt + GRENADE_PIN_TIME, released: false, cue: false };
     }
     this.grenadePrime.buttons |= button;
-    this.grenadePrime.strength = this.grenadePrime.buttons === 3 ? .65 : this.grenadePrime.buttons === 2 ? .35 : 1;
+    this.grenadePrime.strength = this.grenadePrime.buttons === 3 ? .5 : this.grenadePrime.buttons === 2 ? 0 : 1;
     player.inspectAt = -99;
     return true;
   }
   releaseGrenade(button = 1) {
     if (!this.grenadePrime || !(this.grenadePrime.buttons & button)) return;
     this.grenadePrime.buttons &= ~button;
-    if (!this.grenadePrime.buttons) { this.grenadePrime.released = true; this.updateGrenadePrime(); }
+    if (!this.grenadePrime.buttons) {
+      this.grenadePrime.released = true;
+      this.grenadePrime.throwAt = Math.max(this.clock, this.grenadePrime.readyAt);
+      this.updateGrenadePrime();
+    }
+  }
+  grenadeReturnSlot() {
+    const player = this.player;
+    return player.lastSlot !== 'grenade' && player.inventory[player.lastSlot] ? player.lastSlot : player.inventory.primary ? 'primary' : player.inventory.pistol ? 'pistol' : 'knife';
   }
   updateGrenadePrime() {
     const p = this.grenadePrime, player = this.player;
-    if (!p) return;
+    if (!p) { if (player?.slot === 'grenade' && !player.grenades) this.switchWeapon(this.grenadeReturnSlot()); return; }
     if (!player?.alive || player.slot !== 'grenade' || this.phase !== 'active' || this.overlayOpen()) { this.grenadePrime = null; return; }
-    if (this.clock >= p.startAt && !p.cue) { p.cue = true; this.audio.mechanic('bolt-lift'); }
-    if (p.released && this.clock >= p.readyAt && !this.isDeploying(player) && player.cooldown <= 0) {
-      const strength = p.strength;
-      this.grenadePrime = null;
-      this.throwGrenade(strength);
-    }
+    if (this.clock >= p.startAt + GRENADE_PIN_TIME * .28 && !p.cue) { p.cue = true; this.audio.mechanic('pin', 'he'); }
+    if (p.released && this.clock >= p.throwAt + GRENADE_RELEASE_TIME && !p.launched) { p.launched = true; this.throwGrenade(p.strength); }
+    if (p.launched && this.clock >= p.throwAt + GRENADE_RECOVER_TIME) { this.grenadePrime = null; this.switchWeapon(this.grenadeReturnSlot()); }
   }
   throwGrenade(strength = 1) {
     const player = this.player;
-    if (!player?.alive || this.phase !== 'active' || player.slot !== 'grenade' || player.cooldown > 0 || this.isDeploying(player) || this.overlayOpen()) return;
-    if (player.grenades <= 0) return;
+    if (!player?.alive || this.phase !== 'active' || player.slot !== 'grenade' || player.cooldown > 0 || this.isDeploying(player) || this.overlayOpen() || player.grenades <= 0) return;
     player.spawnShield = 0; player.grenades--;
-    const dir = new T.Vector3(0, 0, -1).applyEuler(new T.Euler(player.pitch + .12, player.yaw, 0, 'YXZ')), eye = this.eyeOf(player),
-      wall = this.world.raycast(eye, dir, .55), origin = eye.addScaledVector(dir, wall ? Math.max(.05, wall.distance - .1) : .45),
-      mesh = makeWeapon('he');
-    mesh.position.copy(origin);
-    this.scene.add(mesh);
-    this.grenades.push({ mesh, pos: origin, velocity: dir.multiplyScalar(12 * strength).add(new T.Vector3(player.moveVel.x, 2.3 * strength, player.moveVel.z)), fuse: 1.65, owner: player });
-    player.inventory.grenade = player.grenades ? this.inventoryWeapon('he') : null;
-    const next = player.inventory[player.lastSlot] ? player.lastSlot : player.inventory.primary ? 'primary' : 'pistol';
-    this.switchWeapon(next);
-    this.audio.mechanic('cloth');
-    this.computeHud();
+    const eye = this.eyeOf(player), launch = grenadeLaunch(player.pitch, player.yaw, strength, eye, player.moveVel, player.grounded ? 0 : player.vy);
+    // Sweep the hand offset before the forward launch so crouching beside a
+    // crate cannot create a grenade on the other side of the wall or floor.
+    const offset = launch.origin.clone().sub(eye), hitHand = this.world.raycast(eye, offset.clone().normalize(), offset.length() + GRENADE_RADIUS);
+    if (hitHand) launch.origin.copy(eye).addScaledVector(offset.normalize(), Math.max(0, hitHand.distance - GRENADE_RADIUS));
+    const wall = this.world.raycast(launch.origin, launch.direction, .40 + GRENADE_RADIUS);
+    launch.origin.addScaledVector(launch.direction, wall ? Math.max(0, wall.distance - GRENADE_RADIUS - .005) : .40);
+    const mesh = makeWeapon('he');
+    mesh.userData.rig.pin.visible = false; mesh.userData.rig.lever.visible = false;
+    mesh.position.copy(launch.origin); this.scene.add(mesh);
+    this.grenades.push({ mesh, pos: launch.origin, velocity: launch.velocity, spin: new T.Vector3(9, 0, 4), fuse: 1.5, owner: player });
+    this.audio.mechanic('throw', 'he'); this.computeHud();
+  }
+
+  grenadeSound(kind, pos, level = 1) {
+    const diff = pos.clone().sub(this.eyeOf(this.player)), distance = diff.length(), pan = Math.sin(Math.atan2(diff.x, diff.z) - this.player.yaw);
+    this.audio.spatialMechanic(kind, 'he', level * Math.min(1, 9 / (distance + 3)), pan, distance);
   }
 
   updateGrenades(dt) {
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const g = this.grenades[i];
-      g.fuse -= dt;
-      g.velocity.y -= 14 * dt;
-      const next = g.pos.clone().addScaledVector(g.velocity, dt), delta = next.clone().sub(g.pos), len = delta.length(),
-        hit = this.world.raycast(g.pos, delta.normalize(), len + .1);
-      if (hit) { g.pos.copy(hit.point).addScaledVector(hit.face.normal, .12); g.velocity.reflect(hit.face.normal).multiplyScalar(.44); }
-      else g.pos.copy(next);
-      g.mesh.position.copy(g.pos);
-      g.mesh.rotation.x += dt * 6; g.mesh.rotation.z += dt * 3;
-      if (g.fuse <= 0) {
-        for (const a of this.all) {
-          if (!a.alive || a.team === g.owner.team) continue;
-          const eye = this.eyeOf(a), dist = eye.distanceTo(g.pos);
-          if (dist < 9 && this.world.lineClear(g.pos, eye)) this.damageActor(a, 140 * (1 - dist / 9), g.owner, 'he');
-        }
-        this.audio.burst(.38, 1.4, 1700);
-        this.audio.tone(62, .4, .7, 'triangle', 25);
-        const mesh = new T.Mesh(new T.SphereGeometry(1, 14, 10), new T.MeshBasicMaterial({ color: 0xffc46e, transparent: true, opacity: .45, depthWrite: false }));
-        mesh.position.copy(g.pos);
-        this.scene.add(mesh);
-        this.effects.push({ mesh, life: .35, total: .35, disposeMat: true, expand: true });
-        this.scene.remove(g.mesh); freeGeometry(g.mesh);
-        this.grenades.splice(i, 1);
+      advanceGrenade(g, dt, this.world, impact => this.grenadeSound('bounce', g.pos, Math.min(.9, impact / 8)));
+      if (g.fuse > 0) continue;
+      for (const a of this.all) {
+        if (!a.alive || a.team === g.owner.team) continue;
+        const eye = this.eyeOf(a), dist = eye.distanceTo(g.pos);
+        if (dist < 9 && this.world.lineClear(g.pos, eye)) this.damageActor(a, 140 * (1 - dist / 9), g.owner, 'he');
       }
+      this.grenadeSound('explode', g.pos, 1.7);
+      const flash = new T.Mesh(new T.SphereGeometry(.30, 12, 8), new T.MeshBasicMaterial({ color: 0xffd49a, transparent: true, opacity: .8, depthWrite: false }));
+      flash.position.copy(g.pos); this.scene.add(flash);
+      this.effects.push({ mesh: flash, life: .085, total: .085, disposeMat: true, expand: true });
+      for (let j = 0; j < 7; j++) {
+        const angle = j * Math.PI * 2 / 7, mesh = new T.Mesh(new T.SphereGeometry(.20, 10, 8), new T.MeshBasicMaterial({ color: this.world.theme === 'desert' ? 0x887d6c : 0x777d80, transparent: true, opacity: .35, depthWrite: false }));
+        mesh.position.copy(g.pos).add(new T.Vector3(Math.cos(angle) * .25, .14 + j * .055, Math.sin(angle) * .25));
+        mesh.scale.set(1, .7, 1); this.scene.add(mesh);
+        this.effects.push({ mesh, life: .48 + j * .035, total: .48 + j * .035, disposeMat: true, expand: true, opacity: .35 });
+      }
+      this.scene.remove(g.mesh); freeGeometry(g.mesh); this.grenades.splice(i, 1);
     }
   }
 
   damageActor(target, raw, attacker, weapon, head = false) {
-    if (!target.alive || target.team === attacker.team || this.clock < (target.spawnShield || 0) || this.phase !== 'active') return false;
+    if (!target.alive || target.team === attacker.team || this.clock < (target.spawnShield || 0) || !['active', 'round-end'].includes(this.phase)) return false;
     const absorbed = head && !target.helmet ? 0 : Math.min(target.armor, raw * (head ? .13 : .28)),
       damage = WEAPONS[weapon]?.oneHitKill ? target.health : raw - absorbed;
     target.armor = Math.max(0, target.armor - absorbed);
@@ -1241,7 +1375,7 @@ export class CsEngine {
       const local = away.applyAxisAngle(new T.Vector3(0, 1, 0), -target.yaw);
       target.ragdoll = { age: 0, duration: .58 + Math.random() * .18, finalX: local.z * 1.40, finalZ: -local.x * 1.40, spin: (Math.random() - .5) * .22, side: Math.random() > .5 ? 1 : -1 };
       if (target.isPlayer && !target.mesh) {
-        target.mesh = makeSoldier(target.team);
+        target.mesh = makeSoldier(target.team, this.soldierLibrary);
         target.mesh.position.copy(target.pos); target.mesh.rotation.y = target.yaw;
         this.scene.add(target.mesh);
       }
@@ -1254,7 +1388,7 @@ export class CsEngine {
         this.zoom = 0; this.fireHeld = this.shotPressed = false;
         this.autoSpectateDelay = this.mode === 'tdm' ? .7 : 2;
         this.spectating = null;
-        this.center('ELIMINATED', this.L('你已阵亡', 'You are down'), attacker.name + ' · ' + WEAPONS[weapon].name + ' · ' + (this.mode === 'tdm' ? this.L('3 秒后复活', 'respawn in 3s') : this.L('等待下一回合', 'wait for the next round')));
+        this.center('ELIMINATED', this.L('你已阵亡', 'You are down'), attacker.name + ' · ' + this.weaponDisplayName(weapon, attacker) + ' · ' + (this.mode === 'tdm' ? this.L('3 秒后复活', 'respawn in 3s') : this.L('等待下一回合', 'wait for the next round')));
       }
       if (target.mesh?.userData.gun) target.mesh.userData.gun.visible = false;
       if (this.mode === 'tdm') {
@@ -1274,6 +1408,10 @@ export class CsEngine {
       if (a.alive || !a.ragdoll || !a.mesh) continue;
       const r = a.ragdoll;
       r.age += dt;
+      if (a.mesh.userData.skinned) {
+        a.mesh.position.copy(a.pos); a.mesh.rotation.set(0, a.yaw, 0);
+        poseSkinnedSoldierDeath(a.mesh, r.age); continue;
+      }
       const p = Math.min(1, r.age / r.duration), ease = 1 - Math.pow(1 - p, 3), settle = p < .78 ? ease : ease + Math.sin((p - .78) / .22 * Math.PI) * .025;
       a.mesh.position.copy(a.pos);
       a.mesh.position.y += (a.mesh.userData.groundOffset || 0) + .235 * ease;
@@ -1300,7 +1438,7 @@ export class CsEngine {
     this.fireHeld = false; this.zoom = 0;
     if (winner !== 'draw') this.scores[winner]++;
     if (this.mode === 'defusal' && winner !== 'draw') settleRound(this.all, winner, this.bomb);
-    this.audio.round(winner === this.player.team);
+    this.audio.round(winner === this.player.team, winner);
     this.center(
       winner === 'draw' ? 'ROUND DRAW' : 'ROUND WON',
       winner === 'draw' ? this.L('本回合平局', 'Round draw') : this.teamName(winner) + this.L('获胜', ' win'),
@@ -1313,7 +1451,7 @@ export class CsEngine {
     const won = this.scores[this.player.team] >= this.winTarget();
     this.grenadePrime = null; this.radioMenu = null;
     this.fireHeld = this.shotPressed = false; this.keys.clear(); this.zoom = 0;
-    this.audio.round(won);
+    this.audio.round(won, won ? this.player.team : this.player.team === 'ct' ? 't' : 'ct');
     this.hud.matchEnd = {
       won,
       title: won ? this.L('胜利属于你。', 'Victory is yours.') : this.L('下次再战。', 'Next time.'),
@@ -1348,13 +1486,15 @@ export class CsEngine {
       if (b.target !== enemy) { b.target = enemy; b.reaction = config.reaction + Math.random() * .25; }
     }
     let moveX = 0, moveZ = 0;
-    if (this.updateBotObjective(b)) return;
+    if (this.updateBotObjective(b, dt)) return;
     if (world.theme === 'desert') {
       b.openingWait = Math.max(0, (b.openingWait || 0) - dt);
-      if (!b.target && b.openingWait > 0) { b.moveSpeed = 0; return; }
+      if (!b.target && b.openingWait > 0) {
+        b.moveSpeed = 0; updateSkinnedSoldier(b.mesh, dt, { speed: 0, grounded: true }); this.updateBotWeapon(b); return;
+      }
       if (clock >= (b.strafeAt || 0)) { b.strafe = Math.random() < .5 ? -1 : 1; b.strafeAt = clock + 1.1 + Math.random() * 2.7; }
     }
-    if (b.target?.alive && b.routeIndex < b.route.length && b.pos.distanceTo(b.target.pos) > 16) b.target = null;
+    if (world.theme !== 'desert' && b.target?.alive && b.routeIndex < b.route.length && b.pos.distanceTo(b.target.pos) > 16) b.target = null;
     if (b.target?.alive) {
       const a = b.target, dx = a.pos.x - b.pos.x, dz = a.pos.z - b.pos.z, len = Math.hypot(dx, dz);
       b.yaw = Math.atan2(-dx, -dz);
@@ -1395,8 +1535,13 @@ export class CsEngine {
           } else { b.target = null; b.aiThink = 0; }
         }
       }
-      if (len > (def.scope ? 24 : 13) && b.routeIndex >= b.route.length) { moveX = dx / len * config.speed * .55; moveZ = dz / len * config.speed * .55; }
-      if (len < 24 && !def.scope) { moveX += Math.cos(b.yaw) * b.strafe * .8; moveZ -= Math.sin(b.yaw) * b.strafe * .8; }
+      if (world.theme === 'desert') {
+        const move = dustCombatMove(b, a.pos, def, config.speed * (b.pace || 1), clock, w.id);
+        moveX = move.x; moveZ = move.z;
+      } else {
+        if (len > (def.scope ? 24 : 13) && b.routeIndex >= b.route.length) { moveX = dx / len * config.speed * .55; moveZ = dz / len * config.speed * .55; }
+        if (len < 24 && !def.scope) { moveX += Math.cos(b.yaw) * b.strafe * .8; moveZ -= Math.sin(b.yaw) * b.strafe * .8; }
+      }
     } else {
       if (b.pathTime <= 0 || !b.path.length) {
         const opponents = all.filter(a => a.alive && a.team !== b.team), destination = this.objectiveDestination(b, opponents);
@@ -1429,15 +1574,19 @@ export class CsEngine {
     }
     b.mesh.position.copy(b.pos);
     b.mesh.position.y += b.mesh.userData.groundOffset || 0;
-    b.mesh.rotation.set(0, b.yaw, 0);
+    const heading = b.mesh.rotation.y, turn = Math.atan2(Math.sin(b.yaw - heading), Math.cos(b.yaw - heading));
+    b.mesh.rotation.set(0, heading + turn * (1 - Math.exp(-dt * 13)), 0);
     b.moveTime += Math.sqrt(moved) * 2.8;
     const moving = moved > .00001;
-    for (let i = 0; i < 2; i++) {
-      const leg = b.mesh.userData.legs[i], stride = Math.sin(b.moveTime + i * Math.PI);
-      leg.rotation.x = moving ? stride * .31 : 0;
-      leg.userData.knee.rotation.x = moving ? Math.max(0, -stride) * .38 : .035;
+    const localVelocity = new T.Vector3((b.pos.x - old.x) / dt, 0, (b.pos.z - old.z) / dt).applyAxisAngle(new T.Vector3(0, 1, 0), -b.mesh.rotation.y);
+    if (!updateSkinnedSoldier(b.mesh, dt, { speed: b.moveSpeed, velocity: localVelocity, grounded: b.grounded, crouched: !!b.crouching })) {
+      for (let i = 0; i < 2; i++) {
+        const leg = b.mesh.userData.legs[i], stride = Math.sin(b.moveTime + i * Math.PI);
+        leg.rotation.x = moving ? stride * .31 : 0;
+        leg.userData.knee.rotation.x = moving ? Math.max(0, -stride) * .38 : .035;
+      }
+      if (moving) b.mesh.position.y += Math.abs(Math.sin(b.moveTime)) * .014;
     }
-    if (moving) b.mesh.position.y += Math.abs(Math.sin(b.moveTime)) * .014;
     this.updateBotWeapon(b);
   }
 
@@ -1447,7 +1596,7 @@ export class CsEngine {
     if (!model) return;
     const state = this.weaponAnimationState(b), pose = applyWeaponAnimation(model, state);
     if (pose) {
-      model.position.set(.060 + pose.offset[0] * .3, 1.29 + pose.offset[1] * .3, -.205 + pose.offset[2] * .3);
+      model.position.set(.060 + pose.offset[0] * .3, 1.29 + (b.mesh.userData.skinned?.weaponYOffset || 0) + pose.offset[1] * .3, -.205 + pose.offset[2] * .3);
       model.rotation.set(pose.rotation[0], .22 + pose.rotation[1], pose.rotation[2]);
       poseSoldierWeapon(b.mesh, pose);
     }
@@ -1495,7 +1644,7 @@ export class CsEngine {
     const recovered = recoverRecoil(w.id, { pitch: this.kickPitch, yaw: this.kickYaw, view: this.recoil }, this.clock - player.lastShot, dt);
     this.kickPitch = recovered.pitch; this.kickYaw = recovered.yaw; this.recoil = recovered.view;
     this.updateGrenadePrime();
-    if (this.phase === 'active' && !this.overlayOpen()) {
+    if (['active', 'round-end'].includes(this.phase) && !this.overlayOpen()) {
       if (w.burstRemaining > 0) this.fire(false, true);
       else if ((d.auto && this.fireHeld) || this.shotPressed) this.fire();
       this.shotPressed = false;
@@ -1522,14 +1671,14 @@ export class CsEngine {
     this.camera.updateProjectionMatrix();
     if (this.gun) {
       const motion = applyWeaponAnimation(this.gun, this.weaponAnimationState(player)),
-        off = motion?.offset || [0, 0, 0], rot = motion?.rotation || [0, 0, 0],
         kick = RECOIL[w.id], viewScale = d.pistol ? 1.6 : d.pellets ? 1.25 : 1;
-      this.gun.position.set(
-        T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) + (moving ? Math.cos(this.viewBob * .5) * .009 : 0) + off[0],
-        -.225 + (moving ? Math.sin(this.viewBob) * .007 : 0) + off[1],
-        -.40 + this.recoil * viewScale + off[2],
-      );
-      this.gun.rotation.set(.012 + this.recoil * (d.pistol ? 2.4 : 1.1) + rot[0], -.04 - this.kickYaw * .7 + rot[1], this.recoil * (kick?.yaw || 0) * 12 + rot[2]);
+      placeWeaponView(this.gun, motion, {
+        x: T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) + (moving ? Math.cos(this.viewBob * .5) * .009 : 0),
+        y: -.225 + (moving ? Math.sin(this.viewBob) * .007 : 0),
+        z: -.40 + this.recoil * viewScale,
+        pitch: .012 + this.recoil * (d.pistol ? 2.4 : 1.1),
+        yaw: -.04 - this.kickYaw * .7, roll: this.recoil * (kick?.yaw || 0) * 12,
+      });
       if (w.id === 'c4') {
         this.gun.position.x = .06; this.gun.rotation.x = .40;
         if (this.bomb?.action?.actor === player) {
@@ -1539,10 +1688,6 @@ export class CsEngine {
           const hand = this.gun.userData.rig.right?.hand;
           if (hand) hand.position.set(.03, .095 + Math.sin(p * 80) * .004, -.018 + (Math.floor(p * 9) % 4) * .02);
         }
-      }
-      if (w.id === 'knife' && !this.isDeploying(player) && player.cooldown > .15) {
-        this.gun.rotation.z -= Math.sin(player.cooldown / (player.cooldown > .5 ? 1 : .5) * Math.PI) * .8;
-        this.gun.position.x -= Math.sin(player.cooldown / .5 * Math.PI) * .22;
       }
     }
   }
@@ -1694,7 +1839,7 @@ export class CsEngine {
     hud.healthLow = player.health < 30;
     hud.killCount = player.kills;
     hud.grenadeCount = player.grenades;
-    hud.weaponName = def.name;
+    hud.weaponName = this.weaponDisplayName(w.id);
     hud.ammoText = ['knife', 'c4'].includes(w.id) ? '—' : w.id === 'he' ? String(player.grenades) : String(w.ammo);
     hud.reserveText = ['knife', 'c4'].includes(w.id) ? '—' : String(w.reserve);
     hud.reloadState = this.grenadePrime
@@ -1709,7 +1854,7 @@ export class CsEngine {
       const item = player.inventory[slot];
       return {
         key: slot, num: i + 1, equipped: player.slot === slot,
-        label: item ? WEAPONS[item.id].name : slot === 'primary' ? this.L('主武器', 'Primary') : slot === 'pistol' ? this.L('手枪', 'Pistol') : slot === 'grenade' ? 'HE Grenade' : slot === 'bomb' ? 'C4 Explosive' : 'Knife',
+        label: item ? this.weaponDisplayName(item.id) : slot === 'primary' ? this.L('主武器', 'Primary') : slot === 'pistol' ? this.L('手枪', 'Pistol') : slot === 'grenade' ? 'HE Grenade' : slot === 'bomb' ? 'C4 Explosive' : 'Knife',
         empty: !item, hidden: slot === 'bomb' && !item,
       };
     }).filter(s => !s.hidden);
@@ -1721,8 +1866,9 @@ export class CsEngine {
     hud.crosshairGap = 2 + Math.min(7, Math.abs(this.kickPitch) * 32 + player.shotsFired * .16 + player.moveSpeed * .45);
     hud.scope = !!(this.zoom && def.scope) && player.alive;
     hud.scopeLabel = this.zoom === 2 ? this.L('二级瞄准', '2× zoom') : this.L('一级瞄准', '1× zoom');
-    hud.hitOpacity = this.hitOpacity;
-    hud.hitHead = this.hitHead;
+    hud.hitOpacity = this.controlSettings.hitFeedback === 'off' ? 0 : this.hitOpacity;
+    hud.hitHead = this.hitHead; hud.hitKind = this.hitKind;
+    hud.hitConfirmation = this.hitKind === 'kill' ? (this.hitHead ? this.L('爆头击杀', 'HEADSHOT KILL') : this.L('击杀', 'KILL')) : this.hitHead ? this.L('爆头', 'HEADSHOT') : '';
     hud.damageOpacity = this.damageOpacity;
     hud.location = this.computeLocation();
     hud.ctScore = this.scores.ct;
@@ -1786,7 +1932,7 @@ export class CsEngine {
     if (button === 0) {
       if (this.primeGrenade(1)) return;
       this.fireHeld = true;
-      this.shotPressed = this.phase === 'active';
+      this.shotPressed = ['active', 'round-end'].includes(this.phase);
       if (!this.mouseLocked) { this.dragLook = true; this.dragX = clientX; this.dragY = clientY; }
     }
     if (button === 2 && !this.primeGrenade(2)) this.secondaryAttack();
@@ -1810,14 +1956,14 @@ export class CsEngine {
     if (code === 'Escape') {
       e.preventDefault();
       if (e.repeat) return;
-      if (this.settingsOpen) { this.focusGuard.consumeEscape(); this.closeSettings(); return; }
-      if (this.mapOpen) { this.focusGuard.consumeEscape(); this.closeMap(); return; }
-      if (this.buyOpen) { this.focusGuard.consumeEscape(); this.closeBuy(); return; }
+      if (this.settingsOpen) { this.focusGuard.consumeEscape(); this.closeSettings(false); return; }
+      if (this.mapOpen) { this.focusGuard.consumeEscape(); this.closeMap(false); return; }
+      if (this.buyOpen) { this.focusGuard.consumeEscape(); this.closeBuy(false); return; }
       if (this.radioMenu) { this.focusGuard.consumeEscape(); this.radioMenu = null; this.computeHud(); this.clearHeldInput(); return; }
       if (this.hud.scoreboardOpen) { this.focusGuard.consumeEscape(); this.hud.scoreboardOpen = false; this.keys.delete('Tab'); return; }
       if (!this.matchActive) return;
       this.focusGuard.escape();
-      if (this.phase === 'paused') this.resumeGame(); else this.pauseGame();
+      if (this.phase === 'paused') this.resumeGame(false); else this.pauseGame();
       return;
     }
     if (this.settingsOpen) return;
@@ -1874,7 +2020,7 @@ export class CsEngine {
     this.audio.init();
     if (this.primeGrenade(1)) return;
     this.fireHeld = true;
-    this.shotPressed = this.phase === 'active';
+    this.shotPressed = ['active', 'round-end'].includes(this.phase);
   }
   touchFireEnd() { this.releaseGrenade(1); this.fireHeld = false; }
   touchSwitch() {
@@ -1893,7 +2039,8 @@ export class CsEngine {
   // ── Main loop (driven by the shell) ──────────────────────────────────────
 
   update(dt) {
-    dt = Math.min(.04, dt);
+    if (this.disposed) return;
+    dt = Math.max(0, Math.min(.04, dt));
     this.fpsTime += dt; this.frameCount++;
     if (this.fpsTime > .75) { this.fps = Math.round(this.frameCount / this.fpsTime); this.hud.fps = String(this.fps); this.fpsTime = 0; this.frameCount = 0; }
     if (this.phase !== 'paused' && this.phase !== 'match-end') this.clock += dt;
@@ -1931,7 +2078,7 @@ export class CsEngine {
         for (const b of this.bots) { if (this.phase !== 'active') break; this.updateAI(b, dt); }
         if (this.phase === 'active') this.updateGrenades(dt);
       } else {
-        for (const b of this.bots) { if (b.alive) { this.updateWeapon(b, dt); this.updateBotWeapon(b); } }
+        for (const b of this.bots) { if (b.alive) { this.updateWeapon(b, dt); updateSkinnedSoldier(b.mesh, dt, { speed: 0, grounded: true }); this.updateBotWeapon(b); } }
       }
       this.updateRagdolls(dt);
       if (this.phase === 'round-end') {
@@ -1943,7 +2090,7 @@ export class CsEngine {
       }
       if (this.phase !== 'match-end') { if (player.alive) this.updatePlayer(dt); else this.updateSpectator(dt); }
       if (this.phase === 'active' && this.mode === 'defusal') this.updateBomb(dt);
-      if (this.buyOpen && !this.canBuy(player)) this.closeBuy();
+      if (this.buyOpen && !this.canBuy(player)) this.closeBuy(false);
       const sec = Math.max(0, Math.ceil(this.phase === 'freeze' ? this.freezeTime : this.mode === 'tdm' ? this.matchElapsed : this.bomb?.status === 'planted' ? this.bomb.fuse : this.roundTime));
       this.hud.timerText = this.phase === 'freeze' ? '0:0' + sec : sec === 0 && this.mode === 'elimination' ? this.L('加时', 'OT') : Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
       this.hud.timerUrgent = this.phase === 'active' && this.mode !== 'tdm' && (this.bomb?.status === 'planted' || this.roundTime < 15);
@@ -1957,7 +2104,7 @@ export class CsEngine {
           e.mesh.geometry.computeBoundingSphere();
         }
         if (e.expand) e.mesh.scale.setScalar(1 + (1 - e.life / e.total) * 4);
-        if (!e.static && e.mesh.material.opacity !== undefined) e.mesh.material.opacity = Math.max(0, e.life / e.total);
+        if (!e.static && e.mesh.material.opacity !== undefined) e.mesh.material.opacity = Math.max(0, e.life / e.total) * (e.opacity ?? 1);
         if (e.life <= 0) {
           e.mesh.removeFromParent(); e.mesh.geometry?.dispose();
           e.disposeMat && e.mesh.material.dispose();
@@ -1965,14 +2112,14 @@ export class CsEngine {
         }
       }
     }
-    this.hitOpacity = Math.max(0, this.hitOpacity - dt * 5);
+    this.hitOpacity = Math.max(0, this.hitOpacity - dt * (this.hitKind === 'kill' ? 2.8 : 4.5));
     this.damageOpacity = Math.max(0, this.damageOpacity - dt * 1.5);
     this.computeHud();
   }
 
   /** Render the 3D scene into the offscreen WebGL canvas. */
   render() {
-    if (!this.renderer || !this.world) return;
+    if (this.disposed || !this.renderer || !this.world) return;
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     if (this.player?.alive && this.gun && this.phase !== 'menu' && !(this.zoom && WEAPONS[this.gunId].scope)) {

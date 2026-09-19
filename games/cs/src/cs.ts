@@ -1,4 +1,4 @@
-// cs.ts — shell adapter for the migrated carrick-cs v13 engine.
+// cs.ts — shell adapter for the migrated carrick-cs v28 engine.
 //
 // CsGame hosts CsEngine (a faithful port of the standalone app's game.js)
 // inside the BaseGame contract: the engine renders Three.js into an offscreen
@@ -224,7 +224,12 @@ export class CsGame extends BaseGame {
     this.touchRegions.clear();
     if (!this.booted) {
       this.booted = true;
-      if (isSoftwareGL()) this.engine.quality = 'low';
+      if (isSoftwareGL()) {
+        this.engine.softwareRendering = true;
+        // Keep the effective setting in sync: changing a knife or sensitivity
+        // must not silently re-enable expensive shadows on software rendering.
+        this.engine.quality = this.engine.controlSettings.quality = 'low';
+      }
       void this.engine.init();
     } else {
       this.engine.toMenu();
@@ -243,6 +248,11 @@ export class CsGame extends BaseGame {
           reserve: engine.player?.inventory?.[engine.player.slot]?.reserve ?? null,
           bots: engine.bots?.filter(bot => bot.alive).length ?? 0,
           bomb: engine.bomb?.status ?? null, matchEnd: !!engine.hud.matchEnd,
+          settingsOpen: engine.settingsOpen, settings: { ...engine.controlSettings },
+          knifeModel: engine.gun?.userData.rig?.knifeModel ?? null,
+          skinnedBots: engine.bots.filter(bot => !!bot.mesh?.userData.skinned).length,
+          clock: engine.clock, gunFov: engine.gunCamera.fov,
+          inspectAt: engine.player?.inspectAt ?? -99,
         };
       },
       forceMatchEnd: (won = true) => {
