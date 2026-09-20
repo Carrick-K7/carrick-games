@@ -1,9 +1,10 @@
 import { expect, type Page } from '@playwright/test';
 import { type GameProfile } from '../../../tests/support/gameover';
+import { activateUi } from './ui.fixture';
 
 async function suicideCs(page: Page) {
   // The migrated engine boots to an in-canvas menu first. Wait for the map to
-  // load, click the "进入战场" button at the baseline viewport, then force
+  // load, click the current visible "进入战场" target, then force
   // the terminal state so the single CS result panel and one-shot score
   // reporting are exercised without seven realtime rounds. Responsive menu
   // layouts and scrolling are covered separately by game-window tests.
@@ -15,7 +16,7 @@ async function suicideCs(page: Page) {
   );
   const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveCSS('width', '1280px');
-  await canvas.click({ position: { x: 314, y: 590 } });
+  await activateUi(page, 'menu-start');
   await page.waitForFunction(
     () => (window as unknown as { __CSX_DEBUG__?: { info?: () => { phase: string } | null } }).__CSX_DEBUG__?.info?.()?.phase === 'freeze',
     undefined,

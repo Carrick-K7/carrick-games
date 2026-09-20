@@ -1,12 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { observeLabels, painted, swipe, tapLabel } from '../../../tests/support/responsiveHud';
+import { swipe } from '../../../tests/support/responsiveHud';
+import { activateUi } from './ui.fixture';
 
 const state = (page: Page) => page.evaluate(() => (window as any).__CSX_DEBUG__?.info() ?? { ready: false });
-async function clickLabel(page: Page, pattern: RegExp) {
-  await expect.poll(() => painted(page, pattern)).not.toBeNull();
-  const p = (await painted(page, pattern))!;
-  await page.mouse.click(p.x, p.y);
-}
 async function ready(page: Page) {
   await page.goto('/#/cs');
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 60_000 });
@@ -27,16 +23,15 @@ test.describe('CS v28 integration', () => {
         if (response.status() >= 400) failed.push(path);
       }
     });
-    await observeLabels(page);
     await page.addInitScript(() => localStorage.setItem('cg-lang', 'en'));
     await ready(page);
-    await clickLabel(page, /^Settings ·/);
+    await activateUi(page, 'menu-settings');
     await expect.poll(async () => (await state(page)).settingsOpen).toBe(true);
-    await clickLabel(page, /^Butterfly$/);
+    await activateUi(page, 'settings-knife-butterfly');
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('butterfly');
     await page.screenshot({ path: testInfo.outputPath('cs-v28-settings-desktop.png') });
-    await clickLabel(page, /^Close$/);
-    await clickLabel(page, /Enter (?:the )?Arena|ENTER ARENA/);
+    await activateUi(page, 'settings-close');
+    await activateUi(page, 'menu-start');
     await expect.poll(async () => (await state(page)).skinnedBots).toBe(9);
     await page.evaluate(() => (window as any).__CSX_DEBUG__.skipFreeze());
     await expect.poll(async () => (await state(page)).phase).toBe('active');
@@ -68,22 +63,35 @@ test.describe('CS v28 integration', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Dust II loads both bomb sites and preserves the live match on resize', async ({ page }, testInfo) => {
+  test('Dust II preserves the paused live match across desktop and phone shapes', async ({ page }, testInfo) => {
     const errors: string[] = []; page.on('pageerror', error => { errors.push(error.message); console.error('[CS runtime]', error.stack); });
-    await observeLabels(page);
-    await page.addInitScript(() => localStorage.setItem('cg-lang', 'en'));
+    await page.addInitScript(() => {
+      localStorage.setItem('cg-lang', 'en');
+      Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', { configurable: true, value: () => undefined });
+    });
     await ready(page);
-    await clickLabel(page, /Dust II/);
+    await activateUi(page, 'menu-map-de_dust2');
     await expect.poll(async () => (await state(page)).map, { timeout: 60_000 }).toBe('de_dust2');
     await expect.poll(async () => (await state(page)).ready).toBe(true);
-    await clickLabel(page, /Enter (?:the )?Arena|ENTER ARENA/);
+    await activateUi(page, 'menu-start');
     await expect.poll(async () => (await state(page)).bomb).toBe('carried');
     expect((await state(page)).skinnedBots).toBe(9);
     await page.screenshot({ path: testInfo.outputPath('cs-v28-dust2.png') });
-    const round = (await state(page)).round;
-    await page.setViewportSize({ width: 844, height: 390 });
-    expect((await state(page)).round).toBe(round);
-    expect((await state(page)).map).toBe('de_dust2');
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => (await state(page)).phase).toBe('paused');
+    const stable = async () => {
+      const s = await state(page);
+      return { phase: s.phase, map: s.map, mode: s.mode, round: s.round, playerAlive: s.playerAlive,
+        playerPos: s.playerPos, mag: s.mag, reserve: s.reserve, scores: s.scores };
+    };
+    const initial = await stable(), prepared = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
+    for (const [width, height] of [[1280, 720], [1920, 1080], [2560, 1080], [390, 844], [844, 390], [320, 568]]) {
+      await page.setViewportSize({ width, height });
+      await expect.poll(() => page.evaluate(() => (window as any).__GAME_VIEWPORT_DEBUG__.info().cameraAspect)).toBeCloseTo(width / height, 3);
+      expect(await page.evaluate(() => (window as any).__GAME_VIEWPORT_DEBUG__.info().gunCameraAspect)).toBeCloseTo(width / height, 3);
+      expect(await stable()).toEqual(initial);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepared!);
+    }
     expect(errors).toEqual([]);
   });
 });
@@ -94,32 +102,29 @@ test.describe('CS v28 touch settings', () => {
 
   test('knife settings scroll without selecting underlying rows and persist after reload', async ({ page }, testInfo) => {
     const errors: string[] = []; page.on('pageerror', error => { errors.push(error.message); console.error('[CS runtime]', error.stack); });
-    await observeLabels(page);
     await page.addInitScript(() => localStorage.setItem('cg-lang', 'zh'));
     await ready(page);
-    // Reach the menu's own settings row through the real touch scroller.
-    for (let i = 0; i < 5 && !(await painted(page, /^设置$/)); i++) await swipe(page, 160, 460, 150);
-    await tapLabel(page, /^设置$/);
+    // Settings is a fixed, reachable header target on every viewport.
+    await activateUi(page, 'menu-settings', true);
     await expect.poll(async () => (await state(page)).settingsOpen).toBe(true);
-    await tapLabel(page, /^爪刀$/);
+    await activateUi(page, 'settings-knife-karambit', true);
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('karambit');
     await swipe(page, 160, 425, 220);
     expect((await state(page)).settings.knifeModel).toBe('karambit');
     expect((await state(page)).phase).toBe('menu');
     await page.screenshot({ path: testInfo.outputPath('cs-v28-settings-phone.png') });
     // Header remains fixed even when the body is scrolled.
-    await page.touchscreen.tap(242, 98);
+    await activateUi(page, 'settings-close', true);
     await expect.poll(async () => (await state(page)).settingsOpen).toBe(false);
     await page.reload();
     await expect.poll(async () => (await state(page)).ready, { timeout: 60_000 }).toBe(true);
     expect((await state(page)).settings.knifeModel).toBe('karambit');
     await page.setViewportSize({ width: 844, height: 390 });
-    for (let i = 0; i < 5 && !(await painted(page, /^设置$/)); i++) await swipe(page, 180, 310, 90);
-    await tapLabel(page, /^设置$/);
+    await activateUi(page, 'menu-settings', true);
     await swipe(page, 420, 270, 165);
     await swipe(page, 420, 270, 165);
     await page.screenshot({ path: testInfo.outputPath('cs-v28-settings-landscape.png') });
-    await tapLabel(page, /^恢复默认设置$/);
+    await activateUi(page, 'settings-reset', true);
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('classic');
     expect(errors).toEqual([]);
   });

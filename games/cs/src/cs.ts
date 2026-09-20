@@ -53,8 +53,15 @@ interface MatchEndResult {
   mode: string;
 }
 
+interface HudTouchCapture {
+  region: HudRegion;
+  sx: number;
+  sy: number;
+  mode: 'pending' | 'drag' | 'scroll' | 'cancelled';
+}
+
 export class CsGame extends BaseGame {
-  /** Vertical finger travel (px) that turns a deferred tap into a scroll. */
+  /** Logical finger travel that resolves a deferred tap's gesture axis. */
   private static readonly TAP_SCROLL_THRESHOLD = 10;
   private readonly engine: CsEngine;
   private readonly hudView: CsHud;
@@ -62,8 +69,10 @@ export class CsGame extends BaseGame {
   private activeRegion: HudRegion | null = null;
   private lastMatchEnd: MatchEndResult | null = null;
   private pausedByShellOverlay = false;
+  private shellOverlayOpen = false;
+  private hudInputContext: string | null = null;
   private readonly touchLook = new Map<number, { x: number; y: number }>();
-  private readonly touchRegions = new Map<number, { region: HudRegion; sy: number; scrolling: boolean }>();
+  private readonly touchRegions = new Map<number, HudTouchCapture>();
 
   private readonly onPointerLockChange = () => {
     this.engine.onPointerLockChange(document.pointerLockElement === this.canvas);
@@ -71,18 +80,27 @@ export class CsGame extends BaseGame {
   private readonly onPointerLockError = () => this.engine.onPointerLockError();
   private readonly onTouchCancel = (event: TouchEvent) => {
     event.preventDefault();
-    for (const entry of this.touchRegions.values()) {
-      if (entry.scrolling) entry.region.scroll?.endDrag();
-      else if (!entry.region.deferTap) entry.region.up?.();
-    }
-    this.touchRegions.clear();
-    this.touchLook.clear();
-    this.engine.clearHeldInput();
+    this.releaseHudInput();
   };
-  private readonly onWindowBlur = () => this.engine.onWindowBlur();
+  private readonly onWindowBlur = () => {
+    this.releaseHudInput();
+    this.engine.onWindowBlur();
+  };
   private readonly onWindowFocus = () => this.engine.onWindowFocus();
-  private readonly onVisibility = () => this.engine.onVisibilityChange();
-  private readonly onContextLost = (e: Event) => { e.preventDefault(); this.engine.onContextLost(); };
+  private readonly onVisibility = () => {
+    if (document.hidden) this.releaseHudInput();
+    this.engine.onVisibilityChange();
+  };
+  private readonly onContextLost = (e: Event) => {
+    e.preventDefault();
+    this.releaseHudInput();
+    this.engine.onContextLost();
+  };
+  private readonly onWindowMouseMove = (event: MouseEvent) => {
+    // BaseGame forwards canvas moves and window mouseup; complete the capture
+    // for a slider/scrollbar dragged beyond the canvas without double delivery.
+    if (this.activeRegion && event.target !== this.canvas) this.handleInput(event);
+  };
   private readonly onContextMenu = (e: Event) => {
     if (this.engine.matchActive) e.preventDefault();
   };
@@ -94,7 +112,15 @@ export class CsGame extends BaseGame {
   /** Wheel: scrollable HUD panels consume it; otherwise it switches weapons. */
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    if (this.hudView.wantsWheel()) { this.hudView.onWheel(e.deltaY); return; }
+    if (this.presentationPaused || this.shellOverlayOpen) return;
+    this.syncHudInputContext();
+    if (this.hudView.wantsWheel()) {
+      this.releaseHudInput(true);
+      this.hudView.onWheel(e.deltaY);
+      // Wheel offsets apply on the next draw, not to the old hit rectangles.
+      this.hudView.regions = [];
+      return;
+    }
     this.engine.onWheel(e.deltaY);
   };
 
@@ -150,6 +176,12 @@ export class CsGame extends BaseGame {
    * canvas, so the first presented frame already matches the new shape.
    */
   override setViewport(viewport: GameViewport) {
+    const previous = this.viewport;
+    if (!previous || previous.width !== viewport.width || previous.height !== viewport.height
+      || previous.dpr !== viewport.dpr
+      || (['top', 'right', 'bottom', 'left'] as const).some(edge => previous.safeArea[edge] !== viewport.safeArea[edge])) {
+      this.releaseHudInput(true);
+    }
     this.engine.resize(viewport.width, viewport.height);
     this.hudView.setSafeArea(viewport.safeArea);
     this.resizeLogicalViewport(viewport);
@@ -162,16 +194,10 @@ export class CsGame extends BaseGame {
    * capture on a trusted dismissal; programmatic closes never request it.
    */
   onShellOverlayChange(open: boolean) {
-    for (const entry of this.touchRegions.values()) {
-      if (entry.scrolling) entry.region.scroll?.endDrag();
-      else if (!entry.region.deferTap) entry.region.up?.();
-    }
-    this.touchRegions.clear();
-    this.touchLook.clear();
-    this.activeRegion?.up?.();
-    this.activeRegion = null;
+    this.shellOverlayOpen = open;
+    this.releaseHudInput();
+    this.hudView.regions = [];
     if (open) {
-      this.engine.clearHeldInput();
       if (!this.pausedByShellOverlay
         && this.engine.matchActive
         && ['active', 'freeze', 'round-end', 'spectate'].includes(this.engine.phase)) {
@@ -185,19 +211,27 @@ export class CsGame extends BaseGame {
   }
 
   restorePointerCapture() {
-    if (this.running && !this.presentationPaused && this.engine.matchActive && !this.engine.overlayOpen()) this.engine.requestCapture();
+    if (this.running && !this.presentationPaused && !this.shellOverlayOpen && this.engine.matchActive && !this.engine.overlayOpen()) this.engine.requestCapture();
+  }
+
+  override setPresentationPaused(paused: boolean) {
+    if (paused) this.releaseHudInput();
+    super.setPresentationPaused(paused);
   }
 
   protected override bindInput() {
     super.bindInput();
     this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.canvas.addEventListener('touchcancel', this.onTouchCancel, { passive: false });
+    window.addEventListener('mousemove', this.onWindowMouseMove);
   }
 
   protected override unbindInput() {
+    this.releaseHudInput();
     super.unbindInput();
     this.canvas.removeEventListener('wheel', this.onWheel);
     this.canvas.removeEventListener('touchcancel', this.onTouchCancel);
+    window.removeEventListener('mousemove', this.onWindowMouseMove);
   }
 
   override getShellSnapshot(): GameShellSnapshot {
@@ -219,9 +253,10 @@ export class CsGame extends BaseGame {
     this.resetScoreReport();
     this.lastMatchEnd = null;
     this.pausedByShellOverlay = false;
-    this.activeRegion = null;
-    this.touchLook.clear();
-    this.touchRegions.clear();
+    this.shellOverlayOpen = false;
+    this.releaseHudInput();
+    this.hudInputContext = null;
+    this.hudView.regions = [];
     if (!this.booted) {
       this.booted = true;
       if (isSoftwareGL()) {
@@ -236,6 +271,18 @@ export class CsGame extends BaseGame {
     }
     // Engine-specific QA stays in this release, not in a shell that can outlive it.
     this.registerCleanup(installGameDebug('__CSX_DEBUG__', {
+      ui: () => {
+        this.syncHudInputContext();
+        return {
+          width: this.width,
+          height: this.height,
+          regions: (this.presentationPaused || this.shellOverlayOpen ? [] : this.hudView.regions).map(region => ({
+            id: region.id ?? null,
+            x: region.x, y: region.y, w: region.w, h: region.h,
+            disabled: !!region.disabled,
+          })),
+        };
+      },
       info: () => {
         const engine = this.engine;
         return {
@@ -278,9 +325,11 @@ export class CsGame extends BaseGame {
 
   update(dt: number) {
     this.engine.update(dt);
+    this.syncHudInputContext();
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    this.syncHudInputContext();
     const engine = this.engine;
     if (engine.renderer && engine.world) {
       engine.render();
@@ -308,7 +357,100 @@ export class CsGame extends BaseGame {
     return false;
   }
 
+  /** End captures without activating a deferred choice or a primed weapon. */
+  private releaseHudInput(preserveScoreboard = false) {
+    const scoreboardOpen = this.engine.hud.scoreboardOpen;
+    const active = this.activeRegion;
+    const touches = [...this.touchRegions.values()];
+    this.activeRegion = null;
+    this.touchRegions.clear();
+    this.touchLook.clear();
+    this.engine.clearHeldInput();
+    active?.up?.();
+    for (const entry of touches) {
+      if (entry.mode === 'scroll') entry.region.scroll?.endDrag();
+      else if (entry.mode === 'drag') entry.region.up?.();
+    }
+    if (preserveScoreboard) this.engine.hud.scoreboardOpen = scoreboardOpen;
+  }
+
+  private syncHudInputContext() {
+    const e = this.engine;
+    // Round transitions are gameplay, not a new input surface. Modal/menu
+    // transitions, on the other hand, must retire every captured HUD closure.
+    const phase = ['menu', 'paused', 'match-end'].includes(e.phase) ? e.phase : 'play';
+    const next = JSON.stringify([
+      phase, e.settingsOpen, e.buyOpen, e.buyOpen ? e.buyCategory : null,
+      e.mapOpen, !!e.hud.matchEnd, !!e.hud.scoreboardOpen,
+      phase === 'menu' ? [e.selectedMap, e.selectedMode, e.bootLoading, e.mapLoading] : null,
+    ]);
+    if (this.hudInputContext !== null && this.hudInputContext !== next) {
+      // clearHeldInput also hides the scoreboard. Preserve the newly requested
+      // panel while ending the previous surface's held keys/fire/touch state.
+      this.releaseHudInput(true);
+      this.hudView.regions = [];
+    }
+    this.hudInputContext = next;
+  }
+
+  private currentHudRegion(region: HudRegion): HudRegion | null {
+    return this.hudView.regions.find(current => !current.disabled
+      && (region.id ? current.id === region.id : current === region)
+      && (['x', 'y', 'w', 'h'] as const).every(key => current[key] === region[key])) ?? null;
+  }
+
+  private pressHudRegion(region: HudRegion, x: number, y: number) {
+    region.down?.(x, y);
+    this.syncHudInputContext();
+  }
+
+  private moveHudTouch(entry: HudTouchCapture, x: number, y: number) {
+    if (entry.mode === 'scroll') {
+      entry.region.scroll?.drag(y);
+      return;
+    }
+    if (entry.mode === 'cancelled') return;
+    if (entry.mode === 'drag') {
+      if (entry.region.deferTap && !this.currentHudRegion(entry.region)) {
+        entry.region.up?.();
+        entry.mode = 'cancelled';
+        return;
+      }
+      entry.region.drag?.(x, y);
+      return;
+    }
+    const dx = Math.abs(x - entry.sx), dy = Math.abs(y - entry.sy);
+    if (Math.max(dx, dy) <= CsGame.TAP_SCROLL_THRESHOLD) return;
+    const region = this.currentHudRegion(entry.region);
+    if (!region) { entry.mode = 'cancelled'; return; }
+    if (region.dragAxis === 'x' && region.drag && dx > dy) {
+      entry.mode = 'drag';
+      entry.region = region;
+      this.pressHudRegion(region, entry.sx, entry.sy);
+      if ([...this.touchRegions.values()].includes(entry)) region.drag(x, y);
+    } else if (dy >= dx && region.scroll) {
+      entry.mode = 'scroll';
+      region.scroll.beginDrag();
+      region.scroll.drag(entry.sy);
+      region.scroll.drag(y);
+    } else {
+      // Horizontal swipes across choices are not taps on the release target.
+      entry.mode = 'cancelled';
+    }
+  }
+
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (e.type === 'touchcancel') {
+      this.onTouchCancel(e as TouchEvent);
+      return;
+    }
+    if (this.presentationPaused || this.shellOverlayOpen) return;
+    this.syncHudInputContext();
+    this.routeInput(e);
+    this.syncHudInputContext();
+  }
+
+  private routeInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (e instanceof KeyboardEvent) {
       if (e.type === 'keydown' && this.engine.hud.matchEnd && this.isRestartInput(e)) {
         this.engineFromMatchEndRestart();
@@ -323,9 +465,14 @@ export class CsGame extends BaseGame {
       if (e.type === 'mousedown') {
         const point = this.canvasPoint(e.clientX, e.clientY);
         const region = this.hudView.hitTest(point.x, point.y);
-        if (region?.down) {
-          this.activeRegion = region;
-          region.down(point.x, point.y);
+        // Look bands capture touch only; a mouse attached to a coarse-pointer
+        // device must still reach the engine's fire/drag-look handlers.
+        if (region && region.id !== 'look') {
+          if (e.button === 0 && region.down) {
+            this.activeRegion?.up?.();
+            this.activeRegion = region;
+            this.pressHudRegion(region, point.x, point.y);
+          }
           return;
         }
         this.engine.onMouseDown(e.button, e.clientX, e.clientY);
@@ -333,6 +480,12 @@ export class CsGame extends BaseGame {
       }
       if (e.type === 'mousemove') {
         if (this.activeRegion?.drag) {
+          if (this.activeRegion.deferTap && !this.currentHudRegion(this.activeRegion)) {
+            const region = this.activeRegion;
+            this.activeRegion = null;
+            region.up?.();
+            return;
+          }
           const point = this.canvasPoint(e.clientX, e.clientY);
           this.activeRegion.drag(point.x, point.y);
           return;
@@ -341,9 +494,11 @@ export class CsGame extends BaseGame {
         return;
       }
       if (e.type === 'mouseup') {
-        const region = this.activeRegion;
-        this.activeRegion = null;
-        region?.up?.();
+        if (e.button === 0) {
+          const region = this.activeRegion;
+          this.activeRegion = null;
+          region?.up?.();
+        }
         this.engine.onMouseUp(e.button);
       }
       return;
@@ -359,29 +514,22 @@ export class CsGame extends BaseGame {
             if (region.id === 'look') {
               this.touchLook.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
             } else {
-              this.touchRegions.set(touch.identifier, { region, sy: point.y, scrolling: false });
-              // Scrollable-panel rows defer activation to touchend so a
-              // swipe gesture can become a scroll instead of a mis-tap.
-              if (!region.deferTap) region.down?.(point.x, point.y);
+              // A control/scroll container has one owner until release. A
+              // second finger must not reset its drag baseline or release it.
+              if ([...this.touchRegions.values()].some(entry =>
+                (region.id ? entry.region.id === region.id : entry.region === region)
+                || (region.scroll && entry.region.scroll === region.scroll))) continue;
+              this.touchRegions.set(touch.identifier, {
+                region, sx: point.x, sy: point.y, mode: region.deferTap ? 'pending' : 'drag',
+              });
+              if (!region.deferTap) this.pressHudRegion(region, point.x, point.y);
             }
           }
           continue;
         }
         if (e.type === 'touchmove') {
           const entry = this.touchRegions.get(touch.identifier);
-          if (entry) {
-            if (entry.scrolling) {
-              entry.region.scroll?.drag(point.y);
-            } else if (entry.region.deferTap) {
-              if (Math.abs(point.y - entry.sy) > CsGame.TAP_SCROLL_THRESHOLD) {
-                entry.scrolling = true;
-                const scroll = entry.region.scroll;
-                if (scroll) { scroll.beginDrag(); scroll.drag(entry.sy); scroll.drag(point.y); }
-              }
-            } else if (entry.region.drag) {
-              entry.region.drag(point.x, point.y);
-            }
-          }
+          if (entry) this.moveHudTouch(entry, point.x, point.y);
           const look = this.touchLook.get(touch.identifier);
           if (look) {
             this.engine.touchLook(touch.clientX - look.x, touch.clientY - look.y);
@@ -390,20 +538,27 @@ export class CsGame extends BaseGame {
           }
           continue;
         }
-        // touchend / touchcancel
+        if (e.type !== 'touchend') continue;
         const entry = this.touchRegions.get(touch.identifier);
         if (entry) {
-          if (entry.scrolling) {
+          // Some browsers coalesce the final move into touchend. Resolve that
+          // travel before deciding whether this was really a held-still tap.
+          this.moveHudTouch(entry, point.x, point.y);
+          if (this.touchRegions.get(touch.identifier) !== entry) continue;
+          this.touchRegions.delete(touch.identifier);
+          if (entry.mode === 'scroll') {
             entry.region.scroll?.endDrag();
-          } else if (entry.region.deferTap) {
-            // A held-still finger is a tap: activate on release (never on cancel).
-            if (e.type === 'touchend') entry.region.down?.(point.x, point.y);
-            entry.region.up?.();
-          } else {
+          } else if (entry.mode === 'pending') {
+            const region = this.currentHudRegion(entry.region);
+            const hit = this.hudView.hitTest(point.x, point.y);
+            if (region && hit === region) {
+              this.pressHudRegion(region, point.x, point.y);
+              region.up?.();
+            }
+          } else if (entry.mode === 'drag') {
             entry.region.up?.();
           }
         }
-        this.touchRegions.delete(touch.identifier);
         this.touchLook.delete(touch.identifier);
       }
     }
@@ -420,7 +575,7 @@ export class CsGame extends BaseGame {
       window.removeEventListener(type, this.onSecondaryButton, { capture: true } as EventListenerOptions);
     }
     this.engine.canvas3d?.removeEventListener('webglcontextlost', this.onContextLost);
-    this.engine.dispose();
     this.stop();
+    this.engine.dispose();
   }
 }

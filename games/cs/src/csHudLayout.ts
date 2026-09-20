@@ -4,7 +4,7 @@
 // canvas at the live CSS viewport size delivered through BaseGame.setViewport.
 // This module keeps all viewport-shape decisions in pure functions so the
 // layout can be unit-tested without a DOM: safe-area insets, the reserved
-// top-right brand/help/menu row (96/44/44px, 8px gaps), compact/short breakpoints and
+// top-right brand/help/menu reserve (the retained 200px clearance), breakpoints and
 // internal scroll state for menus that do not fit short screens.
 
 import {
@@ -134,39 +134,86 @@ export function menuHeaderLayout(L: HudLayout, statusWidth: number) {
   return { titleWidth, subtitleX, subtitleWidth: Math.max(0, Math.min(190, subtitleRight - subtitleX)), statusX, showStatus };
 }
 
-/** Score strip stays below the radar on phones, left of shell chrome otherwise. */
+/** Shared modal bounds: the safe content box below the unchanged shell row. */
+export function overlayBounds(L: HudLayout): HudRect {
+  const y = Math.min(L.bottom, Math.max(L.top, L.contentTop));
+  return { x: L.left, y, w: L.availW, h: Math.max(0, L.bottom - y) };
+}
+
+/** Center in safe content, not W/2 or H/2 (which drift on notched screens). */
+export function overlayRect(L: HudLayout, desiredW: number, desiredH: number): HudRect {
+  const bounds = overlayBounds(L);
+  const w = Math.min(bounds.w, Math.max(0, desiredW));
+  const h = Math.min(bounds.h, Math.max(0, desiredH));
+  return { x: bounds.x + (bounds.w - w) / 2, y: bounds.y + (bounds.h - h) / 2, w, h };
+}
+
+/** Radar size/position is shared with the score, touch and feedback geometry. */
+export function radarRect(L: HudLayout): HudRect {
+  const size = L.short ? Math.round(Math.min(96, Math.max(64, L.availH * 0.33)))
+    : L.compact ? Math.max(88, Math.min(148, Math.round(Math.min(L.W, L.H) * 0.28))) : 148;
+  // The normal 320px radar ends at x102, before the x108 utility reserve.
+  // With a large side inset it cannot stay there: put score first, then radar.
+  const docked = L.left + size + 6 > L.shellReserve.x;
+  return { x: L.left, y: docked ? L.contentTop + 58 : L.top, w: size, h: size };
+}
+
+/** Short landscape keeps the score beside the radar, not across its controls. */
 export function scoreStripRect(L: HudLayout, radarSize: number): HudRect {
+  const radar = radarRect(L);
   const radarRight = L.left + radarSize + 12;
-  const w = L.compact ? L.availW : Math.min(300, L.availW, L.shellReserve.x - 8 - radarRight);
+  const besideW = Math.max(0, Math.min(300, L.shellReserve.x - 8 - radarRight));
+  const beside = (!L.compact || L.short) && besideW >= 160 && radar.y === L.top;
+  const w = beside ? besideW : L.availW;
   return {
-    x: L.compact ? L.left : Math.max(radarRight, Math.min(L.W / 2 - w / 2, L.shellReserve.x - 8 - w)),
-    y: L.compact ? L.top + radarSize + 30 : L.top - 4,
+    x: beside ? Math.max(radarRight, Math.min(L.left + (L.availW - w) / 2, L.shellReserve.x - 8 - w)) : L.left,
+    y: beside ? L.top - 4 : radar.y > L.top ? L.contentTop : L.top + radarSize + 30,
     w,
     h: 46,
   };
 }
 
-/** Only panels intersecting the utility row dock below its unchanged 64px edge. */
 export function scoreboardRect(L: HudLayout, rowCount: number): HudRect {
-  const w = Math.min(620, L.availW), h = Math.min(180 + rowCount * 26, L.availH);
-  const rect = { x: L.left + (L.availW - w) / 2, y: Math.max(L.top, L.H / 2 - h / 2), w, h };
-  if (rectsOverlap(rect, L.shellReserve)) {
-    rect.y = L.contentTop;
-    rect.h = Math.min(h, L.bottom - rect.y);
-  }
-  return rect;
+  return overlayRect(L, 620, 156 + Math.max(0, rowCount) * 28);
 }
 
-/** Bottom-left health/armor/money panel. */
+export interface HudTableColumn { x: number; w: number }
+
+/** Flexible name column, bounded numeric/status slots; no desktop x-220 offsets. */
+export function scoreboardColumns(panel: HudRect): Record<'name' | 'kills' | 'deaths' | 'status', HudTableColumn> {
+  const pad = Math.min(20, panel.w * 0.05), gap = Math.min(8, panel.w * 0.02);
+  const available = Math.max(0, panel.w - pad * 2 - gap * 3);
+  const numeric = Math.min(48, available * 0.15);
+  const statusW = Math.min(80, available * 0.24);
+  const name = { x: panel.x + pad, w: available - numeric * 2 - statusW };
+  const kills = { x: name.x + name.w + gap, w: numeric };
+  const deaths = { x: kills.x + kills.w + gap, w: numeric };
+  const status = { x: deaths.x + deaths.w + gap, w: statusW };
+  return { name, kills, deaths, status };
+}
+
+/** Use one scroll region for both teams; headers/close/footer remain fixed. */
+export function scoreboardBodyLayout(panel: HudRect, rowCount: number) {
+  const rowHeight = 28, teamHeaderHeight = 32;
+  const headerH = Math.min(72, panel.h), footerH = Math.min(20, Math.max(0, panel.h - headerH));
+  const pad = Math.min(12, panel.w / 2);
+  const body = { x: panel.x + pad, y: panel.y + headerH, w: Math.max(0, panel.w - pad * 2), h: Math.max(0, panel.h - headerH - footerH) };
+  const contentH = Math.max(0, rowCount) * rowHeight + teamHeaderHeight * 2;
+  return { body, rowHeight, teamHeaderHeight, contentH, maxScroll: Math.max(0, contentH - body.h) };
+}
+
+/** Bottom-left health/armor/money panel; short screens use fewer content rows. */
 export function healthPanelRect(L: HudLayout): HudRect {
   const w = Math.min(L.short ? 210 : 230, L.compact ? L.availW * 0.44 : L.availW);
-  return { x: L.margin + L.safe.left, y: L.H - 78 - L.margin - L.safe.bottom, w, h: 78 };
+  const h = L.short ? 62 : 78;
+  return { x: L.left, y: L.bottom - h, w, h };
 }
 
-/** Bottom-right weapon/ammo panel. */
+/** Bottom-right weapon/ammo panel; drawing must honor the returned height. */
 export function weaponPanelRect(L: HudLayout): HudRect {
   const w = Math.min(300, L.compact ? L.availW * 0.5 : L.availW);
-  return { x: L.W - w - L.margin - L.safe.right, y: L.H - 100 - L.margin - L.safe.bottom, w, h: 100 };
+  const h = L.short ? 76 : 100;
+  return { x: L.right - w, y: L.bottom - h, w, h };
 }
 
 export type TouchButtonId = 'fire' | 'jump' | 'reload' | 'use' | 'switch' | 'pause' | 'buy';
@@ -208,28 +255,49 @@ export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = 
   const right = L.right;
   const hp = healthPanelRect(L);
   const wp = weaponPanelRect(L);
-
-  // Joystick docks above the health panel; the fire cluster above the ammo panel.
-  const joyHit = JOY_R + JOY_PAD;
-  const jx = hp.x + joyHit;
-  const jy = hp.y - GAP - joyHit;
-  const joystick = { cx: jx, cy: jy, r: JOY_R, hit: { x: jx - joyHit, y: jy - joyHit, w: joyHit * 2, h: joyHit * 2 } };
-
-  const fireCx = right - FIRE_R;
-  const fireCy = wp.y - GAP - FIRE_R;
-  const buttons: TouchButton[] = [{ id: 'fire', cx: fireCx, cy: fireCy, r: FIRE_R }];
-  const fireLeft = fireCx - FIRE_R;
-  const fireTop = fireCy - FIRE_R;
+  const radar = radarRect(L);
 
   if (L.short) {
-    // Landscape phones lack vertical room above FIRE (pause/buy own the top
-    // strip), so the small actions form a horizontal row left of FIRE.
-    let bx = fireLeft - GAP - SMALL_R;
-    for (const id of ['jump', 'reload', 'use', 'switch'] as const) {
-      buttons.push({ id, cx: bx, cy: fireCy, r: SMALL_R });
-      bx -= SMALL_R * 2 + GAP;
+    // A single bottom-aligned row keeps seven real >=44px actions clear even
+    // on a 568x320 notched phone. Pause/buy cannot use their portrait top row:
+    // that row intersects FIRE at this height. Leave a look band above it.
+    const smallIds: TouchButtonId[] = ['jump', 'reload', 'use', 'switch', 'pause', ...(opts.hasBuy ? ['buy' as const] : [])];
+    const joyD = Math.min(88, Math.max(TOUCH_TARGET, hp.y - GAP - radar.y - radar.h - GAP));
+    const jx = hp.x + joyD / 2, jy = hp.y - GAP - joyD / 2;
+    const joystick = { cx: jx, cy: jy, r: Math.max(22, Math.min(36, joyD / 2 - 8)), hit: { x: hp.x, y: jy - joyD / 2, w: joyD, h: joyD } };
+    const fireD = Math.max(TOUCH_TARGET, Math.min(FIRE_R * 2, wp.y - GAP - L.contentTop,
+      L.availW - joyD - smallIds.length * (TOUCH_TARGET + GAP) - GAP));
+    const actionBottom = wp.y - GAP;
+    const buttons: TouchButton[] = [{ id: 'fire', cx: right - fireD / 2, cy: actionBottom - fireD / 2, r: fireD / 2 }];
+    let bx = right - fireD - GAP - TOP_R;
+    for (const id of smallIds) {
+      buttons.push({ id, cx: bx, cy: actionBottom - TOP_R, r: TOP_R });
+      bx -= TOUCH_TARGET + GAP;
     }
-  } else {
+    const strip = scoreStripRect(L, radar.w);
+    const lookX = Math.max(joystick.hit.x + joyD, radar.x + radar.w) + GAP;
+    const lookY = Math.max(L.contentTop, strip.y + strip.h + GAP);
+    const lookW = right - fireD - GAP - lookX;
+    const lookH = actionBottom - TOUCH_TARGET - GAP - lookY;
+    const look = lookW >= 40 && lookH >= 24 ? [{ x: lookX, y: lookY, w: lookW, h: lookH }] : [];
+    return { joystick, buttons, look };
+  }
+
+  // Side insets can reduce a 320px viewport below the original 296px usable
+  // width. Shrink the generous joystick pad, never the small action targets.
+  const joyHit = Math.min(JOY_R + JOY_PAD, Math.max(TOUCH_TARGET / 2, (L.availW - 152) / 2));
+  const jx = hp.x + joyHit;
+  const jy = hp.y - GAP - joyHit;
+  const joystick = { cx: jx, cy: jy, r: Math.max(22, Math.min(JOY_R, joyHit - 12)), hit: { x: jx - joyHit, y: jy - joyHit, w: joyHit * 2, h: joyHit * 2 } };
+  const topY = radar.y > L.top ? radar.y : L.contentTop;
+  const fireR = Math.max(TOP_R, Math.min(FIRE_R, (wp.y - 120 - (topY + TOUCH_TARGET + GAP)) / 2));
+  const fireCx = right - fireR;
+  const fireCy = wp.y - GAP - fireR;
+  const buttons: TouchButton[] = [{ id: 'fire', cx: fireCx, cy: fireCy, r: fireR }];
+  const fireLeft = fireCx - fireR;
+  const fireTop = fireCy - fireR;
+
+  {
     // Tall screens: JMP left of FIRE; RLD/USE (+SWP) in rows above FIRE.
     buttons.push({ id: 'jump', cx: fireLeft - GAP - SMALL_R, cy: fireCy, r: SMALL_R });
     const rowCy = fireTop - GAP - SMALL_R;
@@ -248,8 +316,8 @@ export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = 
     }
   }
 
-  // Pause / buy sit directly under the shell's top-right button reserve.
-  const topCy = L.contentTop + TOP_R;
+  // With a docked radar, the score owns contentTop; utilities sit beside radar.
+  const topCy = topY + TOP_R;
   buttons.push({ id: 'pause', cx: L.W - 46 - L.safe.right, cy: topCy, r: TOP_R });
   if (opts.hasBuy) buttons.push({ id: 'buy', cx: L.W - 110 - L.safe.right, cy: topCy, r: TOP_R });
 
@@ -259,8 +327,9 @@ export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = 
   const cluster = buttons.filter(b => b.id !== 'pause' && b.id !== 'buy');
   const clusterTop = Math.min(...cluster.map(b => b.cy - b.r));
   const clusterLeft = Math.min(...cluster.map(b => b.cx - b.r));
-  const lookX = joystick.hit.x + joystick.hit.w + GAP;
-  const lookY = L.contentTop + TOP_R * 2 + GAP; // below pause/buy
+  const lookX = Math.max(joystick.hit.x + joystick.hit.w, radar.x + radar.w) + GAP;
+  const score = scoreStripRect(L, radar.w);
+  const lookY = Math.max(topY + TOP_R * 2 + GAP, score.y + score.h + GAP); // below score and pause/buy
   const look: HudRect[] = [];
   const band1H = clusterTop - GAP - lookY;
   if (band1H >= 24 && right - lookX >= 40) look.push({ x: lookX, y: lookY, w: right - lookX, h: band1H });
@@ -268,8 +337,118 @@ export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = 
   const band2W = clusterLeft - GAP - lookX;
   const band2H = Math.min(hp.y, wp.y) - GAP - band2Y;
   if (band2W >= 40 && band2H >= 24) look.push({ x: lookX, y: band2Y, w: band2W, h: band2H });
+  if (!look.length) {
+    // A docked radar can leave no full-width band above the topmost action.
+    // Keep aiming possible in the gap beside that action instead of returning
+    // an empty set of look regions on heavily inset 320px portrait screens.
+    const blocked = [joystick.hit, ...buttons.map(buttonHit), { ...radar, h: radar.h + 24 }, { ...score, h: score.h + 8 }, hp, wp];
+    const bounds = overlayBounds(L);
+    const band = freeHudSlot(bounds, blocked, L.availW, 44, 40, lookY)
+      ?? freeHudSlot(bounds, blocked, L.availW, 24, 40, lookY);
+    if (band) look.push(band);
+  }
 
   return { look, joystick, buttons };
+}
+
+export interface MatchFeedbackOptions {
+  touch?: boolean;
+  hasBuy?: boolean;
+  objective?: boolean;
+  objectiveAction?: boolean;
+  center?: boolean;
+  notice?: boolean;
+  pickup?: boolean;
+  killfeedCount?: number;
+}
+
+export interface MatchFeedbackLayout {
+  objective: HudRect | null;
+  objectiveAction: HudRect | null;
+  center: HudRect | null;
+  notice: HudRect | null;
+  pickup: HudRect | null;
+  killfeed: HudRect[];
+}
+
+/** Find a readable free horizontal slot; avoid shrinking fonts to fit collisions. */
+function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height: number, minWidth: number, preferredY: number, alignRight = false): HudRect | null {
+  if (height > bounds.h || minWidth > bounds.w) return null;
+  const clampY = (y: number) => Math.max(bounds.y, Math.min(bounds.y + bounds.h - height, y));
+  const ys = new Set([bounds.y, clampY(preferredY), bounds.y + bounds.h - height]);
+  for (const rect of blocked) {
+    ys.add(clampY(rect.y - GAP - height));
+    ys.add(clampY(rect.y + rect.h + GAP));
+  }
+  let best: HudRect | null = null, bestCost = Infinity;
+  for (const y of ys) {
+    let slots = [{ left: bounds.x, right: bounds.x + bounds.w }];
+    for (const rect of blocked) {
+      if (y >= rect.y + rect.h + GAP || y + height <= rect.y - GAP) continue;
+      const left = rect.x - GAP, right = rect.x + rect.w + GAP;
+      slots = slots.flatMap(slot => {
+        if (right <= slot.left || left >= slot.right) return [slot];
+        return [{ left: slot.left, right: Math.min(slot.right, left) }, { left: Math.max(slot.left, right), right: slot.right }]
+          .filter(part => part.right - part.left >= minWidth);
+      });
+    }
+    for (const slot of slots) {
+      const w = Math.min(width, slot.right - slot.left);
+      if (w < minWidth) continue;
+      const centerX = bounds.x + (bounds.w - w) / 2;
+      const x = alignRight ? slot.right - w : Math.max(slot.left, Math.min(slot.right - w, centerX));
+      const cost = (Math.min(width, bounds.w) - w) * 2 + Math.abs(y - preferredY) + Math.abs(x - (alignRight ? bounds.x + bounds.w - w : centerX)) * 0.2;
+      if (cost < bestCost) { best = { x, y, w, h: height }; bestCost = cost; }
+    }
+  }
+  return best;
+}
+
+/**
+ * Shared match feedback avoids the radar, score/pips, health/ammo and visible
+ * touch controls. Invisible look bands are intentionally NOT visual obstacles.
+ * Priority: objective action, center result, objective, pickup, notice, feed.
+ * Lower-priority entries return null / fewer feed rows rather than overpaint
+ * critical HUD. Objective action always has a bounded fallback on unsupported
+ * tiny viewports; supported matrix tests prove that fallback is not needed.
+ */
+export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions = {}): MatchFeedbackLayout {
+  const bounds = overlayBounds(L), radar = radarRect(L), score = scoreStripRect(L, radar.w);
+  const blocked: HudRect[] = [
+    { ...radar, h: radar.h + (L.short ? 0 : 24) },
+    { ...score, h: score.h + 8 },
+    healthPanelRect(L), weaponPanelRect(L),
+  ];
+  if (options.touch) {
+    const controls = computeTouchControls(L, { hasBuy: options.hasBuy });
+    blocked.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
+  }
+  const result: MatchFeedbackLayout = { objective: null, objectiveAction: null, center: null, notice: null, pickup: null, killfeed: [] };
+  const topY = Math.max(L.contentTop, score.y + score.h + 16);
+  const place = (w: number, h: number, minW: number, y = topY, right = false) => {
+    const rect = freeHudSlot(bounds, blocked, w, h, Math.min(minW, bounds.w), y, right);
+    if (rect) blocked.push(rect);
+    return rect;
+  };
+  if (options.objectiveAction) {
+    // Extreme short-height + top/bottom inset combinations have one 24px
+    // lane. Keep the action label/progress visible; draw from rect.h, not 40.
+    result.objectiveAction = place(360, 40, 160) ?? place(240, 40, 96) ?? place(360, 24, 120);
+    if (!result.objectiveAction) {
+      result.objectiveAction = overlayRect(L, 240, 40);
+      blocked.push(result.objectiveAction);
+    }
+  }
+  if (options.center) result.center = place(560, 80, 160, Math.max(topY, bounds.y + bounds.h * 0.18));
+  if (options.objective) result.objective = place(460, 30, 140);
+  if (options.pickup) result.pickup = place(240, 32, 120, Math.min(healthPanelRect(L).y, weaponPanelRect(L).y) - 48);
+  if (options.notice) result.notice = place(460, 32, 140, topY + 42);
+  for (let i = 0; i < Math.min(5, Math.max(0, options.killfeedCount ?? 0)); i++) {
+    const row = place(300, 22, 160, L.contentTop + i * 30, true);
+    if (!row) break;
+    result.killfeed.push(row);
+  }
+  return result;
 }
 
 /**
