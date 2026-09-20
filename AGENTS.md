@@ -218,7 +218,10 @@ The root-owned `/usr/local/libexec/carrick-deploy-games` wrapper accepts these m
 ```text
 deploy-game <id> <version> <40sha> <expectedTargetGeneration> <sequence> <expectedShellGeneration>
 deploy <40sha> <expectedShellGeneration> <sequence> <expectedCatalogGeneration>
+remove-game <id> <expectedTargetGeneration> <sequence> <expectedShellGeneration>
 ```
+
+`remove-game` is the ops-owned delist command: it moves that game's catalog entry to `tombstones[id]` so the game leaves `/games/index.json` and every shell picker, while its immutable release files stay retained and a later `deploy-game` or `activate-game` restores it. Application CI never calls it; see the RUNBOOK.
 
 App-side invariants: a game fences its **shell generation** (its catalog entry, then `tombstones[id]`, then zero), so an unrelated game's publication cannot invalidate it. The shell fences **catalog generation** (`catalog.shell.generation`, not the top-level catalog generation), because every published game is its tested counterpart. Generations are canonical nonnegative safe integers and the deployment sequence is positive. The older modern forms without the final counterpart argument are rejected; `deploy <sha>` is legacy-only and never a modern fallback.
 
