@@ -70,6 +70,17 @@ export function computeHudLayout(W: number, H: number, safe?: Partial<HudSafeAre
   };
 }
 
+/** Aiming follows the world camera, not the safe-area/content-box center. */
+export function aimGeometry(W: number, H: number) {
+  const x = W / 2, y = H / 2;
+  return { x, y, scopeRadius: Math.min(W, H) * .42,
+    clearance: { x: x - 18, y: y - 18, w: 36, h: 36 } };
+}
+
+export function aimClearanceRect(L: HudLayout): HudRect {
+  return aimGeometry(L.W, L.H).clearance;
+}
+
 export function clampScroll(offset: number, max: number): number {
   if (!Number.isFinite(offset) || !Number.isFinite(max) || max <= 0) return 0;
   return Math.min(Math.max(0, offset), max);
@@ -150,12 +161,18 @@ export function overlayRect(L: HudLayout, desiredW: number, desiredH: number): H
 
 /** Radar size/position is shared with the score, touch and feedback geometry. */
 export function radarRect(L: HudLayout): HudRect {
-  const size = L.short ? Math.round(Math.min(96, Math.max(64, L.availH * 0.33)))
+  let size = L.short ? Math.round(Math.min(96, Math.max(64, L.availH * 0.33)))
     : L.compact ? Math.max(88, Math.min(148, Math.round(Math.min(L.W, L.H) * 0.28))) : 148;
   // The normal 320px radar ends at x102, before the x108 utility reserve.
   // With a large side inset it cannot stay there: put score first, then radar.
   const docked = L.left + size + 6 > L.shellReserve.x;
-  return { x: L.left, y: docked ? L.contentTop + 58 : L.top, w: size, h: size };
+  const y = docked ? L.contentTop + 58 : L.top, aim = aimClearanceRect(L);
+  if (docked && rectsOverlap({ x: L.left, y, w: size, h: size + (L.short ? 0 : 24) }, aim)) {
+    // Preserve an aiming lane on short, heavily inset portrait windows instead
+    // of letting a docked radar/caption force every touch action into that lane.
+    size = Math.max(56, Math.min(size, aim.x - L.left - 8));
+  }
+  return { x: L.left, y, w: size, h: size };
 }
 
 /** Short landscape keeps the score beside the radar, not across its controls. */
@@ -163,7 +180,9 @@ export function scoreStripRect(L: HudLayout, radarSize: number): HudRect {
   const radar = radarRect(L);
   const radarRight = L.left + radarSize + 12;
   const besideW = Math.max(0, Math.min(300, L.shellReserve.x - 8 - radarRight));
-  const beside = (!L.compact || L.short) && besideW >= 160 && radar.y === L.top;
+  // A 44px landscape side notch leaves 145px here on a 568px screen.
+  // Docking the strip below the radar instead would put it directly over aim.
+  const beside = (!L.compact || L.short) && besideW >= (L.short ? 140 : 160) && radar.y === L.top;
   const w = beside ? besideW : L.availW;
   return {
     x: beside ? Math.max(radarRight, Math.min(L.left + (L.availW - w) / 2, L.shellReserve.x - 8 - w)) : L.left,
@@ -251,7 +270,7 @@ const GAP = 8;
  * - nothing covers the health or weapon panels, and pause/buy stay clear of
  *   the shell's top-right button reserve.
  */
-export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = {}): TouchControlsLayout {
+function preferredTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = {}): TouchControlsLayout {
   const right = L.right;
   const hp = healthPanelRect(L);
   const wp = weaponPanelRect(L);
@@ -351,6 +370,57 @@ export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = 
   return { look, joystick, buttons };
 }
 
+/** Preserve the familiar arrangement when its targets and aim are all clear. */
+export function computeTouchControls(L: HudLayout, opts: { hasBuy?: boolean } = {}): TouchControlsLayout {
+  const preferred = preferredTouchControls(L, opts), aim = aimClearanceRect(L);
+  const radar = radarRect(L), score = scoreStripRect(L, radar.w), hp = healthPanelRect(L), wp = weaponPanelRect(L);
+  const bounds = overlayBounds(L);
+  const fixed = [L.shellReserve, { ...radar, h: radar.h + (L.short ? 0 : 24) }, { ...score, h: score.h + 8 }, hp, wp];
+  const visible = [preferred.joystick.hit, ...preferred.buttons.map(buttonHit)];
+  const valid = preferred.look.length > 0 && visible.every((r, i) =>
+    r.x >= L.left && r.y >= L.top && r.x + r.w <= L.right && r.y + r.h <= L.bottom
+    && ![aim, ...fixed, ...visible.slice(0, i)].some(other => rectsOverlap(r, other)));
+  if (valid) return preferred;
+  // Dense landscape needs a split row on either side of aim. Reclaim generous
+  // joystick padding/fire diameter before reducing gaps; never shrink a target
+  // below 44px. The slot search can also use a second row when height permits.
+  let best: TouchControlsLayout | null = null;
+  for (const compact of [false, true]) {
+    for (const gap of [GAP, 4]) {
+      const joyD = compact ? TOUCH_TARGET : preferred.joystick.hit.w;
+      const hit = { x: L.left, y: hp.y - GAP - joyD, w: joyD, h: joyD };
+      if (hit.y < bounds.y || [...fixed, aim].some(r => rectsOverlap(hit, r))) continue;
+      const joystick = { cx: hit.x + joyD / 2, cy: hit.y + joyD / 2,
+        r: Math.min(preferred.joystick.r, joyD / 2), hit };
+      const blocked = [...fixed, aim, hit], buttons: TouchButton[] = [];
+      for (const button of preferred.buttons) {
+        const diameter = compact ? TOUCH_TARGET : button.r * 2;
+        const rect = freeHudSlot(bounds, blocked, diameter, diameter, diameter,
+          button.cy - button.r, true, gap);
+        if (!rect) continue;
+        buttons.push({ id: button.id, cx: rect.x + diameter / 2, cy: rect.y + diameter / 2, r: diameter / 2 });
+        blocked.push(rect);
+      }
+      // Invisible look regions may cross aim: they do not hide the target.
+      const lookObstacles = [...fixed, hit, ...buttons.map(buttonHit)];
+      const band = freeHudSlot(bounds, lookObstacles, L.availW, 44, 40, score.y + score.h + GAP, false, gap)
+        ?? freeHudSlot(bounds, lookObstacles, L.availW, 24, 40, score.y + score.h + GAP, false, gap);
+      const result = { joystick, buttons, look: band ? [band] : [] };
+      if (band && buttons.length === preferred.buttons.length) return result;
+      if (!best || buttons.length > best.buttons.length || (buttons.length === best.buttons.length && band)) best = result;
+    }
+  }
+  // On physically unsupported tiny viewports, retain only safely placed
+  // controls rather than silently covering the aim point with a fallback.
+  if (best) return best;
+  const hit = { x: Math.min(L.left, aim.x - TOUCH_TARGET), y: Math.max(L.top, hp.y - GAP - TOUCH_TARGET),
+    w: TOUCH_TARGET, h: TOUCH_TARGET };
+  const joystick = { cx: hit.x + TOUCH_TARGET / 2, cy: hit.y + TOUCH_TARGET / 2, r: TOUCH_TARGET / 2, hit };
+  const buttons = preferred.buttons.filter(b => ![aim, hit, ...fixed].some(r => rectsOverlap(buttonHit(b), r)));
+  const band = freeHudSlot(bounds, [...fixed, hit, ...buttons.map(buttonHit)], L.availW, 24, 40, L.contentTop);
+  return { joystick, buttons, look: band ? [band] : [] };
+}
+
 export interface MatchFeedbackOptions {
   touch?: boolean;
   hasBuy?: boolean;
@@ -360,6 +430,9 @@ export interface MatchFeedbackOptions {
   notice?: boolean;
   pickup?: boolean;
   killfeedCount?: number;
+  /** Requested outer caption widths, including the caller's text padding. */
+  hitConfirmationWidth?: number;
+  scopeLabelWidth?: number;
 }
 
 export interface MatchFeedbackLayout {
@@ -368,24 +441,26 @@ export interface MatchFeedbackLayout {
   center: HudRect | null;
   notice: HudRect | null;
   pickup: HudRect | null;
+  hitConfirmation: HudRect | null;
+  scopeLabel: HudRect | null;
   killfeed: HudRect[];
 }
 
 /** Find a readable free horizontal slot; avoid shrinking fonts to fit collisions. */
-function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height: number, minWidth: number, preferredY: number, alignRight = false): HudRect | null {
+function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height: number, minWidth: number, preferredY: number, alignRight = false, gap = GAP, preferredX?: number): HudRect | null {
   if (height > bounds.h || minWidth > bounds.w) return null;
   const clampY = (y: number) => Math.max(bounds.y, Math.min(bounds.y + bounds.h - height, y));
   const ys = new Set([bounds.y, clampY(preferredY), bounds.y + bounds.h - height]);
   for (const rect of blocked) {
-    ys.add(clampY(rect.y - GAP - height));
-    ys.add(clampY(rect.y + rect.h + GAP));
+    ys.add(clampY(rect.y - gap - height));
+    ys.add(clampY(rect.y + rect.h + gap));
   }
   let best: HudRect | null = null, bestCost = Infinity;
   for (const y of ys) {
     let slots = [{ left: bounds.x, right: bounds.x + bounds.w }];
     for (const rect of blocked) {
-      if (y >= rect.y + rect.h + GAP || y + height <= rect.y - GAP) continue;
-      const left = rect.x - GAP, right = rect.x + rect.w + GAP;
+      if (y >= rect.y + rect.h + gap || y + height <= rect.y - gap) continue;
+      const left = rect.x - gap, right = rect.x + rect.w + gap;
       slots = slots.flatMap(slot => {
         if (right <= slot.left || left >= slot.right) return [slot];
         return [{ left: slot.left, right: Math.min(slot.right, left) }, { left: Math.max(slot.left, right), right: slot.right }]
@@ -395,7 +470,7 @@ function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height:
     for (const slot of slots) {
       const w = Math.min(width, slot.right - slot.left);
       if (w < minWidth) continue;
-      const centerX = bounds.x + (bounds.w - w) / 2;
+      const centerX = preferredX ?? bounds.x + (bounds.w - w) / 2;
       const x = alignRight ? slot.right - w : Math.max(slot.left, Math.min(slot.right - w, centerX));
       const cost = (Math.min(width, bounds.w) - w) * 2 + Math.abs(y - preferredY) + Math.abs(x - (alignRight ? bounds.x + bounds.w - w : centerX)) * 0.2;
       if (cost < bestCost) { best = { x, y, w, h: height }; bestCost = cost; }
@@ -407,14 +482,15 @@ function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height:
 /**
  * Shared match feedback avoids the radar, score/pips, health/ammo and visible
  * touch controls. Invisible look bands are intentionally NOT visual obstacles.
- * Priority: objective action, center result, objective, pickup, notice, feed.
- * Lower-priority entries return null / fewer feed rows rather than overpaint
- * critical HUD. Objective action always has a bounded fallback on unsupported
- * tiny viewports; supported matrix tests prove that fallback is not needed.
+ * Priority: objective action, hit confirmation, scope caption, center result,
+ * objective, pickup, notice, feed. Lower-priority entries return null / fewer
+ * feed rows rather than overpaint critical HUD. No fallback may cover aim.
  */
 export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions = {}): MatchFeedbackLayout {
   const bounds = overlayBounds(L), radar = radarRect(L), score = scoreStripRect(L, radar.w);
+  const aim = aimGeometry(L.W, L.H);
   const blocked: HudRect[] = [
+    aim.clearance,
     { ...radar, h: radar.h + (L.short ? 0 : 24) },
     { ...score, h: score.h + 8 },
     healthPanelRect(L), weaponPanelRect(L),
@@ -423,7 +499,8 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
     const controls = computeTouchControls(L, { hasBuy: options.hasBuy });
     blocked.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
   }
-  const result: MatchFeedbackLayout = { objective: null, objectiveAction: null, center: null, notice: null, pickup: null, killfeed: [] };
+  const result: MatchFeedbackLayout = { objective: null, objectiveAction: null, center: null, notice: null, pickup: null,
+    hitConfirmation: null, scopeLabel: null, killfeed: [] };
   const topY = Math.max(L.contentTop, score.y + score.h + 16);
   const place = (w: number, h: number, minW: number, y = topY, right = false) => {
     const rect = freeHudSlot(bounds, blocked, w, h, Math.min(minW, bounds.w), y, right);
@@ -433,13 +510,23 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
   if (options.objectiveAction) {
     // Extreme short-height + top/bottom inset combinations have one 24px
     // lane. Keep the action label/progress visible; draw from rect.h, not 40.
-    result.objectiveAction = place(360, 40, 160) ?? place(240, 40, 96) ?? place(360, 24, 120);
-    if (!result.objectiveAction) {
-      result.objectiveAction = overlayRect(L, 240, 40);
-      blocked.push(result.objectiveAction);
-    }
+    result.objectiveAction = place(360, 40, 160) ?? place(240, 40, 96) ?? place(360, 24, 96);
   }
-  if (options.center) result.center = place(560, 80, 160, Math.max(topY, bounds.y + bounds.h * 0.18));
+  const caption = (requestedWidth: number | undefined, preferredY: number) => {
+    if (typeof requestedWidth !== 'number' || !Number.isFinite(requestedWidth) || requestedWidth <= 0) return null;
+    const width = Math.min(requestedWidth, bounds.w);
+    if (width <= 0) return null;
+    const rect = freeHudSlot(bounds, blocked, width, 22, width, preferredY, false, GAP, aim.x - width / 2)
+      ?? freeHudSlot(bounds, blocked, width, 22, Math.min(width, 80), preferredY, false, GAP, aim.x - width / 2);
+    if (rect) blocked.push(rect);
+    return rect;
+  };
+  result.hitConfirmation = caption(options.hitConfirmationWidth, aim.clearance.y + aim.clearance.h + GAP);
+  result.scopeLabel = caption(options.scopeLabelWidth, aim.y + aim.scopeRadius + GAP);
+  if (options.center) {
+    const y = Math.max(topY, bounds.y + bounds.h * 0.18);
+    result.center = place(560, 80, 160, y) ?? place(560, 56, 160, y);
+  }
   if (options.objective) result.objective = place(460, 30, 140);
   if (options.pickup) result.pickup = place(240, 32, 120, Math.min(healthPanelRect(L).y, weaponPanelRect(L).y) - 48);
   if (options.notice) result.notice = place(460, 32, 140, topY + 42);

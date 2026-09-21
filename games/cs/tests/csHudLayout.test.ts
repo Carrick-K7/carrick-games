@@ -2,6 +2,8 @@
 // safe-area and shell-button reservation, and internal scroll state.
 import { describe, expect, it } from 'vitest';
 import {
+  aimGeometry,
+  aimClearanceRect,
   buttonHit,
   clampScroll,
   computeHudLayout,
@@ -258,6 +260,7 @@ describe('csHudLayout: touch controls matrix', () => {
           const radar = radarRect(L), strip = scoreStripRect(L, radar.w);
           expect(rectsOverlap(rect, radar), `${tag}: ${name} vs radar`).toBe(false);
           expect(rectsOverlap(rect, strip), `${tag}: ${name} vs score`).toBe(false);
+          if (!name.startsWith('look')) expect(rectsOverlap(rect, aimClearanceRect(L)), `${tag}: ${name} vs aim`).toBe(false);
         }
       });
     }
@@ -329,14 +332,15 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
     for (const touch of [false, true]) {
       it(`${tag} touch:${touch}: concurrent feedback avoids HUD and visible controls`, () => {
         const radar = radarRect(L), strip = scoreStripRect(L, radar.w);
-        const reserved = [L.shellReserve, { ...radar, h: radar.h + (L.short ? 0 : 24) }, { ...strip, h: strip.h + 8 }, healthPanelRect(L), weaponPanelRect(L)];
+        const reserved = [aimClearanceRect(L), L.shellReserve, { ...radar, h: radar.h + (L.short ? 0 : 24) }, { ...strip, h: strip.h + 8 }, healthPanelRect(L), weaponPanelRect(L)];
         if (touch) {
           const controls = computeTouchControls(L, { hasBuy: true });
           reserved.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
         }
-        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, killfeedCount: 5 });
+        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, killfeedCount: 5,
+          hitConfirmationWidth: 120, scopeLabelWidth: 60 });
         expect(feedback.objectiveAction).not.toBeNull();
-        const all = [feedback.objectiveAction, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed].filter((rect): rect is HudRect => rect != null);
+        const all = [feedback.objectiveAction, feedback.hitConfirmation, feedback.scopeLabel, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed].filter((rect): rect is HudRect => rect != null);
         all.forEach((rect, i) => {
           expectInside(rect, overlayBounds(L));
           for (const obstacle of [...reserved, ...all.slice(0, i)]) {
@@ -367,13 +371,140 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
     const L = computeHudLayout(568, 320, { top: 44, right: 20, bottom: 34, left: 47 });
     const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true });
     expect(feedback.objectiveAction?.h).toBe(24);
-    expect(feedback.objectiveAction?.w).toBeGreaterThanOrEqual(240);
+    expect(feedback.objectiveAction?.w).toBeGreaterThanOrEqual(96);
+    expect(rectsOverlap(feedback.objectiveAction!, aimClearanceRect(L))).toBe(false);
   });
 
   it('empty feedback has no persistent extra panels and caps an oversized killfeed', () => {
     const L = computeHudLayout(1280, 720);
-    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, killfeed: [] });
+    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, hitConfirmation: null, scopeLabel: null, killfeed: [] });
     expect(matchFeedbackLayout(L, { killfeedCount: 100 }).killfeed.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('csHudLayout: camera-centered aiming feedback', () => {
+  it('keeps the aiming origin and optic independent of safe-area centering', () => {
+    for (const { width, height, safe } of TOUCH_MATRIX) {
+      const L = computeHudLayout(width, height, safe), aim = aimGeometry(width, height);
+      expect(aim).toEqual({ x: width / 2, y: height / 2, scopeRadius: Math.min(width, height) * .42,
+        clearance: { x: width / 2 - 18, y: height / 2 - 18, w: 36, h: 36 } });
+      expect(aimClearanceRect(L)).toEqual(aim.clearance);
+      if (safe?.left !== safe?.right) expect(aim.x).not.toBe((L.left + L.right) / 2);
+    }
+    expect(aimGeometry(431, 901).x).toBe(215.5);
+    expect(aimGeometry(431, 901).y).toBe(450.5);
+  });
+
+  for (const { width, height, safe } of TOUCH_MATRIX) {
+    for (const touch of [false, true]) {
+      it(`${width}x${height} ${JSON.stringify(safe)} touch:${touch}: active captions retain bounded readable slots`, () => {
+        const L = computeHudLayout(width, height, safe), radar = radarRect(L), score = scoreStripRect(L, radar.w);
+        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, hitConfirmationWidth: 120, scopeLabelWidth: 60,
+          notice: true, pickup: true, killfeedCount: 3 });
+        expect(feedback.hitConfirmation).not.toBeNull();
+        expect(feedback.scopeLabel).not.toBeNull();
+        const obstacles = [aimClearanceRect(L), radar, score, healthPanelRect(L), weaponPanelRect(L), L.shellReserve];
+        if (touch) {
+          const controls = computeTouchControls(L, { hasBuy: true });
+          obstacles.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
+        }
+        const captions = [feedback.hitConfirmation!, feedback.scopeLabel!];
+        for (const [i, rect] of captions.entries()) {
+          expect(rect.h).toBe(22);
+          expect(rect.w).toBeGreaterThanOrEqual(i === 0 ? 80 : 60);
+          expect(rect.w).toBeLessThanOrEqual(i === 0 ? 120 : 60);
+          expectInside(rect, overlayBounds(L));
+          for (const other of [...obstacles, ...captions.slice(0, i)]) expect(rectsOverlap(rect, other)).toBe(false);
+        }
+      });
+    }
+  }
+
+  it('relocates isolated pickup and concurrent feed away from the target, not over it', () => {
+    for (const [W, H] of [[320, 568], [568, 320]]) {
+      for (const hasBuy of [false, true]) {
+        const L = computeHudLayout(W, H), aim = aimClearanceRect(L);
+        const pickup = matchFeedbackLayout(L, { touch: true, hasBuy, pickup: true }).pickup;
+        expect(pickup).not.toBeNull();
+        expect(rectsOverlap(pickup!, aim)).toBe(false);
+        const feed = matchFeedbackLayout(L, { touch: true, hasBuy, notice: true, killfeedCount: 3 });
+        for (const rect of [feed.notice, ...feed.killfeed].filter((r): r is HudRect => !!r)) expect(rectsOverlap(rect, aim)).toBe(false);
+      }
+    }
+  });
+
+  it('splits dense landscape controls around aim while retaining all actions and look space', () => {
+    const safes = [...SAFE_AREAS, { top: 0, right: 44, bottom: 21, left: 44 }];
+    for (const W of [568, 667, 844]) for (const safe of safes) for (const hasBuy of [false, true]) {
+      const L = computeHudLayout(W, 320, safe), aim = aimClearanceRect(L), controls = computeTouchControls(L, { hasBuy });
+      expect(controls.buttons.map(b => b.id).sort()).toEqual(['fire', 'jump', 'reload', 'use', 'switch', 'pause', ...(hasBuy ? ['buy'] : [])].sort());
+      expect(controls.look.length).toBeGreaterThan(0);
+      const visible = [controls.joystick.hit, ...controls.buttons.map(buttonHit)];
+      const obstacles = [radarRect(L), scoreStripRect(L, radarRect(L).w), healthPanelRect(L), weaponPanelRect(L), L.shellReserve];
+      for (const obstacle of obstacles) expect(rectsOverlap(obstacle, aim)).toBe(false);
+      const all = [...visible, ...controls.look];
+      all.forEach((rect, i) => {
+        expectInside(rect, { x: L.left, y: L.top, w: L.availW, h: L.availH });
+        expect(rect.w).toBeGreaterThanOrEqual(i < visible.length ? 44 : 40);
+        expect(rect.h).toBeGreaterThanOrEqual(i < visible.length ? 44 : 24);
+        if (i < visible.length) expect(rectsOverlap(rect, aim)).toBe(false);
+        for (const other of [...obstacles, ...all.slice(0, i)]) expect(rectsOverlap(rect, other)).toBe(false);
+      });
+    }
+  });
+
+  it('keeps a compact two-line round message when an 80px panel would hide aim', () => {
+    for (const [W, H] of [[320, 568], [568, 320]]) {
+      const L = computeHudLayout(W, H), result = matchFeedbackLayout(L, { touch: true, hasBuy: true, center: true });
+      expect(result.center).not.toBeNull();
+      expect(result.center?.h).toBe(56);
+      expectInside(result.center!, overlayBounds(L));
+      expect(rectsOverlap(result.center!, aimClearanceRect(L))).toBe(false);
+    }
+  });
+
+  it('prefers full caption width but ellipsizes within a narrow safe slot when necessary', () => {
+    const desktop = matchFeedbackLayout(computeHudLayout(1280, 720), { hitConfirmationWidth: 120 });
+    expect(desktop.hitConfirmation?.w).toBe(120);
+    const inset = computeHudLayout(320, 568, { top: 44, right: 20, bottom: 34, left: 47 });
+    const narrow = matchFeedbackLayout(inset, { touch: true, hasBuy: true, hitConfirmationWidth: 120 });
+    expect(narrow.hitConfirmation?.w).toBeGreaterThanOrEqual(80);
+    expect(narrow.hitConfirmation?.w).toBeLessThan(120);
+    expect(rectsOverlap(narrow.hitConfirmation!, aimClearanceRect(inset))).toBe(false);
+  });
+
+  it('does not invent captions for absent or invalid measurements', () => {
+    for (const width of [undefined, 0, -10, NaN, Infinity]) {
+      const result = matchFeedbackLayout(computeHudLayout(568, 320), { hitConfirmationWidth: width, scopeLabelWidth: width });
+      expect(result.hitConfirmation).toBeNull();
+      expect(result.scopeLabel).toBeNull();
+    }
+  });
+
+  it('compacts a docked radar to retain touch aiming on a short heavily inset portrait', () => {
+    const L = computeHudLayout(320, 480, { top: 44, right: 20, bottom: 34, left: 47 });
+    const aim = aimClearanceRect(L), radar = radarRect(L);
+    expect(radar.w).toBeLessThan(90);
+    expect(rectsOverlap({ ...radar, h: radar.h + 24 }, aim)).toBe(false);
+    for (const hasBuy of [false, true]) {
+      const controls = computeTouchControls(L, { hasBuy });
+      expect(controls.look.length).toBeGreaterThan(0);
+      expect(controls.buttons).toHaveLength(hasBuy ? 7 : 6);
+      const visible = [controls.joystick.hit, ...controls.buttons.map(buttonHit)];
+      for (const r of visible) {
+        expect(r.w).toBeGreaterThanOrEqual(44); expect(r.h).toBeGreaterThanOrEqual(44);
+        expect(rectsOverlap(r, aim)).toBe(false);
+      }
+    }
+  });
+
+  it('never falls back to covering aim when an unsupported tiny viewport has no action lane', () => {
+    const L = computeHudLayout(568, 280, { top: 44, right: 20, bottom: 34, left: 47 });
+    const result = matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true, hitConfirmationWidth: 120 });
+    for (const rect of [result.objectiveAction, result.hitConfirmation].filter((r): r is HudRect => !!r)) {
+      expectInside(rect, overlayBounds(L));
+      expect(rectsOverlap(rect, aimClearanceRect(L))).toBe(false);
+    }
   });
 });
 

@@ -2,9 +2,9 @@
 // viewport; fixed headers/actions never move with selectable content.
 import type { CsEngine } from './csEngine.js';
 import { MAPS } from './csMaps.js';
-import { UI, uiButton, uiParagraph, uiRound, uiText } from './csHudUi.js';
+import { UI, uiButton, uiFont, uiParagraph, uiRound, uiText } from './csHudUi.js';
 import {
-  buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
+  aimGeometry, buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
   normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout,
   TOUCH_TARGET, weaponPanelRect, type HudLayout, type HudSafeArea, type HudRect,
   type TouchButtonId,
@@ -354,9 +354,12 @@ export class CsHud {
 
   private drawMatchHud(ctx: Ctx, L: HudLayout) {
     const e = this.engine, h = e.hud, { W, H } = L;
+    // Optic masking belongs to the world layer. Painting it after HUD panels
+    // would blacken the radar, score and objective outside the lens.
+    this.drawAimUnderlay(ctx, W, H);
     const radar = radarRect(L), rs = radar.w;
     e.drawRadarContent(ctx, radar.x, radar.y, rs);
-    if (!L.short) this.text(ctx, h.location, radar.x + rs / 2, radar.y + rs + 12, 11, C.dim, 'center', false, rs + 12);
+    if (!L.short) this.text(ctx, h.location, radar.x + rs / 2, radar.y + rs + 12, 11, C.dim, 'center', false, rs);
     const score = scoreStripRect(L, rs), { x: sx, y: sy, w: sw } = score;
     this.panel(ctx, sx, sy, sw, score.h, true);
     this.text(ctx, String(h.ctScore), sx + 24, sy + 23, 20, C.blue, 'center', true);
@@ -365,9 +368,14 @@ export class CsHud {
     this.text(ctx, h.timerText, sx + sw / 2, sy + 31, 16, h.timerUrgent ? C.red : C.text, 'center', true);
     this.pips(ctx, h.alivePips.ct, sx + 10, sy + score.h + 6, C.blue);
     this.pips(ctx, h.alivePips.t, sx + sw - 10 - h.alivePips.t.length * 10, sy + score.h + 6, C.amber);
+    uiFont(ctx, 13);
+    const hitConfirmationWidth = h.hitOpacity > 0 && h.hitConfirmation ? Math.ceil(ctx.measureText(h.hitConfirmation).width) + 12 : undefined;
+    uiFont(ctx, 11);
+    const scopeLabelWidth = h.scope && h.scopeLabel ? Math.ceil(ctx.measureText(h.scopeLabel).width) + 12 : undefined;
     const feedback = matchFeedbackLayout(L, { touch: e.touchMode, hasBuy: !!h.money,
       objective: !!h.objective, objectiveAction: !!h.objectiveAction, center: !!h.center,
-      notice: !!h.notice && !h.center, pickup: !!h.pickup, killfeedCount: Math.min(3, h.killfeed.length) });
+      notice: !!h.notice && !h.center, pickup: !!h.pickup, killfeedCount: Math.min(3, h.killfeed.length),
+      hitConfirmationWidth, scopeLabelWidth });
     const message = (rect: HudRect, text: string, color: string = C.text) => {
       this.panel(ctx, rect.x, rect.y, rect.w, rect.h, true);
       this.text(ctx, text, rect.x + rect.w / 2, rect.y + rect.h / 2, 12, color, 'center', false, rect.w - 20);
@@ -382,8 +390,8 @@ export class CsHud {
     if (h.center && feedback.center) {
       const r = feedback.center;
       this.panel(ctx, r.x, r.y, r.w, r.h, true);
-      this.text(ctx, h.center.title, r.x + r.w / 2, r.y + 25, 20, C.text, 'center', true, r.w - 24);
-      this.text(ctx, h.center.detail, r.x + r.w / 2, r.y + 57, 12, C.dim, 'center', false, r.w - 24);
+      this.text(ctx, h.center.title, r.x + r.w / 2, r.y + (r.h < 80 ? 18 : 25), 20, C.text, 'center', true, r.w - 24);
+      this.text(ctx, h.center.detail, r.x + r.w / 2, r.y + (r.h < 80 ? 42 : 57), 12, C.dim, 'center', false, r.w - 24);
     }
     if (h.notice && feedback.notice) message(feedback.notice, h.notice.text);
     if (h.pickup && feedback.pickup) message(feedback.pickup, this.L('拾取 · ', 'Pick up · ') + h.pickup.name);
@@ -394,7 +402,17 @@ export class CsHud {
       this.text(ctx, k.weapon + (k.head ? ' · HS' : ''), r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w * .38);
       this.text(ctx, k.bName, r.x + r.w - 8, r.y + r.h / 2, 11, k.bTeam === 'ct' ? C.blue : C.amber, 'right', false, r.w * .27);
     });
-    this.drawCrosshair(ctx, W, H);
+    if (h.hitOpacity > 0 && feedback.hitConfirmation) {
+      const r = feedback.hitConfirmation;
+      ctx.save(); ctx.globalAlpha *= Math.min(1, h.hitOpacity);
+      this.text(ctx, h.hitConfirmation, r.x + r.w / 2, r.y + r.h / 2, 13, this.hitColor(), 'center', false, r.w - 12);
+      ctx.restore();
+    }
+    if (h.scope && feedback.scopeLabel) {
+      const r = feedback.scopeLabel;
+      uiRound(ctx, r.x, r.y, r.w, r.h, 'rgba(10,17,24,.78)', undefined, 5);
+      this.text(ctx, h.scopeLabel, r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w - 12);
+    }
     const hp = healthPanelRect(L), compactHp = hp.w < 160 || hp.h < 78;
     this.panel(ctx, hp.x, hp.y, hp.w, hp.h, true);
     const healthY = hp.y + (h.money ? (hp.h < 78 ? 30 : 34) : 24);
@@ -407,8 +425,17 @@ export class CsHud {
     const wp = weaponPanelRect(L), compactWp = wp.w < 220 || wp.h < 90;
     this.panel(ctx, wp.x, wp.y, wp.w, wp.h, true);
     this.text(ctx, h.weaponName, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, C.text, 'left', true, wp.w - 24);
-    this.text(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 18 : 22, C.text, 'right', true, wp.w - 24);
-    if (!compactWp) this.text(ctx, h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
+    if (h.objectiveAction && !feedback.objectiveAction) {
+      // Extremely short/notched windows may have no extra feedback lane. Keep
+      // active planting/defusing visible inside the existing weapon panel,
+      // rather than hiding it or covering the aiming point with a fallback.
+      this.text(ctx, h.objectiveAction.text, wp.x + 12, wp.y + (wp.h < 90 ? 34 : 39), 11, C.gold, 'left', false, wp.w - 24);
+      uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, wp.w - 24, 3, C.border, undefined, 2);
+      uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, (wp.w - 24) * h.objectiveAction.progress01, 3, C.amber, undefined, 2);
+    } else {
+      this.text(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 18 : 22, C.text, 'right', true, wp.w - 24);
+      if (!compactWp) this.text(ctx, h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
+    }
     const slots = h.slots, gap = 4, bw = (wp.w - 24 - gap * (slots.length - 1)) / Math.max(1, slots.length);
     slots.forEach((s, i) => {
       const x = wp.x + 12 + i * (bw + gap), y = wp.y + wp.h - 27;
@@ -425,9 +452,16 @@ export class CsHud {
       this.text(ctx, this.L('0  取消', '0  Cancel'), rr.x + 12, rr.y + rr.h - 12, 12, C.dim);
     }
     if (e.touchMode) this.drawTouchControls(ctx, L);
+    this.drawHitMarker(ctx, W, H);
   }
-  private drawCrosshair(ctx: Ctx, W: number, H: number) {
-    const e = this.engine, h = e.hud, x = W / 2, y = H / 2;
+  private hitColor(): string {
+    const h = this.engine.hud;
+    return h.hitKind === 'kill' ? C.gold : h.hitHead ? C.amber : '#fff';
+  }
+  /** Aim is the camera's raw viewport center, never the safe-content center. */
+  private drawAimUnderlay(ctx: Ctx, W: number, H: number) {
+    const e = this.engine, h = e.hud, { x, y, scopeRadius: r } = aimGeometry(W, H);
+    ctx.save();
     if (!h.crosshairHidden && !h.scope && e.player?.alive) {
       ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.5; ctx.beginPath();
       const gap = h.crosshairGap, len = 7;
@@ -435,18 +469,25 @@ export class CsHud {
       ctx.moveTo(x, y - gap - len); ctx.lineTo(x, y - gap); ctx.moveTo(x, y + gap); ctx.lineTo(x, y + gap + len); ctx.stroke();
     }
     if (h.scope) {
-      const r = Math.min(W, H) * .42;
-      ctx.fillStyle = 'rgba(0,0,0,.94)'; ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill('evenodd');
+      ctx.fillStyle = 'rgba(0,0,0,.94)'; ctx.beginPath(); ctx.rect(0, 0, W, H);
+      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill('evenodd');
       ctx.strokeStyle = '#10151a'; ctx.lineWidth = 1.5; ctx.beginPath();
       ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.moveTo(x, y - r); ctx.lineTo(x, y + r); ctx.stroke();
-      this.text(ctx, h.scopeLabel, x, Math.min(H - 14, y + r + 18), 11, C.dim, 'center');
     }
-    if (h.hitOpacity > 0) {
-      ctx.globalAlpha = h.hitOpacity;
-      const color = h.hitKind === 'kill' ? C.gold : h.hitHead ? C.amber : '#fff';
-      this.text(ctx, '×', x, y - 26, h.hitKind === 'kill' ? 26 : 22, color, 'center');
-      if (h.hitConfirmation) this.text(ctx, h.hitConfirmation, x, y + 30, 13, color, 'center'); ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  /** Font-independent, symmetric arms surround the same point as the reticle. */
+  private drawHitMarker(ctx: Ctx, W: number, H: number) {
+    const h = this.engine.hud;
+    if (!(h.hitOpacity > 0)) return;
+    const { x, y } = aimGeometry(W, H), inner = 4, outer = h.hitKind === 'kill' ? 12 : 10;
+    ctx.save(); ctx.globalAlpha *= Math.min(1, h.hitOpacity);
+    ctx.strokeStyle = this.hitColor(); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath();
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      ctx.moveTo(x + sx * inner, y + sy * inner);
+      ctx.lineTo(x + sx * outer, y + sy * outer);
     }
+    ctx.stroke(); ctx.restore();
   }
   private pips(ctx: Ctx, states: string[], x: number, y: number, color: string) {
     states.forEach((state, i) => this.text(ctx, state === 'dead' ? '×' : state === 'me' ? '●' : '·', x + i * 10, y, 11, state === 'dead' ? C.faint : color));

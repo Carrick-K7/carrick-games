@@ -63,6 +63,8 @@ export class CsEngine {
   constructor(opts = {}) {
     this.width = opts.width || 1280;
     this.height = opts.height || 720;
+    const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
+    this.renderDpr = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
     this.isZh = opts.isZh || (() => true);
     this.hooks = opts.hooks || {};
     this.assetUrl = opts.assetUrl || (path => new URL(path, import.meta.url).href);
@@ -229,7 +231,7 @@ export class CsEngine {
   applyQuality() {
     if (!this.renderer) return;
     const low = this.quality === 'low';
-    const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
+    const dpr = this.renderDpr;
     // Software GL must read the offscreen WebGL canvas back into the shared
     // shell canvas. Bound that transfer without changing logical HUD geometry.
     const pixels = this.softwareRendering ? 230400 : 4500000;
@@ -250,9 +252,17 @@ export class CsEngine {
    * Safe before init (renderer not yet created — init() reads this.width /
    * this.height) and while a late init() map load is still in flight.
    */
-  resize(width, height) {
+  resize(width, height, dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) {
     const w = Math.max(1, Math.round(width || 0)), h = Math.max(1, Math.round(height || 0));
-    if (w === this.width && h === this.height) return;
+    const nextDpr = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+    const dprChanged = this.renderDpr !== nextDpr;
+    this.renderDpr = nextDpr;
+    if (w === this.width && h === this.height) {
+      // A monitor/zoom change can change only DPR. Refresh the backing store,
+      // never the camera origin, active match or logical HUD coordinates.
+      if (dprChanged) this.applyQuality();
+      return;
+    }
     this.width = w; this.height = h;
     const aspect = w / h;
     this.camera.aspect = aspect; this.camera.updateProjectionMatrix();

@@ -112,6 +112,24 @@ describe('v28 engine settings and presentation', () => {
     expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(2); expect(e.renderer.shadowMap.enabled).toBe(true);
   });
 
+  it('refreshes DPR-only changes without moving cameras or resetting the match', async () => {
+    vi.stubGlobal('devicePixelRatio', 1);
+    const e = engineAt(); vi.spyOn(e, 'loadMap').mockResolvedValue(true);
+    await e.init();
+    e.player = e.makeActor('ct', 'YOU', true); e.phase = 'active'; e.clock = 12;
+    const projection = e.camera.projectionMatrix.clone(), gunProjection = e.gunCamera.projectionMatrix.clone();
+    const player = e.player, sizeCalls = e.renderer.setSize.mock.calls.length;
+    e.resize(1280, 720, 2);
+    expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(2);
+    expect(e.renderer.setSize.mock.calls.length).toBe(sizeCalls);
+    expect(e.camera.projectionMatrix.equals(projection)).toBe(true);
+    expect(e.gunCamera.projectionMatrix.equals(gunProjection)).toBe(true);
+    expect(e.player).toBe(player); expect(e.clock).toBe(12); expect(e.phase).toBe('active');
+    const calls = e.renderer.setPixelRatio.mock.calls.length;
+    e.resize(1280, 720, 2); expect(e.renderer.setPixelRatio.mock.calls.length).toBe(calls);
+    e.resize(1280, 720, 1); expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(1);
+  });
+
   it('respects visual/off/full feedback and localized headshot/kill confirmation', () => {
     const e = arena();
     e.setHitFeedback('visual'); e.showHitFeedback(true, true); e.computeHud();

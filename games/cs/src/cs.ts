@@ -182,7 +182,7 @@ export class CsGame extends BaseGame {
       || (['top', 'right', 'bottom', 'left'] as const).some(edge => previous.safeArea[edge] !== viewport.safeArea[edge])) {
       this.releaseHudInput(true);
     }
-    this.engine.resize(viewport.width, viewport.height);
+    this.engine.resize(viewport.width, viewport.height, viewport.dpr);
     this.hudView.setSafeArea(viewport.safeArea);
     this.resizeLogicalViewport(viewport);
   }
