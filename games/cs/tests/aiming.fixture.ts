@@ -12,6 +12,8 @@ export interface AimShot {
   hit: 'body' | 'head';
   kill: boolean;
   feedback: 'off' | 'visual' | 'full';
+  ammo?: number;
+  reserve?: number;
 }
 export interface AimPaint {
   op: 'stroke' | 'fill' | 'fillRect' | 'text' | 'image';
@@ -242,6 +244,8 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
             target.mesh.rotation.set(0, Math.atan2(player.pos.x - target.pos.x, player.pos.z - target.pos.z), 0);
             if (target.mesh.userData.gun) target.mesh.userData.gun.visible = true;
             player.inventory.primary = e.inventoryWeapon(shot.zoom ? 'g3sg1' : 'm4a1');
+            if (shot.ammo !== undefined) player.inventory.primary.ammo = shot.ammo;
+            if (shot.reserve !== undefined) player.inventory.primary.reserve = shot.reserve;
             player.slot = 'primary';
             e.setGun(false);
             e.recoil = e.kickPitch = e.kickYaw = 0;
@@ -283,6 +287,18 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
             return snapshot();
           },
           snapshot,
+          advanceWeapon(seconds: number) {
+            // Controlled player-only time, retaining real weapon/action code;
+            // NPCs and the SDK presentation remain frozen by this fixture.
+            e.fireHeld = false; e.shotPressed = false;
+            for (let left = Math.max(0, Math.min(10, seconds)); left > 0;) {
+              const dt = Math.min(1 / 60, left); e.clock += dt; e.updatePlayer(dt); left -= dt;
+            }
+            e.computeHud();
+            const weapon = e.weaponOf(player);
+            return { ammo: weapon.ammo, reserve: weapon.reserve, reloading: player.reload > 0,
+              reloadState: e.hud.reloadState, fireHeld: e.fireHeld, shotPressed: e.shotPressed, paint: capture() };
+          },
           resize(next: AimViewport) {
             currentViewport = next;
             game.setViewport(next);

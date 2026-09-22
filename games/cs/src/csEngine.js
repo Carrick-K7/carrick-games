@@ -1619,6 +1619,11 @@ export class CsEngine {
     if (!player.alive) return;
     this.updateWeapon(player, dt);
     const movable = this.phase !== 'freeze' && !this.overlayOpen(), w = this.weaponOf(player), d = WEAPONS[w.id];
+    // Re-check the equipped weapon each frame, not a queued last-shot callback:
+    // switching/overlays must not reload a stowed gun or interrupt its shot cycle.
+    if (this.gameInputActive() && player.inventory[player.slot] === w && player.reload <= 0
+      && player.cooldown <= 0 && this.clock >= (w.readyAt || 0)
+      && w.ammo === 0 && w.reserve > 0 && !d.utility && w.id !== 'knife') this.beginReload(player);
     if (movable) {
       const wantsCrouch = this.keys.has('ControlLeft') || this.keys.has('ControlRight');
       if (wantsCrouch) this.crouching = true;

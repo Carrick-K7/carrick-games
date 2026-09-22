@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "source": "packages/weapon-art/src/silhouettes.ts",
+  "generator": "games/cs/tests/export-hud-weapon-icons.mjs",
+  "attribution": "Valve inventory-render traces; rights remain with their respective owners. See ../../../CREDITS.md.",
+  "fill": "#f0f3f5",
+  "orientation": "Original source orientation; muzzle +x, grip +y.",
+  "weapons": {
+    "ak47": {
+      "file": "ak47.svg",
+      "sourceId": "ak47",
+      "width": 1032,
+      "height": 522,
+      "viewBox": [
+        -0.518,
+        -0.268,
+        1.032,
+        0.522
+      ],
+      "pathSha256": "d0794b9dc0586df8f0baf3fd7712689899366feb731e363e2b1b2c42be08b407",
+      "svgSha256": "e13f5961fa67dac1315a122836935aaf8e77d0013abaae6ec1f2f712dbc45434"
+    },
+    "m4a1": {
+      "file": "m4a1.svg",
+      "sourceId": "m4a1s",
+      "width": 1029,
+      "height": 402,
+      "viewBox": [
+        -0.523,
+        -0.208,
+        1.029,
+        0.402
+      ],
+      "pathSha256": "acce657cff9df26536c21c3b4598b20a032efb4356e01334a0f76f1c766ab15e",
+      "svgSha256": "003286d0a341160bddf6061c8455facc6881b99170db512624bc119e8e166a4f"
+    },
+    "awp": {
+      "file": "awp.svg",
+      "sourceId": "awp",
+      "width": 1043,
+      "height": 403,
+      "viewBox": [
+        -0.518,
+        -0.199,
+        1.043,
+        0.403
+      ],
+      "pathSha256": "b251b5a51798ca476421d6759c2fa09f66e8e77d26c77f43a6e1d9978c3867ab",
+      "svgSha256": "fe5cb974c6311f97eff8d0c7e9dae63233872114dd870d17c0cbc63354389f0a"
+    },
+    "mp5": {
+      "file": "mp5.svg",
+      "sourceId": "mp5",
+      "width": 984,
+      "height": 596,
+      "viewBox": [
+        -0.489,
+        -0.299,
+        0.984,
+        0.596
+      ],
+      "pathSha256": "731a53f989b9934b34b1fc51459aaad97bd773ef5e513b7feb98decbadab6a2c",
+      "svgSha256": "e1c9f8e1d26d06d7a9ba6edd7d97ca789e0cd41ea40c600bc577dfcd4be3bb70"
+    },
+    "tmp": {
+      "file": "tmp.svg",
+      "sourceId": "mp9",
+      "width": 890,
+      "height": 597,
+      "viewBox": [
+        -0.446,
+        -0.3,
+        0.89,
+        0.597
+      ],
+      "pathSha256": "901fca76812ff7dd8d42d913215c3a04f48a04e9844de20ba201de3b6e691192",
+      "svgSha256": "24cda03ca440ef0bfe75973159ce9da371982900cf197c6f6bbbf94a3b02c20a"
+    },
+    "p90": {
+      "file": "p90.svg",
+      "sourceId": "p90",
+      "width": 978,
+      "height": 597,
+      "viewBox": [
+        -0.489,
+        -0.299,
+        0.978,
+        0.597
+      ],
+      "pathSha256": "3302fa5820e26301ce7094288944972af94a22bd5c4c270167c1a2b9f50a1d75",
+      "svgSha256": "4cae5f4bbbb6d857dd7b65100bdbdb2b4e9077d430d8ffb0ab8193cce25cf0d8"
+    },
+    "mac10": {
+      "file": "mac10.svg",
+      "sourceId": "mac10",
+      "width": 471,
+      "height": 606,
+      "viewBox": [
+        -0.238,
+        -0.298,
+        0.471,
+        0.606
+      ],
+      "pathSha256": "e596fb3a76f1db5f920a0b9f6ec3cee43681173f2694f968473e37dbcec0e81d",
+      "svgSha256": "ef0cf2ca578d00bd63abb0725cd5b723d6a0c26806571320b451ba912ec00f9a"
+    },
+    "sg552": {
+      "file": "sg552.svg",
+      "sourceId": "sg552",
+      "width": 1041,
+      "height": 504,
+      "viewBox": [
+        -0.515,
+        -0.263,
+        1.041,
+        0.504
+      ],
+      "pathSha256": "ba42bfcb0a494794789647488547fee0c1991b182b3a0f8a241ee201757e33a0",
+      "svgSha256": "b4e849b4d6cf153c326be20c5f41eaf96ddaef1eb20dc5c401a09cdfb5496094"
+    },
+    "aug": {
+      "file": "aug.svg",
+      "sourceId": "aug",
+      "width": 881,
+      "height": 601,
+      "viewBox": [
+        -0.437,
+        -0.299,
+        0.881,
+        0.601
+      ],
+      "pathSha256": "d36ef85a46f76ee499c937a900f10b4aac17a245facda4d8185dc646be103d1f",
+      "svgSha256": "2e0a8488c7f39fea7f7824b5397a53e6acc8171e9acb6891ac4687d88e622e08"
+    },
+    "scout": {
+      "file": "scout.svg",
+      "sourceId": "scout",
+      "width": 1034,
+      "height": 482,
+      "viewBox": [
+        -0.516,
+        -0.239,
+        1.034,
+        0.482
+      ],
+      "pathSha256": "3935a3299c116e5e7763d534428d206595f7b67568e461757a7d3ceeaf68f747",
+      "svgSha256": "1c301d85756bf2ef1a953cc63598f4688abd396ebf3e03dd2cd3038d60d3ca01"
+    },
+    "g3sg1": {
+      "file": "g3sg1.svg",
+      "sourceId": "g3sg1",
+      "width": 1038,
+      "height": 556,
+      "viewBox": [
+        -0.516,
+        -0.286,
+        1.038,
+        0.556
+      ],
+      "pathSha256": "cd65b516eff76283dfb657a6c36111ebb3e3b3504d02a5eb564bc111f711bd38",
+      "svgSha256": "ce698584e8f00f2131a53cff526640358fbec6f0934b21d5d5b416c84f317b5f"
+    },
+    "m3": {
+      "file": "m3.svg",
+      "sourceId": "m3",
+      "width": 1036,
+      "height": 515,
+      "viewBox": [
+        -0.511,
+        -0.264,
+        1.036,
+        0.515
+      ],
+      "pathSha256": "5724fcdd84113cbd74332777287d8f08062f0ed761b2bd8110768f8afb69da6e",
+      "svgSha256": "52193ab23d26728c22f63952618e6073f3a17905072c35bd3f9d5b5fca6069e0"
+    },
+    "xm1014": {
+      "file": "xm1014.svg",
+      "sourceId": "xm1014",
+      "width": 1031,
+      "height": 450,
+      "viewBox": [
+        -0.524,
+        -0.231,
+        1.031,
+        0.45
+      ],
+      "pathSha256": "71a99be9b496d7a6f5c5fbdf3f1d830254d113f0f924687ffd03b231176e883e",
+      "svgSha256": "7a8ee1c47b8f3fd333ca9ebdb4a10d8db6b23b92a300ed3d212dd8bcece435a9"
+    },
+    "m249": {
+      "file": "m249.svg",
+      "sourceId": "m249",
+      "width": 848,
+      "height": 609,
+      "viewBox": [
+        -0.419,
+        -0.316,
+        0.848,
+        0.609
+      ],
+      "pathSha256": "90b033e2f7344e8f5391960cf773042c44b02a0a763fd11278df71bf026c3795",
+      "svgSha256": "f977b8220738a58c037366f683e1ae59e17172f4db013cf1727eca0fd34c7976"
+    },
+    "deagle": {
+      "file": "deagle.svg",
+      "sourceId": "deagle",
+      "width": 718,
+      "height": 599,
+      "viewBox": [
+        -0.356,
+        -0.305,
+        0.718,
+        0.599
+      ],
+      "pathSha256": "9c00ee998e1e339e7d2f601b577aaa1785c4ea40c4db551bbfb6404d33877dbe",
+      "svgSha256": "486de638ae92223ac8658e2e9750554322bdb66efc4c320863dd86d47f25c8a5"
+    },
+    "usp": {
+      "file": "usp.svg",
+      "sourceId": "usp",
+      "width": 1038,
+      "height": 531,
+      "viewBox": [
+        -0.516,
+        -0.265,
+        1.038,
+        0.531
+      ],
+      "pathSha256": "2fe70e721ed5d6e03efc86969655eeb90ef05c8ceb3a247fbc07fdb38e0694d4",
+      "svgSha256": "3dceaeba037cb9d771146d33861e0f9b9a79601a2ea3923875ad10c037448d27"
+    },
+    "glock": {
+      "file": "glock.svg",
+      "sourceId": "glock",
+      "width": 767,
+      "height": 602,
+      "viewBox": [
+        -0.381,
+        -0.302,
+        0.767,
+        0.602
+      ],
+      "pathSha256": "bb2e84363e72c52eafaa97e35fbc48fd5ec9658a66cd234d1b4bb7cd772bb1a3",
+      "svgSha256": "c5ca8c4b78a79a3181e110e4f150856b6c88a4eb2ebaabcd3a6239b8f9f7f097"
+    }
+  }
+}

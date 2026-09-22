@@ -8,6 +8,14 @@ Carrick resolves all resources through each host instance's immutable release `a
 
 Asset paths shown as `dist/assets/...` below correspond to `assets/...` beside this file in the Carrick release. Source scripts and test names below refer to the original standalone project, not installed Carrick commands. The current bank contains 154 original CS:GO WAVs, whose rights remain with Valve/respective owners; provenance is not a permissive redistribution licence. Quaternius body/hand/animation resources retain their included CC0 notices.
 
+## Tactical interface artwork
+
+The map previews in `assets/ui/maps/` are genuine HUD-free frames of Carrick CS's existing `fy_snow` and `de_dust2` renderer, captured with the game-owned `tests/capture-map-previews.mjs`. They retain the underlying map authorship and licensing below; they are not generated illustrations or imported CS:GO screenshots.
+
+The firearm HUD SVGs in `assets/ui/weapons/` are offline exports of Carrick's existing pure `packages/weapon-art` inventory silhouettes, originally traced from Valve's official inventory renders. `tests/export-hud-weapon-icons.mjs` retains the exact path data and measured aspect ratios; the adjacent manifest records source IDs and digests. Valve/respective owners retain those artwork rights. Exporting these files does not grant a new redistribution licence or introduce a runtime dependency on another game's release. Health/armor and team utility symbols in `csHudArt.ts` are original, unbranded vector symbols, not Valve insignia.
+
+The interface's visual direction draws on CS:GO/Panorama's flat panels, map cards and restrained team colors. No official CS:GO logo, reference-site screenshot or proprietary UI font is shipped by this interface update.
+
 ---
 
 # CS

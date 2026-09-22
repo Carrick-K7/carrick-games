@@ -2,7 +2,8 @@
 // viewport; fixed headers/actions never move with selectable content.
 import type { CsEngine } from './csEngine.js';
 import { MAPS } from './csMaps.js';
-import { UI, uiButton, uiFont, uiParagraph, uiRound, uiText } from './csHudUi.js';
+import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRule, uiText, type UiTone } from './csHudUi.js';
+import { drawHudIcon, drawTeamBadge } from './csHudArt.js';
 import {
   aimGeometry, buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
   normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout,
@@ -45,12 +46,13 @@ export interface CsHudView {
   scoreboardOpen: boolean; bombMarker: unknown;
 }
 const C = { text: UI.text, dim: UI.dim, faint: UI.muted, amber: UI.accent,
-  border: UI.border, blue: '#8ac9ef', red: '#f08075', green: '#9bd7b0', gold: '#f4c77e' };
+  border: UI.border, blue: UI.ct, red: '#ef8175', green: UI.cash, gold: UI.t };
 const MAP_EN: Record<string, { name: string; intro: string; hint: string }> = {
   fy_snow: { name: 'Snow Arena', intro: 'A compact snow arena with weapons to pick up on the ground.', hint: 'Flank along the side ramps to reach the rear AWP balcony.' },
   de_dust2: { name: 'Dust II', intro: 'Fight through long A, mid doors and B tunnels. Two bomb sites.', hint: 'Buy at your spawn, then attack or defend sites A and B.' },
 };
-type Choice = { id: string; label: string; selected: boolean; action: () => void; disabled?: boolean };
+const HUD_FIREARMS = new Set(['ak47', 'm4a1', 'awp', 'mp5', 'tmp', 'p90', 'mac10', 'sg552', 'aug', 'scout', 'g3sg1', 'm3', 'xm1014', 'm249', 'deagle', 'usp', 'glock']);
+type Choice = { id: string; label: string; selected: boolean; action: () => void; disabled?: boolean; tone?: UiTone };
 
 export class CsHud {
   regions: HudRegion[] = [];
@@ -64,7 +66,55 @@ export class CsHud {
   private regionDy = 0;
   private regionClip: HudRect | null = null;
   private regionScroll: HudScroll | null = null;
+  private pointer: { x: number; y: number } | null = null;
+  private readonly mapPreviews = new Map<string, HTMLImageElement>();
+  private readonly weaponIcons = new Map<string, HTMLImageElement>();
   constructor(private readonly engine: CsEngine) {}
+  setPointer(point: { x: number; y: number } | null) { this.pointer = point; }
+  dispose() {
+    this.pointer = null; this.regions = [];
+    // Images have no callbacks into this HUD. Dropping the instance cache cannot
+    // retarget another instance or a retained release while downloads settle.
+    this.mapPreviews.clear(); this.weaponIcons.clear();
+  }
+  private hovered(x: number, y: number, w: number, h: number) {
+    if (!this.pointer) return false;
+    const p = this.pointer, cy = y + this.regionDy, clip = this.regionClip;
+    if (clip && (p.x < clip.x || p.x > clip.x + clip.w || p.y < clip.y || p.y > clip.y + clip.h)) return false;
+    return p.x >= x && p.x <= x + w && p.y >= cy && p.y <= cy + h;
+  }
+  private image(cache: Map<string, HTMLImageElement>, path: string) {
+    if (typeof Image === 'undefined' || typeof this.engine.assetUrl !== 'function') return null;
+    const url = this.engine.assetUrl(path);
+    let image = cache.get(url);
+    if (!image) {
+      image = new Image(); image.decoding = 'async'; image.src = url;
+      cache.set(url, image);
+    }
+    return image.complete && image.naturalWidth > 0 ? image : null;
+  }
+  private mapPreview(id: string) { return this.image(this.mapPreviews, `assets/ui/maps/${id}.webp`); }
+  private drawWeaponArtwork(ctx: Ctx, id: string, x: number, y: number, w: number, h: number, disabled = false) {
+    if (['armor', 'vest', 'kit'].includes(id)) {
+      drawHudIcon(ctx, 'armor', x, y, w, h, disabled ? C.faint : C.text); return;
+    }
+    if (!HUD_FIREARMS.has(id)) return;
+    const image = this.image(this.weaponIcons, `assets/ui/weapons/${id}.svg`);
+    if (!image) return;
+    const scale = Math.min(w / image.naturalWidth, h / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    ctx.save(); if (disabled) ctx.globalAlpha *= .45;
+    ctx.drawImage(image, x + (w - width) / 2, y + (h - height) / 2, width, height);
+    ctx.restore();
+  }
+  private drawMapPreview(ctx: Ctx, id: string, x: number, y: number, w: number, h: number) {
+    const image = this.mapPreview(id);
+    ctx.fillStyle = UI.raised; ctx.fillRect(x, y, w, h);
+    if (!image) return;
+    const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
+    const sw = w / scale, sh = h / scale;
+    ctx.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+  }
   private L(zh: string, en: string) { return this.engine.isZh() ? zh : en; }
   setSafeArea(safe?: Partial<HudSafeArea> | null) { this.safeArea = normalizeSafeArea(safe); }
   hitTest(x: number, y: number): HudRegion | null {
@@ -121,27 +171,32 @@ export class CsHud {
     uiText(ctx, value, x, y, size, color, align, bold, maxWidth);
   }
   private panel(ctx: Ctx, x: number, y: number, w: number, h: number, soft = false) {
-    uiRound(ctx, x, y, w, h, soft ? 'rgba(16,26,36,.88)' : UI.surface, C.border, soft ? 9 : 16);
+    if (soft) uiHudPlate(ctx, x, y, w, h);
+    else uiRound(ctx, x, y, w, h, 'rgba(22,29,36,.96)', C.border, 2);
   }
   private button(ctx: Ctx, x: number, y: number, w: number, h: number, label: string, action: () => void,
-    opts: { id: string; selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean }) {
-    uiButton(ctx, x, y, w, h, label, opts);
+    opts: { id: string; selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean; tone?: UiTone }) {
+    uiButton(ctx, x, y, w, h, label, { ...opts, hovered: !opts.disabled && this.hovered(x, y, w, h) });
     this.push({ id: opts.id, x, y, w, h, disabled: opts.disabled, down: () => action() });
   }
   private choices(ctx: Ctx, label: string, x: number, y: number, w: number, options: Choice[]) {
     this.text(ctx, label, x, y + 8, 13, C.dim);
     const gap = 6, bw = (w - gap * (options.length - 1)) / options.length;
     options.forEach((o, i) => this.button(ctx, x + i * (bw + gap), y + 24, bw, TOUCH_TARGET, o.label, o.action,
-      { id: o.id, selected: o.selected, disabled: o.disabled, small: bw < 100 }));
+      { id: o.id, selected: o.selected, disabled: o.disabled, small: bw < 100, tone: o.tone }));
+    uiRule(ctx, x, y + 77, w);
     return 84;
   }
   private dimScreen(ctx: Ctx, W: number, H: number) {
-    ctx.fillStyle = 'rgba(4,10,17,.68)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(5,10,15,.48)'; ctx.fillRect(0, 0, W, H);
   }
   private frame(ctx: Ctx, L: HudLayout, w: number, h: number, title: string, close?: { id: string; run: () => void; label?: string }) {
     const r = overlayRect(L, w, h);
     this.regions = []; this.dimScreen(ctx, L.W, L.H); this.panel(ctx, r.x, r.y, r.w, r.h);
-    this.text(ctx, title, r.x + 20, r.y + 30, 20, C.text, 'left', true, r.w - (close ? 132 : 40));
+    ctx.fillStyle = UI.header; ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, 58);
+    uiRule(ctx, r.x + 1, r.y + 59, r.w - 2);
+    ctx.fillStyle = UI.ct; ctx.fillRect(r.x, r.y, 3, 59);
+    this.text(ctx, title, r.x + 20, r.y + 30, 21, C.text, 'left', false, r.w - (close ? 132 : 40));
     if (close) this.button(ctx, r.x + r.w - 104, r.y + 8, 88, 44, close.label || this.L('关闭', 'Close'), close.run, { id: close.id });
     return r;
   }
@@ -150,12 +205,13 @@ export class CsHud {
   // mode options exist, so Team DM cannot push Start below a short window.
   private drawMenu(ctx: Ctx, L: HudLayout) {
     const e = this.engine, map = (MAPS as any)[e.selectedMap], en = MAP_EN[e.selectedMap];
-    const title = L.availW < 400 ? this.L('CS · 对局', 'CS · Match') : this.L('CS · 对局设置', 'CS · Match setup');
+    const title = L.availW < 400 ? this.L('CS / 对战', 'CS / Play') : this.L('CS / 对战准备', 'CS / Play');
     const r = this.frame(ctx, L, 980, 638, title, { id: 'menu-settings', label: this.L('设置', 'Settings'), run: () => e.openSettings() });
     const pad = r.w < 400 ? 16 : 24;
     const body = { x: r.x + pad, y: r.y + 68, w: r.w - pad * 2 - 8, h: Math.max(1, r.h - 144) };
     const wide = body.w >= 720, gap = 32, colW = wide ? (body.w - gap) / 2 : body.w;
-    const mapH = 228;
+    const mapCardH = wide ? Math.min(280, Math.max(96, body.h - 180)) : 84;
+    const mapH = wide ? mapCardH + 44 : 228;
     const configH = 336 + (e.selectedMode === 'tdm' ? 84 : 0);
     const contentH = wide ? Math.max(mapH + 124, configH) + 12 : mapH + configH + 28;
     this.menuScroll.setMax(contentH - body.h);
@@ -166,20 +222,42 @@ export class CsHud {
       { id: 'de_dust2', name: this.L('炙热沙城Ⅱ', 'Dust II'), detail: this.L('经典沙城 · A / B 双包点', 'Classic Dust II · sites A and B') },
     ];
     cards.forEach((card, i) => {
-      const y = body.y + 26 + i * 96, selected = e.selectedMap === card.id;
-      uiRound(ctx, body.x, y, colW, 84, selected ? UI.selected : UI.raised, selected ? C.amber : C.border, 12, selected ? 1.5 : 1);
-      this.text(ctx, card.name, body.x + 16, y + 24, 16, C.text, 'left', true, colW - 54);
-      uiParagraph(ctx, card.detail, body.x + 16, y + 40, colW - 48, 13, C.dim, 2, 18);
-      ctx.strokeStyle = selected ? C.amber : C.faint; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(body.x + colW - 22, y + 24, 7, 0, Math.PI * 2); ctx.stroke();
-      if (selected) { ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(body.x + colW - 22, y + 24, 3.5, 0, Math.PI * 2); ctx.fill(); }
-      this.push({ id: `menu-map-${card.id}`, x: body.x, y, w: colW, h: 84, disabled: e.bootLoading || e.mapLoading, down: () => e.selectMap(card.id) });
+      const cw = wide ? (colW - 12) / 2 : colW;
+      const ch = mapCardH;
+      const x = wide ? body.x + i * (cw + 12) : body.x;
+      const y = body.y + 26 + (wide ? 0 : i * 96);
+      const selected = e.selectedMap === card.id, hover = this.hovered(x, y, cw, ch);
+      const thumbW = Math.min(84, Math.round(cw * .28));
+      this.drawMapPreview(ctx, card.id, x, y, wide ? cw : thumbW, ch);
+      if (wide) {
+        ctx.fillStyle = 'rgba(7,12,17,.12)'; ctx.fillRect(x, y, cw, ch);
+        ctx.fillStyle = 'rgba(8,14,20,.9)'; ctx.fillRect(x, y + ch - 56, cw, 56);
+        this.text(ctx, card.name, x + 12, y + ch - 35, 16, C.text, 'left', true, cw - 24);
+        this.text(ctx, card.id.toUpperCase(), x + 12, y + ch - 14, 11, C.dim, 'left', false, cw - 24);
+      } else {
+        ctx.fillStyle = selected ? UI.selected : hover ? UI.hover : UI.raised;
+        ctx.fillRect(x + thumbW, y, cw - thumbW, ch);
+        this.text(ctx, card.name, x + thumbW + 12, y + 25, 16, C.text, 'left', true, cw - thumbW - 24);
+        this.text(ctx, card.id.toUpperCase(), x + thumbW + 12, y + 49, 11, C.dim, 'left', false, cw - thumbW - 24);
+        this.text(ctx, card.id === 'fy_snow' ? this.L('地面拾枪', 'Ground pickups') : this.L('A / B 双包点', 'Sites A / B'), x + thumbW + 12, y + 67, 12, C.dim, 'left', false, cw - thumbW - 24);
+      }
+      ctx.strokeStyle = selected ? UI.text : hover ? '#a3b3bf' : C.border;
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
+      if (selected) {
+        const tx = wide ? x + cw - 27 : x + 8, ty = y + 8;
+        ctx.fillStyle = UI.text; ctx.fillRect(tx, ty, 18, 18);
+        ctx.strokeStyle = '#243542'; ctx.lineWidth = 2; ctx.beginPath();
+        ctx.moveTo(tx + 4, ty + 9); ctx.lineTo(tx + 8, ty + 13); ctx.lineTo(tx + 14, ty + 5); ctx.stroke();
+      }
+      this.push({ id: `menu-map-${card.id}`, x, y, w: cw, h: ch, disabled: e.bootLoading || e.mapLoading, down: () => e.selectMap(card.id) });
     });
     if (wide) {
       uiParagraph(ctx, this.L(map.intro, en.intro), body.x, body.y + mapH + 4, colW, 14, C.text, 2, 21);
       uiParagraph(ctx, this.L(map.hint, en.hint), body.x, body.y + mapH + 58, colW, 13, C.dim, 2, 19);
       this.text(ctx, this.L('5 对 5 · 本地人机', '5 vs 5 · local bot match'), body.x, body.y + mapH + 112, 12, C.faint);
     }
+    if (wide) { ctx.fillStyle = UI.separator; ctx.fillRect(body.x + colW + gap / 2, body.y, 1, Math.max(mapH + 124, configH)); }
     const x = wide ? body.x + colW + gap : body.x;
     let y = wide ? body.y : body.y + mapH;
     const modes = [
@@ -191,8 +269,8 @@ export class CsHud {
     if (e.selectedMode === 'tdm') y += this.choices(ctx, this.L('获胜击杀数', 'Kill limit'), x, y, colW,
       [30, 50, 100].map(n => ({ id: `menu-limit-${n}`, label: String(n), selected: e.selectedKillLimit === n, action: () => e.setKillLimit(n) })));
     y += this.choices(ctx, this.L('阵营', 'Team'), x, y, colW, [
-      { id: 'menu-team-ct', label: this.L('CT · 反恐精英', 'CT · Counter'), selected: e.selectedTeam === 'ct', action: () => e.selectTeam('ct') },
-      { id: 'menu-team-t', label: this.L('T · 恐怖分子', 'T · Terrorist'), selected: e.selectedTeam === 't', action: () => e.selectTeam('t') },
+      { id: 'menu-team-ct', label: this.L('CT · 反恐精英', 'CT · Counter'), selected: e.selectedTeam === 'ct', tone: 'ct', action: () => e.selectTeam('ct') },
+      { id: 'menu-team-t', label: this.L('T · 恐怖分子', 'T · Terrorist'), selected: e.selectedTeam === 't', tone: 't', action: () => e.selectTeam('t') },
     ]);
     y += this.choices(ctx, this.L('机器人难度', 'Bot skill'), x, y, colW, [
       { id: 'easy', label: this.L('休闲', 'Casual') }, { id: 'normal', label: this.L('标准', 'Regular') }, { id: 'hard', label: this.L('硬核', 'Hardcore') },
@@ -203,12 +281,14 @@ export class CsHud {
     ]);
     this.endScroll(ctx); this.scrollbar(ctx, this.menuScroll, body.x + body.w + 8, body.y, body.h);
     const fy = r.y + r.h - 64;
+    uiRule(ctx, r.x + 1, fy - 12, r.w - 2);
     const label = e.bootLoading ? e.hud.menuStart.label : e.mapLoading ? this.L('正在装载地图…', 'Loading map…')
       : e.ready ? this.L('进入战场', 'Enter the Arena') : this.L('重试加载', 'Retry loading');
     const actionW = wide ? 252 : r.w - pad * 2;
     if (wide) {
-      this.text(ctx, this.L(map.name, en.name), r.x + pad, fy + 12, 14, C.text, 'left', true, r.w - actionW - pad * 3);
-      this.text(ctx, this.L('地图作者：', 'Map by ') + map.credit, r.x + pad, fy + 34, 12, C.dim, 'left', false, r.w - actionW - pad * 3);
+      drawTeamBadge(ctx, e.selectedTeam === 'ct' ? 'ct' : 't', r.x + pad, fy + 9, 28, e.selectedTeam === 'ct' ? C.blue : C.gold);
+      this.text(ctx, this.L(map.name, en.name) + ' / ' + e.selectedTeam.toUpperCase(), r.x + pad + 40, fy + 12, 14, C.text, 'left', true, r.w - actionW - pad * 3 - 40);
+      this.text(ctx, this.L('本地人机 · 地图作者：', 'Local bots · map by ') + map.credit, r.x + pad + 40, fy + 34, 12, C.dim, 'left', false, r.w - actionW - pad * 3 - 40);
     }
     this.button(ctx, r.x + r.w - pad - actionW, fy, actionW, 48, label, () => e.primaryAction(),
       { id: 'menu-start', primary: true, disabled: e.bootLoading || e.mapLoading });
@@ -229,7 +309,7 @@ export class CsHud {
       const sx = x + 8, sw = w - 16, sy = y + 42, t = (value - min) / (max - min);
       uiRound(ctx, sx, sy - 2, sw, 4, C.border, undefined, 2);
       uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, C.amber, undefined, 2);
-      ctx.fillStyle = C.text; ctx.beginPath(); ctx.arc(sx + sw * t, sy, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C.text; ctx.fillRect(sx + sw * t - 5, sy - 8, 10, 16);
       const change = (px: number) => apply(min + Math.max(0, Math.min(1, (px - sx) / sw)) * (max - min));
       this.push({ id, x, y: sy - 22, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += 84;
     };
@@ -249,6 +329,7 @@ export class CsHud {
       [true, false].map(on => ({ id: `settings-sound-${on ? 'on' : 'off'}`, label: on ? this.L('开启', 'On') : this.L('关闭', 'Off'), selected: e.audio.enabled === on, action: () => { if (e.audio.enabled !== on) e.toggleSound(); } })));
     this.text(ctx, e.settingsNote || this.L('设置自动保存在此浏览器', 'Settings persist in this browser'), x, y + 14, 12, C.dim, 'left', false, w);
     this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 8, top, h);
+    uiRule(ctx, r.x + 1, r.y + r.h - 72, r.w - 2);
     this.button(ctx, x, r.y + r.h - 60, r.w - pad * 2, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
   }
 
@@ -285,8 +366,9 @@ export class CsHud {
     const itemY = top + 56 + tabsH + 12;
     view.items.forEach((item, i) => {
       const ix = x + i % itemCols * (iw + 12), iy = itemY + Math.floor(i / itemCols) * 80;
-      uiRound(ctx, ix, iy, iw, 70, item.disabled ? '#17232e' : UI.raised, C.border, 10);
-      this.text(ctx, item.label, ix + 14, iy + 19, 14, item.disabled ? C.dim : C.text, 'left', true, iw - 28);
+      uiRound(ctx, ix, iy, iw, 70, item.disabled ? '#20282f' : this.hovered(ix, iy, iw, 70) ? UI.hover : UI.raised, C.border, 1);
+      this.text(ctx, item.label, ix + 14, iy + 19, 14, item.disabled ? C.dim : C.text, 'left', true, iw - 100);
+      this.drawWeaponArtwork(ctx, item.id, ix + iw - 76, iy + 8, 62, 20, item.disabled);
       this.text(ctx, item.detail, ix + 14, iy + 46, 12, C.dim, 'left', false, Math.max(0, iw - 114));
       this.text(ctx, item.priceText, ix + iw - 14, iy + 46, 13, C.gold, 'right', false, 90);
       this.push({ id: `shop-item-${item.id}`, x: ix, y: iy, w: iw, h: 70, disabled: item.disabled, down: () => e.buy(item.id) });
@@ -359,11 +441,18 @@ export class CsHud {
     this.drawAimUnderlay(ctx, W, H);
     const radar = radarRect(L), rs = radar.w;
     e.drawRadarContent(ctx, radar.x, radar.y, rs);
-    if (!L.short) this.text(ctx, h.location, radar.x + rs / 2, radar.y + rs + 12, 11, C.dim, 'center', false, rs);
+    if (!L.short) {
+      ctx.fillStyle = UI.hud; ctx.fillRect(radar.x, radar.y + rs + 3, rs, 18);
+      this.text(ctx, h.location, radar.x + rs / 2, radar.y + rs + 12, 11, C.dim, 'center', false, rs - 8);
+    }
     const score = scoreStripRect(L, rs), { x: sx, y: sy, w: sw } = score;
     this.panel(ctx, sx, sy, sw, score.h, true);
-    this.text(ctx, String(h.ctScore), sx + 24, sy + 23, 20, C.blue, 'center', true);
-    this.text(ctx, String(h.tScore), sx + sw - 24, sy + 23, 20, C.amber, 'center', true);
+    ctx.fillStyle = 'rgba(112,170,209,.17)'; ctx.fillRect(sx, sy, 46, score.h);
+    ctx.fillStyle = 'rgba(197,170,103,.17)'; ctx.fillRect(sx + sw - 46, sy, 46, score.h);
+    ctx.fillStyle = C.blue; ctx.fillRect(sx, sy, 46, 2);
+    ctx.fillStyle = C.gold; ctx.fillRect(sx + sw - 46, sy, 46, 2);
+    uiNumber(ctx, String(h.ctScore), sx + 23, sy + 24, 24, C.blue, 'center');
+    uiNumber(ctx, String(h.tScore), sx + sw - 23, sy + 24, 24, C.gold, 'center');
     this.text(ctx, h.roundLabel, sx + sw / 2, sy + 12, 11, C.dim, 'center', false, sw - 76);
     this.text(ctx, h.timerText, sx + sw / 2, sy + 31, 16, h.timerUrgent ? C.red : C.text, 'center', true);
     this.pips(ctx, h.alivePips.ct, sx + 10, sy + score.h + 6, C.blue);
@@ -398,6 +487,7 @@ export class CsHud {
     const kills = h.killfeed.slice(-feedback.killfeed.length);
     feedback.killfeed.forEach((r, i) => {
       const k = kills[i]; this.panel(ctx, r.x, r.y, r.w, r.h, true);
+      if (k.aMe) { ctx.strokeStyle = 'rgba(214,113,89,.8)'; ctx.lineWidth = 1; ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); }
       this.text(ctx, k.aName, r.x + 8, r.y + r.h / 2, 11, k.aTeam === 'ct' ? C.blue : C.amber, 'left', false, r.w * .27);
       this.text(ctx, k.weapon + (k.head ? ' · HS' : ''), r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w * .38);
       this.text(ctx, k.bName, r.x + r.w - 8, r.y + r.h / 2, 11, k.bTeam === 'ct' ? C.blue : C.amber, 'right', false, r.w * .27);
@@ -410,21 +500,27 @@ export class CsHud {
     }
     if (h.scope && feedback.scopeLabel) {
       const r = feedback.scopeLabel;
-      uiRound(ctx, r.x, r.y, r.w, r.h, 'rgba(10,17,24,.78)', undefined, 5);
+      uiRound(ctx, r.x, r.y, r.w, r.h, UI.hud, undefined, 1);
       this.text(ctx, h.scopeLabel, r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w - 12);
     }
     const hp = healthPanelRect(L), compactHp = hp.w < 160 || hp.h < 78;
-    this.panel(ctx, hp.x, hp.y, hp.w, hp.h, true);
+    uiHudPlate(ctx, hp.x, hp.y, hp.w, hp.h, h.healthLow ? C.red : C.gold);
     const healthY = hp.y + (h.money ? (hp.h < 78 ? 30 : 34) : 24);
-    if (h.money) this.text(ctx, h.money, hp.x + 10, hp.y + 12, 11, C.gold, 'left', false, hp.w - 20);
-    this.text(ctx, '+ ' + h.health, hp.x + 10, healthY, hp.h < 78 ? 18 : 20, h.healthLow ? C.red : C.text, 'left', true);
-    if (compactHp) this.text(ctx, `${h.killCount} K`, hp.x + hp.w - 10, healthY, 11, C.dim, 'right');
+    if (h.money) this.text(ctx, h.money, hp.x + 10, hp.y + 12, 11, C.green, 'left', false, hp.w - 20);
+    drawHudIcon(ctx, 'health', hp.x + 10, healthY - 7, 14, 14, h.healthLow ? C.red : C.text);
+    uiNumber(ctx, String(h.health), hp.x + 31, healthY, hp.h < 78 ? 22 : 24, h.healthLow ? C.red : C.text);
+    const narrowVitals = hp.w < 120;
+    if (compactHp) this.text(ctx, `${h.killCount} K`, hp.x + hp.w - 10, narrowVitals ? hp.y + hp.h - 13 : healthY, 11, C.dim, 'right');
     if (hp.h >= 78) uiRound(ctx, hp.x + 10, hp.y + 51, (hp.w - 20) * h.healthPct / 100, 3, h.healthLow ? C.red : C.amber, undefined, 2);
-    this.text(ctx, this.L('护甲 ', 'Armor ') + h.armor, hp.x + 10, hp.y + hp.h - 14, 11, C.dim, 'left', false, compactHp ? hp.w - 20 : hp.w - 84);
+    drawHudIcon(ctx, 'armor', hp.x + 10, hp.y + hp.h - 20, 13, 13, C.dim);
+    this.text(ctx, String(h.armor), hp.x + 31, hp.y + hp.h - 13, 12, C.dim, 'left', false, narrowVitals ? hp.w - 68 : compactHp ? hp.w - 41 : hp.w - 105);
     if (!compactHp) this.text(ctx, h.killCount + this.L(' 击杀', ' kills'), hp.x + hp.w - 10, hp.y + hp.h - 14, 11, C.dim, 'right');
     const wp = weaponPanelRect(L), compactWp = wp.w < 220 || wp.h < 90;
-    this.panel(ctx, wp.x, wp.y, wp.w, wp.h, true);
-    this.text(ctx, h.weaponName, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, C.text, 'left', true, wp.w - 24);
+    uiHudPlate(ctx, wp.x, wp.y, wp.w, wp.h, e.player?.team === 'ct' ? C.blue : C.gold);
+    const weaponIcon = wp.w >= 240 && wp.h >= 90 && HUD_FIREARMS.has(e.gunId);
+    const weaponHeading = compactWp && e.player?.reload > 0 ? h.reloadState : h.weaponName;
+    this.text(ctx, weaponHeading, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, e.player?.reload > 0 ? C.gold : C.text, 'left', true, wp.w - (weaponIcon ? 88 : 24));
+    if (weaponIcon) this.drawWeaponArtwork(ctx, e.gunId, wp.x + wp.w - 70, wp.y + 8, 56, 17);
     if (h.objectiveAction && !feedback.objectiveAction) {
       // Extremely short/notched windows may have no extra feedback lane. Keep
       // active planting/defusing visible inside the existing weapon panel,
@@ -433,13 +529,14 @@ export class CsHud {
       uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, wp.w - 24, 3, C.border, undefined, 2);
       uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, (wp.w - 24) * h.objectiveAction.progress01, 3, C.amber, undefined, 2);
     } else {
-      this.text(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 18 : 22, C.text, 'right', true, wp.w - 24);
+      uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 20 : 26, C.text, 'right', wp.w - 24);
       if (!compactWp) this.text(ctx, h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
     }
     const slots = h.slots, gap = 4, bw = (wp.w - 24 - gap * (slots.length - 1)) / Math.max(1, slots.length);
     slots.forEach((s, i) => {
       const x = wp.x + 12 + i * (bw + gap), y = wp.y + wp.h - 27;
-      uiRound(ctx, x, y, bw, 19, s.equipped ? '#514538' : '#26333f', undefined, 4);
+      ctx.fillStyle = s.equipped ? 'rgba(204,178,118,.18)' : 'rgba(255,255,255,.035)'; ctx.fillRect(x, y, bw, 19);
+      if (s.equipped) { ctx.fillStyle = C.gold; ctx.fillRect(x, y + 17, bw, 2); }
       this.text(ctx, s.key === 'grenade' ? `${s.num}·${h.grenadeCount}` : String(s.num), x + bw / 2, y + 10, 11, s.empty ? C.faint : s.equipped ? C.gold : C.dim, 'center', s.equipped);
     });
     if (h.damageOpacity > 0) { ctx.globalAlpha = Math.min(1, h.damageOpacity); ctx.strokeStyle = '#c33327'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, W, H); ctx.globalAlpha = 1; }
@@ -456,7 +553,8 @@ export class CsHud {
   }
   private hitColor(): string {
     const h = this.engine.hud;
-    return h.hitKind === 'kill' ? C.gold : h.hitHead ? C.amber : '#fff';
+    // Hit-confirmation colors and exact aiming geometry are independent of menu styling.
+    return h.hitKind === 'kill' ? '#f4c77e' : h.hitHead ? '#f4b45f' : '#fff';
   }
   /** Aim is the camera's raw viewport center, never the safe-content center. */
   private drawAimUnderlay(ctx: Ctx, W: number, H: number) {
@@ -490,7 +588,10 @@ export class CsHud {
     ctx.stroke(); ctx.restore();
   }
   private pips(ctx: Ctx, states: string[], x: number, y: number, color: string) {
-    states.forEach((state, i) => this.text(ctx, state === 'dead' ? '×' : state === 'me' ? '●' : '·', x + i * 10, y, 11, state === 'dead' ? C.faint : color));
+    states.forEach((state, i) => {
+      ctx.fillStyle = state === 'dead' ? '#54616b' : state === 'me' ? C.text : color;
+      ctx.fillRect(x + i * 10 + 1, y - 3, 6, state === 'dead' ? 1 : 5);
+    });
   }
   private drawTouchControls(ctx: Ctx, L: HudLayout) {
     const e = this.engine, tc = computeTouchControls(L, { hasBuy: !!e.hud.money });

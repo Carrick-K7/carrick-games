@@ -152,6 +152,17 @@ Existing expressive game art and mechanics remain game-owned. Use `packages/game
 - Games use `this.isDarkTheme()` / `this.isZhLang()` and `getRetroPalette()` from `packages/game-sdk/src/render.ts`; shell tokens do not imply a global gameplay palette rewrite.
 - Existing `three` use is limited to CS, CS Kimi and Villa, rendered back into the shared 2D canvas contract. Preserve game-owned renderer/resource budgets and private QA fixtures, not shell knowledge of internal scenes.
 
+### CS Tactical Interface
+
+CS's game-owned interface follows a restrained CS:GO/Panorama-inspired direction, not an official Valve UI or a new shell theme. These are source/design contracts, not release evidence.
+
+- Use charcoal glass-like panels, square 0–2px corners, fine horizontal rules, white underlined selections, CT blue/T sand accents and a muted green primary action. Keep system fonts and compact numeric hierarchy; no imported proprietary fonts, permanent sidebar or additional shell chrome.
+- The arena menu uses real, static map preview cards and a fixed Start action. Wide views use a two-card gallery; narrow views retain readable compact rows. Settings, shop, pause, map and results use the same visual vocabulary and exclusive modal ownership, not text showing through overlapping menus.
+- Retain genuine HUD-free map frames in `games/cs/public/assets/ui/maps/` with `games/cs/tests/capture-map-previews.mjs` as the capture recipe. Firearm HUD images are exact offline exports of the existing shared weapon-art paths, never newly approximated guns; the game-owned export script records mappings and hashes. Resolve both through the instance's immutable asset URL and contain-fit firearm icons.
+- Preserve real 44px touch targets, fixed headers/footers, scroll/tap separation, pointer cancellation and safe-area/aim clearance. Photo loading must not gate play; failed optional artwork keeps labeled cards usable.
+- Combat panels remain quiet square backplates with health/armor symbols, weapon silhouettes, team-separated score blocks and a compact killfeed. Do not change map rendering, hit-marker color/geometry, optic layering or camera projection to obtain the style.
+- The separately requested empty-magazine behavior starts the existing timed reload only when reserve ammunition remains and deploy/bolt/pump actions permit it. It does not invent ammunition, restart repeated empty reloads, synthesize semi-auto input, or bypass pause/modal ownership. Manual reload stays available; compact HUDs expose the active reload state.
+
 ### Warm Villa Source and Design
 
 `games/villa/package.json` is Villa's independent version source; `games/villa/src/villaVersion.ts` reads it. The shell has its own version. The following retains the authored Villa design/audit constraints, **not a claim about deployment status**.

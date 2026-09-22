@@ -29,7 +29,8 @@
           { "keys": ["Shift", "Ctrl", "Space"], "action": "Walk / crouch / jump", "actionZh": "静步 / 蹲下 / 跳跃" }
         ],
         "notes": [
-          { "text": "Choose classic, karambit or butterfly in the game's Settings. Butterfly draw and inspect animations have randomized variants.", "textZh": "在游戏设置中选择经典刀、爪刀或蝴蝶刀；蝴蝶刀拥有随机切刀和检视动作。", "audience": "all" }
+          { "text": "Choose classic, karambit or butterfly in the game's Settings. Butterfly draw and inspect animations have randomized variants.", "textZh": "在游戏设置中选择经典刀、爪刀或蝴蝶刀；蝴蝶刀拥有随机切刀和检视动作。", "audience": "all" },
+          { "text": "Empty magazines reload automatically when reserve ammunition remains. Press R to reload early.", "textZh": "有备弹时，弹匣打空会自动换弹；按 R 可提前换弹。", "audience": "all" }
         ]
       },
       {

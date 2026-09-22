@@ -99,7 +99,10 @@ export class CsGame extends BaseGame {
   private readonly onWindowMouseMove = (event: MouseEvent) => {
     // BaseGame forwards canvas moves and window mouseup; complete the capture
     // for a slider/scrollbar dragged beyond the canvas without double delivery.
-    if (this.activeRegion && event.target !== this.canvas) this.handleInput(event);
+    if (event.target !== this.canvas) {
+      if (this.activeRegion) this.handleInput(event);
+      else this.hudView.setPointer(null);
+    }
   };
   private readonly onContextMenu = (e: Event) => {
     if (this.engine.matchActive) e.preventDefault();
@@ -365,6 +368,7 @@ export class CsGame extends BaseGame {
     this.activeRegion = null;
     this.touchRegions.clear();
     this.touchLook.clear();
+    this.hudView.setPointer(null);
     this.engine.clearHeldInput();
     active?.up?.();
     for (const entry of touches) {
@@ -462,6 +466,7 @@ export class CsGame extends BaseGame {
     }
 
     if (e instanceof MouseEvent) {
+      if (e.type === 'mousemove' || e.type === 'mousedown') this.hudView.setPointer(this.canvasPoint(e.clientX, e.clientY));
       if (e.type === 'mousedown') {
         const point = this.canvasPoint(e.clientX, e.clientY);
         const region = this.hudView.hitTest(point.x, point.y);
@@ -505,6 +510,7 @@ export class CsGame extends BaseGame {
     }
 
     if (e instanceof TouchEvent) {
+      this.hudView.setPointer(null);
       e.preventDefault();
       for (const touch of Array.from(e.changedTouches)) {
         const point = this.canvasPoint(touch.clientX, touch.clientY);
@@ -576,6 +582,7 @@ export class CsGame extends BaseGame {
     }
     this.engine.canvas3d?.removeEventListener('webglcontextlost', this.onContextLost);
     this.stop();
+    this.hudView.dispose();
     this.engine.dispose();
   }
 }

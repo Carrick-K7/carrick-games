@@ -115,6 +115,18 @@ describe('CS aiming paint geometry', () => {
     (hud as any).drawHitMarker(ctx, 844, 390); expect(operations).toEqual([]);
   });
 
+  it('keeps larger tactical health digits clear of two-digit kills in a deeply inset phone', () => {
+    const { ctx, operations } = recorder();
+    const { hud } = fixture(operations, { health: 100, armor: 100, killCount: 65 });
+    hud.setSafeArea({ top: 44, right: 20, bottom: 34, left: 47 }); hud.draw(ctx, 320, 568);
+    const health = operations.find(op => op.kind === 'text' && op.text === '100' && op.bounds.h >= 20);
+    const armor = operations.find(op => op.kind === 'text' && op.text === '100' && op.bounds.h === 12);
+    const kills = operations.find(op => op.kind === 'text' && op.text === '65 K');
+    expect(health).toBeTruthy(); expect(armor).toBeTruthy(); expect(kills).toBeTruthy();
+    expect(rectsOverlap(health.bounds, kills.bounds)).toBe(false);
+    expect(rectsOverlap(armor.bounds, kills.bounds)).toBe(false);
+  });
+
   for (const [W, H] of [[320, 568], [390, 844], [568, 320], [844, 390]]) {
     it(`${W}x${H}: painted confirmation and scope caption stay clear of controls, ammo and aim`, () => {
       const { ctx, operations } = recorder();
