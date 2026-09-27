@@ -333,7 +333,7 @@ export class CsEngine {
   hideCenter() { this.hud.center = null; }
 
   addKill(a, b, w, head) {
-    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weapon: this.weaponDisplayName(w, a), head, time: this.clock });
+    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weaponId: w, weapon: this.weaponDisplayName(w, a), head, time: this.clock });
     while (this.hud.killfeed.length > 6) this.hud.killfeed.shift();
   }
 

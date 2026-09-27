@@ -24,6 +24,7 @@ export interface AimPaint {
   arcs: { x: number; y: number; r: number }[];
   evenodd?: boolean;
   text?: string;
+  src?: string;
   bounds?: { x: number; y: number; w: number; h: number };
 }
 export interface AimSnapshot {
@@ -42,6 +43,7 @@ export interface AimSnapshot {
   opacity: number;
   hitKind: string;
   confirmation: string;
+  killfeed: { weaponId?: string; weapon: string; head: boolean; aName: string; bName: string }[];
   scope: boolean;
   audioHits: { head: boolean; killed: boolean }[];
   paint: AimPaint[];
@@ -184,7 +186,13 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
           const b = point(x + metrics.actualBoundingBoxRight, y + metrics.actualBoundingBoxDescent);
           record('text', { text: String(text), bounds: { x: a[0], y: a[1], w: b[0] - a[0], h: b[1] - a[1] } });
         });
-        wrap('drawImage', () => record('image'));
+        wrap('drawImage', (source, ...args) => {
+          const [x, y, w, h] = args.length >= 4 ? args.slice(-4)
+            : [args[0], args[1], source.naturalWidth ?? source.width, source.naturalHeight ?? source.height];
+          const a = point(x, y), b = point(x + w, y + h);
+          record('image', { src: source instanceof HTMLImageElement ? source.src : undefined,
+            bounds: { x: a[0], y: a[1], w: b[0] - a[0], h: b[1] - a[1] } });
+        });
         const capture = () => {
           paint = [];
           recording = true;
@@ -207,6 +215,7 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
           camera: { fov: e.camera.fov, aspect: e.camera.aspect, gunAspect: e.gunCamera.aspect },
           ...shotData, alive: target.alive, clock: e.clock, opacity: e.hud.hitOpacity,
           hitKind: e.hud.hitKind, confirmation: e.hud.hitConfirmation, scope: e.hud.scope,
+           killfeed: e.hud.killfeed.map((k: any) => ({ weaponId: k.weaponId, weapon: k.weapon, head: k.head, aName: k.aName, bName: k.bName })),
           audioHits: [...audioHits], paint: capture(),
           lane: { from: chosenLane.from.toArray(), to: chosenLane.to.toArray() },
           });
@@ -287,6 +296,11 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
             return snapshot();
           },
           snapshot,
+          switchToPistol() {
+            player.inventory.pistol = e.inventoryWeapon('usp'); player.slot = 'pistol';
+            player.reload = 0; e.zoom = 0; e.setGun(false); e.computeHud();
+            return snapshot();
+          },
           advanceWeapon(seconds: number) {
             // Controlled player-only time, retaining real weapon/action code;
             // NPCs and the SDK presentation remain frozen by this fixture.

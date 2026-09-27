@@ -198,6 +198,23 @@ export function scoreboardRect(L: HudLayout, rowCount: number): HudRect {
 
 export interface HudTableColumn { x: number; w: number }
 
+/** Separate name/art/headshot cells: optional icons must never shift the names. */
+export function killfeedColumns(row: HudRect, headshot = false) {
+  const pad = Math.min(8, Math.max(0, row.w * .05));
+  const inner = Math.max(0, row.w - pad * 2), gap = Math.min(6, inner * .04);
+  const middleW = Math.min(inner * .6, Math.min(64, Math.max(0, row.w * .23)) + (headshot ? 22 : 0));
+  const nameW = Math.max(0, (inner - middleW - gap * 2) / 2);
+  const headW = headshot ? Math.min(18, middleW * .3) : 0;
+  const headGap = headshot ? Math.min(4, middleW * .07) : 0;
+  const imageH = Math.min(16, Math.max(0, row.h - 6));
+  const attacker = { x: row.x + pad, y: row.y, w: nameW, h: row.h };
+  const weapon = { x: attacker.x + nameW + gap, y: row.y + (row.h - imageH) / 2,
+    w: Math.max(0, middleW - headW - headGap), h: imageH };
+  const head = headshot ? { x: weapon.x + weapon.w + headGap, y: row.y, w: headW, h: row.h } : null;
+  const victim = { x: attacker.x + nameW + gap + middleW + gap, y: row.y, w: nameW, h: row.h };
+  return { attacker, weapon, head, victim };
+}
+
 /** Flexible name column, bounded numeric/status slots; no desktop x-220 offsets. */
 export function scoreboardColumns(panel: HudRect): Record<'name' | 'kills' | 'deaths' | 'status', HudTableColumn> {
   const pad = Math.min(20, panel.w * 0.05), gap = Math.min(8, panel.w * 0.02);

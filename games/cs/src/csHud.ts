@@ -6,7 +6,7 @@ import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRul
 import { drawHudIcon, drawTeamBadge } from './csHudArt.js';
 import {
   aimGeometry, buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
-  normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout,
+  normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout, killfeedColumns,
   TOUCH_TARGET, weaponPanelRect, type HudLayout, type HudSafeArea, type HudRect,
   type TouchButtonId,
 } from './csHudLayout.js';
@@ -42,7 +42,7 @@ export interface CsHudView {
   money: string | null; buyTimeText: string;
   matchEnd: { won: boolean; title: string; score: string; stats: string } | null;
   radio: { title: string; options: string[] } | null;
-  killfeed: { aName: string; aTeam: string; aMe: boolean; bName: string; bTeam: string; weapon: string; head: boolean; time: number }[];
+  killfeed: { aName: string; aTeam: string; aMe: boolean; bName: string; bTeam: string; weaponId?: string; weapon: string; head: boolean; time: number }[];
   scoreboardOpen: boolean; bombMarker: unknown;
 }
 const C = { text: UI.text, dim: UI.dim, faint: UI.muted, amber: UI.accent,
@@ -96,16 +96,17 @@ export class CsHud {
   private mapPreview(id: string) { return this.image(this.mapPreviews, `assets/ui/maps/${id}.webp`); }
   private drawWeaponArtwork(ctx: Ctx, id: string, x: number, y: number, w: number, h: number, disabled = false) {
     if (['armor', 'vest', 'kit'].includes(id)) {
-      drawHudIcon(ctx, 'armor', x, y, w, h, disabled ? C.faint : C.text); return;
+      drawHudIcon(ctx, 'armor', x, y, w, h, disabled ? C.faint : C.text); return true;
     }
-    if (!HUD_FIREARMS.has(id)) return;
+    if (!HUD_FIREARMS.has(id)) return false;
     const image = this.image(this.weaponIcons, `assets/ui/weapons/${id}.svg`);
-    if (!image) return;
+    if (!image) return false;
     const scale = Math.min(w / image.naturalWidth, h / image.naturalHeight);
     const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
     ctx.save(); if (disabled) ctx.globalAlpha *= .45;
     ctx.drawImage(image, x + (w - width) / 2, y + (h - height) / 2, width, height);
     ctx.restore();
+    return true;
   }
   private drawMapPreview(ctx: Ctx, id: string, x: number, y: number, w: number, h: number) {
     const image = this.mapPreview(id);
@@ -485,13 +486,7 @@ export class CsHud {
     if (h.notice && feedback.notice) message(feedback.notice, h.notice.text);
     if (h.pickup && feedback.pickup) message(feedback.pickup, this.L('拾取 · ', 'Pick up · ') + h.pickup.name);
     const kills = h.killfeed.slice(-feedback.killfeed.length);
-    feedback.killfeed.forEach((r, i) => {
-      const k = kills[i]; this.panel(ctx, r.x, r.y, r.w, r.h, true);
-      if (k.aMe) { ctx.strokeStyle = 'rgba(214,113,89,.8)'; ctx.lineWidth = 1; ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); }
-      this.text(ctx, k.aName, r.x + 8, r.y + r.h / 2, 11, k.aTeam === 'ct' ? C.blue : C.amber, 'left', false, r.w * .27);
-      this.text(ctx, k.weapon + (k.head ? ' · HS' : ''), r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w * .38);
-      this.text(ctx, k.bName, r.x + r.w - 8, r.y + r.h / 2, 11, k.bTeam === 'ct' ? C.blue : C.amber, 'right', false, r.w * .27);
-    });
+    feedback.killfeed.forEach((r, i) => this.drawKillfeedRow(ctx, r, kills[i]));
     if (h.hitOpacity > 0 && feedback.hitConfirmation) {
       const r = feedback.hitConfirmation;
       ctx.save(); ctx.globalAlpha *= Math.min(1, h.hitOpacity);
@@ -550,6 +545,20 @@ export class CsHud {
     }
     if (e.touchMode) this.drawTouchControls(ctx, L);
     this.drawHitMarker(ctx, W, H);
+  }
+  private drawKillfeedRow(ctx: Ctx, r: HudRect, k: CsHudView['killfeed'][number]) {
+    const columns = killfeedColumns(r, k.head), cy = r.y + r.h / 2;
+    this.panel(ctx, r.x, r.y, r.w, r.h, true);
+    if (k.aMe) { ctx.strokeStyle = 'rgba(214,113,89,.8)'; ctx.lineWidth = 1; ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); }
+    this.text(ctx, k.aName, columns.attacker.x, cy, 11, k.aTeam === 'ct' ? C.blue : C.amber, 'left', false, columns.attacker.w);
+    const art = columns.weapon;
+    // Use the historical event ID, not a translated label or the current gun:
+    // switching weapons after a kill must not change its recorded silhouette.
+    const drawn = !!k.weaponId && HUD_FIREARMS.has(k.weaponId)
+      && this.drawWeaponArtwork(ctx, k.weaponId, art.x, art.y, art.w, art.h);
+    if (!drawn) this.text(ctx, k.weapon, art.x + art.w / 2, cy, 11, C.dim, 'center', false, art.w);
+    if (columns.head) this.text(ctx, 'HS', columns.head.x + columns.head.w / 2, cy, 10, C.gold, 'center', true, columns.head.w);
+    this.text(ctx, k.bName, columns.victim.x + columns.victim.w, cy, 11, k.bTeam === 'ct' ? C.blue : C.amber, 'right', false, columns.victim.w);
   }
   private hitColor(): string {
     const h = this.engine.hud;

@@ -76,6 +76,19 @@ function deferred<T>() {
 }
 
 describe('v28 engine settings and presentation', () => {
+  it('records the killing firearm identity independently of later equipment or language', () => {
+    const e = arena(), victim = { name: 'TARGET', team: 't' };
+    const ids = Object.keys(WEAPONS).filter(id => !(WEAPONS as any)[id].utility && id !== 'knife');
+    for (const id of ids) {
+      e.addKill(e.player, victim, id, true);
+      const event = e.hud.killfeed.at(-1), label = event.weapon;
+      equip(e, 'knife'); e.isZh = () => true;
+      expect(event).toMatchObject({ weaponId: id, weapon: label, aName: 'YOU', bName: 'TARGET', aMe: true, head: true, time: e.clock });
+    }
+    expect(e.hud.killfeed).toHaveLength(6);
+    e.addKill(e.player, victim, 'he', false);
+    expect(e.hud.killfeed.at(-1)).toMatchObject({ weaponId: 'he', head: false });
+  });
   it('initializes, persists and resets the complete settings instead of separate menu defaults', () => {
     localStorage.setItem('cs.controls.v1', JSON.stringify({ ...DEFAULT_SETTINGS, quality: 'low', startingPistol: 'deagle', knifeModel: 'butterfly', hitFeedback: 'visual' }));
     const e = arena();
