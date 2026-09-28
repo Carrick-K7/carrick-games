@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CsHud } from '../src/csHud';
-import { UI, uiButton, uiHudPlate } from '../src/csHudUi';
+import { UI, uiButton, uiHudPlate, uiText } from '../src/csHudUi';
 
 function recorder() {
   const ops: any[] = [];
@@ -24,6 +24,11 @@ function luminance(hex: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('CS tactical presentation tokens', () => {
+  it('does not spill an ellipsis outside a zero or sub-glyph text budget', () => {
+    const { ctx, ops } = recorder();
+    for (const max of [0, 1, 5]) uiText(ctx, 'Equipment', 0, 0, 14, UI.text, 'left', false, max);
+    expect(ops.filter(op => op.type === 'text').every(op => op.value === '')).toBe(true);
+  });
   it('uses crisp controls, an explicit selected underline, and high-contrast primary actions', () => {
     const { ctx, ops } = recorder();
     uiButton(ctx, 10, 20, 160, 44, 'CT', { selected: true, tone: 'ct' });

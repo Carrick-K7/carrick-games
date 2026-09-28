@@ -333,7 +333,10 @@ export class CsEngine {
   hideCenter() { this.hud.center = null; }
 
   addKill(a, b, w, head) {
-    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weaponId: w, weapon: this.weaponDisplayName(w, a), head, time: this.clock });
+    // Snapshot the actual attacker, not current/spectated equipment. HE and C4
+    // retain their damage-source IDs even after their owner switches weapons.
+    const weaponIconId = w === 'knife' ? `knife-${normalizeKnifeModel(a.isPlayer ? this.controlSettings.knifeModel : 'classic')}` : w;
+    this.hud.killfeed.push({ aName: a.name, aTeam: a.team, aMe: a.isPlayer, bName: b.name, bTeam: b.team, weaponId: w, weaponIconId, weapon: this.weaponDisplayName(w, a), head, time: this.clock });
     while (this.hud.killfeed.length > 6) this.hud.killfeed.shift();
   }
 
@@ -568,9 +571,20 @@ export class CsEngine {
     if (a.inventory.primary) this.buyItem(a, 'he');
   }
 
-  /** View-model for the canvas buy menu. */
+  shopItemName(id) {
+    const equipment = { vest: this.L('防弹衣', 'Kevlar Vest'), armor: this.L('防弹衣与头盔', 'Armor + Helmet'),
+      kit: this.L('拆弹工具', 'Defuse Kit'), he: this.L('高爆手雷', 'HE Grenade') };
+    return equipment[id] || WEAPONS[id]?.name || id;
+  }
+
+  /** View-model for the canvas buy menu; prices and eligibility remain economy-owned. */
   shopView() {
     const player = this.player, L = (zh, en) => this.L(zh, en);
+    const canBuy = this.canBuy(player);
+    const equipmentDetails = { vest: L('降低身体伤害', 'Body protection'), armor: L('身体与头部保护', 'Body and head protection'),
+      kit: L('加快拆除炸弹', 'Faster defusing'), he: L('区域爆炸伤害', 'Area blast damage') };
+    const categories = BUY_CATEGORIES.map((c, i) => ({ id: c.id, name: c.name,
+      nameEn: ['Pistols', 'SMGs', 'Rifles', 'Snipers', 'Heavy', 'Gear'][i] || c.name, active: this.buyCategory === c.id }));
     const items = [];
     for (const item of SHOP) {
       if (item.category !== this.buyCategory || item.team && item.team !== player.team) continue;
@@ -580,19 +594,23 @@ export class CsEngine {
         : item.id === 'he' ? player.grenades >= 1
         : Object.values(player.inventory).some(w => w?.id === item.id);
       const cost = item.id === 'armor' && player.armor >= 100 && !player.helmet ? 350 : item.price;
+      const affordable = this.mode === 'tdm' || player.money >= cost;
       items.push({
         id: item.id,
-        label: item.name || WEAPONS[item.id].name,
-        detail: WEAPONS[item.id]?.type.split(' · ')[0] || this.L('辅助装备', 'Equipment'),
+        label: this.shopItemName(item.id),
+        detail: equipmentDetails[item.id] || (this.isZh() ? WEAPONS[item.id]?.type.split(' · ')[0] : WEAPON_TYPE_EN[item.id]) || L('辅助装备', 'Equipment'),
         priceText: owned ? L('已装备', 'Owned') : this.mode === 'tdm' ? L('免费', 'Free') : '$ ' + cost,
-        disabled: owned || this.mode !== 'tdm' && player.money < cost,
+        status: owned ? 'owned' : !canBuy ? 'unavailable' : !affordable ? 'funds' : 'available',
+        statusText: owned ? L('已装备', 'Owned') : !canBuy ? L('暂不可购买', 'Unavailable') : !affordable ? L('余额不足', 'Insufficient funds') : '',
+        disabled: owned || !canBuy || !affordable,
       });
     }
     return {
-      money: this.mode === 'tdm' ? L('团队竞技 · 装备免费', 'Team Deathmatch · gear is free') : '$ ' + player.money,
+      money: this.mode === 'tdm' ? L('团队竞技 · 免费装备', 'Team DM · free gear') : '$ ' + player.money,
+      free: this.mode === 'tdm', canBuy,
       timeText: this.hud.buyTimeText,
-      categories: BUY_CATEGORIES.map((c, i) => ({ id: c.id, name: c.name, nameEn: ['Pistols', 'SMGs', 'Rifles', 'Snipers', 'Heavy', 'Gear'][i] || c.name, active: this.buyCategory === c.id })),
-      categoryTitle: BUY_CATEGORIES.find(c => c.id === this.buyCategory)?.name || '',
+      categories,
+      categoryTitle: (() => { const c = categories.find(c => c.active); return c ? L(c.name, c.nameEn) : ''; })(),
       items,
     };
   }
@@ -604,11 +622,12 @@ export class CsEngine {
   }
   buy(id) {
     if (!this.buyItem(this.player, id)) this.notify(this.L('无法购买：检查金额、购买区域或已有装备', 'Cannot buy: check funds, buy zone or owned gear'), 2);
+    else this.notify(this.L('已购买 · ', 'Purchased · ') + this.shopItemName(id), 1.8);
   }
 
   // ── Overlays ─────────────────────────────────────────────────────────────
 
-  overlayOpen() { return this.buyOpen || this.mapOpen || this.settingsOpen; }
+  overlayOpen() { return this.buyOpen || this.mapOpen || this.settingsOpen || !!this.radioMenu; }
 
   toggleBuy() {
     if (this.buyOpen) { this.closeBuy(); return; }
@@ -1443,7 +1462,7 @@ export class CsEngine {
 
   endRound(winner, reason = '') {
     if (this.phase === 'round-end' || this.phase === 'match-end') return;
-    this.closeMap(false); this.closeBuy(false);
+    this.closeMap(false); this.closeBuy(false); this.closeRadio(false);
     this.phase = 'round-end'; this.roundWinner = winner; this.transitionTime = 5;
     this.fireHeld = false; this.zoom = 0;
     if (winner !== 'draw') this.scores[winner]++;
@@ -1898,7 +1917,17 @@ export class CsEngine {
 
   // ── Radio ────────────────────────────────────────────────────────────────
 
-  openRadio(menu) { if (!this.player?.alive) return; this.radioMenu = menu; this.computeHud(); }
+  openRadio(menu) {
+    if (!this.player?.alive || !this.matchActive || this.settingsOpen
+      || !['active', 'freeze', 'round-end', 'paused'].includes(this.phase) || !Object.prototype.hasOwnProperty.call(RADIO, menu)) return;
+    this.closeBuy(false); this.closeMap(false); this.clearHeldInput();
+    this.radioMenu = menu; this.computeHud(); this.hooks.releaseCapture?.();
+  }
+  closeRadio(capture = true) {
+    if (!this.radioMenu) return;
+    this.radioMenu = null; this.clearHeldInput(); this.computeHud();
+    if (capture && this.player?.alive && ['active', 'freeze', 'round-end'].includes(this.phase)) this.requestCapture();
+  }
   chooseRadio(index) {
     const table = this.isZh() ? RADIO : RADIO_EN;
     const message = table[this.radioMenu]?.[index];
@@ -1910,8 +1939,7 @@ export class CsEngine {
         for (const b of this.bots.filter(b => b.alive && b.team === this.player.team)) { b.route = [this.player.pos.clone()]; b.routeIndex = 0; b.pathTime = 0; }
       }
     }
-    this.radioMenu = null;
-    this.computeHud();
+    this.closeRadio();
   }
 
   // ── Input (forwarded by the shell adapter) ───────────────────────────────
@@ -1974,7 +2002,7 @@ export class CsEngine {
       if (this.settingsOpen) { this.focusGuard.consumeEscape(); this.closeSettings(false); return; }
       if (this.mapOpen) { this.focusGuard.consumeEscape(); this.closeMap(false); return; }
       if (this.buyOpen) { this.focusGuard.consumeEscape(); this.closeBuy(false); return; }
-      if (this.radioMenu) { this.focusGuard.consumeEscape(); this.radioMenu = null; this.computeHud(); this.clearHeldInput(); return; }
+      if (this.radioMenu) { this.focusGuard.consumeEscape(); this.closeRadio(false); return; }
       if (this.hud.scoreboardOpen) { this.focusGuard.consumeEscape(); this.hud.scoreboardOpen = false; this.keys.delete('Tab'); return; }
       if (!this.matchActive) return;
       this.focusGuard.escape();
@@ -1993,11 +2021,15 @@ export class CsEngine {
       else if (code === 'ArrowLeft') { e.preventDefault(); this.cycleBuyCategory(-1); }
       return;
     }
+    if (this.radioMenu) {
+      if (/^Digit[0-9]$/.test(code)) { e.preventDefault(); if (!e.repeat) this.chooseRadio(Number(code.slice(5)) - 1); }
+      else if (KEY_ACTIONS[code]?.startsWith('radio') && !e.repeat) this.openRadio(KEY_ACTIONS[code]);
+      return;
+    }
     if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ControlLeft', 'ControlRight'].includes(code)) e.preventDefault();
     if (this.phase === 'paused' || this.phase === 'match-end' || e.repeat) return;
     if (code === 'KeyM') { e.preventDefault(); this.toggleMap(); return; }
     this.keys.add(code);
-    if (this.radioMenu && /^Digit[0-9]$/.test(code)) { this.chooseRadio(Number(code.slice(5)) - 1); return; }
     if (code === 'Tab') { this.hud.scoreboardOpen = true; return; }
     const action = KEY_ACTIONS[code];
     if (action === 'reload') this.reload();

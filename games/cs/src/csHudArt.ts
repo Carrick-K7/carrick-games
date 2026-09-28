@@ -1,5 +1,5 @@
-// Original, asset-free utility symbols. Firearms use offline-derived inventory SVGs.
-export type HudIconKind = 'health' | 'armor';
+// Original, asset-free utility symbols. Weapons use offline-derived inventory SVGs.
+export type HudIconKind = 'health' | 'armor' | 'headshot' | 'grenade' | 'bomb';
 type Art = { w: number; h: number; paths: readonly (readonly number[])[] };
 
 // Filled contours avoid stroke overshoot. Inner contours are transparent holes;
@@ -11,6 +11,32 @@ const ART: Record<HudIconKind, Art> = {
   armor: { w: 16, h: 16, paths: [
     [2, 1, 14, 1, 14, 8, 12, 12, 8, 15, 4, 12, 2, 8],
     [4, 3, 12, 3, 12, 7.5, 10.5, 10.5, 8, 12.5, 5.5, 10.5, 4, 7.5],
+  ] },
+  // Profile + impact aperture/rays, not a copied skull or team insignia.
+  headshot: { w: 16, h: 16, paths: [
+    [4, 2, 8, 2, 10, 4, 10, 6, 12, 8, 10, 9, 10, 11, 7, 11, 7, 14, 2, 14, 2, 10, 1, 8, 1, 5],
+    [6, 4, 8, 6, 6, 8, 4, 6],
+    [11, 3, 13, 1, 14, 2, 12, 4],
+    [12, 5, 15, 5, 15, 6.5, 12, 6.5],
+    [12, 10, 14, 12, 13, 13, 11, 11],
+  ] },
+  // Segmented canister, pin ring and lever; an original utility pictogram.
+  grenade: { w: 16, h: 16, paths: [
+    [4, 6, 11, 6, 13, 9, 13, 12, 10, 15, 5, 15, 2, 12, 2, 9],
+    [4, 9, 6, 9, 6, 12, 4, 12],
+    [8, 9, 10, 9, 10, 12, 8, 12],
+    [5, 3, 9, 3, 9, 5, 5, 5],
+    [5, 1, 11, 1, 14, 6, 12.5, 7, 10, 3, 5, 3],
+    [1, 1, 4, 1, 4, 4, 1, 4],
+    [2, 2, 3, 2, 3, 3, 2, 3],
+  ] },
+  // Wired rectangular device with a screen and keys; no proprietary markings.
+  bomb: { w: 16, h: 16, paths: [
+    [2, 5, 14, 5, 14, 15, 2, 15],
+    [4, 7, 12, 7, 12, 10, 4, 10],
+    [4, 12, 6, 12, 6, 13.5, 4, 13.5],
+    [8, 12, 12, 12, 12, 13.5, 8, 13.5],
+    [4, 5, 4, 1, 9, 1, 11, 3, 11, 5, 9, 5, 9, 3, 6, 3, 6, 5],
   ] },
 };
 const BADGES: Record<'ct' | 't', Art> = {
@@ -55,7 +81,7 @@ function drawArt(ctx: CanvasRenderingContext2D, art: Art, x: number, y: number, 
 /** Contain-fit inside logical bounds; retains the caller's transform and alpha. */
 export function drawHudIcon(ctx: CanvasRenderingContext2D, kind: HudIconKind,
   x: number, y: number, w: number, h: number, color: string): void {
-  drawArt(ctx, ART[kind], x, y, w, h, color);
+  if (Object.prototype.hasOwnProperty.call(ART, kind)) drawArt(ctx, ART[kind], x, y, w, h, color);
 }
 
 /** Original shield / double-chevron motifs; team labels remain the HUD's responsibility. */

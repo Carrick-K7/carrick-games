@@ -12,6 +12,8 @@ export const HUD_WEAPON_SOURCES = Object.freeze({
   ak47: 'ak47', m4a1: 'm4a1s', awp: 'awp', mp5: 'mp5', tmp: 'mp9', p90: 'p90',
   mac10: 'mac10', sg552: 'sg552', aug: 'aug', scout: 'scout', g3sg1: 'g3sg1',
   m3: 'm3', xm1014: 'xm1014', m249: 'm249', deagle: 'deagle', usp: 'usp', glock: 'glock',
+  // Stable event-art IDs distinguish appearances without changing inventory IDs.
+  'knife-classic': 'knife', 'knife-karambit': 'karambit', 'knife-butterfly': 'butterfly',
 });
 const sourceFile = 'packages/weapon-art/src/silhouettes.ts';
 const output = new URL('../public/assets/ui/weapons/', import.meta.url);
@@ -46,7 +48,7 @@ function sourceViewBox(key) {
 }
 
 export function hudWeaponSvg(id) {
-  if (!Object.hasOwn(HUD_WEAPON_SOURCES, id)) throw new Error(`No exact HUD firearm source for ${id}`);
+  if (!Object.hasOwn(HUD_WEAPON_SOURCES, id)) throw new Error(`No exact HUD weapon source for ${id}`);
   const key = HUD_WEAPON_SOURCES[id], path = WEAPON_SILHOUETTES[key];
   const dims = WEAPON_SILHOUETTE_DIMS[key];
   if (!path || !dims?.every(value => Number.isFinite(value) && value > 0)) throw new Error(`Invalid silhouette source: ${key}`);
@@ -65,7 +67,7 @@ export function hudWeaponManifest() {
     generator: 'games/cs/tests/export-hud-weapon-icons.mjs',
     attribution: 'Valve inventory-render traces; rights remain with their respective owners. See ../../../CREDITS.md.',
     fill: '#f0f3f5',
-    orientation: 'Original source orientation; muzzle +x, grip +y.',
+    orientation: 'Original source orientation; firearms muzzle +x, grip +y; knives retain their source pose.',
     weapons: Object.fromEntries(Object.entries(HUD_WEAPON_SOURCES).map(([id, sourceId]) => {
       const [w, h] = WEAPON_SILHOUETTE_DIMS[sourceId];
       return [id, { file: `${id}.svg`, sourceId, width: Math.round(w * 1000), height: Math.round(h * 1000),
@@ -81,5 +83,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   await mkdir(output, { recursive: true });
   for (const [name, svg] of files) await writeFile(new URL(name, output), svg);
   await writeFile(new URL('manifest.json', output), manifest);
-  console.log(`Exported ${files.length} exact CS HUD firearm SVGs and manifest.json.`);
+  console.log(`Exported ${files.length} exact CS HUD weapon SVGs and manifest.json.`);
 }

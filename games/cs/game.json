@@ -44,7 +44,8 @@
           { "keys": ["Esc"], "action": "Pause / close game panel", "actionZh": "暂停 / 关闭游戏面板" }
         ],
         "notes": [
-          { "text": "Elimination, bomb defusal and team deathmatch are local matches against bots, not online multiplayer.", "textZh": "回合歼灭、经典爆破与团队竞技均为本地人机对战，不含在线多人服务。", "audience": "all" }
+          { "text": "Elimination, bomb defusal and team deathmatch are local matches against bots, not online multiplayer.", "textZh": "回合歼灭、经典爆破与团队竞技均为本地人机对战，不含在线多人服务。", "audience": "all" },
+          { "text": "The pause menu also opens the scoreboard and radio. Choose radio messages by tapping or keys 1–8; 0 or Escape closes. Opening radio during play does not pause the round.", "textZh": "暂停菜单也可打开记分板和无线电。无线电可点选或按数字键 1–8，0 / Esc 关闭；对局中打开无线电不会暂停回合。", "audience": "all" }
         ]
       }
     ]

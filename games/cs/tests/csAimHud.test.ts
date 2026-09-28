@@ -115,6 +115,39 @@ describe('CS aiming paint geometry', () => {
     (hud as any).drawHitMarker(ctx, 844, 390); expect(operations).toEqual([]);
   });
 
+  it('shows critical respawn feedback rather than a stale reload after death on a tight phone', () => {
+    const { ctx, operations } = recorder();
+    const { hud, engine } = fixture(operations, { money: '$800', health: 0, reloadState: 'Reloading · 2s',
+      center: { kicker: 'RESPAWNING', title: 'Respawn 2s', detail: 'Team DM' } });
+    const safe = { top: 44, right: 20, bottom: 34, left: 47 };
+    engine.touchMode = true; engine.player.alive = false; engine.player.reload = 2;
+    hud.setSafeArea(safe); hud.draw(ctx, 320, 568);
+    const label = operations.find(op => op.kind === 'text' && op.text === 'Respawn 2s');
+    const panel = weaponPanelRect(computeHudLayout(320, 568, safe));
+    expect(label).toBeTruthy(); expect(label.bounds.y).toBeGreaterThanOrEqual(panel.y);
+    expect(operations.some(op => op.text === 'Reloading · 2s')).toBe(false);
+  });
+
+  it('shows complete three-digit scoreboard counts on a deeply inset phone', () => {
+    const { ctx, operations } = recorder(), { hud, engine } = fixture(operations, { scoreboardOpen: true });
+    engine.scores = { ct: 100, t: 3 }; engine.keys = new Set();
+    engine.all = [{ name: 'YOU', team: 'ct', isPlayer: true, alive: true, kills: 123, deaths: 100 }];
+    hud.setSafeArea({ top: 44, right: 20, bottom: 34, left: 47 }); hud.draw(ctx, 320, 568);
+    expect(operations.some(op => op.kind === 'text' && op.text === '123')).toBe(true);
+    expect(operations.filter(op => op.kind === 'text' && op.text === '100')).toHaveLength(2);
+    expect(operations.some(op => op.kind === 'text' && op.text === 'CT')).toBe(true);
+  });
+
+  it('makes the unavailable radio action visibly disabled while paused and dead', () => {
+    const { ctx, operations } = recorder(), { hud, engine } = fixture(operations);
+    engine.phase = 'paused'; engine.player.alive = false;
+    hud.draw(ctx, 320, 568);
+    const radio = hud.regions.find(r => r.id === 'pause-radio')!;
+    expect(radio).toBeTruthy(); expect(radio.disabled).toBe(true);
+    expect(hud.hitTest(radio.x + radio.w / 2, radio.y + radio.h / 2)?.id).not.toBe('pause-radio');
+    expect(operations.some(op => op.kind === 'text' && op.text.includes('alive players only'))).toBe(true);
+  });
+
   it('keeps larger tactical health digits clear of two-digit kills in a deeply inset phone', () => {
     const { ctx, operations } = recorder();
     const { hud } = fixture(operations, { health: 100, armor: 100, killCount: 65 });

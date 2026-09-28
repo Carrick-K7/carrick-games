@@ -362,7 +362,7 @@ export class CsGame extends BaseGame {
 
   /** End captures without activating a deferred choice or a primed weapon. */
   private releaseHudInput(preserveScoreboard = false) {
-    const scoreboardOpen = this.engine.hud.scoreboardOpen;
+    const scoreboardOpen = this.engine.hud.scoreboardOpen, radioMenu = this.engine.radioMenu;
     const active = this.activeRegion;
     const touches = [...this.touchRegions.values()];
     this.activeRegion = null;
@@ -375,7 +375,7 @@ export class CsGame extends BaseGame {
       if (entry.mode === 'scroll') entry.region.scroll?.endDrag();
       else if (entry.mode === 'drag') entry.region.up?.();
     }
-    if (preserveScoreboard) this.engine.hud.scoreboardOpen = scoreboardOpen;
+    if (preserveScoreboard) { this.engine.hud.scoreboardOpen = scoreboardOpen; this.engine.radioMenu = radioMenu; }
   }
 
   private syncHudInputContext() {
@@ -385,7 +385,7 @@ export class CsGame extends BaseGame {
     const phase = ['menu', 'paused', 'match-end'].includes(e.phase) ? e.phase : 'play';
     const next = JSON.stringify([
       phase, e.settingsOpen, e.buyOpen, e.buyOpen ? e.buyCategory : null,
-      e.mapOpen, !!e.hud.matchEnd, !!e.hud.scoreboardOpen,
+      e.mapOpen, e.radioMenu, !!e.hud.matchEnd, !!e.hud.scoreboardOpen,
       phase === 'menu' ? [e.selectedMap, e.selectedMode, e.bootLoading, e.mapLoading] : null,
     ]);
     if (this.hudInputContext !== null && this.hudInputContext !== next) {

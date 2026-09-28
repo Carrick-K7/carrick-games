@@ -4,7 +4,7 @@
   "generator": "games/cs/tests/export-hud-weapon-icons.mjs",
   "attribution": "Valve inventory-render traces; rights remain with their respective owners. See ../../../CREDITS.md.",
   "fill": "#f0f3f5",
-  "orientation": "Original source orientation; muzzle +x, grip +y.",
+  "orientation": "Original source orientation; firearms muzzle +x, grip +y; knives retain their source pose.",
   "weapons": {
     "ak47": {
       "file": "ak47.svg",
@@ -243,6 +243,48 @@
       ],
       "pathSha256": "bb2e84363e72c52eafaa97e35fbc48fd5ec9658a66cd234d1b4bb7cd772bb1a3",
       "svgSha256": "c5ca8c4b78a79a3181e110e4f150856b6c88a4eb2ebaabcd3a6239b8f9f7f097"
+    },
+    "knife-classic": {
+      "file": "knife-classic.svg",
+      "sourceId": "knife",
+      "width": 754,
+      "height": 614,
+      "viewBox": [
+        -0.376,
+        -0.314,
+        0.754,
+        0.614
+      ],
+      "pathSha256": "3c619623acd22f5bd92648631e012988dff097fb5305ca63a18e5092d3ee60a4",
+      "svgSha256": "166977930023dfb4acc6ba278c5500a39738c06e62d036aa5428c0733fba7315"
+    },
+    "knife-karambit": {
+      "file": "knife-karambit.svg",
+      "sourceId": "karambit",
+      "width": 855,
+      "height": 605,
+      "viewBox": [
+        -0.428,
+        -0.3,
+        0.855,
+        0.605
+      ],
+      "pathSha256": "aabf3bc252780ab037181b9839265410784d7e12b5a38cb62c382fd1b223bcfe",
+      "svgSha256": "732039648893664f8d483ad9c7ca838fb89d0de571ce65247d81154f4ca46e6e"
+    },
+    "knife-butterfly": {
+      "file": "knife-butterfly.svg",
+      "sourceId": "butterfly",
+      "width": 733,
+      "height": 616,
+      "viewBox": [
+        -0.366,
+        -0.309,
+        0.733,
+        0.616
+      ],
+      "pathSha256": "2e2b7c8f2d52070049c7fae091d041a45e1c50440b71436e726067f9dae09576",
+      "svgSha256": "925f29cf1eea544a4ee862bc0353cdd12eb994db33c466d75e6c9ab76a19a199"
     }
   }
 }

@@ -159,6 +159,137 @@ export function overlayRect(L: HudLayout, desiredW: number, desiredH: number): H
   return { x: bounds.x + (bounds.w - w) / 2, y: bounds.y + (bounds.h - h) / 2, w, h };
 }
 
+export interface ModalSections {
+  compact: boolean;
+  /** Unsupported small panels put title/close/actions inside the scroll body. */
+  scrollAll: boolean;
+  headerH: number;
+  close: HudRect | null;
+  headerContent: HudRect | null;
+  body: HudRect;
+  footer: HudRect | null;
+}
+
+function panelPadding(panel: HudRect, requested = panel.w < 400 ? 16 : 24): number {
+  return Math.min(Math.max(0, requested), Math.max(0, panel.w / 2));
+}
+
+function modalChrome(panel: HudRect, compact: boolean, pad: number) {
+  const headerH = compact ? 52 : 60, closeW = compact ? 44 : 88;
+  const close = { x: panel.x + panel.w - (compact ? 8 : 16) - closeW,
+    y: panel.y + (compact ? 4 : 8), w: closeW, h: TOUCH_TARGET };
+  const headerContent = { x: panel.x + pad, y: close.y,
+    w: Math.max(0, close.x - 12 - panel.x - pad), h: TOUCH_TARGET };
+  return { headerH, close, headerContent };
+}
+
+function scrollingPanel(panel: HudRect): ModalSections {
+  const pad = Math.min(8, Math.max(0, panel.w / 2), Math.max(0, panel.h / 2));
+  return { compact: true, scrollAll: true, headerH: 0, close: null, headerContent: null,
+    body: { x: panel.x + pad, y: panel.y + pad,
+      w: Math.max(0, panel.w - pad * 2), h: Math.max(0, panel.h - pad * 2) }, footer: null };
+}
+
+/**
+ * Fixed modal chrome keeps a full 44px option reachable even in the 166px-high
+ * notched-landscape content box. Callers append chrome/actions to scroll content
+ * when scrollAll is true; never paint a fixed footer over that body.
+ */
+export function modalSections(panel: HudRect, primaryHeight = 48, padding?: number): ModalSections {
+  const primaryH = Math.max(TOUCH_TARGET, Number.isFinite(primaryHeight) ? primaryHeight : 48);
+  const pad = panelPadding(panel, padding), compact = panel.h < 260;
+  if (panel.h < Math.max(160, primaryH + 112) || panel.w - pad * 2 - 8 < TOUCH_TARGET) return scrollingPanel(panel);
+  const chrome = modalChrome(panel, compact, pad);
+  const footer = { x: panel.x + pad, y: panel.y + panel.h - (compact ? 8 : 16) - primaryH,
+    w: panel.w - pad * 2, h: primaryH };
+  const y = panel.y + chrome.headerH + (compact ? 4 : 8);
+  const body = { x: panel.x + pad, y, w: panel.w - pad * 2 - 8,
+    h: Math.max(0, footer.y - (compact ? 4 : 12) - y) };
+  return { compact, scrollAll: false, ...chrome, body, footer };
+}
+
+export interface ShopLayout extends ModalSections {
+  /** Inline on short panels; otherwise a fixed money/time band below the title. */
+  status: HudRect | null;
+  statusInline: boolean;
+  categories: HudRect[];
+  categoryColumns: number;
+  itemColumns: number;
+  itemWidth: number;
+  itemHeight: number;
+  itemGap: number;
+}
+
+/** Fixed money/category navigation; only the item list scrolls. */
+export function shopLayout(panel: HudRect, categoryCount = 6): ShopLayout {
+  const count = Number.isFinite(categoryCount) ? Math.max(0, Math.floor(categoryCount)) : 0;
+  const pad = panelPadding(panel), innerW = Math.max(0, panel.w - pad * 2), compact = panel.h < 300;
+  const chrome = modalChrome(panel, compact, pad), gap = compact ? 4 : 8;
+  const categoryColumns = count === 0 ? 0 : Math.min(count,
+    innerW >= count * (compact ? 56 : 88) + (count - 1) * gap ? count : innerW >= 280 ? 3 : 2);
+  const rows = categoryColumns ? Math.ceil(count / categoryColumns) : 0;
+  const statusInline = compact;
+  const status = compact ? chrome.headerContent : { x: panel.x + pad, y: panel.y + chrome.headerH + 4, w: innerW, h: 44 };
+  const categoryY = compact ? panel.y + chrome.headerH + 4 : status.y + status.h + 8;
+  const categoriesH = rows ? rows * TOUCH_TARGET + (rows - 1) * gap : 0;
+  const bodyY = categoryY + categoriesH + (compact ? 4 : 12);
+  const bottom = panel.y + panel.h - (compact ? 8 : 12);
+  // The extreme short panel uses inline status instead of a clipped footer.
+  const footerH = bottom - bodyY >= TOUCH_TARGET + 32 ? 24 : 0;
+  const body = { x: panel.x + pad, y: bodyY, w: Math.max(0, innerW - 8),
+    h: Math.max(0, bottom - bodyY - (footerH ? footerH + 8 : 0)) };
+  if (body.h < TOUCH_TARGET || body.w < TOUCH_TARGET || panel.h < 104) {
+    const fallback = scrollingPanel(panel);
+    return { ...fallback, status: null, statusInline: false, categories: [], categoryColumns: 0,
+      itemColumns: 1, itemWidth: fallback.body.w, itemHeight: 44, itemGap: 8 };
+  }
+  const categoryW = categoryColumns ? (innerW - (categoryColumns - 1) * gap) / categoryColumns : 0;
+  const categories = Array.from({ length: count }, (_, i) => ({
+    x: panel.x + pad + i % categoryColumns * (categoryW + gap),
+    y: categoryY + Math.floor(i / categoryColumns) * (TOUCH_TARGET + gap), w: categoryW, h: TOUCH_TARGET,
+  }));
+  const footer = footerH ? { x: panel.x + pad, y: bottom - footerH, w: innerW, h: footerH } : null;
+  const itemColumns = body.w >= 560 ? 2 : 1, itemHeight = body.h < 70 ? 44 : 70;
+  return { compact, scrollAll: false, ...chrome, body, footer, status, statusInline, categories, categoryColumns,
+    itemColumns, itemWidth: (body.w - (itemColumns - 1) * 12) / itemColumns, itemHeight, itemGap: itemHeight === 44 ? 8 : 10 };
+}
+
+export interface TacticalMapLayout {
+  compact: boolean;
+  headerH: number;
+  close: HudRect;
+  headerContent: HudRect;
+  map: HudRect;
+  legend: HudRect;
+  footer: HudRect | null;
+  sideLegend: boolean;
+}
+
+/** Short landscape puts the legend beside the map, not in its height budget. */
+export function tacticalMapLayout(panel: HudRect): TacticalMapLayout {
+  const pad = panelPadding(panel), compact = panel.h < 300;
+  const chrome = modalChrome(panel, compact, pad);
+  const top = Math.min(panel.y + panel.h, panel.y + chrome.headerH + 8);
+  const bottom = Math.max(top, panel.y + panel.h - (compact ? 8 : 12));
+  const w = Math.max(0, panel.w - pad * 2), h = Math.max(0, bottom - top);
+  const sideLegend = panel.w >= 400 && panel.h < 400;
+  if (sideLegend) {
+    const size = Math.max(0, Math.min(h, w - 156));
+    const map = { x: panel.x + pad, y: top, w: size, h: size };
+    const x = map.x + size + 16, legendW = Math.max(0, panel.x + panel.w - pad - x);
+    const footerH = Math.min(24, h), legendH = Math.max(0, h - footerH - 8);
+    return { compact, ...chrome, map, sideLegend,
+      legend: { x, y: top, w: legendW, h: legendH },
+      footer: footerH ? { x, y: bottom - footerH, w: legendW, h: footerH } : null };
+  }
+  const footerH = Math.min(24, h), legendH = Math.min(44, Math.max(0, h - footerH - 8));
+  const size = Math.max(0, Math.min(w, h - legendH - footerH - 16));
+  const map = { x: panel.x + (panel.w - size) / 2, y: top, w: size, h: size };
+  return { compact, ...chrome, map, sideLegend,
+    legend: { x: panel.x + pad, y: Math.min(bottom - footerH, top + size + 8), w, h: legendH },
+    footer: footerH ? { x: panel.x + pad, y: bottom - footerH, w, h: footerH } : null };
+}
+
 /** Radar size/position is shared with the score, touch and feedback geometry. */
 export function radarRect(L: HudLayout): HudRect {
   let size = L.short ? Math.round(Math.min(96, Math.max(64, L.availH * 0.33)))
@@ -217,10 +348,13 @@ export function killfeedColumns(row: HudRect, headshot = false) {
 
 /** Flexible name column, bounded numeric/status slots; no desktop x-220 offsets. */
 export function scoreboardColumns(panel: HudRect): Record<'name' | 'kills' | 'deaths' | 'status', HudTableColumn> {
-  const pad = Math.min(20, panel.w * 0.05), gap = Math.min(8, panel.w * 0.02);
+  // Match the body's 12px clip inset even on deeply notched narrow phones.
+  const pad = Math.min(panel.w / 2, Math.max(12, Math.min(20, panel.w * 0.05)));
+  const gap = Math.min(panel.w < 300 ? 3 : 8, panel.w * 0.02);
   const available = Math.max(0, panel.w - pad * 2 - gap * 3);
-  const numeric = Math.min(48, available * 0.15);
-  const statusW = Math.min(80, available * 0.24);
+  const numeric = Math.min(48, Math.max(available * .15, Math.min(36, available * .22)));
+  const nameMin = Math.min(80, Math.max(0, available - numeric * 2 - Math.min(44, available * .24)));
+  const statusW = Math.min(80, available * .24, Math.max(0, available - numeric * 2 - nameMin));
   const name = { x: panel.x + pad, w: available - numeric * 2 - statusW };
   const kills = { x: name.x + name.w + gap, w: numeric };
   const deaths = { x: kills.x + kills.w + gap, w: numeric };
@@ -231,11 +365,17 @@ export function scoreboardColumns(panel: HudRect): Record<'name' | 'kills' | 'de
 /** Use one scroll region for both teams; headers/close/footer remain fixed. */
 export function scoreboardBodyLayout(panel: HudRect, rowCount: number) {
   const rowHeight = 28, teamHeaderHeight = 32;
-  const headerH = Math.min(72, panel.h), footerH = Math.min(20, Math.max(0, panel.h - headerH));
+  const headerH = Math.min(panel.h < 300 ? 52 : 72, panel.h);
+  // 12px middle-baseline footer text needs its own 28px band, not 20px
+  // overlapping the bottom four pixels of the scroll clip.
+  const footerH = Math.min(28, Math.max(0, panel.h - headerH));
   const pad = Math.min(12, panel.w / 2);
   const body = { x: panel.x + pad, y: panel.y + headerH, w: Math.max(0, panel.w - pad * 2), h: Math.max(0, panel.h - headerH - footerH) };
+  const footer = { x: panel.x + pad, y: panel.y + panel.h - footerH, w: body.w, h: footerH };
+  const close = { x: panel.x + panel.w - pad - Math.min(44, body.w), y: panel.y + Math.min(4, Math.max(0, headerH - 44)),
+    w: Math.min(44, body.w), h: Math.min(44, headerH) };
   const contentH = Math.max(0, rowCount) * rowHeight + teamHeaderHeight * 2;
-  return { body, rowHeight, teamHeaderHeight, contentH, maxScroll: Math.max(0, contentH - body.h) };
+  return { body, rowHeight, teamHeaderHeight, contentH, maxScroll: Math.max(0, contentH - body.h), headerH, footer, close };
 }
 
 /** Bottom-left health/armor/money panel; short screens use fewer content rows. */
@@ -561,6 +701,7 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
  */
 export function ellipsize(ctx: CanvasRenderingContext2D, str: string, maxW: number): string {
   if (ctx.measureText(str).width <= maxW) return str;
+  if (!(maxW > 0) || ctx.measureText('…').width > maxW) return '';
   let lo = 0, hi = str.length;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;

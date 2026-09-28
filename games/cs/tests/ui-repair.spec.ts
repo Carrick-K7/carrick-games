@@ -8,6 +8,17 @@ async function boot(page: Page, lang: string) {
   await page.goto('/#/cs');
   await expect.poll(async () => (await info(page))?.ready, { timeout: 60_000 }).toBe(true);
 }
+async function swipeContent(page: Page) {
+  const body = await page.evaluate(() => {
+    const ui = (window as any).__CSX_DEBUG__.ui(), r = ui.regions.find((r: any) => r.id === null && r.h >= 44);
+    const canvas = document.getElementById('gameCanvas')!.getBoundingClientRect();
+    if (!r) throw new Error('No visible game-owned scroll body');
+    return { x: canvas.x + (r.x + r.w / 2) * canvas.width / ui.width,
+      from: canvas.y + (r.y + r.h - 8) * canvas.height / ui.height,
+      to: canvas.y + (r.y + 8) * canvas.height / ui.height };
+  });
+  await swipe(page, body.x, body.from, body.to);
+}
 async function reveal(page: Page, id: string, touch: boolean) {
   for (let n = 0; n < 12; n++) {
     if (await uiRegion(page, id)) return;
@@ -99,9 +110,9 @@ test.describe('CS touch sliders and short shop', () => {
     await expect.poll(async () => (await info(page)).playerAlive).toBe(true);
     await page.keyboard.press('b');
     await expect.poll(() => uiRegion(page, 'shop-close')).not.toBeNull();
-    for (let n = 0; n < 6 && !(await uiRegion(page, 'shop-category-equipment')); n++) await swipe(page, 420, 310, 165);
+    for (let n = 0; n < 6 && !(await uiRegion(page, 'shop-category-equipment')); n++) await swipeContent(page);
     await activateUi(page, 'shop-category-equipment', true);
-    for (let n = 0; n < 8 && !(await uiRegion(page, 'shop-item-he')); n++) await swipe(page, 420, 310, 165);
+    for (let n = 0; n < 8 && !(await uiRegion(page, 'shop-item-he')); n++) await swipeContent(page);
     await activateUi(page, 'shop-item-he', true);
     await page.screenshot({ path: testInfo.outputPath('short-shop.png') });
     await activateUi(page, 'shop-close', true);

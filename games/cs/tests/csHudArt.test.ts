@@ -48,11 +48,12 @@ function recorder(throwOnFill = false) {
   }) as unknown as CanvasRenderingContext2D;
   return { ctx, paints, currentPath, initial, snapshot, api, stack };
 }
-const kinds: HudIconKind[] = ['health', 'armor'];
+const kinds: HudIconKind[] = ['health', 'armor', 'headshot', 'grenade', 'bomb'];
 const expected = {
   ak47: 'ak47', m4a1: 'm4a1s', awp: 'awp', mp5: 'mp5', tmp: 'mp9', p90: 'p90',
   mac10: 'mac10', sg552: 'sg552', aug: 'aug', scout: 'scout', g3sg1: 'g3sg1',
   m3: 'm3', xm1014: 'xm1014', m249: 'm249', deagle: 'deagle', usp: 'usp', glock: 'glock',
+  'knife-classic': 'knife', 'knife-karambit': 'karambit', 'knife-butterfly': 'butterfly',
 };
 // Independently audited minima of source anchors/control points: normalized
 // traces are not perfectly centered at zero after relative-command rounding.
@@ -61,6 +62,7 @@ const expectedOrigins: Record<string, [number, number]> = {
   tmp: [-.446, -.3], p90: [-.489, -.299], mac10: [-.238, -.298], sg552: [-.515, -.263],
   aug: [-.437, -.299], scout: [-.516, -.239], g3sg1: [-.516, -.286], m3: [-.511, -.264],
   xm1014: [-.524, -.231], m249: [-.419, -.316], deagle: [-.356, -.305], usp: [-.516, -.265], glock: [-.381, -.302],
+  'knife-classic': [-.376, -.314], 'knife-karambit': [-.428, -.3], 'knife-butterfly': [-.366, -.309],
 };
 const assetDir = new URL('../public/assets/ui/weapons/', import.meta.url);
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -71,7 +73,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe('CS original HUD artwork', () => {
   for (const kind of kinds) {
     it(`${kind}: fits ammo/shop/tiny/portrait bounds and preserves canvas state/path`, () => {
-      for (const [w, h] of [[54, 14], [72, 22], [14, 14], [18, 18], [3, 23], [.5, .25]]) {
+      for (const [w, h] of [[54, 14], [72, 22], [14, 14], [16, 16], [18, 18], [3, 23], [.5, .25]]) {
         const r = recorder(), x = -11.25, y = 7.5;
         const callerPath = structuredClone(r.currentPath.contours);
         drawHudIcon(r.ctx, kind, x, y, w, h, '#cfd6da');
@@ -158,10 +160,21 @@ describe('CS original HUD artwork', () => {
     }
   });
 
-  it('restores caller state even when painting throws', () => {
-    const r = recorder(true);
-    expect(() => drawHudIcon(r.ctx, 'armor', 0, 0, 54, 14, '#fff')).toThrow('paint failed');
-    expect(r.snapshot()).toEqual(r.initial); expect(r.api.restore).toHaveBeenCalledOnce(); expect(r.stack).toEqual([]);
+  it('leaves unknown icon kinds unpainted for the caller\'s readable fallback', () => {
+    for (const kind of ['unknown', 'knife', '__proto__', 'constructor', 'toString']) {
+      const r = recorder(), path = structuredClone(r.currentPath.contours);
+      drawHudIcon(r.ctx, kind as HudIconKind, 0, 0, 16, 16, '#fff');
+      expect(r.paints).toEqual([]); expect(r.api.save).not.toHaveBeenCalled();
+      expect(r.snapshot()).toEqual(r.initial); expect(r.currentPath.contours).toEqual(path);
+    }
+  });
+
+  it('restores caller state even when painting any icon throws', () => {
+    for (const kind of kinds) {
+      const r = recorder(true);
+      expect(() => drawHudIcon(r.ctx, kind, 0, 0, 16, 16, '#fff')).toThrow('paint failed');
+      expect(r.snapshot()).toEqual(r.initial); expect(r.api.restore).toHaveBeenCalledOnce(); expect(r.stack).toEqual([]);
+    }
   });
 
   it('supports minimal CPU contexts when Path2D is unavailable with identical painted contours', () => {
@@ -175,17 +188,17 @@ describe('CS original HUD artwork', () => {
   });
 });
 
-describe('CS offline-derived firearm SVGs', () => {
-  it('exports exactly the 17 own firearms with explicit name-correct mappings, not utility approximations', () => {
+describe('CS offline-derived weapon SVGs', () => {
+  it('exports exactly the 17 own firearms and three knife appearances, not utility approximations', () => {
     const firearms = Object.entries(WEAPONS).filter(([, weapon]) => !('utility' in weapon && weapon.utility) && weapon.mag > 0).map(([id]) => id);
     expect(firearms).toHaveLength(17);
-    expect(Object.keys(expected).sort()).toEqual(firearms.sort());
+    expect(Object.keys(expected).sort()).toEqual([...firearms, 'knife-classic', 'knife-karambit', 'knife-butterfly'].sort());
     expect(HUD_WEAPON_SOURCES).toEqual(expected);
     expect(WEAPONS.m4a1.name).toBe('M4A1-S'); expect(expected.m4a1).toBe('m4a1s');
     expect(WEAPONS.tmp.name).toBe('MP9'); expect(expected.tmp).toBe('mp9');
     expect(WEAPONS.m3.name).toBe('Nova'); expect(WEAPONS.scout.name).toBe('SSG 08');
     expect(WEAPONS.sg552.name).toBe('SG 553'); expect(WEAPONS.mp5.name).toBe('MP5-SD'); expect(WEAPONS.usp.name).toBe('USP-S');
-    expect(readdirSync(assetDir).sort()).toEqual([...firearms.map(id => `${id}.svg`), 'manifest.json'].sort());
+    expect(readdirSync(assetDir).sort()).toEqual([...Object.keys(expected).map(id => `${id}.svg`), 'manifest.json'].sort());
   });
 
   for (const [id, sourceId] of Object.entries(expected)) {
@@ -218,9 +231,9 @@ describe('CS offline-derived firearm SVGs', () => {
     }
   });
 
-  it('refuses knife/HE/C4 and unknown IDs rather than substituting an invented firearm', () => {
-    for (const id of ['knife', 'he', 'c4', 'armor', '', '__proto__', 'constructor', 'future-weapon']) {
-      expect(() => hudWeaponSvg(id)).toThrow('No exact HUD firearm source');
+  it('refuses ambiguous knife, utilities and unknown IDs rather than inventing a weapon silhouette', () => {
+    for (const id of ['knife', 'knife-unknown', 'he', 'c4', 'grenade', 'bomb', 'armor', '', '__proto__', 'constructor', 'future-weapon']) {
+      expect(() => hudWeaponSvg(id)).toThrow('No exact HUD weapon source');
     }
   });
 });

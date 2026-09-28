@@ -7,7 +7,7 @@ import { drawHudIcon, drawTeamBadge } from './csHudArt.js';
 import {
   aimGeometry, buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
   normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout, killfeedColumns,
-  TOUCH_TARGET, weaponPanelRect, type HudLayout, type HudSafeArea, type HudRect,
+  TOUCH_TARGET, weaponPanelRect, modalSections, shopLayout, tacticalMapLayout, type ModalSections, type HudLayout, type HudSafeArea, type HudRect,
   type TouchButtonId,
 } from './csHudLayout.js';
 
@@ -21,6 +21,8 @@ export interface HudRegion {
   deferTap?: boolean;
   dragAxis?: 'x';
   scroll?: HudScroll;
+  /** Rich purchase rows must expose their complete name/price before activation. */
+  minVisibleHeight?: number;
 }
 type Ctx = CanvasRenderingContext2D;
 export interface CsHudView {
@@ -42,7 +44,7 @@ export interface CsHudView {
   money: string | null; buyTimeText: string;
   matchEnd: { won: boolean; title: string; score: string; stats: string } | null;
   radio: { title: string; options: string[] } | null;
-  killfeed: { aName: string; aTeam: string; aMe: boolean; bName: string; bTeam: string; weaponId?: string; weapon: string; head: boolean; time: number }[];
+  killfeed: { aName: string; aTeam: string; aMe: boolean; bName: string; bTeam: string; weaponId?: string; weaponIconId?: string; weapon: string; head: boolean; time: number }[];
   scoreboardOpen: boolean; bombMarker: unknown;
 }
 const C = { text: UI.text, dim: UI.dim, faint: UI.muted, amber: UI.accent,
@@ -52,7 +54,9 @@ const MAP_EN: Record<string, { name: string; intro: string; hint: string }> = {
   de_dust2: { name: 'Dust II', intro: 'Fight through long A, mid doors and B tunnels. Two bomb sites.', hint: 'Buy at your spawn, then attack or defend sites A and B.' },
 };
 const HUD_FIREARMS = new Set(['ak47', 'm4a1', 'awp', 'mp5', 'tmp', 'p90', 'mac10', 'sg552', 'aug', 'scout', 'g3sg1', 'm3', 'xm1014', 'm249', 'deagle', 'usp', 'glock']);
+const HUD_KNIVES = new Set(['knife-classic', 'knife-karambit', 'knife-butterfly']);
 type Choice = { id: string; label: string; selected: boolean; action: () => void; disabled?: boolean; tone?: UiTone };
+type PanelClose = { id: string; run: () => void; label?: string; icon?: string };
 
 export class CsHud {
   regions: HudRegion[] = [];
@@ -63,6 +67,9 @@ export class CsHud {
   private readonly scoreboardScroll = new HudScroll();
   private readonly pauseScroll = new HudScroll();
   private readonly resultScroll = new HudScroll();
+  private readonly radioScroll = new HudScroll();
+  private lastBuyCategory = '';
+  private lastRadioMenu: string | null = null;
   private regionDy = 0;
   private regionClip: HudRect | null = null;
   private regionScroll: HudScroll | null = null;
@@ -98,7 +105,10 @@ export class CsHud {
     if (['armor', 'vest', 'kit'].includes(id)) {
       drawHudIcon(ctx, 'armor', x, y, w, h, disabled ? C.faint : C.text); return true;
     }
-    if (!HUD_FIREARMS.has(id)) return false;
+    if (id === 'he' || id === 'c4') {
+      drawHudIcon(ctx, id === 'he' ? 'grenade' : 'bomb', x, y, w, h, disabled ? C.faint : C.text); return true;
+    }
+    if (!HUD_FIREARMS.has(id) && !HUD_KNIVES.has(id)) return false;
     const image = this.image(this.weaponIcons, `assets/ui/weapons/${id}.svg`);
     if (!image) return false;
     const scale = Math.min(w / image.naturalWidth, h / image.naturalHeight);
@@ -130,10 +140,11 @@ export class CsHud {
     if (e.settingsOpen) return this.settingsScroll;
     if (e.phase === 'menu') return this.menuScroll;
     if (e.hud.matchEnd) return this.resultScroll;
+    if (e.radioMenu) return this.radioScroll;
+    if (e.hud.scoreboardOpen) return this.scoreboardScroll;
     if (e.phase === 'paused') return this.pauseScroll;
     if (e.mapOpen) return null;
     if (e.buyOpen) return this.buyScroll;
-    if (e.hud.scoreboardOpen) return this.scoreboardScroll;
     return null;
   }
   wantsWheel() { return !!this.activeScroll() || this.engine.mapOpen; }
@@ -146,6 +157,8 @@ export class CsHud {
       const x = Math.max(region.x, c.x), y = Math.max(region.y, c.y);
       const right = Math.min(region.x + region.w, c.x + c.w), bottom = Math.min(region.y + region.h, c.y + c.h);
       if (right - x < 4 || bottom - y < 4) return;
+      if (r.down && r.w >= TOUCH_TARGET && r.h >= TOUCH_TARGET
+        && (right - x < TOUCH_TARGET || bottom - y < (r.minVisibleHeight ?? TOUCH_TARGET))) return;
       region = { ...region, x, y, w: right - x, h: bottom - y };
       if (region.down) { region.deferTap = true; if (this.regionScroll) region.scroll = this.regionScroll; }
     }
@@ -191,15 +204,25 @@ export class CsHud {
   private dimScreen(ctx: Ctx, W: number, H: number) {
     ctx.fillStyle = 'rgba(5,10,15,.48)'; ctx.fillRect(0, 0, W, H);
   }
-  private frame(ctx: Ctx, L: HudLayout, w: number, h: number, title: string, close?: { id: string; run: () => void; label?: string }) {
-    const r = overlayRect(L, w, h);
+  private frame(ctx: Ctx, L: HudLayout, w: number, h: number, title: string, close?: PanelClose,
+    chrome?: { headerH: number; close: HudRect | null }) {
+    const r = overlayRect(L, w, h), c = chrome ?? modalSections(r);
     this.regions = []; this.dimScreen(ctx, L.W, L.H); this.panel(ctx, r.x, r.y, r.w, r.h);
-    ctx.fillStyle = UI.header; ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, 58);
-    uiRule(ctx, r.x + 1, r.y + 59, r.w - 2);
-    ctx.fillStyle = UI.ct; ctx.fillRect(r.x, r.y, 3, 59);
-    this.text(ctx, title, r.x + 20, r.y + 30, 21, C.text, 'left', false, r.w - (close ? 132 : 40));
-    if (close) this.button(ctx, r.x + r.w - 104, r.y + 8, 88, 44, close.label || this.L('关闭', 'Close'), close.run, { id: close.id });
+    if (c.headerH > 0) {
+      ctx.fillStyle = UI.header; ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, c.headerH - 2);
+      uiRule(ctx, r.x + 1, r.y + c.headerH - 1, r.w - 2);
+      ctx.fillStyle = UI.ct; ctx.fillRect(r.x, r.y, 3, c.headerH - 1);
+      this.text(ctx, title, r.x + 20, r.y + c.headerH / 2, c.headerH < 60 ? 18 : 21, C.text, 'left', false,
+        close && c.close ? c.close.x - r.x - 32 : r.w - 40);
+    }
+    if (close && c.close) this.button(ctx, c.close.x, c.close.y, c.close.w, c.close.h,
+      c.close.w <= 44 ? close.icon || '×' : close.label || this.L('关闭', 'Close'), close.run, { id: close.id });
     return r;
+  }
+  private inlineHeader(ctx: Ctx, body: HudRect, title: string, close?: PanelClose) {
+    this.text(ctx, title, body.x, body.y + 22, 18, C.text, 'left', false, body.w - (close ? 56 : 0));
+    if (close) this.button(ctx, body.x + body.w - 44, body.y, 44, 44, close.icon || '×', close.run, { id: close.id });
+    uiRule(ctx, body.x, body.y + 51, body.w);
   }
 
   // One menu for every device. The action footer does not depend on how many
@@ -207,16 +230,19 @@ export class CsHud {
   private drawMenu(ctx: Ctx, L: HudLayout) {
     const e = this.engine, map = (MAPS as any)[e.selectedMap], en = MAP_EN[e.selectedMap];
     const title = L.availW < 400 ? this.L('CS / 对战', 'CS / Play') : this.L('CS / 对战准备', 'CS / Play');
-    const r = this.frame(ctx, L, 980, 638, title, { id: 'menu-settings', label: this.L('设置', 'Settings'), run: () => e.openSettings() });
-    const pad = r.w < 400 ? 16 : 24;
-    const body = { x: r.x + pad, y: r.y + 68, w: r.w - pad * 2 - 8, h: Math.max(1, r.h - 144) };
+    const close = { id: 'menu-settings', label: this.L('设置', 'Settings'), icon: '⚙', run: () => e.openSettings() };
+    const r = this.frame(ctx, L, 980, 638, title, close), sections = modalSections(r);
+    const topExtra = (sections.scrollAll ? 56 : 0) + (e.hud.menuError ? 32 : 0);
+    const body = { ...sections.body, y: sections.body.y + topExtra, h: Math.max(1, sections.body.h - topExtra) };
     const wide = body.w >= 720, gap = 32, colW = wide ? (body.w - gap) / 2 : body.w;
     const mapCardH = wide ? Math.min(280, Math.max(96, body.h - 180)) : 84;
     const mapH = wide ? mapCardH + 44 : 228;
     const configH = 336 + (e.selectedMode === 'tdm' ? 84 : 0);
     const contentH = wide ? Math.max(mapH + 124, configH) + 12 : mapH + configH + 28;
-    this.menuScroll.setMax(contentH - body.h);
-    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.menuScroll);
+    this.menuScroll.setMax(contentH + topExtra + (sections.scrollAll ? 60 : 0) - sections.body.h);
+    this.beginScroll(ctx, sections.body.x, sections.body.y, sections.body.w, sections.body.h, this.menuScroll);
+    if (sections.scrollAll) this.inlineHeader(ctx, sections.body, title, close);
+    if (e.hud.menuError) this.text(ctx, e.hud.menuError, body.x, body.y - 18, 12, C.red, 'left', false, body.w);
     this.text(ctx, this.L('选择地图', 'Map'), body.x, body.y + 8, 13, C.dim);
     const cards = [
       { id: 'fy_snow', name: this.L('雪地竞技场', 'Snow Arena'), detail: this.L('雪地近距离交战 · 地面拾枪', 'Close-range rounds · ground pickups') },
@@ -280,39 +306,43 @@ export class CsHud {
       { id: 'menu-pistol-default', label: this.L('阵营默认', 'Faction'), selected: e.selectedPistol === 'default', action: () => e.setPistol('default') },
       { id: 'menu-pistol-deagle', label: 'Desert Eagle', selected: e.selectedPistol === 'deagle', action: () => e.setPistol('deagle') },
     ]);
-    this.endScroll(ctx); this.scrollbar(ctx, this.menuScroll, body.x + body.w + 8, body.y, body.h);
-    const fy = r.y + r.h - 64;
-    uiRule(ctx, r.x + 1, fy - 12, r.w - 2);
     const label = e.bootLoading ? e.hud.menuStart.label : e.mapLoading ? this.L('正在装载地图…', 'Loading map…')
       : e.ready ? this.L('进入战场', 'Enter the Arena') : this.L('重试加载', 'Retry loading');
-    const actionW = wide ? 252 : r.w - pad * 2;
-    if (wide) {
-      drawTeamBadge(ctx, e.selectedTeam === 'ct' ? 'ct' : 't', r.x + pad, fy + 9, 28, e.selectedTeam === 'ct' ? C.blue : C.gold);
-      this.text(ctx, this.L(map.name, en.name) + ' / ' + e.selectedTeam.toUpperCase(), r.x + pad + 40, fy + 12, 14, C.text, 'left', true, r.w - actionW - pad * 3 - 40);
-      this.text(ctx, this.L('本地人机 · 地图作者：', 'Local bots · map by ') + map.credit, r.x + pad + 40, fy + 34, 12, C.dim, 'left', false, r.w - actionW - pad * 3 - 40);
-    }
-    this.button(ctx, r.x + r.w - pad - actionW, fy, actionW, 48, label, () => e.primaryAction(),
+    if (sections.scrollAll) this.button(ctx, body.x, body.y + contentH + 8, body.w, 48, label, () => e.primaryAction(),
       { id: 'menu-start', primary: true, disabled: e.bootLoading || e.mapLoading });
-    if (e.hud.menuError) this.text(ctx, e.hud.menuError, r.x + pad, r.y + 54, 12, C.red, 'left', false, r.w - pad * 2);
+    this.endScroll(ctx); this.scrollbar(ctx, this.menuScroll, sections.body.x + sections.body.w + 5, sections.body.y, sections.body.h);
+    if (sections.footer) {
+      const footer = sections.footer, actionW = wide ? 252 : footer.w;
+      uiRule(ctx, r.x + 1, footer.y - (sections.compact ? 4 : 12), r.w - 2);
+      if (wide) {
+        drawTeamBadge(ctx, e.selectedTeam === 'ct' ? 'ct' : 't', footer.x, footer.y + 9, 28, e.selectedTeam === 'ct' ? C.blue : C.gold);
+        this.text(ctx, this.L(map.name, en.name) + ' / ' + e.selectedTeam.toUpperCase(), footer.x + 40, footer.y + 12, 14, C.text, 'left', true, footer.w - actionW - 56);
+        this.text(ctx, this.L('本地人机 · 地图作者：', 'Local bots · map by ') + map.credit, footer.x + 40, footer.y + 34, 12, C.dim, 'left', false, footer.w - actionW - 56);
+      }
+      this.button(ctx, footer.x + footer.w - actionW, footer.y, actionW, footer.h, label, () => e.primaryAction(),
+        { id: 'menu-start', primary: true, disabled: e.bootLoading || e.mapLoading });
+    }
   }
 
   private drawSettings(ctx: Ctx, L: HudLayout) {
     const e = this.engine;
-    const r = this.frame(ctx, L, 560, 638, this.L('设置', 'Settings'), { id: 'settings-close', run: () => e.closeSettings() });
-    const pad = r.w < 400 ? 16 : 24, x = r.x + pad, w = r.w - pad * 2 - 8;
-    const top = r.y + 68, h = Math.max(1, r.h - 144);
-    this.settingsScroll.setMax(624 - h);
-    this.beginScroll(ctx, x, top, w, h, this.settingsScroll);
+    const title = this.L('设置', 'Settings'), close = { id: 'settings-close', run: () => e.closeSettings() };
+    const r = this.frame(ctx, L, 560, 638, title, close), sections = modalSections(r, 44);
+    const { body } = sections, x = body.x, w = body.w, top = body.y + (sections.scrollAll ? 56 : 0);
+    const compactSlider = body.h < 80, contentH = compactSlider ? 584 : 624;
+    this.settingsScroll.setMax(contentH + (sections.scrollAll ? 112 : 0) - body.h);
+    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.settingsScroll);
+    if (sections.scrollAll) this.inlineHeader(ctx, body, title, close);
     let y = top;
     const slider = (id: string, label: string, value: number, min: number, max: number, format: string, apply: (v: number) => void) => {
       this.text(ctx, label, x, y + 8, 14, C.text, 'left', false, w - 66);
       this.text(ctx, format, x + w, y + 8, 13, C.amber, 'right');
-      const sx = x + 8, sw = w - 16, sy = y + 42, t = (value - min) / (max - min);
+      const sx = x + 8, sw = w - 16, sy = y + (compactSlider ? 32 : 42), t = (value - min) / (max - min);
       uiRound(ctx, sx, sy - 2, sw, 4, C.border, undefined, 2);
       uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, C.amber, undefined, 2);
       ctx.fillStyle = C.text; ctx.fillRect(sx + sw * t - 5, sy - 8, 10, 16);
       const change = (px: number) => apply(min + Math.max(0, Math.min(1, (px - sx) / sw)) * (max - min));
-      this.push({ id, x, y: sy - 22, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += 84;
+      this.push({ id, x, y: compactSlider ? y : sy - 22, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += compactSlider ? 64 : 84;
     };
     slider('settings-sensitivity', this.L('鼠标灵敏度', 'Mouse sensitivity'), e.controlSettings.sensitivity, .1, 4, e.controlSettings.sensitivity.toFixed(2), v => e.setSensitivity(v));
     slider('settings-scope', this.L('开镜灵敏度', 'Scoped sensitivity'), e.controlSettings.scopeSensitivity, .1, 2, e.controlSettings.scopeSensitivity.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
@@ -329,9 +359,12 @@ export class CsHud {
     y += this.choices(ctx, this.L('音效', 'Sound'), x, y, w,
       [true, false].map(on => ({ id: `settings-sound-${on ? 'on' : 'off'}`, label: on ? this.L('开启', 'On') : this.L('关闭', 'Off'), selected: e.audio.enabled === on, action: () => { if (e.audio.enabled !== on) e.toggleSound(); } })));
     this.text(ctx, e.settingsNote || this.L('设置自动保存在此浏览器', 'Settings persist in this browser'), x, y + 14, 12, C.dim, 'left', false, w);
-    this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 8, top, h);
-    uiRule(ctx, r.x + 1, r.y + r.h - 72, r.w - 2);
-    this.button(ctx, x, r.y + r.h - 60, r.w - pad * 2, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
+    if (sections.scrollAll) this.button(ctx, x, top + contentH + 8, w, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
+    this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 5, body.y, body.h);
+    if (sections.footer) {
+      const f = sections.footer; uiRule(ctx, r.x + 1, f.y - (sections.compact ? 4 : 12), r.w - 2);
+      this.button(ctx, f.x, f.y, f.w, f.h, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
+    }
   }
 
   // Modal routing is exclusive: no underlying menu text or controls bleed
@@ -339,100 +372,204 @@ export class CsHud {
   draw(ctx: Ctx, W: number, H: number, presentationPaused = false) {
     const e = this.engine, L = computeHudLayout(W, H, this.safeArea);
     this.regions = []; ctx.save();
+    if (!e.radioMenu) this.lastRadioMenu = null;
     if (e.settingsOpen) this.drawSettings(ctx, L);
     else if (e.phase === 'menu') this.drawMenu(ctx, L);
     else if (e.hud.matchEnd) this.drawMatchEnd(ctx, L);
+    else if (e.radioMenu && e.hud.radio) this.drawRadio(ctx, L);
+    else if (e.hud.scoreboardOpen) this.drawScoreboard(ctx, L);
     else if (e.phase === 'paused' && !presentationPaused) this.drawPause(ctx, L);
     else if (e.mapOpen) this.drawTacticalMap(ctx, L);
     else if (e.buyOpen) this.drawBuyMenu(ctx, L);
-    else if (e.hud.scoreboardOpen) this.drawScoreboard(ctx, L);
     else this.drawMatchHud(ctx, L);
     if (presentationPaused) this.regions = [];
     ctx.restore();
   }
 
   private drawBuyMenu(ctx: Ctx, L: HudLayout) {
-    const e = this.engine, view = e.shopView();
-    const r = this.frame(ctx, L, 760, 560, this.L('购买装备', 'Equipment'), { id: 'shop-close', run: () => e.closeBuy() });
-    const pad = r.w < 400 ? 16 : 24, x = r.x + pad, w = r.w - pad * 2 - 8;
-    const top = r.y + 64, h = Math.max(1, r.h - 100), cols = w >= 560 ? 3 : 2;
-    const tabW = (w - (cols - 1) * 8) / cols, tabsH = Math.ceil(view.categories.length / cols) * 52;
-    const itemCols = w >= 560 ? 2 : 1, iw = (w - (itemCols - 1) * 12) / itemCols;
-    const contentH = 52 + tabsH + 20 + Math.ceil(view.items.length / itemCols) * 80;
-    this.buyScroll.setMax(contentH - h); this.beginScroll(ctx, x, top, w, h, this.buyScroll);
-    this.text(ctx, view.money, x, top + 12, 20, C.gold, 'left', true, w);
-    this.text(ctx, view.timeText, x, top + 36, 12, C.dim, 'left', false, w);
-    view.categories.forEach((cat, i) => this.button(ctx, x + i % cols * (tabW + 8), top + 56 + Math.floor(i / cols) * 52, tabW, 44,
-      this.L(cat.name, cat.nameEn), () => { e.setBuyCategory(cat.id); this.buyScroll.setMax(0); }, { id: `shop-category-${cat.id}`, selected: cat.active, small: true }));
-    const itemY = top + 56 + tabsH + 12;
+    const e = this.engine, view = e.shopView(), layout = shopLayout(overlayRect(L, 760, 560), view.categories.length);
+    const title = this.L('购买装备', 'Equipment'), close = { id: 'shop-close', run: () => e.closeBuy() };
+    const r = this.frame(ctx, L, 760, 560, layout.statusInline ? '' : title, close, layout);
+    if (this.lastBuyCategory !== e.buyCategory) { this.buyScroll.setMax(0); this.lastBuyCategory = e.buyCategory; }
+    const { body, itemWidth: iw, itemHeight: ih, itemColumns } = layout;
+    const notice = e.hud.notice?.text;
+    const money = view.free ? this.L('装备免费', 'Free gear') : view.money;
+    const status = (box: HudRect, inline: boolean) => {
+      if (inline) {
+        this.text(ctx, box.w < 240 ? this.L('购买', 'Buy') : title, box.x, box.y + 10, 16, C.text, 'left', false, Math.max(0, box.w - 112));
+        uiNumber(ctx, money, box.x + box.w, box.y + 10, 18, C.green, 'right', 108);
+        this.text(ctx, view.timeText + (notice && !layout.footer ? ' · ' + notice : ''), box.x, box.y + 32, 11, notice ? C.gold : C.dim, 'left', false, box.w);
+      } else {
+        uiNumber(ctx, money, box.x, box.y + 12, 20, C.green, 'left', box.w);
+        this.text(ctx, view.timeText, box.x, box.y + 35, 12, C.dim, 'left', false, box.w);
+      }
+    };
+    const drawCategory = (cat: typeof view.categories[number], box: HudRect) => this.button(ctx, box.x, box.y, box.w, box.h,
+      cat.id === 'equipment' ? this.L('装备', 'Gear') : cat.id === 'heavy' ? this.L('重型', 'Heavy') : this.L(cat.name, cat.nameEn),
+      () => e.setBuyCategory(cat.id), { id: `shop-category-${cat.id}`, selected: cat.active, small: true });
+    if (layout.status) status(layout.status, layout.statusInline);
+    if (!layout.scrollAll) view.categories.forEach((cat, i) => drawCategory(cat, layout.categories[i]));
+    const fallbackCatsH = Math.ceil(view.categories.length / 2) * 52;
+    const extra = layout.scrollAll ? 112 + fallbackCatsH : 0;
+    const contentH = extra + Math.ceil(view.items.length / itemColumns) * (ih + layout.itemGap);
+    this.buyScroll.setMax(contentH - body.h);
+    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.buyScroll);
+    if (layout.scrollAll) {
+      this.inlineHeader(ctx, body, title, close); status({ x: body.x, y: body.y + 56, w: body.w, h: 44 }, false);
+      view.categories.forEach((cat, i) => drawCategory(cat, { x: body.x + i % 2 * (body.w + 8) / 2,
+        y: body.y + 108 + Math.floor(i / 2) * 52, w: (body.w - 8) / 2, h: 44 }));
+    }
     view.items.forEach((item, i) => {
-      const ix = x + i % itemCols * (iw + 12), iy = itemY + Math.floor(i / itemCols) * 80;
-      uiRound(ctx, ix, iy, iw, 70, item.disabled ? '#20282f' : this.hovered(ix, iy, iw, 70) ? UI.hover : UI.raised, C.border, 1);
-      this.text(ctx, item.label, ix + 14, iy + 19, 14, item.disabled ? C.dim : C.text, 'left', true, iw - 100);
-      this.drawWeaponArtwork(ctx, item.id, ix + iw - 76, iy + 8, 62, 20, item.disabled);
-      this.text(ctx, item.detail, ix + 14, iy + 46, 12, C.dim, 'left', false, Math.max(0, iw - 114));
-      this.text(ctx, item.priceText, ix + iw - 14, iy + 46, 13, C.gold, 'right', false, 90);
-      this.push({ id: `shop-item-${item.id}`, x: ix, y: iy, w: iw, h: 70, disabled: item.disabled, down: () => e.buy(item.id) });
+      const ix = body.x + i % itemColumns * (iw + 12), iy = body.y + extra + Math.floor(i / itemColumns) * (ih + layout.itemGap);
+      const tint = item.status === 'owned' ? C.green : item.status === 'funds' ? C.red : C.gold;
+      uiRound(ctx, ix, iy, iw, ih, item.disabled ? '#20282f' : this.hovered(ix, iy, iw, ih) ? UI.hover : UI.raised, C.border, 1);
+      if (item.status === 'owned') { ctx.fillStyle = C.green; ctx.fillRect(ix, iy, 2, ih); }
+      uiFont(ctx, 12); const priceW = Math.min(90, Math.max(44, ctx.measureText(item.priceText).width + 4));
+      const detail = item.status === 'funds' || item.status === 'unavailable' ? item.statusText : item.detail;
+      if (ih < 70) {
+        this.text(ctx, item.label, ix + 12, iy + 12, 13, item.disabled ? C.dim : C.text, 'left', true, iw - 24);
+        this.text(ctx, detail, ix + 12, iy + 31, 11, item.status === 'funds' ? C.red : C.dim, 'left', false, Math.max(0, iw - priceW - 32));
+        this.text(ctx, item.priceText, ix + iw - 12, iy + 31, 12, tint, 'right', true, priceW);
+      } else {
+        const artW = iw >= 240 ? 62 : 40;
+        this.text(ctx, item.label, ix + 12, iy + 18, 14, item.disabled ? C.dim : C.text, 'left', true, iw - artW - 36);
+        this.drawWeaponArtwork(ctx, item.id, ix + iw - artW - 12, iy + 8, artW, 20, item.disabled);
+        this.text(ctx, detail, ix + 12, iy + 48, 12, item.status === 'funds' ? C.red : C.dim, 'left', false, Math.max(0, iw - priceW - 32));
+        this.text(ctx, item.priceText, ix + iw - 12, iy + 48, 13, tint, 'right', true, priceW);
+      }
+      this.push({ id: `shop-item-${item.id}`, x: ix, y: iy, w: iw, h: ih, minVisibleHeight: ih, disabled: item.disabled, down: () => e.buy(item.id) });
     });
-    this.endScroll(ctx); this.scrollbar(ctx, this.buyScroll, x + w + 8, top, h);
-    this.text(ctx, this.L('购买时对局继续进行', 'The round keeps running'), x, r.y + r.h - 18, 12, C.dim, 'left', false, w);
+    this.endScroll(ctx); this.scrollbar(ctx, this.buyScroll, body.x + body.w + 5, body.y, body.h);
+    if (layout.footer) {
+      const f = layout.footer; uiRule(ctx, r.x + 1, f.y - 4, r.w - 2);
+      this.text(ctx, notice || this.L('购买时对局继续进行', 'The round keeps running'), f.x, f.y + f.h / 2, 12, notice ? C.gold : C.dim, 'left', false, f.w);
+    }
   }
 
   private drawScoreboard(ctx: Ctx, L: HudLayout) {
-    const e = this.engine;
-    const r = this.frame(ctx, L, 640, 560, this.L('比赛记分板', 'Scoreboard'));
-    const { body, rowHeight, teamHeaderHeight, maxScroll } = scoreboardBodyLayout(r, e.all.length);
+    const e = this.engine, title = this.L('比赛记分板', 'Scoreboard');
+    const r = overlayRect(L, 640, 560), layout = scoreboardBodyLayout(r, e.all.length);
+    const close = { id: 'scoreboard-close', run: () => { e.hud.scoreboardOpen = false; e.keys.delete('Tab'); } };
+    this.frame(ctx, L, 640, 560, '', close, layout);
+    this.text(ctx, title, r.x + 20, r.y + 26, layout.headerH < 60 ? 18 : 21, C.text, 'left', false, r.w - 92);
+    if (layout.headerH >= 60) {
+      const map = (MAPS as any)[e.selectedMap];
+      const info = [map ? this.L(map.name, MAP_EN[e.selectedMap]?.name || map.name) : '', e.hud.roundLabel, e.hud.timerText].filter(Boolean).join(' · ');
+      this.text(ctx, info, r.x + 20, r.y + 54, 12, C.dim, 'left', false, r.w - 40);
+    }
+    const { body, rowHeight, teamHeaderHeight, maxScroll, footer } = layout;
     const col = scoreboardColumns(r), cx = (c: { x: number; w: number }) => c.x + c.w / 2;
     this.scoreboardScroll.setMax(maxScroll); this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.scoreboardScroll);
     let y = body.y + 14;
     for (const team of ['ct', 't'] as const) {
-      this.text(ctx, `${team.toUpperCase()}  ${e.scores[team]}`, col.name.x, y, 14, team === 'ct' ? C.blue : C.amber, 'left', true, col.name.w);
-      this.text(ctx, this.L('击杀', 'K'), cx(col.kills), y, 12, C.dim, 'center');
-      this.text(ctx, this.L('阵亡', 'D'), cx(col.deaths), y, 12, C.dim, 'center');
-      this.text(ctx, this.L('状态', 'State'), cx(col.status), y, 12, C.dim, 'center'); y += teamHeaderHeight;
-      for (const a of [...e.all].filter(a => a.team === team).sort((a, b) => b.kills - a.kills)) {
-        if (a.isPlayer) uiRound(ctx, body.x, y - 13, body.w, 26, UI.raised, undefined, 5);
-        this.text(ctx, a.name + (a.isPlayer ? this.L(' · 你', ' · you') : ''), col.name.x, y, 13, a.alive ? C.text : C.faint, 'left', a.isPlayer, col.name.w);
-        this.text(ctx, String(a.kills), cx(col.kills), y, 13, C.text, 'center');
-        this.text(ctx, String(a.deaths), cx(col.deaths), y, 13, C.text, 'center');
-        this.text(ctx, a.alive ? this.L('存活', 'Alive') : this.L('阵亡', 'Dead'), cx(col.status), y, 12, a.alive ? C.green : C.faint, 'center', false, col.status.w); y += rowHeight;
-      }
+      const color = team === 'ct' ? C.blue : C.gold;
+      ctx.fillStyle = team === 'ct' ? 'rgba(112,170,209,.15)' : 'rgba(197,170,103,.15)'; ctx.fillRect(body.x, y - 14, body.w, teamHeaderHeight);
+      ctx.fillStyle = color; ctx.fillRect(body.x, y - 14, 3, teamHeaderHeight);
+      const badgeSize = col.name.w < 100 ? 12 : 18;
+      drawTeamBadge(ctx, team, col.name.x + 4, y - badgeSize / 2, badgeSize, color);
+      const name = col.name.w >= 210 ? this.L(team === 'ct' ? '反恐精英' : '恐怖分子', team === 'ct' ? 'Counter-terrorists' : 'Terrorists') : team.toUpperCase();
+      const teamScoreW = col.name.w < 100 ? 28 : 32;
+      this.text(ctx, name, col.name.x + badgeSize + 8, y, 13, color, 'left', true, Math.max(0, col.name.w - badgeSize - 16 - teamScoreW));
+      uiNumber(ctx, String(e.scores[team]), col.name.x + col.name.w - 4, y, col.name.w < 100 ? 16 : 18, color, 'right', teamScoreW);
+      this.text(ctx, this.L('击杀', 'K'), cx(col.kills), y, 12, C.dim, 'center', false, col.kills.w);
+      this.text(ctx, this.L('阵亡', 'D'), cx(col.deaths), y, 12, C.dim, 'center', false, col.deaths.w);
+      this.text(ctx, this.L('状态', 'State'), cx(col.status), y, 12, C.dim, 'center', false, col.status.w); y += teamHeaderHeight;
+      const players = [...e.all].filter(a => a.team === team).sort((a, b) => b.kills - a.kills);
+      players.forEach((a, i) => {
+        ctx.fillStyle = a.isPlayer ? UI.raised : i % 2 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.08)'; ctx.fillRect(body.x, y - 12, body.w, 24);
+        if (a.isPlayer) { ctx.fillStyle = color; ctx.fillRect(body.x, y - 12, 3, 24); }
+        this.text(ctx, a.name + (a.isPlayer ? this.L(' · 你', ' · you') : ''), col.name.x + 4, y, 13, a.alive ? C.text : C.faint, 'left', a.isPlayer, col.name.w - 8);
+        uiNumber(ctx, String(a.kills), col.kills.x + col.kills.w - 4, y, 14, C.text, 'right', col.kills.w - 8);
+        uiNumber(ctx, String(a.deaths), col.deaths.x + col.deaths.w - 4, y, 14, C.text, 'right', col.deaths.w - 8);
+        this.text(ctx, a.alive ? this.L('存活', 'Alive') : this.L('阵亡', 'Dead'), cx(col.status), y, 12, a.alive ? C.green : C.faint, 'center', false, col.status.w);
+        uiRule(ctx, body.x, y + 14, body.w); y += rowHeight;
+      });
     }
     this.endScroll(ctx); this.scrollbar(ctx, this.scoreboardScroll, r.x + r.w - 7, body.y, body.h);
-    this.text(ctx, this.L('按住 Tab 查看 · 滚动查看全部队员', 'Hold Tab · scroll for all players'), r.x + r.w / 2, r.y + r.h - 18, 12, C.dim, 'center', false, r.w - 32);
+    uiRule(ctx, r.x + 1, footer.y, r.w - 2);
+    this.text(ctx, e.phase === 'paused' ? this.L('对局已暂停 · 滚动查看队员', 'Paused · scroll for all players')
+      : this.L('按住 Tab 查看 · 滚动查看队员', 'Hold Tab · scroll for all players'), footer.x + footer.w / 2, footer.y + footer.h / 2, 12, C.dim, 'center', false, footer.w);
   }
 
   private drawTacticalMap(ctx: Ctx, L: HudLayout) {
-    const e = this.engine;
-    const r = this.frame(ctx, L, 600, 660, this.L('战术地图', 'Tactical map'), { id: 'map-close', run: () => e.closeMap() });
-    const size = Math.max(1, Math.min(r.w - 32, r.h - 124));
-    const x = r.x + (r.w - size) / 2, y = r.y + 64;
-    e.drawRadarContent(ctx, x, y, size);
-    uiParagraph(ctx, this.L('白：自己 · 蓝：队友 · 橙：已发现敌人', 'White: you · Blue: team · Orange: spotted enemies'), r.x + 16, y + size + 8, r.w - 32, 12, C.dim, 2, 17);
-    this.text(ctx, this.L('查看地图时对局继续进行', 'The round keeps running'), r.x + 16, r.y + r.h - 14, 11, C.faint, 'left', false, r.w - 32);
+    const e = this.engine, layout = tacticalMapLayout(overlayRect(L, 600, 660));
+    this.frame(ctx, L, 600, 660, this.L('战术地图', 'Tactical map'), { id: 'map-close', run: () => e.closeMap() }, layout);
+    const { map, legend, footer } = layout;
+    if (map.w > 0) e.drawRadarContent(ctx, map.x, map.y, map.w);
+    if (layout.sideLegend && legend.h >= 54) {
+      [[C.text, this.L('自己', 'You')], [C.blue, this.L('队友', 'Teammates')], [C.amber, this.L('已发现敌人', 'Spotted enemies')]].forEach(([color, label], i) => {
+        const y = legend.y + i * 20 + 10;
+        ctx.fillStyle = color; ctx.fillRect(legend.x, y - 3, 6, 6);
+        this.text(ctx, label, legend.x + 16, y, 12, C.dim, 'left', false, legend.w - 16);
+      });
+    } else if (legend.h >= 17) uiParagraph(ctx, this.L('白：自己 · 蓝：队友 · 橙：已发现敌人', 'White: you · Blue: team · Orange: spotted enemies'), legend.x, legend.y, legend.w, 12, C.dim, Math.floor(legend.h / 17), 17);
+    if (footer && footer.h >= 14) this.text(ctx, this.L('查看地图时对局继续进行', 'The round keeps running'), footer.x, footer.y + footer.h / 2, 11, C.faint, 'left', false, footer.w);
   }
   private drawPause(ctx: Ctx, L: HudLayout) {
-    const e = this.engine, r = this.frame(ctx, L, 420, 352, this.L('对局已暂停', 'Match paused'));
-    const x = r.x + 20, w = r.w - 40, top = r.y + 68, h = Math.max(1, r.h - 140);
-    this.pauseScroll.setMax(164 - h); this.beginScroll(ctx, x, top, w, h, this.pauseScroll);
-    [
+    const e = this.engine, title = this.L('对局已暂停', 'Match paused');
+    const r = this.frame(ctx, L, 420, 352, title), sections = modalSections(r, 48, 20);
+    if (e.hud.notice && !sections.scrollAll) this.text(ctx, e.hud.notice.text, r.x + 20, r.y + sections.headerH - 9, 10, C.gold, 'left', false, r.w - 40);
+    const { body } = sections, top = body.y + (sections.scrollAll ? 56 : 0);
+    const items = [
       { id: 'pause-settings', label: this.L('设置', 'Settings'), run: () => e.openSettings() },
+      { id: 'pause-scoreboard', label: this.L('比赛记分板', 'Scoreboard'), run: () => { e.hud.scoreboardOpen = true; } },
+      { id: 'pause-radio', label: e.player?.alive ? this.L('无线电指令', 'Radio commands') : this.L('无线电（阵亡不可用）', 'Radio (alive players only)'), disabled: !e.player?.alive, run: () => e.openRadio('radio1') },
       { id: 'pause-restart', label: this.L('重新开始', 'Restart match'), run: () => e.startMatch() },
       { id: 'pause-menu', label: this.L('返回主菜单', 'Back to menu'), run: () => e.toMenu() },
-    ].forEach((item, i) => this.button(ctx, x, top + i * 56, w, 44, item.label, item.run, { id: item.id }));
-    this.endScroll(ctx); this.scrollbar(ctx, this.pauseScroll, x + w + 7, top, h);
-    this.button(ctx, x, r.y + r.h - 64, w, 48, this.L('继续对局', 'Resume match'), () => e.resumeGame(), { id: 'pause-resume', primary: true });
+    ];
+    const contentH = items.length * 56 - 12;
+    this.pauseScroll.setMax(contentH + (sections.scrollAll ? 116 : 0) - body.h);
+    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.pauseScroll);
+    if (sections.scrollAll) this.inlineHeader(ctx, body, title);
+    items.forEach((item, i) => this.button(ctx, body.x, top + i * 56, body.w, 44, item.label, item.run, { id: item.id, disabled: item.disabled }));
+    if (sections.scrollAll) this.button(ctx, body.x, top + contentH + 12, body.w, 48, this.L('继续对局', 'Resume match'), () => e.resumeGame(), { id: 'pause-resume', primary: true });
+    this.endScroll(ctx); this.scrollbar(ctx, this.pauseScroll, body.x + body.w + 5, body.y, body.h);
+    if (sections.footer) {
+      const f = sections.footer; uiRule(ctx, r.x + 1, f.y - (sections.compact ? 4 : 12), r.w - 2);
+      this.button(ctx, f.x, f.y, f.w, f.h, this.L('继续对局', 'Resume match'), () => e.resumeGame(), { id: 'pause-resume', primary: true });
+    }
   }
   private drawMatchEnd(ctx: Ctx, L: HudLayout) {
     const e = this.engine, end = e.hud.matchEnd!;
-    const r = this.frame(ctx, L, 480, 380, end.title);
-    const x = r.x + 20, w = r.w - 40, top = r.y + 64, h = Math.max(1, r.h - 140);
-    this.resultScroll.setMax(176 - h); this.beginScroll(ctx, x, top, w, h, this.resultScroll);
-    this.text(ctx, end.score, x, top + 28, 36, end.won ? C.gold : C.text, 'left', true, w);
-    uiParagraph(ctx, end.stats, x, top + 60, w, 13, C.dim, 2, 20);
+    const r = this.frame(ctx, L, 480, 380, end.title), sections = modalSections(r, 48, 20);
+    const { body } = sections, x = body.x, w = body.w, top = body.y + (sections.scrollAll ? 56 : 0);
+    this.resultScroll.setMax(176 + (sections.scrollAll ? 116 : 0) - body.h);
+    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.resultScroll);
+    if (sections.scrollAll) this.inlineHeader(ctx, body, end.title);
+    uiHudPlate(ctx, x, top, w, 56, end.won ? C.gold : C.blue);
+    this.text(ctx, 'CT', x + 12, top + 28, 13, C.blue, 'left', true);
+    this.text(ctx, 'T', x + w - 12, top + 28, 13, C.gold, 'right', true);
+    uiNumber(ctx, end.score, x + w / 2, top + 28, w < 240 ? 26 : 36, end.won ? C.gold : C.text, 'center', w - 64);
+    uiParagraph(ctx, end.stats, x, top + 64, w, 13, C.dim, 2, 20);
     this.button(ctx, x, top + 116, w, 44, this.L('返回主菜单', 'Back to menu'), () => e.toMenu(), { id: 'result-menu' });
-    this.endScroll(ctx); this.scrollbar(ctx, this.resultScroll, x + w + 7, top, h);
-    this.button(ctx, x, r.y + r.h - 64, w, 48, this.L('再来一局', 'Play again'), () => e.startMatch(), { id: 'result-replay', primary: true });
+    if (sections.scrollAll) this.button(ctx, x, top + 188, w, 48, this.L('再来一局', 'Play again'), () => e.startMatch(), { id: 'result-replay', primary: true });
+    this.endScroll(ctx); this.scrollbar(ctx, this.resultScroll, x + w + 5, body.y, body.h);
+    if (sections.footer) {
+      const f = sections.footer; uiRule(ctx, r.x + 1, f.y - (sections.compact ? 4 : 12), r.w - 2);
+      this.button(ctx, f.x, f.y, f.w, f.h, this.L('再来一局', 'Play again'), () => e.startMatch(), { id: 'result-replay', primary: true });
+    }
+  }
+
+  private drawRadio(ctx: Ctx, L: HudLayout) {
+    const e = this.engine, radio = e.hud.radio!;
+    const close = { id: 'radio-close', run: () => e.closeRadio() };
+    const r = this.frame(ctx, L, 420, 576, radio.title, close), sections = modalSections(r, 44);
+    const { body } = sections, top = body.y + (sections.scrollAll ? 56 : 0);
+    if (this.lastRadioMenu !== e.radioMenu) { this.radioScroll.setMax(0); this.lastRadioMenu = e.radioMenu; }
+    const contentH = radio.options.length * 52 - 8;
+    this.radioScroll.setMax(contentH + (sections.scrollAll ? 112 : 0) - body.h);
+    const tabs = (box: HudRect) => {
+      const w = (box.w - 12) / 3;
+      [['radio1', this.L('指令', 'Orders')], ['radio2', this.L('战术', 'Tactics')], ['radio3', this.L('报告', 'Reports')]].forEach(([id, label], i) =>
+        this.button(ctx, box.x + i * (w + 6), box.y, w, 44, label, () => e.openRadio(id), { id: `radio-group-${id}`, selected: e.radioMenu === id, small: true }));
+    };
+    if (!sections.scrollAll) this.text(ctx, e.phase === 'paused' ? this.L('对局暂停 · 数字键选择', 'Paused · number keys select') : this.L('对局继续 · 数字键选择', 'Round live · number keys select'), r.x + 20, r.y + sections.headerH - 9, 10, C.dim, 'left', false, sections.close ? sections.close.x - r.x - 32 : r.w - 40);
+    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.radioScroll);
+    if (sections.scrollAll) this.inlineHeader(ctx, body, radio.title, close);
+    radio.options.forEach((option, i) => this.button(ctx, body.x, top + i * 52, body.w, 44, `${i + 1}  ${option}`, () => e.chooseRadio(i), { id: `radio-choice-${i + 1}` }));
+    if (sections.scrollAll) tabs({ x: body.x, y: top + contentH + 12, w: body.w, h: 44 });
+    this.endScroll(ctx); this.scrollbar(ctx, this.radioScroll, body.x + body.w + 5, body.y, body.h);
+    if (sections.footer) { uiRule(ctx, r.x + 1, sections.footer.y - 4, r.w - 2); tabs(sections.footer); }
   }
 
   private drawMatchHud(ctx: Ctx, L: HudLayout) {
@@ -480,6 +617,8 @@ export class CsHud {
     if (h.center && feedback.center) {
       const r = feedback.center;
       this.panel(ctx, r.x, r.y, r.w, r.h, true);
+      ctx.fillStyle = ['ELIMINATED', 'RESPAWNING'].includes(h.center.kicker) ? C.red : C.gold;
+      ctx.fillRect(r.x, r.y, 3, r.h);
       this.text(ctx, h.center.title, r.x + r.w / 2, r.y + (r.h < 80 ? 18 : 25), 20, C.text, 'center', true, r.w - 24);
       this.text(ctx, h.center.detail, r.x + r.w / 2, r.y + (r.h < 80 ? 42 : 57), 12, C.dim, 'center', false, r.w - 24);
     }
@@ -512,9 +651,14 @@ export class CsHud {
     if (!compactHp) this.text(ctx, h.killCount + this.L(' 击杀', ' kills'), hp.x + hp.w - 10, hp.y + hp.h - 14, 11, C.dim, 'right');
     const wp = weaponPanelRect(L), compactWp = wp.w < 220 || wp.h < 90;
     uiHudPlate(ctx, wp.x, wp.y, wp.w, wp.h, e.player?.team === 'ct' ? C.blue : C.gold);
-    const weaponIcon = wp.w >= 240 && wp.h >= 90 && HUD_FIREARMS.has(e.gunId);
-    const weaponHeading = compactWp && e.player?.reload > 0 ? h.reloadState : h.weaponName;
-    this.text(ctx, weaponHeading, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, e.player?.reload > 0 ? C.gold : C.text, 'left', true, wp.w - (weaponIcon ? 88 : 24));
+    const inlineFeedback = h.center && !feedback.center ? h.center.title
+      : !h.center && h.notice && !feedback.notice ? h.notice.text
+      : h.objective && !feedback.objective ? h.objective.text
+      : h.pickup && !feedback.pickup ? this.L('拾取 · ', 'Pick up · ') + h.pickup.name : null;
+    const reloading = !!e.player?.alive && e.player.reload > 0;
+    const weaponIcon = !inlineFeedback && wp.w >= 240 && wp.h >= 90 && HUD_FIREARMS.has(e.gunId);
+    const weaponHeading = h.center && !feedback.center ? h.center.title : compactWp && reloading ? h.reloadState : inlineFeedback || h.weaponName;
+    this.text(ctx, weaponHeading, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, reloading || inlineFeedback ? C.gold : C.text, 'left', true, wp.w - (weaponIcon ? 88 : 24));
     if (weaponIcon) this.drawWeaponArtwork(ctx, e.gunId, wp.x + wp.w - 70, wp.y + 8, 56, 17);
     if (h.objectiveAction && !feedback.objectiveAction) {
       // Extremely short/notched windows may have no extra feedback lane. Keep
@@ -525,7 +669,7 @@ export class CsHud {
       uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, (wp.w - 24) * h.objectiveAction.progress01, 3, C.amber, undefined, 2);
     } else {
       uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 20 : 26, C.text, 'right', wp.w - 24);
-      if (!compactWp) this.text(ctx, h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
+      if (!compactWp) this.text(ctx, !e.player?.alive && e.player?.reload > 0 ? this.L('已阵亡', 'Eliminated') : h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
     }
     const slots = h.slots, gap = 4, bw = (wp.w - 24 - gap * (slots.length - 1)) / Math.max(1, slots.length);
     slots.forEach((s, i) => {
@@ -535,14 +679,6 @@ export class CsHud {
       this.text(ctx, s.key === 'grenade' ? `${s.num}·${h.grenadeCount}` : String(s.num), x + bw / 2, y + 10, 11, s.empty ? C.faint : s.equipped ? C.gold : C.dim, 'center', s.equipped);
     });
     if (h.damageOpacity > 0) { ctx.globalAlpha = Math.min(1, h.damageOpacity); ctx.strokeStyle = '#c33327'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, W, H); ctx.globalAlpha = 1; }
-    if (h.radio) {
-      const rw = Math.min(280, L.availW), rh = 60 + h.radio.options.length * 24;
-      const rr = overlayRect(L, rw, rh), rowH = Math.min(24, (rr.h - 64) / Math.max(1, h.radio.options.length));
-      this.panel(ctx, rr.x, rr.y, rr.w, rr.h);
-      this.text(ctx, h.radio.title, rr.x + 12, rr.y + 20, 14, C.amber);
-      h.radio.options.forEach((option, i) => this.text(ctx, `${i + 1}  ${option}`, rr.x + 12, rr.y + 42 + i * rowH, 12, C.text, 'left', false, rr.w - 24));
-      this.text(ctx, this.L('0  取消', '0  Cancel'), rr.x + 12, rr.y + rr.h - 12, 12, C.dim);
-    }
     if (e.touchMode) this.drawTouchControls(ctx, L);
     this.drawHitMarker(ctx, W, H);
   }
@@ -554,10 +690,11 @@ export class CsHud {
     const art = columns.weapon;
     // Use the historical event ID, not a translated label or the current gun:
     // switching weapons after a kill must not change its recorded silhouette.
-    const drawn = !!k.weaponId && HUD_FIREARMS.has(k.weaponId)
-      && this.drawWeaponArtwork(ctx, k.weaponId, art.x, art.y, art.w, art.h);
+    const iconId = k.weaponIconId || (k.weaponId !== 'knife' ? k.weaponId : undefined);
+    const known = !!iconId && (HUD_FIREARMS.has(iconId) || HUD_KNIVES.has(iconId) || iconId === 'he' || iconId === 'c4');
+    const drawn = known && this.drawWeaponArtwork(ctx, iconId, art.x, art.y, art.w, art.h);
     if (!drawn) this.text(ctx, k.weapon, art.x + art.w / 2, cy, 11, C.dim, 'center', false, art.w);
-    if (columns.head) this.text(ctx, 'HS', columns.head.x + columns.head.w / 2, cy, 10, C.gold, 'center', true, columns.head.w);
+    if (columns.head) drawHudIcon(ctx, 'headshot', columns.head.x, cy - 8, columns.head.w, 16, C.gold);
     this.text(ctx, k.bName, columns.victim.x + columns.victim.w, cy, 11, k.bTeam === 'ct' ? C.blue : C.amber, 'right', false, columns.victim.w);
   }
   private hitColor(): string {

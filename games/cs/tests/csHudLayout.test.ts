@@ -11,6 +11,9 @@ import {
   healthPanelRect,
   HudScroll,
   menuHeaderLayout,
+  modalSections,
+  shopLayout,
+  tacticalMapLayout,
   normalizeSafeArea,
   overlayBounds,
   overlayRect,
@@ -323,7 +326,7 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
       expect(columns.status.w).toBeGreaterThanOrEqual(44);
       const cells = Object.values(columns);
       cells.forEach((cell, i) => {
-        expectInside({ ...cell, y: body.y, h: rowHeight }, panel);
+        expectInside({ ...cell, y: body.y, h: rowHeight }, body);
         if (i > 0) expect(cell.x).toBeGreaterThan(cells[i - 1].x + cells[i - 1].w);
       });
       if (L.short) expect(maxScroll).toBeGreaterThan(0);
@@ -508,6 +511,135 @@ describe('csHudLayout: camera-centered aiming feedback', () => {
   });
 });
 
+describe('CS adaptive modal sections and fixed shop navigation', () => {
+  const panels = [
+    { name: 'menu', w: 980, h: 638, primary: 48 },
+    { name: 'settings', w: 560, h: 638, primary: 44 },
+    { name: 'pause', w: 420, h: 352, primary: 48 },
+    { name: 'results', w: 480, h: 380, primary: 48 },
+    { name: 'radio', w: 420, h: 560, primary: 44 },
+  ];
+  for (const { width, height, safe } of TOUCH_MATRIX) {
+    const L = computeHudLayout(width, height, safe);
+    const tag = `${width}x${height} ${JSON.stringify(safe)}`;
+    it(`${tag}: modal headers/actions are fixed and a full 44px choice can enter each body`, () => {
+      for (const spec of panels) {
+        const panel = overlayRect(L, spec.w, spec.h), sections = modalSections(panel, spec.primary);
+        expect(sections.scrollAll, spec.name).toBe(false);
+        expect(sections.body.h, spec.name).toBeGreaterThanOrEqual(44);
+        expect(sections.body.w, spec.name).toBeGreaterThanOrEqual(44);
+        expect(sections.close?.h, spec.name).toBe(44);
+        expect(sections.close!.w, spec.name).toBeGreaterThanOrEqual(44);
+        expect(sections.footer?.h, spec.name).toBe(spec.primary);
+        const rectangles = [sections.close!, sections.headerContent!, sections.body, sections.footer!];
+        rectangles.forEach((rect, i) => {
+          expectInside(rect, panel);
+          expect(rectsOverlap(rect, L.shellReserve)).toBe(false);
+          for (const other of rectangles.slice(0, i)) expect(rectsOverlap(rect, other), spec.name).toBe(false);
+        });
+        // At any height, scroll-to-row can expose a whole real target, not an
+        // unavoidable 22/26px sliver as in the previous 166px-high panels.
+        const scroll = new HudScroll();
+        const stride = 56, contentH = 8 * stride;
+        scroll.setMax(contentH - sections.body.h);
+        for (let i = 0; i < 8; i++) {
+          scroll.offset = clampScroll(i * stride, scroll.max);
+          const row = { x: sections.body.x, y: sections.body.y + i * stride - scroll.offset,
+            w: sections.body.w, h: 44 };
+          expectInside(row, sections.body);
+        }
+      }
+    });
+    it(`${tag}: shop keeps cash and all category targets outside a usable item-only scroll body`, () => {
+      const panel = overlayRect(L, 760, 560), shop = shopLayout(panel, 6);
+      expect(shop.scrollAll).toBe(false);
+      expect(shop.categories).toHaveLength(6);
+      expect(shop.body.h).toBeGreaterThanOrEqual(44);
+      expect(shop.itemHeight).toBeGreaterThanOrEqual(44);
+      expect(shop.itemHeight).toBeLessThanOrEqual(shop.body.h);
+      expect(shop.itemWidth).toBeGreaterThanOrEqual(44);
+      for (const category of shop.categories) {
+        expect(category.h).toBe(44); expect(category.w).toBeGreaterThanOrEqual(44);
+      }
+      const rectangles = [shop.close!, shop.status!, ...shop.categories, shop.body, ...(shop.footer ? [shop.footer] : [])];
+      rectangles.forEach((rect, i) => {
+        expectInside(rect, panel);
+        for (const other of rectangles.slice(0, i)) expect(rectsOverlap(rect, other)).toBe(false);
+      });
+      const before = JSON.stringify({ status: shop.status, categories: shop.categories, close: shop.close });
+      const scroll = new HudScroll(); scroll.setMax(1000); scroll.wheel(250);
+      const after = shopLayout(panel, 6);
+      expect(JSON.stringify({ status: after.status, categories: after.categories, close: after.close })).toBe(before);
+    });
+    it(`${tag}: actual 640x560 scoreboard has separate close/body/footer and column clip bounds`, () => {
+      const panel = overlayRect(L, 640, 560), layout = scoreboardBodyLayout(panel, 10), columns = scoreboardColumns(panel);
+      expect(layout.close.w).toBe(44); expect(layout.close.h).toBe(44);
+      expect(layout.body.h).toBeGreaterThanOrEqual(44);
+      const rectangles = [layout.close, layout.body, layout.footer];
+      rectangles.forEach((rect, i) => {
+        expectInside(rect, panel);
+        for (const other of rectangles.slice(0, i)) expect(rectsOverlap(rect, other)).toBe(false);
+      });
+      // The current 12px footer at bottom-18 fits wholly below the body clip.
+      expectInside({ x: layout.footer.x, y: panel.y + panel.h - 24, w: layout.footer.w, h: 12 }, layout.footer);
+      for (const column of Object.values(columns)) expectInside({ ...column, y: layout.body.y, h: 28 }, layout.body);
+    });
+    it(`${tag}: tactical map, legend and footer stay separated inside the modal`, () => {
+      const panel = overlayRect(L, 600, 660), layout = tacticalMapLayout(panel);
+      const rectangles = [layout.close, layout.headerContent, layout.map, layout.legend, ...(layout.footer ? [layout.footer] : [])];
+      rectangles.forEach((rect, i) => {
+        expectInside(rect, panel);
+        for (const other of rectangles.slice(0, i)) expect(rectsOverlap(rect, other)).toBe(false);
+      });
+      expect(layout.map.w).toBe(layout.map.h);
+      expect(layout.map.w).toBeGreaterThanOrEqual(90);
+    });
+  }
+  it('preserves a 48px Start and 50px body in the exact deepest supported landscape notch', () => {
+    const L = computeHudLayout(568, 320, { top: 44, right: 20, bottom: 34, left: 47 });
+    const panel = overlayRect(L, 980, 638), sections = modalSections(panel);
+    expect(panel).toEqual({ x: 59, y: 108, w: 477, h: 166 });
+    expect(sections.headerH).toBe(52);
+    expect(sections.close).toEqual({ x: 484, y: 112, w: 44, h: 44 });
+    expect(sections.body).toEqual({ x: 83, y: 164, w: 421, h: 50 });
+    expect(sections.footer).toEqual({ x: 83, y: 218, w: 429, h: 48 });
+    const shop = shopLayout(panel);
+    expect(shop.categoryColumns).toBe(6);
+    expect(shop.body).toEqual({ x: 83, y: 212, w: 421, h: 54 });
+    expect(shop.itemHeight).toBe(44); expect(shop.footer).toBeNull();
+    expect(shop.statusInline).toBe(true);
+    const map = tacticalMapLayout(panel);
+    expect(map.sideLegend).toBe(true); expect(map.map.w).toBe(98);
+  });
+  it('uses a bounded scroll-all fallback instead of overlapping fixed chrome on smaller panels', () => {
+    for (const panel of [{ x: 10, y: 20, w: 200, h: 159 }, { x: 0, y: 0, w: 70, h: 90 }, { x: 0, y: 0, w: 20, h: 20 }]) {
+      for (const layout of [modalSections(panel), shopLayout(panel, 6)]) {
+        expect(layout.scrollAll).toBe(true);
+        expect(layout.close).toBeNull(); expect(layout.headerContent).toBeNull(); expect(layout.footer).toBeNull();
+        expect(layout.headerH).toBe(0);
+        expectInside(layout.body, panel);
+      }
+    }
+    expect(modalSections({ x: 0, y: 0, w: 420, h: 160 }).body.h).toBe(44);
+  });
+  it('keeps all six shop categories on one readable desktop row', () => {
+    const L = computeHudLayout(1280, 720), layout = shopLayout(overlayRect(L, 760, 560), 6);
+    expect(layout.categoryColumns).toBe(6);
+    expect(new Set(layout.categories.map(r => r.y)).size).toBe(1);
+    expect(layout.categories.every(r => r.w >= 88 && r.h === 44)).toBe(true);
+    expect(layout.body.h).toBeGreaterThanOrEqual(140);
+  });
+
+  it('handles absent categories without phantom rows or invalid geometry', () => {
+    const panel = { x: 0, y: 0, w: 760, h: 560 };
+    for (const count of [0, -4, NaN, Infinity]) {
+      const layout = shopLayout(panel, count);
+      expect(layout.categories).toEqual([]); expect(layout.categoryColumns).toBe(0);
+      expectInside(layout.body, panel);
+    }
+  });
+});
+
 // ─── Scrolled hit-region mapping (CsHud.push) ─────────────────────────────
 
 describe('csHud: scrolled hit regions', () => {
@@ -519,16 +651,25 @@ describe('csHud: scrolled hit regions', () => {
     return hud;
   }
 
-  it('intersects partially visible rows with the clip instead of leaking hit area', () => {
+  it('clips rows without exposing action fragments smaller than a real 44px target', () => {
     const scroll = new HudScroll();
     const hud = hudInScroll(scroll);
     (hud as unknown as { push(r: object): void }).push({ x: 10, y: 120, w: 100, h: 50, down: () => undefined });
+    // Only20px would be visible; the scroll background handles that fragment.
+    expect(hud.regions).toHaveLength(0);
+    (hud as unknown as { push(r: object): void }).push({ x: 10, y: 140, w: 100, h: 60, down: () => undefined });
     const r = hud.regions[0];
-    // Content y 120..170, scrolled -50 -> screen 70..120, clipped to 100..120.
-    expect(r.y).toBe(100);
-    expect(r.h).toBe(20);
-    expect(r.x).toBe(10);
-    expect(r.w).toBe(100);
+    // Content140..200, scroll−50=>90..150, clip=>100..150: safe50px.
+    expect(r.y).toBe(100); expect(r.h).toBe(50);
+    expect(r.x).toBe(10); expect(r.w).toBe(100);
+  });
+
+  it('requires the complete name and price area before a rich purchase row activates', () => {
+    const hud = hudInScroll(new HudScroll());
+    (hud as unknown as { push(r: object): void }).push({ x: 10, y: 130, w: 100, h: 70, minVisibleHeight: 70, down: () => undefined });
+    expect(hud.regions).toHaveLength(0);
+    (hud as unknown as { push(r: object): void }).push({ x: 10, y: 150, w: 100, h: 70, minVisibleHeight: 70, down: () => undefined });
+    expect(hud.regions[0].h).toBe(70);
   });
 
   it('drops fully clipped rows and marks visible action rows as deferred taps', () => {

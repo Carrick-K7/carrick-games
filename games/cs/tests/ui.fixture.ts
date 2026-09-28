@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-export async function uiRegion(page: Page, id: string, minHeight = 40) {
+export async function uiRegion(page: Page, id: string, minHeight = 44) {
   return page.evaluate(({ id, minHeight }) => {
     const ui = (window as any).__CSX_DEBUG__?.ui?.();
     const region = ui?.regions.find((r: any) => r.id === id && !r.disabled && r.h >= minHeight);

@@ -15,6 +15,18 @@ export interface AimShot {
   ammo?: number;
   reserve?: number;
 }
+export interface ControlledKillfeed {
+  weaponId: 'knife' | 'he' | 'c4';
+  knifeModel?: 'classic' | 'karambit' | 'butterfly';
+  head?: boolean;
+  bot?: boolean;
+}
+export interface AimPixels {
+  count: number;
+  bounds: { x: number; y: number; w: number; h: number } | null;
+  /** Exact-color device-pixel mask, relative to the requested crop. */
+  mask: number[];
+}
 export interface AimPaint {
   op: 'stroke' | 'fill' | 'fillRect' | 'text' | 'image';
   index: number;
@@ -23,6 +35,7 @@ export interface AimPaint {
   segments: { from: [number, number]; to: [number, number] }[];
   arcs: { x: number; y: number; r: number }[];
   evenodd?: boolean;
+  path2d?: boolean;
   text?: string;
   src?: string;
   bounds?: { x: number; y: number; w: number; h: number };
@@ -43,7 +56,8 @@ export interface AimSnapshot {
   opacity: number;
   hitKind: string;
   confirmation: string;
-  killfeed: { weaponId?: string; weapon: string; head: boolean; aName: string; bName: string }[];
+  killfeed: { weaponId?: string; weaponIconId?: string; weapon: string; head: boolean; aName: string; bName: string }[];
+  killfeedEvidence: 'none' | 'real-fire' | 'controlled-record-render';
   scope: boolean;
   audioHits: { head: boolean; killed: boolean }[];
   paint: AimPaint[];
@@ -55,6 +69,8 @@ export interface AimSnapshot {
  * smoke. It loads the actual pinned CS ESM release, Snow BSP and skinned actors.
  * Only actor placement/health, aim and shot randomness are deterministic. Snow
  * occlusion, engine.fire/hitActor/damageActor and the entire CsGame draw stay real.
+ * The separately labeled controlledKillfeed API calls addKill only: it verifies
+ * record rendering/identity, never claims an actual melee or explosion kill.
  * TypeScript-private engine/hudView access is confined to this test fixture.
  */
 export async function openAimingFixture(page: Page, viewport: AimViewport) {
@@ -175,7 +191,13 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
           arcs.push({ x: p[0], y: p[1], r: Math.hypot(edge[0] - p[0], edge[1] - p[1]) });
         });
         wrap('stroke', () => record('stroke'));
-        wrap('fill', rule => record('fill', { evenodd: rule === 'evenodd' }));
+        wrap('fill', (pathOrRule, rule) => {
+          const path2d = pathOrRule instanceof Path2D;
+          // A native Path2D has opaque contours. Never attribute the previous
+          // immediate-mode path to it: glyph bounds come from real pixel readback.
+          record('fill', { evenodd: (path2d ? rule : pathOrRule) === 'evenodd', path2d,
+            ...(path2d ? { segments: [], arcs: [] } : {}) });
+        });
         wrap('fillRect', (x, y, w, h) => {
           const a = point(x, y), b = point(x + w, y + h);
           record('fillRect', { bounds: { x: a[0], y: a[1], w: b[0] - a[0], h: b[1] - a[1] } });
@@ -200,6 +222,7 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
           return paint;
         };
         let shotData: Pick<AimSnapshot, 'damage' | 'ammoSpent' | 'ray'> = { damage: 0, ammoSpent: 0, ray: null };
+        let killfeedEvidence: AimSnapshot['killfeedEvidence'] = 'none';
         let hitPoint: any = null;
         const snapshot = (): AimSnapshot => {
           if (hitPoint && shotData.ray) {
@@ -215,13 +238,15 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
           camera: { fov: e.camera.fov, aspect: e.camera.aspect, gunAspect: e.gunCamera.aspect },
           ...shotData, alive: target.alive, clock: e.clock, opacity: e.hud.hitOpacity,
           hitKind: e.hud.hitKind, confirmation: e.hud.hitConfirmation, scope: e.hud.scope,
-           killfeed: e.hud.killfeed.map((k: any) => ({ weaponId: k.weaponId, weapon: k.weapon, head: k.head, aName: k.aName, bName: k.bName })),
+           killfeed: e.hud.killfeed.map((k: any) => ({ weaponId: k.weaponId, weaponIconId: k.weaponIconId,
+             weapon: k.weapon, head: k.head, aName: k.aName, bName: k.bName })), killfeedEvidence,
           audioHits: [...audioHits], paint: capture(),
           lane: { from: chosenLane.from.toArray(), to: chosenLane.to.toArray() },
           });
         };
         Object.assign((window as any).__CS_AIM_FIXTURE__, {
           shoot(shot: AimShot) {
+            killfeedEvidence = 'real-fire';
             e.clearEffects();
             e.clearCorpses();
             e.hud.killfeed = [];
@@ -296,6 +321,34 @@ export async function openAimingFixture(page: Page, viewport: AimViewport) {
             return snapshot();
           },
           snapshot,
+          controlledKillfeed(record: ControlledKillfeed) {
+            // Rendering/event-snapshot fixture ONLY. No fire, melee, thrown HE
+            // or bomb-damage claim: CPU tests exercise those actual damage paths.
+            killfeedEvidence = 'controlled-record-render';
+            shotData = { damage: 0, ammoSpent: 0, ray: null }; hitPoint = null;
+            e.clearEffects(); e.clearCorpses(); e.hud.killfeed = []; e.hud.notice = null;
+            e.hideCenter(); e.phase = 'active'; e.setHitFeedback('off'); audioHits.length = 0;
+            target.alive = true; target.health = 100;
+            e.setKnifeModel(record.knifeModel ?? 'classic');
+            const slot = record.weaponId === 'knife' ? 'knife' : record.weaponId === 'he' ? 'grenade' : 'bomb';
+            player.inventory[slot] = e.inventoryWeapon(record.weaponId); player.slot = slot;
+            player.reload = 0; e.zoom = 0; e.setGun(false); e.syncPlayerView(2, false);
+            const actor = record.weaponId === 'c4'
+              ? { name: 'C4', team: target.team === 't' ? 'ct' : 't', pos: target.pos, kills: 0, headshots: 0, damageDealt: 0 }
+              : record.bot ? e.bots.find((b: any) => b.team === player.team) : player;
+            if (!actor) throw new Error('Controlled killfeed needs a real friendly actor');
+            const aName = actor.name, bName = target.name;
+            try {
+              if (record.weaponId !== 'c4') actor.name = record.bot ? 'BOT-WITH-LONG-NAME' : 'ATTACKER-WITH-LONG-NAME';
+              target.name = 'TARGET-WITH-LONG-NAME';
+              e.addKill(actor, target, record.weaponId, record.head ?? false);
+            } finally { actor.name = aName; target.name = bName; }
+            e.computeHud(); game.setPresentationPaused(true);
+            return snapshot();
+          },
+          changeKnifeModel(model: 'classic' | 'karambit' | 'butterfly') {
+            e.setKnifeModel(model); return snapshot();
+          },
           switchToPistol() {
             player.inventory.pistol = e.inventoryWeapon('usp'); player.slot = 'pistol';
             player.reload = 0; e.zoom = 0; e.setGun(false); e.computeHud();
@@ -343,3 +396,29 @@ export const resizeAimingFixture = (page: Page, viewport: AimViewport): Promise<
   page.evaluate(viewport => (window as any).__CS_AIM_FIXTURE__.resize(viewport), viewport);
 export const closeAimingFixture = (page: Page): Promise<void> =>
   page.evaluate(() => (window as any).__CS_AIM_FIXTURE__?.destroy?.());
+export const recordControlledKillfeed = (page: Page, record: ControlledKillfeed): Promise<AimSnapshot> =>
+  page.evaluate(record => (window as any).__CS_AIM_FIXTURE__.controlledKillfeed(record), record);
+
+/** Read exact opaque-color pixels from the actual final game canvas, not a mock path. */
+export const readAimingPixels = (page: Page, bounds: NonNullable<AimPaint['bounds']>, rgb: [number, number, number]): Promise<AimPixels> =>
+  page.evaluate(({ bounds, rgb }) => {
+    const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect(), sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+    const x = Math.max(0, Math.floor(bounds.x * sx)), y = Math.max(0, Math.floor(bounds.y * sy));
+    const endX = Math.min(canvas.width, Math.ceil((bounds.x + bounds.w) * sx));
+    const endY = Math.min(canvas.height, Math.ceil((bounds.y + bounds.h) * sy));
+    const w = Math.max(0, endX - x), h = Math.max(0, endY - y), mask: number[] = [];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    if (w > 0 && h > 0) {
+      const pixels = canvas.getContext('2d')!.getImageData(x, y, w, h).data;
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+        const i = (yy * w + xx) * 4;
+        if (pixels[i] !== rgb[0] || pixels[i + 1] !== rgb[1] || pixels[i + 2] !== rgb[2] || pixels[i + 3] !== 255) continue;
+        mask.push(yy * w + xx); minX = Math.min(minX, xx); maxX = Math.max(maxX, xx);
+        minY = Math.min(minY, yy); maxY = Math.max(maxY, yy);
+      }
+    }
+    return { count: mask.length, mask, bounds: mask.length
+      ? { x: (x + minX) / sx, y: (y + minY) / sy, w: (maxX - minX + 1) / sx, h: (maxY - minY + 1) / sy }
+      : null };
+  }, { bounds, rgb });
