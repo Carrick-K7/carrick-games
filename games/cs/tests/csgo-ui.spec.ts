@@ -35,8 +35,12 @@ test.describe('CS tactical interface presentation', () => {
     await expect.poll(() => colorAt(page, before.x + 8, before.y + 8)).toEqual([52, 70, 82]);
     expect(await uiRegion(page, 'menu-mode-tdm')).toEqual(before);
     await page.screenshot({ path: testInfo.outputPath('tactical-map-selection.png') });
-    const gun = page.waitForResponse(r => r.url().endsWith('/assets/ui/weapons/usp.svg'));
-    await activateUi(page, 'menu-start'); await gun;
+    await activateUi(page, 'menu-start');
+    await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().playerAlive)).toBe(true);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    // The minimal ammo band no longer requests decorative weapon artwork.
+    // Actual killing-weapon art is exercised by the separate real-fire cases.
+    expect(assets.filter(path => path.includes('/assets/ui/weapons/'))).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath('tactical-match-hud.png') });
     expect(assets.filter(path => !path.startsWith(base))).toEqual([]);
     expect(errors).toEqual([]);
