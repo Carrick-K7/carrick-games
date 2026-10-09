@@ -1,12 +1,34 @@
 import { expect, test, type Page } from '@playwright/test';
 import { swipe } from '../../../tests/support/responsiveHud';
-import { activateUi } from './ui.fixture';
+import { activateUi, uiRegion } from './ui.fixture';
 
 const state = (page: Page) => page.evaluate(() => (window as any).__CSX_DEBUG__?.info() ?? { ready: false });
 async function ready(page: Page) {
   await page.goto('/#/cs');
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 60_000 });
   await expect.poll(async () => (await state(page)).ready, { timeout: 60_000 }).toBe(true);
+}
+
+async function activateSetting(page: Page, id: string, touch = false) {
+  const painted = () => page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const scan = async (target: string) => {
+    await page.mouse.wheel(0, -10000); await painted();
+    const step = await page.evaluate(() => {
+      const body = (window as any).__CSX_DEBUG__.ui().regions.find((r: any) => r.id === null);
+      return Math.max(4, Math.min(120, (body?.h ?? 56) - 44));
+    });
+    for (let n = 0; n < 80; n++) {
+      if (await uiRegion(page, target)) return true;
+      await page.mouse.wheel(0, step); await painted();
+    }
+    return false;
+  };
+  // Each caller has just opened the default collapsed page. Open More first,
+  // rather than scanning 150 frames for a deliberately nonexistent control.
+  expect(await scan('settings-more')).toBe(true);
+  await activateUi(page, 'settings-more', touch);
+  expect(await scan(id), `reachable expanded setting ${id}`).toBe(true);
+  await activateUi(page, id, touch);
 }
 
 test.describe('CS v28 integration', () => {
@@ -27,7 +49,7 @@ test.describe('CS v28 integration', () => {
     await ready(page);
     await activateUi(page, 'menu-settings');
     await expect.poll(async () => (await state(page)).settingsOpen).toBe(true);
-    await activateUi(page, 'settings-knife-butterfly');
+    await activateSetting(page, 'settings-knife-butterfly');
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('butterfly');
     await page.screenshot({ path: testInfo.outputPath('cs-v28-settings-desktop.png') });
     await activateUi(page, 'settings-close');
@@ -107,7 +129,7 @@ test.describe('CS v28 touch settings', () => {
     // Settings is a fixed, reachable header target on every viewport.
     await activateUi(page, 'menu-settings', true);
     await expect.poll(async () => (await state(page)).settingsOpen).toBe(true);
-    await activateUi(page, 'settings-knife-karambit', true);
+    await activateSetting(page, 'settings-knife-karambit', true);
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('karambit');
     await swipe(page, 160, 425, 220);
     expect((await state(page)).settings.knifeModel).toBe('karambit');
@@ -124,7 +146,7 @@ test.describe('CS v28 touch settings', () => {
     await swipe(page, 420, 270, 165);
     await swipe(page, 420, 270, 165);
     await page.screenshot({ path: testInfo.outputPath('cs-v28-settings-landscape.png') });
-    await activateUi(page, 'settings-reset', true);
+    await activateSetting(page, 'settings-reset', true);
     await expect.poll(async () => (await state(page)).settings.knifeModel).toBe('classic');
     expect(errors).toEqual([]);
   });

@@ -361,11 +361,13 @@ describe('CS HUD input capture', () => {
       (hud as any).drawSettings(context, computeHudLayout(width, height));
     });
     game.setViewport({ width: 844, height: 390, dpr: 2, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
-    hud.onWheel(60);
-    game.draw(ctx);
-    // Scoped sensitivity is the second slider; its visible screen-space hit
-    // rectangle has moved, while the setting still depends on logical x only.
-    const slider = hud.regions.filter(region => region.deferTap && region.drag).at(-1)!;
+    hud.onWheel(220); game.draw(ctx);
+    const more = hud.regions.find(region => region.id === 'settings-more')!;
+    expect(more).toBeDefined(); more.down!(more.x + more.w / 2, more.y + more.h / 2);
+    game.draw(ctx); hud.onWheel(120); game.draw(ctx);
+    // Scoped sensitivity now lives under More. Its scrolled screen-space hit
+    // rectangle moves, while the setting still depends on logical x only.
+    const slider = hud.regions.find(region => region.id === 'settings-scope')!;
     expect(slider).toBeDefined();
     expect(slider.dragAxis).toBe('x');
     const y = slider.y + slider.h / 2;

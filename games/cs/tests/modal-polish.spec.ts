@@ -63,12 +63,18 @@ for (const run of runs) test.describe(`CS modal polish · isolated real release 
           let s = await modalSurface(page, surface);
           assertPaint(s);
           if (surface === 'scoreboard') await page.screenshot({ path: testInfo.outputPath(`${shape.width}x${shape.height}-scoreboard-top.png`) });
+          if (surface === 'settings' || surface === 'pause') await page.screenshot({ path: testInfo.outputPath(`${shape.width}x${shape.height}-${surface}-basic.png`) });
           if (s.scroll?.max) { s = await modalWheel(page, s.scroll.max); assertPaint(s); }
+          if (surface === 'settings' || surface === 'pause') {
+            expect(s.regions.some(r => r.id?.startsWith('pause-'))).toBe(false);
+            expect(s.regions.some(r => r.id === 'settings-reset')).toBe(false);
+            s = await activateModal(page, 'settings-more', shape.touch); assertPaint(s);
+          }
           if (shape.width === 568) {
             const options: Partial<Record<typeof surface, string[]>> = {
               menu: ['menu-map-fy_snow', 'menu-map-de_dust2', 'menu-mode-elimination', 'menu-mode-tdm', 'menu-limit-30', 'menu-limit-50', 'menu-limit-100', 'menu-team-ct', 'menu-team-t', 'menu-skill-easy', 'menu-skill-normal', 'menu-skill-hard', 'menu-pistol-default', 'menu-pistol-deagle'],
-              settings: ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-quality-high', 'settings-quality-low', 'settings-sound-on', 'settings-sound-off'],
-              pause: ['pause-settings', 'pause-scoreboard', 'pause-radio', 'pause-restart', 'pause-menu'],
+              settings: ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-quality-high', 'settings-quality-low', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
+              pause: ['settings-more', 'settings-scoreboard', 'settings-radio', 'settings-restart', 'settings-menu', 'settings-done'],
               result: ['result-menu'],
             };
             const fixed = s.regions.filter(r => r.id && !r.deferred);
@@ -97,12 +103,12 @@ for (const run of runs) test.describe(`CS modal polish · isolated real release 
         // Native touch/mouse uses the displayed current hitbox after scrolling,
         // never a legacy coordinate or a direct callback invocation.
         await modalSurface(page, 'pause');
-        let s = await activateModal(page, 'pause-scoreboard', shape.touch);
+        let s = await activateModal(page, 'settings-scoreboard', shape.touch);
         expect(s.phase).toBe('paused'); expect(s.scoreboard).toBe(true);
         s = await activateModal(page, 'scoreboard-close', shape.touch);
         expect(s.phase).toBe('paused'); expect(s.scoreboard).toBe(false);
         const before = s.clock;
-        s = await activateModal(page, 'pause-radio', shape.touch);
+        s = await activateModal(page, 'settings-radio', shape.touch);
         expect(s.radio).toBe('radio1'); expect(s.phase).toBe('paused');
         s = await stepModal(page, .08); expect(s.clock).toBe(before);
         await activateModal(page, 'radio-group-radio3', shape.touch);

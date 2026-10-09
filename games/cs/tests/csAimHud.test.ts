@@ -140,11 +140,16 @@ describe('CS aiming paint geometry', () => {
 
   it('makes the unavailable radio action visibly disabled while paused and dead', () => {
     const { ctx, operations } = recorder(), { hud, engine } = fixture(operations);
-    engine.phase = 'paused'; engine.player.alive = false;
+    engine.phase = 'paused'; engine.matchActive = true; engine.player.alive = false;
+    engine.controlSettings = { sensitivity: .8, scopeSensitivity: 1, knifeModel: 'classic', hitFeedback: 'full' };
+    engine.audio = { enabled: true }; engine.quality = 'low'; engine.selectedPistol = 'default';
     hud.draw(ctx, 320, 568);
-    const radio = hud.regions.find(r => r.id === 'pause-radio')!;
+    expect(hud.regions.some(r => r.id?.startsWith('pause-') || r.id === 'settings-radio')).toBe(false);
+    (hud as any).setSettingsExpanded(true); hud.draw(ctx, 320, 568);
+    (hud as any).settingsScroll.offset = (hud as any).settingsScroll.max; hud.draw(ctx, 320, 568);
+    const radio = hud.regions.find(r => r.id === 'settings-radio')!;
     expect(radio).toBeTruthy(); expect(radio.disabled).toBe(true);
-    expect(hud.hitTest(radio.x + radio.w / 2, radio.y + radio.h / 2)?.id).not.toBe('pause-radio');
+    expect(hud.hitTest(radio.x + radio.w / 2, radio.y + radio.h / 2)?.id).not.toBe('settings-radio');
     expect(operations.some(op => op.kind === 'text' && op.text.includes('alive players only'))).toBe(true);
   });
 

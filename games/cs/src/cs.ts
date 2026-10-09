@@ -385,7 +385,7 @@ export class CsGame extends BaseGame {
     const phase = ['menu', 'paused', 'match-end'].includes(e.phase) ? e.phase : 'play';
     const next = JSON.stringify([
       phase, e.settingsOpen, e.buyOpen, e.buyOpen ? e.buyCategory : null,
-      e.mapOpen, e.radioMenu, !!e.hud.matchEnd, !!e.hud.scoreboardOpen,
+      e.mapOpen, e.radioMenu, !!e.hud.matchEnd, !!e.hud.scoreboardOpen, this.hudView.inputRevision,
       phase === 'menu' ? [e.selectedMap, e.selectedMode, e.bootLoading, e.mapLoading] : null,
     ]);
     if (this.hudInputContext !== null && this.hudInputContext !== next) {

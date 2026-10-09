@@ -5,12 +5,13 @@ export interface ModalViewport {
   width: number; height: number; dpr: number; zh: boolean; touch: boolean;
   safeArea: { top: number; right: number; bottom: number; left: number };
 }
-export type ModalSurface = 'menu' | 'settings' | 'pause' | 'result' | 'scoreboard' | 'radio' | 'map' | 'shop';
+export type ModalSurface = 'active' | 'menu' | 'settings' | 'pause' | 'result' | 'scoreboard' | 'radio' | 'map' | 'shop';
 export interface ModalRect { x: number; y: number; w: number; h: number }
 export interface ModalSnapshot {
   fixture: 'real-cs-controlled-modal-host'; viewport: ModalViewport;
   phase: string; radio: string | null; scoreboard: boolean; buyOpen: boolean; canBuy: boolean;
   clock: number; ammo: number; money: number; notice: string | null; captureRequests: number;
+  soundEnabled: boolean; settingsOpen: boolean;
   fireHeld: boolean; shotPressed: boolean; backing: { width: number; height: number };
   sceneFramesBefore: number; sceneFramesAfter: number;
   regions: (ModalRect & { id: string | null; disabled: boolean; deferred: boolean })[];
@@ -91,6 +92,7 @@ export async function openModalFixture(page: Page, viewport: ModalViewport) {
         phase: e.phase, radio: e.radioMenu, scoreboard: !!e.hud.scoreboardOpen, buyOpen: e.buyOpen,
         canBuy: !!e.player && e.canBuy(e.player), clock: e.clock, ammo: e.player ? e.weaponOf(e.player).ammo : 0,
         money: e.player?.money ?? 0, notice: e.hud.notice?.text ?? null, captureRequests,
+        soundEnabled: e.audio.enabled, settingsOpen: e.settingsOpen,
         fireHeld: e.fireHeld, shotPressed: e.shotPressed, backing: { width: canvas.width, height: canvas.height },
         sceneFramesBefore: before, sceneFramesAfter: sceneFrames,
         regions: hud.regions.map((r: any) => ({ id: r.id ?? null, x: r.x, y: r.y, w: r.w, h: r.h, disabled: !!r.disabled, deferred: !!r.deferTap })),
@@ -98,7 +100,7 @@ export async function openModalFixture(page: Page, viewport: ModalViewport) {
         paint, radar, shop: e.buyOpen ? e.shopView().items.map((i: any) => ({ id: i.id, detail: i.detail, priceText: i.priceText, status: i.status, disabled: i.disabled })) : [] };
     };
     const resetScroll = () => {
-      for (const key of ['menuScroll', 'settingsScroll', 'pauseScroll', 'resultScroll', 'buyScroll', 'scoreboardScroll', 'radioScroll']) {
+      for (const key of ['menuScroll', 'settingsScroll', 'resultScroll', 'buyScroll', 'scoreboardScroll', 'radioScroll']) {
         hud[key].offset = 0; hud[key].endDrag();
       }
     };
@@ -106,6 +108,9 @@ export async function openModalFixture(page: Page, viewport: ModalViewport) {
       e.closeRadio(false); e.closeBuy(false); e.closeMap(false); e.closeSettings(false);
       e.hud.scoreboardOpen = false; e.hud.matchEnd = null; e.hud.notice = null; e.phase = 'active';
       e.matchActive = true; e.touchMode = current.touch; resetScroll();
+      // Paint the intervening closed state rather than leaking expansion from
+      // one independently selected fixture surface into the next.
+      hud.draw(scratch, current.width, current.height);
       if (which === 'menu') { e.phase = 'menu'; e.matchActive = false; e.selectedMode = 'tdm'; }
       if (which === 'settings') { e.phase = 'menu'; e.matchActive = false; e.openSettings(); }
       if (which === 'pause') e.pauseGame();
@@ -141,16 +146,40 @@ export async function openModalFixture(page: Page, viewport: ModalViewport) {
       step(seconds: number) { for (let left = Math.min(1, Math.max(0, seconds)); left > 0;) { const dt = Math.min(.02, left); advance(dt); left -= dt; } return snapshot(); },
       wheel(delta: number) { wheel(delta); return snapshot(); },
       reveal(id: string) {
-        // Search actual HUD hit regions with the real wheel listener, without
-        // spending a WebGL frame for every four pixels. The returned capture
-        // always redraws the real scene freshly before any click/screenshot.
-        wheel(-10000);
-        for (let n = 0; n < 600; n++) {
+        // Observe the real pre-clip target once, then send a real wheel event
+        // to reveal it. Avoid hundreds of redundant canvas paints per control.
+        // This is fixture-local observation, not a new production hook or a
+        // parallel layout formula; actual clipped >=44px targets must still exist.
+        const find = (target: string) => {
+          // In live play, wheel is weapon switching, not panel scrolling.
+          if (hud.wantsWheel()) wheel(-10000);
+          let wanted: any = null;
+          const push = hud.push;
+          hud.push = function(region: any) {
+            if (region.id === target) wanted = { region: { ...region }, clip: this.regionClip ? { ...this.regionClip } : null };
+            return push.call(this, region);
+          };
+          try { hud.draw(scratch, current.width, current.height); } finally { hud.push = push; }
+          const visible = () => hud.regions.find((r: any) => r.id === target && r.w >= 44 && r.h >= 44);
+          if (visible()) return visible();
+          if (!wanted?.clip) return null;
+          const { region, clip } = wanted;
+          wheel(region.y - clip.y - Math.max(0, (clip.h - region.h) / 2));
           hud.draw(scratch, current.width, current.height);
-          if (hud.regions.some((r: any) => r.id === id && r.w >= 44 && r.h >= 44)) return snapshot();
-          const scroll = hud.regions.find((r: any) => r.scroll)?.scroll;
-          if (!scroll || scroll.offset >= scroll.max) break;
-          wheel(4);
+          return visible() || null;
+        };
+        if (find(id)) return snapshot();
+        if (/^settings-(scope|knife-|pistol-|hit-|reset|scoreboard|radio|restart)/.test(id)) {
+          const more = find('settings-more');
+          if (more) {
+            // Exercise the actual adapter mouse path, not a private HUD flag.
+            const box = canvas.getBoundingClientRect();
+            const point = { clientX: box.x + (more.x + more.w / 2) * box.width / current.width,
+              clientY: box.y + (more.y + more.h / 2) * box.height / current.height, button: 0, bubbles: true };
+            canvas.dispatchEvent(new MouseEvent('mousedown', point));
+            canvas.dispatchEvent(new MouseEvent('mouseup', point));
+            if (find(id)) return snapshot();
+          }
         }
         throw new Error(`No full 44px target reachable: ${id}`);
       },

@@ -63,26 +63,28 @@ describe('CS repaired menu surfaces', () => {
     const e = engine(); e.settingsOpen = true;
     const hud = new CsHud(e), { ctx, text } = context();
     hud.draw(ctx, 1280, 720);
-    expect(text).toContain('Settings'); expect(text).toContain('Reset settings');
+    expect(text).toContain('Settings'); expect(text).not.toContain('Reset settings');
+    expect(hud.regions.some(r => r.id === 'settings-more')).toBe(true);
+    expect(hud.regions.some(r => r.id === 'settings-reset')).toBe(false);
     expect(text).not.toContain('Enter the Arena'); expect(text).not.toContain('Snow Arena');
     expect(hud.regions.filter(r => r.id).every(r => r.id!.startsWith('settings-'))).toBe(true);
     expect(hud.regions.find(r => r.id === 'settings-sensitivity')?.dragAxis).toBe('x');
   });
 
-  it('short settings scrolls choices, never its header or reset button', () => {
+  it('short settings scrolls choices, never its header or Done button', () => {
     const e = engine(); e.settingsOpen = true;
     const hud = new CsHud(e), { ctx } = context();
     const render = () => hud.draw(ctx, 568, 320);
     render();
-    const close = hud.regions.find(r => r.id === 'settings-close')!, reset = hud.regions.find(r => r.id === 'settings-reset')!;
-    const bounds = overlayRect(computeHudLayout(568, 320), 560, 638);
+    const close = hud.regions.find(r => r.id === 'settings-close')!, done = hud.regions.find(r => r.id === 'settings-done')!;
+    const bounds = overlayRect(computeHudLayout(568, 320), 480, 440);
     hud.onWheel(1000); render();
     expect(hud.regions.find(r => r.id === 'settings-close')).toMatchObject({ x: close.x, y: close.y, w: close.w, h: close.h });
-    expect(hud.regions.find(r => r.id === 'settings-reset')).toMatchObject({ x: reset.x, y: reset.y, w: reset.w, h: reset.h });
-    expect(hud.regions.find(r => r.id === 'settings-sound-off')!.h).toBe(44);
+    expect(hud.regions.find(r => r.id === 'settings-done')).toMatchObject({ x: done.x, y: done.y, w: done.w, h: done.h });
+    expect(hud.regions.find(r => r.id === 'settings-more')!.h).toBe(44);
     for (const r of hud.regions.filter(r => r.deferTap)) {
       expect(r.y).toBeGreaterThanOrEqual(bounds.y + 68);
-      expect(r.y + r.h).toBeLessThanOrEqual(reset.y - 8);
+      expect(r.y + r.h).toBeLessThanOrEqual(done.y - 8);
     }
   });
 });

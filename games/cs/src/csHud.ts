@@ -66,7 +66,16 @@ export class CsHud {
   private readonly settingsScroll = new HudScroll();
   private readonly buyScroll = new HudScroll();
   private readonly scoreboardScroll = new HudScroll();
-  private readonly pauseScroll = new HudScroll();
+  private settingsExpanded = false;
+  private settingsRevision = 0;
+  /** Private input-surface revision; folding retires captured old controls. */
+  get inputRevision() { return this.settingsRevision; }
+  private setSettingsExpanded(expanded: boolean) {
+    if (expanded === this.settingsExpanded) return;
+    this.settingsExpanded = expanded; this.settingsRevision++;
+    if (!expanded) this.settingsScroll.setMax(0);
+    this.regions = [];
+  }
   private readonly resultScroll = new HudScroll();
   private readonly radioScroll = new HudScroll();
   private lastBuyCategory = '';
@@ -144,7 +153,7 @@ export class CsHud {
     if (e.hud.matchEnd) return this.resultScroll;
     if (e.radioMenu) return this.radioScroll;
     if (e.hud.scoreboardOpen) return this.scoreboardScroll;
-    if (e.phase === 'paused') return this.pauseScroll;
+    if (e.phase === 'paused') return this.settingsScroll;
     if (e.mapOpen) return null;
     if (e.buyOpen) return this.buyScroll;
     return null;
@@ -327,46 +336,70 @@ export class CsHud {
   }
 
   private drawSettings(ctx: Ctx, L: HudLayout) {
-    const e = this.engine;
-    const title = this.L('设置', 'Settings'), close = { id: 'settings-close', run: () => e.closeSettings() };
-    const r = this.frame(ctx, L, 560, 638, title, close), sections = modalSections(r, 44);
+    const e = this.engine, inMatch = !!e.matchActive && e.phase !== 'menu';
+    // Native pointer unlock / focus loss and Escape all share this paused page.
+    // An explicit button may resume/capture; the existing Escape path never does.
+    const done = () => {
+      if (e.settingsOpen) e.closeSettings();
+      if (e.phase === 'paused' && e.matchActive) e.resumeGame();
+    };
+    const title = this.L('设置', 'Settings'), close = { id: 'settings-close', run: done };
+    const r = this.frame(ctx, L, 480, 440, title, close), sections = modalSections(r, 44);
     const { body } = sections, x = body.x, w = body.w, top = body.y + (sections.scrollAll ? 56 : 0);
-    const compactSlider = body.h < 80, contentH = compactSlider ? 584 : 624;
+    const contentH = 288 + (this.settingsExpanded ? 372 + (inMatch ? 168 : 0) : 0) + (e.settingsNote ? 28 : 0);
     this.settingsScroll.setMax(contentH + (sections.scrollAll ? 112 : 0) - body.h);
     this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.settingsScroll);
     if (sections.scrollAll) this.inlineHeader(ctx, body, title, close);
     let y = top;
     const slider = (id: string, label: string, value: number, min: number, max: number, format: string, apply: (v: number) => void) => {
       this.text(ctx, label, x, y + 8, 14, C.text, 'left', false, w - 66);
-      this.text(ctx, format, x + w, y + 8, 13, C.amber, 'right');
-      const sx = x + 8, sw = w - 16, sy = y + (compactSlider ? 32 : 42), t = (value - min) / (max - min);
+      this.text(ctx, format, x + w, y + 8, 13, C.dim, 'right');
+      const sx = x + 8, sw = w - 16, sy = y + 32, t = (value - min) / (max - min);
       uiRound(ctx, sx, sy - 2, sw, 4, C.border, undefined, 2);
-      uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, C.amber, undefined, 2);
+      uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, C.dim, undefined, 2);
       ctx.fillStyle = C.text; ctx.fillRect(sx + sw * t - 5, sy - 8, 10, 16);
       const change = (px: number) => apply(min + Math.max(0, Math.min(1, (px - sx) / sw)) * (max - min));
-      this.push({ id, x, y: compactSlider ? y : sy - 22, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += compactSlider ? 64 : 84;
+      this.push({ id, x, y, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += 64;
     };
-    slider('settings-sensitivity', this.L('鼠标灵敏度', 'Mouse sensitivity'), e.controlSettings.sensitivity, .1, 4, e.controlSettings.sensitivity.toFixed(2), v => e.setSensitivity(v));
-    slider('settings-scope', this.L('开镜灵敏度', 'Scoped sensitivity'), e.controlSettings.scopeSensitivity, .1, 2, e.controlSettings.scopeSensitivity.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
-    y += this.choices(ctx, this.L('近战模型', 'Knife model'), x, y, w,
-      [['classic', this.L('经典刀', 'Classic')], ['karambit', this.L('爪刀', 'Karambit')], ['butterfly', this.L('蝴蝶刀', 'Butterfly')]].map(([id, label]) => ({ id: `settings-knife-${id}`, label, selected: e.controlSettings.knifeModel === id, action: () => e.setKnifeModel(id) })));
-    y += this.choices(ctx, this.L('初始手枪 · 下次出生生效', 'Starting pistol · next spawn'), x, y, w, [
-      { id: 'settings-pistol-default', label: this.L('阵营默认', 'Faction'), selected: e.selectedPistol === 'default', action: () => e.setPistol('default') },
-      { id: 'settings-pistol-deagle', label: 'Desert Eagle', selected: e.selectedPistol === 'deagle', action: () => e.setPistol('deagle') },
-    ]);
-    y += this.choices(ctx, this.L('命中反馈', 'Hit feedback'), x, y, w,
-      [['off', this.L('关闭', 'Off')], ['visual', this.L('视觉', 'Visual')], ['full', this.L('完整', 'Full')]].map(([id, label]) => ({ id: `settings-hit-${id}`, label, selected: e.controlSettings.hitFeedback === id, action: () => e.setHitFeedback(id) })));
-    y += this.choices(ctx, this.L('画质', 'Quality'), x, y, w,
-      [['high', this.L('高', 'High')], ['low', this.L('流畅', 'Low')]].map(([id, label]) => ({ id: `settings-quality-${id}`, label, selected: e.quality === id, action: () => e.setQuality(id) })));
+    slider('settings-sensitivity', this.L('灵敏度', 'Sensitivity'), e.controlSettings.sensitivity, .1, 4, e.controlSettings.sensitivity.toFixed(2), v => e.setSensitivity(v));
     y += this.choices(ctx, this.L('音效', 'Sound'), x, y, w,
       [true, false].map(on => ({ id: `settings-sound-${on ? 'on' : 'off'}`, label: on ? this.L('开启', 'On') : this.L('关闭', 'Off'), selected: e.audio.enabled === on, action: () => { if (e.audio.enabled !== on) e.toggleSound(); } })));
-    this.text(ctx, e.settingsNote || this.L('设置自动保存在此浏览器', 'Settings persist in this browser'), x, y + 14, 12, C.dim, 'left', false, w);
-    if (sections.scrollAll) this.button(ctx, x, top + contentH + 8, w, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
-    this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 5, body.y, body.h);
-    if (sections.footer) {
-      const f = sections.footer; uiRule(ctx, r.x + 1, f.y - (sections.compact ? 4 : 12), r.w - 2);
-      this.button(ctx, f.x, f.y, f.w, f.h, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' });
+    y += this.choices(ctx, this.L('画质', 'Quality'), x, y, w,
+      [['high', this.L('高', 'High')], ['low', this.L('流畅', 'Low')]].map(([id, label]) => ({ id: `settings-quality-${id}`, label, selected: e.quality === id, action: () => e.setQuality(id) })));
+    this.button(ctx, x, y, w, 44, this.settingsExpanded ? this.L('收起更多设置', 'Less settings') : this.L('更多设置', 'More settings'),
+      () => this.setSettingsExpanded(!this.settingsExpanded), { id: 'settings-more' }); y += 56;
+    if (this.settingsExpanded) {
+      slider('settings-scope', this.L('开镜灵敏度', 'Scoped sensitivity'), e.controlSettings.scopeSensitivity, .1, 2, e.controlSettings.scopeSensitivity.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
+      y += this.choices(ctx, this.L('近战模型', 'Knife model'), x, y, w,
+        [['classic', this.L('经典刀', 'Classic')], ['karambit', this.L('爪刀', 'Karambit')], ['butterfly', this.L('蝴蝶刀', 'Butterfly')]].map(([id, label]) => ({ id: `settings-knife-${id}`, label, selected: e.controlSettings.knifeModel === id, action: () => e.setKnifeModel(id) })));
+      y += this.choices(ctx, this.L('初始手枪 · 下次出生生效', 'Starting pistol · next spawn'), x, y, w, [
+        { id: 'settings-pistol-default', label: this.L('阵营默认', 'Faction'), selected: e.selectedPistol === 'default', action: () => e.setPistol('default') },
+        { id: 'settings-pistol-deagle', label: 'Desert Eagle', selected: e.selectedPistol === 'deagle', action: () => e.setPistol('deagle') },
+      ]);
+      y += this.choices(ctx, this.L('命中反馈', 'Hit feedback'), x, y, w,
+        [['off', this.L('关闭', 'Off')], ['visual', this.L('视觉', 'Visual')], ['full', this.L('完整', 'Full')]].map(([id, label]) => ({ id: `settings-hit-${id}`, label, selected: e.controlSettings.hitFeedback === id, action: () => e.setHitFeedback(id) })));
+      this.button(ctx, x, y, w, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' }); y += 56;
+      if (inMatch) {
+        const actions = [
+          { id: 'settings-scoreboard', label: this.L('记分板', 'Scoreboard'), run: () => { this.setSettingsExpanded(false); e.settingsOpen = false; e.clearHeldInput(); e.hud.scoreboardOpen = true; } },
+          { id: 'settings-radio', label: e.player?.alive ? this.L('无线电', 'Radio') : this.L('无线电（阵亡不可用）', 'Radio (alive players only)'), disabled: !e.player?.alive,
+            run: () => { this.setSettingsExpanded(false); e.settingsOpen = false; e.openRadio('radio1'); } },
+          { id: 'settings-restart', label: this.L('重新开始', 'Restart match'), run: () => { e.settingsOpen = false; e.startMatch(); } },
+        ];
+        for (const item of actions) {
+          this.button(ctx, x, y, w, 44, item.label, item.run, { id: item.id, disabled: item.disabled }); y += 56;
+        }
+      }
     }
+    if (e.settingsNote) this.text(ctx, e.settingsNote, x, y + 14, 12, C.dim, 'left', false, w);
+    const footer = (f: HudRect) => {
+      const backW = inMatch ? Math.max(72, Math.min(128, f.w * .36)) : 0, gap = inMatch ? 8 : 0;
+      this.button(ctx, f.x, f.y, f.w - backW - gap, 44, inMatch ? this.L('继续', 'Continue') : this.L('完成', 'Done'), done, { id: 'settings-done', primary: true });
+      if (inMatch) this.button(ctx, f.x + f.w - backW, f.y, backW, 44, this.L('主菜单', 'Menu'), () => e.toMenu(), { id: 'settings-menu' });
+    };
+    if (sections.scrollAll) footer({ x, y: top + contentH + 8, w, h: 44 });
+    this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 5, body.y, body.h);
+    if (sections.footer) { uiRule(ctx, r.x + 1, sections.footer.y - (sections.compact ? 4 : 12), r.w - 2); footer(sections.footer); }
   }
 
   // Modal routing is exclusive: no underlying menu text or controls bleed
@@ -376,12 +409,13 @@ export class CsHud {
     this.regions = []; ctx.save();
     if (!e.radioMenu) this.lastRadioMenu = null;
     if (e.phase === 'menu') this.emphasis.reset();
+    if (!e.settingsOpen && e.phase !== 'paused') this.setSettingsExpanded(false);
     if (e.settingsOpen) this.drawSettings(ctx, L);
     else if (e.phase === 'menu') this.drawMenu(ctx, L);
     else if (e.hud.matchEnd) this.drawMatchEnd(ctx, L);
     else if (e.radioMenu && e.hud.radio) this.drawRadio(ctx, L);
     else if (e.hud.scoreboardOpen) this.drawScoreboard(ctx, L);
-    else if (e.phase === 'paused' && !presentationPaused) this.drawPause(ctx, L);
+    else if (e.phase === 'paused' && !presentationPaused) this.drawSettings(ctx, L);
     else if (e.mapOpen) this.drawTacticalMap(ctx, L);
     else if (e.buyOpen) this.drawBuyMenu(ctx, L);
     else this.drawMatchHud(ctx, L);
@@ -508,30 +542,6 @@ export class CsHud {
     } else if (legend.h >= 17) uiParagraph(ctx, this.L('白：自己 · 蓝：队友 · 橙：已发现敌人', 'White: you · Blue: team · Orange: spotted enemies'), legend.x, legend.y, legend.w, 12, C.dim, Math.floor(legend.h / 17), 17);
     if (footer && footer.h >= 14) this.text(ctx, this.L('查看地图时对局继续进行', 'The round keeps running'), footer.x, footer.y + footer.h / 2, 11, C.faint, 'left', false, footer.w);
   }
-  private drawPause(ctx: Ctx, L: HudLayout) {
-    const e = this.engine, title = this.L('对局已暂停', 'Match paused');
-    const r = this.frame(ctx, L, 420, 352, title), sections = modalSections(r, 48, 20);
-    if (e.hud.notice && !sections.scrollAll) this.text(ctx, e.hud.notice.text, r.x + 20, r.y + sections.headerH - 9, 10, C.gold, 'left', false, r.w - 40);
-    const { body } = sections, top = body.y + (sections.scrollAll ? 56 : 0);
-    const items = [
-      { id: 'pause-settings', label: this.L('设置', 'Settings'), run: () => e.openSettings() },
-      { id: 'pause-scoreboard', label: this.L('比赛记分板', 'Scoreboard'), run: () => { e.hud.scoreboardOpen = true; } },
-      { id: 'pause-radio', label: e.player?.alive ? this.L('无线电指令', 'Radio commands') : this.L('无线电（阵亡不可用）', 'Radio (alive players only)'), disabled: !e.player?.alive, run: () => e.openRadio('radio1') },
-      { id: 'pause-restart', label: this.L('重新开始', 'Restart match'), run: () => e.startMatch() },
-      { id: 'pause-menu', label: this.L('返回主菜单', 'Back to menu'), run: () => e.toMenu() },
-    ];
-    const contentH = items.length * 56 - 12;
-    this.pauseScroll.setMax(contentH + (sections.scrollAll ? 116 : 0) - body.h);
-    this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.pauseScroll);
-    if (sections.scrollAll) this.inlineHeader(ctx, body, title);
-    items.forEach((item, i) => this.button(ctx, body.x, top + i * 56, body.w, 44, item.label, item.run, { id: item.id, disabled: item.disabled }));
-    if (sections.scrollAll) this.button(ctx, body.x, top + contentH + 12, body.w, 48, this.L('继续对局', 'Resume match'), () => e.resumeGame(), { id: 'pause-resume', primary: true });
-    this.endScroll(ctx); this.scrollbar(ctx, this.pauseScroll, body.x + body.w + 5, body.y, body.h);
-    if (sections.footer) {
-      const f = sections.footer; uiRule(ctx, r.x + 1, f.y - (sections.compact ? 4 : 12), r.w - 2);
-      this.button(ctx, f.x, f.y, f.w, f.h, this.L('继续对局', 'Resume match'), () => e.resumeGame(), { id: 'pause-resume', primary: true });
-    }
-  }
   private drawMatchEnd(ctx: Ctx, L: HudLayout) {
     const e = this.engine, end = e.hud.matchEnd!;
     const r = this.frame(ctx, L, 480, 380, end.title), sections = modalSections(r, 48, 20);
@@ -578,7 +588,6 @@ export class CsHud {
   private drawMatchHud(ctx: Ctx, L: HudLayout) {
     const e = this.engine, h = e.hud, { W, H } = L;
     const emphasis = this.emphasis.update({ clock: e.clock, alive: e.player?.alive,
-      weaponKey: `${e.player?.slot || ''}:${e.gunId || ''}:${h.weaponName}`,
       location: h.location, scopeKey: h.scope ? h.scopeLabel : '',
       sessionKey: `${e.selectedMap || ''}:${e.mode || ''}:${e.round || 0}` });
     // Optic masking belongs to the world layer. Painting it after HUD panels
@@ -608,7 +617,7 @@ export class CsHud {
     const feedback = matchFeedbackLayout(L, { touch: e.touchMode, hasBuy: !!h.money,
       objective: !!h.objective, objectiveAction: !!h.objectiveAction, center: !!h.center,
       notice: !!h.notice && !h.center, pickup: !!h.pickup && !h.notice && !h.center, killfeedCount: Math.min(3, h.killfeed.length),
-      hitConfirmationWidth, scopeLabelWidth, equipment: emphasis.equipment && h.slots.length > 0 });
+      hitConfirmationWidth, scopeLabelWidth });
     const message = (rect: HudRect, text: string, color: string = C.text) => {
       uiStatusBand(ctx, rect.x, rect.y, rect.w, rect.h);
       this.text(ctx, text, rect.x + rect.w / 2, rect.y + rect.h / 2, 12, color, 'center', false, rect.w - 20);
@@ -645,15 +654,6 @@ export class CsHud {
     }
     this.drawCompactVitals(ctx, h, healthPanelRect(L));
     this.drawCompactWeapon(ctx, h, weaponPanelRect(L), feedback);
-    if (emphasis.equipment && feedback.equipment) {
-      const r = feedback.equipment, slots = h.slots, gap = 3, bw = (r.w - 12 - gap * (slots.length - 1)) / Math.max(1, slots.length);
-      uiStatusBand(ctx, r.x, r.y, r.w, r.h);
-      slots.forEach((s, i) => {
-        const x = r.x + 6 + i * (bw + gap);
-        if (s.equipped) { ctx.fillStyle = C.text; ctx.fillRect(x, r.y + r.h - 2, bw, 2); }
-        this.text(ctx, String(s.num), x + bw / 2, r.y + 10, 11, s.empty ? C.faint : s.equipped ? C.text : C.dim, 'center', s.equipped, bw);
-      });
-    }
     if (h.damageOpacity > 0) { ctx.globalAlpha = Math.min(1, h.damageOpacity); ctx.strokeStyle = '#c33327'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, W, H); ctx.globalAlpha = 1; }
     if (e.touchMode) this.drawTouchControls(ctx, L);
     this.drawHitMarker(ctx, W, H);
@@ -673,18 +673,6 @@ export class CsHud {
     if (money) this.text(ctx, money, r.x + 8, top + height - 10, 11, C.green, 'left', false, r.w - 16);
   }
 
-  /** Meaningful action/mode only: weapon family descriptions are not combat HUD. */
-  private weaponActionText(h: CsHudView) {
-    const e = this.engine, p = e.player;
-    if (!p?.alive) return { active: '', mode: '' };
-    const item = p.inventory?.[p.slot];
-    if (e.grenadePrime || p.reload > 0 || (typeof e.isDeploying === 'function' && e.isDeploying(p))
-      || (item && typeof e.isCycling === 'function' && e.isCycling(item))) return { active: h.reloadState, mode: '' };
-    const mode = item?.id === 'glock' ? item.burst ? this.L('三连发', 'Burst') : this.L('半自动', 'Semi-auto')
-      : item && ['usp', 'm4a1'].includes(item.id) ? item.suppressed ? this.L('消音', 'Suppressed') : this.L('未消音', 'Unsuppressed') : '';
-    return { active: '', mode };
-  }
-
   private drawCompactWeapon(ctx: Ctx, h: CsHudView, r: HudRect, feedback: MatchFeedbackLayout) {
     const e = this.engine, p = e.player, narrow = r.w < 160, split = r.w < 210;
     const center = h.center && !feedback.center ? h.center.title : '';
@@ -697,13 +685,12 @@ export class CsHud {
     const utility = [h.grenadeCount > 0 ? `HE×${h.grenadeCount}` : '',
       h.slots.some(s => s.key === 'bomb' && !s.empty) || p.inventory?.bomb ? 'C4' : ''].filter(Boolean).join(' · ');
     const action = h.objectiveAction && !feedback.objectiveAction ? h.objectiveAction : null;
-    const weaponState = this.weaponActionText(h);
     const objective = e.bomb?.status === 'planted' && Number.isFinite(e.bomb.fuse)
       ? `${e.bomb.site?.id || 'C4'} · ${Math.ceil(Math.max(0, e.bomb.fuse))}s` : h.objective?.text || '';
-    const status = center || action?.text || weaponState.active
+    const status = center || action?.text
       || (!h.center && h.notice && !feedback.notice ? h.notice.text : '')
       || (h.objective && !feedback.objective ? objective : '')
-      || (!h.notice && !h.center && h.pickup && !feedback.pickup ? this.L('拾取 · ', 'Pick up · ') + h.pickup.name : '') || weaponState.mode;
+      || (!h.notice && !h.center && h.pickup && !feedback.pickup ? this.L('拾取 · ', 'Pick up · ') + h.pickup.name : '');
     let name = h.weaponName;
     if (e.gunId === 'knife') name = e.controlSettings.knifeModel === 'butterfly' ? this.L('蝴蝶刀', 'Butterfly')
       : e.controlSettings.knifeModel === 'karambit' ? this.L('爪刀', 'Karambit') : this.L('经典刀', 'Knife');
@@ -716,6 +703,12 @@ export class CsHud {
     } else {
       this.text(ctx, name, r.x + 8, r.y + 15, 12, C.text, 'left', true, r.w - 144);
       uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, r.x + r.w - 8, r.y + 15, 22, h.ammoText === '0' ? C.gold : C.text, 'right', 122);
+    }
+    // Quiet real reload feedback without action/countdown prose.
+    if (p.reload > 0 && p.reloadTotal > 0) {
+      const progress = Math.max(0, Math.min(1, 1 - p.reload / p.reloadTotal));
+      ctx.fillStyle = C.border; ctx.fillRect(r.x + 8, r.y + primaryH - 2, r.w - 16, 2);
+      ctx.fillStyle = C.gold; ctx.fillRect(r.x + 8, r.y + primaryH - 2, (r.w - 16) * progress, 2);
     }
     // Reserve a persistent envelope; showing a status never shifts controls.
     const lineY = split ? r.y + 49 : r.y + 44;

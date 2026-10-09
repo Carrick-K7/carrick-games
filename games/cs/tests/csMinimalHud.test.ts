@@ -38,7 +38,7 @@ function fixture(zh = false) {
   const engine: any = {
     clock: 10, mode: 'elimination', selectedMap: 'fy_snow', round: 1, phase: 'active', gunId: 'm249', touchMode: false,
     isZh: () => zh, assetUrl: (path: string) => `https://example.invalid/${path}`,
-    player: { alive: true, slot: 'primary', health: 100, armor: 100, reload: 0, money: 16000, inventory: { primary: { id: 'm249' }, bomb: { id: 'c4' } } },
+    player: { alive: true, slot: 'primary', health: 100, armor: 100, reload: 0, reloadTotal: 0, money: 16000, inventory: { primary: { id: 'm249' }, bomb: { id: 'c4' } } },
     isDeploying: () => false, isCycling: () => false, controlSettings: { knifeModel: 'classic' },
     drawRadarContent: () => undefined, touchMove: { x: 0, y: 0 }, keys: new Set(),
     hud: {
@@ -58,7 +58,8 @@ function fixture(zh = false) {
 }
 const texts = (paint: Paint[]) => paint.filter(p => p.op === 'text').map(p => p.text);
 const contains = (outer: HudRect, inner: HudRect) => inner.x >= outer.x - .001 && inner.y >= outer.y - .001 && inner.x + inner.w <= outer.x + outer.w + .001 && inner.y + inner.h <= outer.y + outer.h + .001;
-const slots = (paint: Paint[]) => paint.filter(p => p.op === 'text' && /^[1-5]$/.test(p.text ?? '') && p.size === 11);
+const reloadLines = (paint: Paint[], weapon: HudRect) => paint.filter(p => p.op === 'fillRect' && p.bounds?.h === 2 && contains(weapon, p.bounds));
+const slots = (paint: Paint[]) => paint.filter(p => p.op === 'text' && /^[1-5]$/.test(p.text ?? ''));
 
 afterEach(() => vi.unstubAllGlobals());
 describe('minimal CS HUD actual canvas paint', () => {
@@ -81,6 +82,7 @@ describe('minimal CS HUD actual canvas paint', () => {
     it(`${W}×${H} deep-safe ${zh ? 'ZH' : 'EN'}: complete body values and seven painted 44px actions survive emphasis expiry`, () => {
       const f = fixture(zh); f.engine.touchMode = true; f.hud.setSafeArea(safe);
       const first = f.draw(W, H);
+      expect(slots(first)).toEqual([]);
       const targets = () => f.hud.regions.filter(r => buttonIds.includes(r.id!)).map(({ id, x, y, w, h }) => ({ id, x, y, w, h })).sort((a, b) => a.id!.localeCompare(b.id!));
       const before = targets();
       expect(before.map(r => r.id)).toEqual(buttonIds);
@@ -110,9 +112,17 @@ describe('minimal CS HUD actual canvas paint', () => {
     });
   }
 
-  it.each([[1280, 720], [390, 844], [844, 390]])('%i×%i: browser audit shapes have room for initial equipment and scope captions', (W, H) => {
+  it.each([[1280, 720], [390, 844], [844, 390]])('%i×%i: initial and switched weapons never show numeric slots; scope captions remain', (W, H) => {
     const f = fixture(); f.engine.touchMode = W < 1000; f.hud.setSafeArea(safe);
-    expect(slots(f.draw(W, H))).toHaveLength(5);
+    expect(slots(f.draw(W, H))).toEqual([]);
+    for (const [slot, gunId] of [['pistol', 'usp'], ['knife', 'knife'], ['primary', 'ak47']]) {
+      f.engine.player.slot = slot; f.engine.gunId = gunId;
+      f.engine.player.inventory[slot] = { id: gunId };
+      for (const item of f.engine.hud.slots) item.equipped = item.key === slot;
+      expect(slots(f.draw(W, H))).toEqual([]);
+      f.engine.clock += .1;
+      expect(slots(f.draw(W, H))).toEqual([]);
+    }
     f.engine.hud.scope = true;
     expect(texts(f.draw(W, H))).toContain('2× zoom');
   });
@@ -120,12 +130,12 @@ describe('minimal CS HUD actual canvas paint', () => {
   it('expires only captions on game-clock advance; frozen redraws retain exact scope geometry and input targets', () => {
     const f = fixture(); f.engine.touchMode = true; f.engine.hud.scope = true;
     const first = f.draw(390, 844);
-    expect(texts(first)).toContain('CT spawn'); expect(texts(first)).toContain('2× zoom'); expect(slots(first)).toHaveLength(5);
+    expect(texts(first)).toContain('CT spawn'); expect(texts(first)).toContain('2× zoom'); expect(slots(first)).toEqual([]);
     const optic = (paint: Paint[]) => paint.filter(p => (p.op === 'fill' && p.rule === 'evenodd' && p.path.some(v => v.op === 'arc')) || (p.op === 'stroke' && p.color === '#10151a'));
     for (let i = 0; i < 5; i++) expect(f.draw(390, 844)).toEqual(first);
     f.engine.clock = 11.6;
     const scopeAged = f.draw(390, 844);
-    expect(texts(scopeAged)).not.toContain('2× zoom'); expect(texts(scopeAged)).toContain('CT spawn'); expect(slots(scopeAged)).toHaveLength(5);
+    expect(texts(scopeAged)).not.toContain('2× zoom'); expect(texts(scopeAged)).toContain('CT spawn'); expect(slots(scopeAged)).toEqual([]);
     f.engine.clock = 12;
     const aged = f.draw(390, 844);
     expect(texts(aged)).not.toContain('CT spawn'); expect(slots(aged)).toEqual([]);
@@ -141,9 +151,9 @@ describe('minimal CS HUD actual canvas paint', () => {
     ['cycle', 'Cycling bolt', '拉栓中'], ['prime', 'Pulling pin…', '正在拉环…'],
     ['burst', 'Burst', '三连发'], ['semi', 'Semi-auto', '半自动'],
     ['suppressed', 'Suppressed', '消音'], ['unsuppressed', 'Unsuppressed', '未消音'],
-  ])('keeps live %s status after captions expire in EN and ZH', (kind, en, zhLabel) => {
+  ])('never paints %s weapon status, initially or after caption expiry, in EN and ZH', (kind, en, zhLabel) => {
     for (const zh of [false, true]) {
-      const f = fixture(zh); f.draw(); f.engine.clock = 13;
+      const f = fixture(zh);
       f.engine.hud.reloadState = zh ? zhLabel : en;
       if (kind === 'reload') f.engine.player.reload = 1;
       if (kind === 'deploy') f.engine.isDeploying = () => true;
@@ -151,8 +161,48 @@ describe('minimal CS HUD actual canvas paint', () => {
       if (kind === 'prime') f.engine.grenadePrime = { readyAt: 14 };
       if (kind === 'burst' || kind === 'semi') f.engine.player.inventory.primary = { id: 'glock', burst: kind === 'burst' };
       if (kind === 'suppressed' || kind === 'unsuppressed') f.engine.player.inventory.primary = { id: 'm4a1', suppressed: kind === 'suppressed' };
-      expect(texts(f.draw())).toContain(zh ? zhLabel : en);
+      for (const clock of [10, 10.1, 13]) {
+        f.engine.clock = clock;
+        const paint = f.draw();
+        expect(texts(paint)).not.toContain(zh ? zhLabel : en);
+        expect(slots(paint)).toEqual([]);
+        expect(texts(paint)).toEqual(expect.arrayContaining(['100 / 200', 'HE×2 · C4']));
+      }
     }
+  });
+
+  for (const [W, H] of shapes) it(`${W}×${H}: real reload paints only a bounded 2px line with complete ammo and utility values`, () => {
+    const f = fixture(); f.hud.setSafeArea(safe);
+    const weapon = weaponPanelRect(computeHudLayout(W, H, safe));
+    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
+    f.engine.player.reloadTotal = 4;
+    f.engine.hud.reloadState = 'Reloading · 3s';
+    let previousWidth = -1;
+    for (const remaining of [4, 3, 2, 1, .01]) {
+      f.engine.player.reload = remaining;
+      const paint = f.draw(W, H), lines = reloadLines(paint, weapon);
+      expect(lines).toHaveLength(2);
+      const [track, progress] = lines.map(p => p.bounds!);
+      expect(track.w).toBeGreaterThan(0);
+      expect(track.w).toBeLessThanOrEqual(weapon.w - 16);
+      expect(progress).toMatchObject({ x: track.x, y: track.y, h: 2 });
+      expect(progress.w).toBeCloseTo(track.w * (1 - remaining / 4));
+      expect(progress.w).toBeGreaterThanOrEqual(previousWidth);
+      expect(progress.w).toBeLessThanOrEqual(track.w);
+      previousWidth = progress.w;
+      expect(lines.every(p => p.alpha > 0)).toBe(true);
+      expect(texts(paint)).toEqual(expect.arrayContaining(['100 / 200', 'HE×2 · C4', 'M249']));
+      expect(texts(paint)).not.toContain(f.engine.hud.reloadState);
+      for (const label of paint.filter(p => p.op === 'text' && p.bounds && contains(weapon, p.bounds))) {
+        expect(rectsOverlap(track, label.bounds!), label.text).toBe(false);
+      }
+    }
+    f.engine.player.reload = 5; // A stale remaining value must never overdraw the track.
+    expect(reloadLines(f.draw(W, H), weapon)[1].bounds!.w).toBe(0);
+    f.engine.player.reloadTotal = 0;
+    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
+    f.engine.player.reloadTotal = 4; f.engine.player.reload = 0;
+    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
   });
 
   it.each([{ id: 'usp', suppressed: true }, { id: 'glock', burst: true }])('prioritizes missing objective over passive $id mode on the deeply inset phone', item => {
@@ -167,15 +217,18 @@ describe('minimal CS HUD actual canvas paint', () => {
     expect(labels).not.toContain('Suppressed'); expect(labels).not.toContain('Burst');
   });
 
-  it('retains critical objective/reload feedback and omits stale reload/ammo after death', () => {
+  it('retains critical objective/reload progress and omits stale reload/ammo after death', () => {
     const f = fixture(); f.engine.touchMode = true; f.hud.setSafeArea(safe);
-    f.engine.player.reload = 2; f.engine.hud.reloadState = 'Reloading · 2s';
-    expect(texts(f.draw(320, 568))).toContain('Reloading · 2s');
+    f.engine.player.reload = 2; f.engine.player.reloadTotal = 4; f.engine.hud.reloadState = 'Reloading · 2s';
+    const loading = f.draw(320, 568);
+    expect(texts(loading)).not.toContain('Reloading · 2s');
+    expect(reloadLines(loading, weaponPanelRect(computeHudLayout(320, 568, safe)))).toHaveLength(2);
     f.engine.player.alive = false; f.engine.hud.health = 0;
     f.engine.hud.center = { kicker: 'RESPAWNING', title: 'Respawn 2s', detail: 'Team DM' };
     const dead = f.draw(320, 568);
     expect(texts(dead)).toContain('Respawn 2s'); expect(texts(dead)).not.toContain('Reloading · 2s');
     expect(texts(dead)).not.toContain('100 / 200'); expect(slots(dead)).toEqual([]);
+    expect(reloadLines(dead, weaponPanelRect(computeHudLayout(320, 568, safe)))).toEqual([]);
     f.engine.player.alive = true; f.engine.player.reload = 0; f.engine.hud.center = null;
     f.engine.hud.objectiveAction = { text: 'Defusing B', progress01: .5 };
     expect(texts(f.draw(320, 568))).toContain('Defusing B');

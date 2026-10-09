@@ -342,10 +342,10 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
           const controls = computeTouchControls(L, { hasBuy: true });
           reserved.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
         }
-        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, equipment: true, killfeedCount: 5,
+        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, killfeedCount: 5,
           hitConfirmationWidth: 120, scopeLabelWidth: 60 });
         expect(feedback.objectiveAction).not.toBeNull();
-        const all = [feedback.objectiveAction, feedback.hitConfirmation, feedback.scopeLabel, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed, feedback.equipment].filter((rect): rect is HudRect => rect != null);
+        const all = [feedback.objectiveAction, feedback.hitConfirmation, feedback.scopeLabel, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed].filter((rect): rect is HudRect => rect != null);
         all.forEach((rect, i) => {
           expectInside(rect, overlayBounds(L));
           for (const obstacle of [...reserved, ...all.slice(0, i)]) {
@@ -382,12 +382,12 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
 
   it('empty feedback has no persistent extra panels and caps an oversized killfeed', () => {
     const L = computeHudLayout(1280, 720);
-    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, equipment: null, hitConfirmation: null, scopeLabel: null, killfeed: [] });
+    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, hitConfirmation: null, scopeLabel: null, killfeed: [] });
     expect(matchFeedbackLayout(L, { killfeedCount: 100 }).killfeed.length).toBeLessThanOrEqual(5);
   });
 });
 
-describe('csHudLayout: minimal persistent plates and transient equipment', () => {
+describe('csHudLayout: minimal persistent plates without equipment', () => {
   it('uses exact stable desktop and narrow row budgets without reducing radar detail', () => {
     const desktop = computeHudLayout(1280, 720);
     expect(healthPanelRect(desktop)).toEqual({ x: 18, y: 654, w: 190, h: 48 });
@@ -420,7 +420,7 @@ describe('csHudLayout: minimal persistent plates and transient equipment', () =>
         const L = computeHudLayout(viewport.width, viewport.height, viewport.safeArea);
         return { health: healthPanelRect(L), weapon: weaponPanelRect(L), radar: radarRect(L),
           score: scoreStripRect(L, radarRect(L).w), controls: computeTouchControls(L, { hasBuy: true }),
-          feedback: matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true, objectiveAction: true }) };
+          feedback: matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true }) };
       };
       const baseline = geometry(1), L = computeHudLayout(width, height, safe);
       for (const dpr of [1.25, 1.5, 2, 3]) expect(geometry(dpr)).toEqual(baseline);
@@ -437,55 +437,28 @@ describe('csHudLayout: minimal persistent plates and transient equipment', () =>
       });
     });
 
-    for (const touch of [false, true]) {
-      it(`${tag} touch:${touch}: equipment yields without moving existing priority placement`, () => {
-        const L = computeHudLayout(width, height, safe);
-        for (const busy of [false, true]) {
-          const options = { touch, hasBuy: true, objectiveAction: busy, center: busy, objective: busy,
-            notice: busy, pickup: busy, killfeedCount: busy ? 5 : 0,
-            hitConfirmationWidth: busy ? 120 : undefined, scopeLabelWidth: busy ? 60 : undefined };
-          const before = matchFeedbackLayout(L, options), after = matchFeedbackLayout(L, { ...options, equipment: true });
-          expect(before.equipment).toBeNull();
-          if (!busy) expect(after.equipment).not.toBeNull();
-          expect({ ...after, equipment: null }).toEqual(before);
-          if (after.equipment) {
-            expect(after.equipment.h).toBe(22);
-            expect(after.equipment.w).toBeGreaterThanOrEqual(96);
-            expect(after.equipment.w).toBeLessThanOrEqual(240);
-            expectInside(after.equipment, overlayBounds(L));
-            const radar = radarRect(L), score = scoreStripRect(L, radar.w);
-            const obstacles = [aimClearanceRect(L), L.shellReserve, { ...radar, h: radar.h + (L.short ? 0 : 24) },
-              { ...score, h: score.h + 8 }, healthPanelRect(L), weaponPanelRect(L),
-              ...Object.values(before).flat().filter((rect): rect is HudRect => rect != null)];
-            if (touch) {
-              const controls = computeTouchControls(L, { hasBuy: true });
-              obstacles.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
-            }
-            for (const obstacle of obstacles) expect(rectsOverlap(after.equipment, obstacle)).toBe(false);
-          }
-        }
-      });
-    }
+    it(`${tag}: feedback has no equipment lane, even with a stale caller option`, () => {
+      const L = computeHudLayout(width, height, safe);
+      for (const touch of [false, true]) for (const busy of [false, true]) {
+        const options = { touch, hasBuy: true, objectiveAction: busy, center: busy, objective: busy,
+          notice: busy, pickup: busy, killfeedCount: busy ? 5 : 0,
+          hitConfirmationWidth: busy ? 120 : undefined, scopeLabelWidth: busy ? 60 : undefined };
+        const result = matchFeedbackLayout(L, options);
+        expect(result).not.toHaveProperty('equipment');
+        const staleOptions = { ...options, equipment: true };
+        expect(matchFeedbackLayout(L, staleOptions)).toEqual(result);
+      }
+    });
   }
 
-  it('prefers the full inventory strip directly above the desktop weapon', () => {
-    const L = computeHudLayout(1280, 720), weapon = weaponPanelRect(L);
-    expect(matchFeedbackLayout(L, { equipment: true }).equipment).toEqual({ x: weapon.x, y: weapon.y - 30, w: 240, h: 22 });
-  });
-
-  it('drops inventory before critical action and hit feedback on a busy notched phone', () => {
+  it('keeps critical action and hit feedback on a busy notched phone', () => {
     const L = computeHudLayout(320, 568, { top: 44, right: 20, bottom: 34, left: 47 });
-    const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true, objectiveAction: true,
+    const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true,
       center: true, objective: true, notice: true, pickup: true, killfeedCount: 5, hitConfirmationWidth: 120, scopeLabelWidth: 60 });
-    expect(feedback.equipment).toBeNull();
+    expect(feedback).not.toHaveProperty('equipment');
     expect(feedback.objectiveAction).not.toBeNull();
     expect(feedback.hitConfirmation?.w).toBeGreaterThanOrEqual(80);
     expect(feedback.scopeLabel?.w).toBe(60);
-  });
-
-  it('omits inventory on an unsupported viewport rather than covering controls or aim', () => {
-    const L = computeHudLayout(160, 120);
-    expect(matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true }).equipment).toBeNull();
   });
 });
 

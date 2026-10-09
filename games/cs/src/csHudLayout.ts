@@ -586,8 +586,6 @@ export interface MatchFeedbackOptions {
   center?: boolean;
   notice?: boolean;
   pickup?: boolean;
-  /** Transient read-only inventory; never displaces higher-priority feedback. */
-  equipment?: boolean;
   killfeedCount?: number;
   /** Requested outer caption widths, including the caller's text padding. */
   hitConfirmationWidth?: number;
@@ -600,7 +598,6 @@ export interface MatchFeedbackLayout {
   center: HudRect | null;
   notice: HudRect | null;
   pickup: HudRect | null;
-  equipment: HudRect | null;
   hitConfirmation: HudRect | null;
   scopeLabel: HudRect | null;
   killfeed: HudRect[];
@@ -643,7 +640,7 @@ function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height:
  * Shared match feedback avoids the radar, score/pips, health/ammo and visible
  * touch controls. Invisible look bands are intentionally NOT visual obstacles.
  * Priority: objective action, hit confirmation, scope caption, center result,
- * objective, pickup, notice, feed, equipment. Lower-priority entries return null / fewer
+ * objective, pickup, notice, feed. Lower-priority entries return null / fewer
  * feed rows rather than overpaint critical HUD. No fallback may cover aim.
  */
 export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions = {}): MatchFeedbackLayout {
@@ -660,7 +657,7 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
     blocked.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
   }
   const result: MatchFeedbackLayout = { objective: null, objectiveAction: null, center: null, notice: null, pickup: null,
-    equipment: null, hitConfirmation: null, scopeLabel: null, killfeed: [] };
+    hitConfirmation: null, scopeLabel: null, killfeed: [] };
   const topY = Math.max(L.contentTop, score.y + score.h + 16);
   const place = (w: number, h: number, minW: number, y = topY, right = false) => {
     const rect = freeHudSlot(bounds, blocked, w, h, Math.min(minW, bounds.w), y, right);
@@ -694,12 +691,6 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
     const row = place(300, 22, 160, L.contentTop + i * 30, true);
     if (!row) break;
     result.killfeed.push(row);
-  }
-  if (options.equipment) {
-    const weapon = weaponPanelRect(L);
-    // This read-only strip yields even to feed rows. It can relocate or vanish,
-    // but it never moves the persistent plates, controls or critical feedback.
-    result.equipment = freeHudSlot(bounds, blocked, 240, 22, 96, weapon.y - GAP - 22, true);
   }
   return result;
 }

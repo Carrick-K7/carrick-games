@@ -11,7 +11,7 @@ afterEach(() => { engines.splice(0).forEach(e => e.dispose()); vi.restoreAllMock
 const DEEP_SAFE = { top: 44, right: 20, bottom: 34, left: 47 };
 const ZERO_SAFE = { top: 0, right: 0, bottom: 0, left: 0 };
 const SHAPES = [[1280, 720], [1100, 640], [320, 568], [390, 844], [568, 320], [844, 390]];
-type Surface = 'menu' | 'settings' | 'pause' | 'result' | 'shop' | 'scoreboard' | 'radio' | 'map';
+type Surface = 'menu' | 'settings' | 'settings-advanced' | 'pause' | 'pause-advanced' | 'result' | 'shop' | 'scoreboard' | 'radio' | 'map';
 type TextPaint = { text: string; font: string; raw: HudRect; visible: HudRect | null; clip: HudRect | null };
 function intersection(a: HudRect, b: HudRect): HudRect | null {
   const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
@@ -65,10 +65,13 @@ function fixture(zh = false) {
   const hud = new CsHud(e);
   const select = (surface: Surface) => {
     e.settingsOpen = e.buyOpen = e.mapOpen = e.hud.scoreboardOpen = false;
-    e.radioMenu = null; e.hud.matchEnd = null; e.phase = 'active';
+    e.radioMenu = null; e.hud.matchEnd = null; e.phase = 'menu';
+    // Render the intervening closed page so each controlled surface starts
+    // with the same collapsed state as a real close/reopen navigation.
+    hud.draw(recorder.ctx, 1280, 720); e.phase = 'active';
     if (surface === 'menu') e.phase = 'menu';
-    if (surface === 'settings') { e.phase = 'menu'; e.settingsOpen = true; }
-    if (surface === 'pause') e.pauseGame();
+    if (surface.startsWith('settings')) { e.phase = 'menu'; e.settingsOpen = true; }
+    if (surface.startsWith('pause')) e.pauseGame();
     if (surface === 'result') { e.phase = 'match-end'; e.hud.matchEnd = { won: true, title: zh ? '反恐精英获胜' : 'Counter-terrorists win', score: '12 : 9', stats: zh ? '击杀 123 · 阵亡 19 · 爆头 45' : 'Kills 123 · Deaths 19 · Headshots 45' }; }
     if (surface === 'shop') { e.buyOpen = true; e.buyCategory = 'pistol'; }
     if (surface === 'scoreboard') e.hud.scoreboardOpen = true;
@@ -81,6 +84,16 @@ function fixture(zh = false) {
     return computeHudLayout(width, height, safe);
   };
   return { e, hud, capture, release, recorder, select, draw };
+}
+function reveal(f: ReturnType<typeof fixture>, id: string, W = 1280, H = 720, safe = ZERO_SAFE) {
+  f.hud.onWheel(-10000);
+  for (let step = 0; step < 600; step++) {
+    f.draw(W, H, safe);
+    const region = f.hud.regions.find(r => r.id === id && r.h >= 44 && r.w >= 44);
+    if (region) return region;
+    f.hud.onWheel(4);
+  }
+  throw new Error(`Missing full target: ${id}`);
 }
 function inside(rect: HudRect, bounds: HudRect, label = '') {
   expect(rect.x, label).toBeGreaterThanOrEqual(bounds.x - .001);
@@ -107,9 +120,12 @@ describe('CS modal paint and hit-region audit', () => {
   for (const [W, H] of SHAPES) for (const safe of [ZERO_SAFE, DEEP_SAFE]) for (const zh of [false, true]) {
     it(`${W}x${H} ${safe === DEEP_SAFE ? 'deep-safe' : 'plain'} ${zh ? 'ZH' : 'EN'}: painted modal text, chrome and real targets remain disjoint`, () => {
       const f = fixture(zh);
-      for (const surface of ['menu', 'settings', 'pause', 'result', 'shop', 'scoreboard', 'radio', 'map'] as Surface[]) {
+      for (const surface of ['menu', 'settings', 'settings-advanced', 'pause', 'pause-advanced', 'result', 'shop', 'scoreboard', 'radio', 'map'] as Surface[]) {
         f.select(surface);
         const L = f.draw(W, H, safe), bounds = overlayBounds(L);
+        if (surface.endsWith('-advanced')) {
+          reveal(f, 'settings-more', W, H, safe).down!(0, 0); f.draw(W, H, safe);
+        }
         assertPaint(f, bounds);
         const scroll = f.hud.regions.find(r => r.scroll)?.scroll;
         if (scroll?.max) {
@@ -125,12 +141,14 @@ describe('CS modal paint and hit-region audit', () => {
     const f = fixture(zh);
     const required: Partial<Record<Surface, string[]>> = {
       menu: ['menu-map-fy_snow', 'menu-map-de_dust2', 'menu-mode-defusal', 'menu-mode-tdm', 'menu-limit-100', 'menu-team-ct', 'menu-team-t', 'menu-skill-hard', 'menu-pistol-deagle'],
-      settings: ['settings-sensitivity', 'settings-scope', 'settings-knife-butterfly', 'settings-pistol-deagle', 'settings-hit-full', 'settings-quality-low', 'settings-sound-off'],
-      pause: ['pause-settings', 'pause-scoreboard', 'pause-radio', 'pause-restart', 'pause-menu'],
+      'settings-advanced': ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-quality-high', 'settings-quality-low', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
+      'pause-advanced': ['settings-more', 'settings-scoreboard', 'settings-radio', 'settings-restart', 'settings-menu', 'settings-done'],
       result: ['result-menu'], radio: Array.from({ length: 8 }, (_, i) => `radio-choice-${i + 1}`),
     };
     for (const [surface, ids] of Object.entries(required)) {
       f.select(surface as Surface); f.draw(568, 320, DEEP_SAFE);
+      if (surface.endsWith('-advanced')) { reveal(f, 'settings-more', 568, 320, DEEP_SAFE).down!(0, 0); f.draw(568, 320, DEEP_SAFE); }
+      f.hud.onWheel(-10000); f.draw(568, 320, DEEP_SAFE);
       const fixed = f.hud.regions.filter(r => r.id && !r.deferTap).map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h }));
       const seen = new Set<string>(), scroll = f.hud.regions.find(r => r.scroll)!.scroll!;
       for (let step = 0; step <= Math.ceil(scroll.max / 4); step++) {
@@ -163,11 +181,15 @@ describe('CS modal paint and hit-region audit', () => {
   });
   it('pause → scoreboard close returns to the same manual pause without capture', () => {
     const f = fixture(); f.select('pause'); f.draw(1280, 720);
-    f.hud.regions.find(r => r.id === 'pause-scoreboard')!.down!(0, 0);
+    reveal(f, 'settings-more').down!(0, 0);
+    reveal(f, 'settings-scoreboard').down!(0, 0);
     f.draw(1280, 720);
     expect(f.e.phase).toBe('paused'); expect(f.e.hud.scoreboardOpen).toBe(true);
     f.hud.regions.find(r => r.id === 'scoreboard-close')!.down!(0, 0);
     expect(f.e.phase).toBe('paused'); expect(f.e.hud.scoreboardOpen).toBe(false);
+    f.draw(1280, 720);
+    expect(f.hud.regions.some(r => r.id === 'settings-done')).toBe(true);
+    expect(f.hud.regions.some(r => r.id?.startsWith('pause-'))).toBe(false);
     expect(f.capture).not.toHaveBeenCalled();
   });
   it('radio blocks blank mouse presses, preserves live/manual clock ownership and Escape never recaptures', () => {

@@ -44,33 +44,40 @@ describe('CS v28 settings HUD', () => {
         expect(r.y + r.h).toBeLessThanOrEqual(layout.bottom);
         expect(rectsOverlap(r, layout.shellReserve)).toBe(false);
       }
-      // Fixed close/reset targets stay genuinely 44px high even on short phones.
+      // Fixed close/done targets stay genuinely 44px high even on short phones.
       expect(hud.regions[0].h).toBe(44);
       expect(hud.regions.at(-1)!.h).toBe(44);
-      const close = { ...hud.regions[0] }, reset = { ...hud.regions.at(-1)! };
+      const close = { ...hud.regions[0] }, done = { ...hud.regions.at(-1)! };
       hud.onWheel(500);
       draw(width, height, { top: 12, right: 10, bottom: 12, left: 10 });
       expect(hud.regions[0]).toMatchObject({ x: close.x, y: close.y, w: close.w, h: close.h });
-      expect(hud.regions.at(-1)).toMatchObject({ x: reset.x, y: reset.y, w: reset.w, h: reset.h });
+      expect(hud.regions.at(-1)).toMatchObject({ x: done.x, y: done.y, w: done.w, h: done.h });
     });
   }
 
   it('knife and feedback options remain reachable through their real scrolled hit regions', () => {
     const { engine, hud, labels, draw } = settingsFixture();
-    draw(844, 390);
-    hud.onWheel(168);
-    draw(844, 390);
-    const butterfly = labels.find(label => label.label === 'Butterfly')!;
-    const target = hud.hitTest(butterfly.x, butterfly.y)!;
-    expect(target.h).toBe(44);
-    expect(target.deferTap).toBe(true);
-    target.down!(butterfly.x, butterfly.y);
-    expect(engine.setKnifeModel).toHaveBeenCalledExactlyOnceWith('butterfly');
-    hud.onWheel(168);
-    draw(844, 390);
-    const visual = labels.find(label => label.label === 'Visual')!;
-    hud.hitTest(visual.x, visual.y)!.down!(visual.x, visual.y);
-    expect(engine.setHitFeedback).toHaveBeenCalledExactlyOnceWith('visual');
+    const reveal = (id: string) => {
+      hud.onWheel(-10000);
+      for (let n = 0; n < 400; n++) {
+        draw(844, 390);
+        const region = hud.regions.find(r => r.id === id && r.h >= 44);
+        if (region) return region;
+        hud.onWheel(4);
+      }
+      throw new Error(`Missing full settings target: ${id}`);
+    };
+    const more = reveal('settings-more'); more.down!(more.x, more.y);
+    for (const [id, label, action, value] of [
+      ['settings-knife-butterfly', 'Butterfly', engine.setKnifeModel, 'butterfly'],
+      ['settings-hit-visual', 'Visual', engine.setHitFeedback, 'visual'],
+    ] as const) {
+      const target = reveal(id), painted = labels.find(p => p.label === label)!;
+      expect(target.h).toBe(44); expect(target.deferTap).toBe(true);
+      expect(hud.hitTest(painted.x, painted.y)).toBe(target);
+      target.down!(painted.x, painted.y);
+      expect(action).toHaveBeenCalledExactlyOnceWith(value);
+    }
     expect(engine.closeSettings).not.toHaveBeenCalled();
     expect(engine.resetSettings).not.toHaveBeenCalled();
   });

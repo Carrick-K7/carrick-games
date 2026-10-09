@@ -22,7 +22,7 @@ async function swipeContent(page: Page) {
 async function reveal(page: Page, id: string, touch: boolean) {
   for (let n = 0; n < 12; n++) {
     if (await uiRegion(page, id)) return;
-    const start = await uiRegion(page, 'menu-start') || await uiRegion(page, 'settings-reset');
+    const start = await uiRegion(page, 'menu-start') || await uiRegion(page, 'settings-done');
     const bounds = page.viewportSize()!;
     const bottom = start ? start.y - 16 : bounds.height - 65;
     if (touch) {
@@ -70,7 +70,7 @@ for (const [width, height, touch, lang] of [
         await activateUi(page, 'touch-pause', true);
         await expect.poll(async () => (await info(page)).phase).toBe('paused');
         await page.screenshot({ path: testInfo.outputPath('pause.png') });
-        await activateUi(page, 'pause-resume', true);
+        await activateUi(page, 'settings-done', true);
         await expect.poll(async () => (await info(page)).phase).not.toBe('paused');
       }
       expect(errors).toEqual([]);

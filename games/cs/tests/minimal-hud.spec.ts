@@ -26,6 +26,9 @@ function assertNativePaint(s: MinimalHudSnapshot) {
   expect(s.backing).toEqual({ width: s.viewport.width * s.viewport.dpr, height: s.viewport.height * s.viewport.dpr });
   expect(s.paint.some(p => p.op === 'image' && !p.src && p.bounds?.w === s.viewport.width && p.bounds?.h === s.viewport.height)).toBe(true);
   expect(texts(s).some(text => /65\s*K|65\s*击杀/.test(text ?? ''))).toBe(false);
+  // No inventory strip, even on initial frames or immediately after a weapon change.
+  expect(equipment(s)).toEqual([]);
+  expect(texts(s).filter(text => /Deploy|Reload(?:ing)?\s*[·:]?\s*\d|Burst|Semi-auto|Suppress|换弹(?:中)?\s*[·:]?\s*\d|取出武器|部署|三连发|半自动|消音|拉栓|拉环|Cycling bolt|Pulling pin/i.test(text ?? ''))).toEqual([]);
   for (const p of s.paint.filter(p => p.op === 'text' && p.text?.trim())) {
     expect(p.alpha, p.text).toBeGreaterThan(0);
     const b = p.bounds!;
@@ -59,7 +62,7 @@ for (const shape of shapes) for (const dpr of [1, 2]) test.describe(`CS minimal 
       const initial = await setMinimalHudScenario(page, 'quiet');
       assertNativePaint(initial); assertTouch(initial, shape.touch);
       if (shape.height >= 480) expect(texts(initial)).toContain(initial.location);
-      expect(equipment(initial)).toHaveLength(5);
+      expect(equipment(initial)).toEqual([]);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-presentation', 'paused');
       const paused = await readMinimalHud(page);
       expect(paused.clock).toBe(initial.clock); expect(paused.paint).toEqual(initial.paint); expect(paused.targets).toEqual(initial.targets);
@@ -78,12 +81,17 @@ for (const shape of shapes) for (const dpr of [1, 2]) test.describe(`CS minimal 
       const busy = await setMinimalHudScenario(page, 'busy', true);
       assertNativePaint(busy); assertTouch(busy, shape.touch);
       expect(texts(busy)).toContain('拆除 B');
-      expect(texts(busy).some(t => t?.startsWith('换弹'))).toBe(true);
+      expect(texts(busy).some(t => /^换弹(?:中)?\s*·/.test(t ?? ''))).toBe(false);
       expect(texts(busy)).toContain('HE×2 · C4');
       await screenshot('busy-zh');
 
-      await setMinimalHudScenario(page, 'high-ammo');
-      const high = await advanceMinimalHud(page, 2.3);
+      const switched = await setMinimalHudScenario(page, 'high-ammo');
+      assertNativePaint(switched); assertTouch(switched, shape.touch);
+      expect(texts(switched)).toEqual(expect.arrayContaining(['M249', '100 / 200', 'HE×2 · C4']));
+      const justSwitched = await advanceMinimalHud(page, .1);
+      assertNativePaint(justSwitched);
+      expect(justSwitched.targets).toEqual(initial.targets);
+      const high = await advanceMinimalHud(page, 2.2);
       assertNativePaint(high); assertTouch(high, shape.touch);
       expect(texts(high)).toEqual(expect.arrayContaining(['100 / 200', 'M249', '$ 16000', 'HE×2 · C4']));
       expect(texts(high).filter(t => t === '100')).toHaveLength(2);
