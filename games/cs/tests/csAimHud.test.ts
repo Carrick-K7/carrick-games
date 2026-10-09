@@ -148,16 +148,22 @@ describe('CS aiming paint geometry', () => {
     expect(operations.some(op => op.kind === 'text' && op.text.includes('alive players only'))).toBe(true);
   });
 
-  it('keeps larger tactical health digits clear of two-digit kills in a deeply inset phone', () => {
+  it('keeps complete vitals separate while removing the duplicate HUD kill counter', () => {
     const { ctx, operations } = recorder();
-    const { hud } = fixture(operations, { health: 100, armor: 100, killCount: 65 });
-    hud.setSafeArea({ top: 44, right: 20, bottom: 34, left: 47 }); hud.draw(ctx, 320, 568);
+    const { hud, engine } = fixture(operations, { health: 100, armor: 100, killCount: 65 });
+    const safe = { top: 44, right: 20, bottom: 34, left: 47 };
+    hud.setSafeArea(safe); hud.draw(ctx, 320, 568);
     const health = operations.find(op => op.kind === 'text' && op.text === '100' && op.bounds.h >= 20);
-    const armor = operations.find(op => op.kind === 'text' && op.text === '100' && op.bounds.h === 12);
-    const kills = operations.find(op => op.kind === 'text' && op.text === '65 K');
-    expect(health).toBeTruthy(); expect(armor).toBeTruthy(); expect(kills).toBeTruthy();
-    expect(rectsOverlap(health.bounds, kills.bounds)).toBe(false);
-    expect(rectsOverlap(armor.bounds, kills.bounds)).toBe(false);
+    const armor = operations.find(op => op.kind === 'text' && op.text === '100' && op.bounds.h === 14);
+    expect(health).toBeTruthy(); expect(armor).toBeTruthy();
+    expect(rectsOverlap(health.bounds, armor.bounds)).toBe(false);
+    const r = healthPanelRect(computeHudLayout(320, 568, safe));
+    for (const op of [health, armor]) {
+      expect(op.bounds.x).toBeGreaterThanOrEqual(r.x);
+      expect(op.bounds.x + op.bounds.w).toBeLessThanOrEqual(r.x + r.w);
+    }
+    expect(operations.some(op => op.text === '65 K' || op.text === '65 kills')).toBe(false);
+    expect(engine.hud.killCount).toBe(65); // Presentation does not change recorded statistics.
   });
 
   for (const [W, H] of [[320, 568], [390, 844], [568, 320], [844, 390]]) {

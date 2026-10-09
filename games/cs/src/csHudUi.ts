@@ -10,6 +10,12 @@ export const UI = {
   primary: '#466b35', primaryHover: '#51763e',
   header: 'rgba(9,14,19,.52)', hud: 'rgba(8,13,18,.76)',
 };
+/** Compact combat-only backing. No decorative frame or accent stripe. */
+export function uiStatusBand(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  if (!(w > 0 && h > 0)) return;
+  ctx.fillStyle = 'rgba(8,13,18,.68)'; ctx.fillRect(x, y, w, h);
+}
+
 export const UI_FONT = '"Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif';
 export const UI_NUMBER_FONT = '"Arial Narrow", "Roboto Condensed", "Bahnschrift", "Segoe UI", Arial, sans-serif';
 export type UiTone = 'neutral' | 'ct' | 't';

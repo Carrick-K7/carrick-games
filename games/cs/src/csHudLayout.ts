@@ -310,16 +310,16 @@ export function radarRect(L: HudLayout): HudRect {
 export function scoreStripRect(L: HudLayout, radarSize: number): HudRect {
   const radar = radarRect(L);
   const radarRight = L.left + radarSize + 12;
-  const besideW = Math.max(0, Math.min(300, L.shellReserve.x - 8 - radarRight));
+  const besideW = Math.max(0, Math.min(240, L.shellReserve.x - 8 - radarRight));
   // A 44px landscape side notch leaves 145px here on a 568px screen.
   // Docking the strip below the radar instead would put it directly over aim.
   const beside = (!L.compact || L.short) && besideW >= (L.short ? 140 : 160) && radar.y === L.top;
-  const w = beside ? besideW : L.availW;
+  const w = beside ? besideW : Math.min(240, L.availW);
   return {
     x: beside ? Math.max(radarRight, Math.min(L.left + (L.availW - w) / 2, L.shellReserve.x - 8 - w)) : L.left,
     y: beside ? L.top - 4 : radar.y > L.top ? L.contentTop : L.top + radarSize + 30,
     w,
-    h: 46,
+    h: 36,
   };
 }
 
@@ -378,17 +378,17 @@ export function scoreboardBodyLayout(panel: HudRect, rowCount: number) {
   return { body, rowHeight, teamHeaderHeight, contentH, maxScroll: Math.max(0, contentH - body.h), headerH, footer, close };
 }
 
-/** Bottom-left health/armor/money panel; short screens use fewer content rows. */
+/** Fixed bottom-left health/armor/cash budget; narrow panels stack all three. */
 export function healthPanelRect(L: HudLayout): HudRect {
-  const w = Math.min(L.short ? 210 : 230, L.compact ? L.availW * 0.44 : L.availW);
-  const h = L.short ? 62 : 78;
+  const w = Math.min(190, L.compact ? L.availW * 0.44 : L.availW);
+  const h = w < 120 ? 60 : 48;
   return { x: L.left, y: L.bottom - h, w, h };
 }
 
-/** Bottom-right weapon/ammo panel; drawing must honor the returned height. */
+/** Fixed name/ammo/action/HE/C4 budget, independent of transient weapon state. */
 export function weaponPanelRect(L: HudLayout): HudRect {
-  const w = Math.min(300, L.compact ? L.availW * 0.5 : L.availW);
-  const h = L.short ? 76 : 100;
+  const w = Math.min(240, L.compact ? L.availW * 0.5 : L.availW);
+  const h = w < 160 ? 76 : 60;
   return { x: L.right - w, y: L.bottom - h, w, h };
 }
 
@@ -586,6 +586,8 @@ export interface MatchFeedbackOptions {
   center?: boolean;
   notice?: boolean;
   pickup?: boolean;
+  /** Transient read-only inventory; never displaces higher-priority feedback. */
+  equipment?: boolean;
   killfeedCount?: number;
   /** Requested outer caption widths, including the caller's text padding. */
   hitConfirmationWidth?: number;
@@ -598,6 +600,7 @@ export interface MatchFeedbackLayout {
   center: HudRect | null;
   notice: HudRect | null;
   pickup: HudRect | null;
+  equipment: HudRect | null;
   hitConfirmation: HudRect | null;
   scopeLabel: HudRect | null;
   killfeed: HudRect[];
@@ -640,7 +643,7 @@ function freeHudSlot(bounds: HudRect, blocked: HudRect[], width: number, height:
  * Shared match feedback avoids the radar, score/pips, health/ammo and visible
  * touch controls. Invisible look bands are intentionally NOT visual obstacles.
  * Priority: objective action, hit confirmation, scope caption, center result,
- * objective, pickup, notice, feed. Lower-priority entries return null / fewer
+ * objective, pickup, notice, feed, equipment. Lower-priority entries return null / fewer
  * feed rows rather than overpaint critical HUD. No fallback may cover aim.
  */
 export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions = {}): MatchFeedbackLayout {
@@ -657,7 +660,7 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
     blocked.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
   }
   const result: MatchFeedbackLayout = { objective: null, objectiveAction: null, center: null, notice: null, pickup: null,
-    hitConfirmation: null, scopeLabel: null, killfeed: [] };
+    equipment: null, hitConfirmation: null, scopeLabel: null, killfeed: [] };
   const topY = Math.max(L.contentTop, score.y + score.h + 16);
   const place = (w: number, h: number, minW: number, y = topY, right = false) => {
     const rect = freeHudSlot(bounds, blocked, w, h, Math.min(minW, bounds.w), y, right);
@@ -691,6 +694,12 @@ export function matchFeedbackLayout(L: HudLayout, options: MatchFeedbackOptions 
     const row = place(300, 22, 160, L.contentTop + i * 30, true);
     if (!row) break;
     result.killfeed.push(row);
+  }
+  if (options.equipment) {
+    const weapon = weaponPanelRect(L);
+    // This read-only strip yields even to feed rows. It can relocate or vanish,
+    // but it never moves the persistent plates, controls or critical feedback.
+    result.equipment = freeHudSlot(bounds, blocked, 240, 22, 96, weapon.y - GAP - 22, true);
   }
   return result;
 }

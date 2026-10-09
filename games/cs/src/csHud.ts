@@ -2,12 +2,13 @@
 // viewport; fixed headers/actions never move with selectable content.
 import type { CsEngine } from './csEngine.js';
 import { MAPS } from './csMaps.js';
-import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRule, uiText, type UiTone } from './csHudUi.js';
+import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRule, uiText, uiStatusBand, type UiTone } from './csHudUi.js';
 import { drawHudIcon, drawTeamBadge } from './csHudArt.js';
+import { HudEmphasis } from './csHudEmphasis.js';
 import {
   aimGeometry, buttonHit, computeHudLayout, computeTouchControls, healthPanelRect, HudScroll,
   normalizeSafeArea, overlayRect, radarRect, scoreboardColumns, scoreboardBodyLayout, scoreStripRect, matchFeedbackLayout, killfeedColumns,
-  TOUCH_TARGET, weaponPanelRect, modalSections, shopLayout, tacticalMapLayout, type ModalSections, type HudLayout, type HudSafeArea, type HudRect,
+  TOUCH_TARGET, weaponPanelRect, modalSections, shopLayout, tacticalMapLayout, type MatchFeedbackLayout, type HudLayout, type HudSafeArea, type HudRect,
   type TouchButtonId,
 } from './csHudLayout.js';
 
@@ -74,12 +75,13 @@ export class CsHud {
   private regionClip: HudRect | null = null;
   private regionScroll: HudScroll | null = null;
   private pointer: { x: number; y: number } | null = null;
+  private readonly emphasis = new HudEmphasis();
   private readonly mapPreviews = new Map<string, HTMLImageElement>();
   private readonly weaponIcons = new Map<string, HTMLImageElement>();
   constructor(private readonly engine: CsEngine) {}
   setPointer(point: { x: number; y: number } | null) { this.pointer = point; }
   dispose() {
-    this.pointer = null; this.regions = [];
+    this.pointer = null; this.regions = []; this.emphasis.reset();
     // Images have no callbacks into this HUD. Dropping the instance cache cannot
     // retarget another instance or a retained release while downloads settle.
     this.mapPreviews.clear(); this.weaponIcons.clear();
@@ -373,6 +375,7 @@ export class CsHud {
     const e = this.engine, L = computeHudLayout(W, H, this.safeArea);
     this.regions = []; ctx.save();
     if (!e.radioMenu) this.lastRadioMenu = null;
+    if (e.phase === 'menu') this.emphasis.reset();
     if (e.settingsOpen) this.drawSettings(ctx, L);
     else if (e.phase === 'menu') this.drawMenu(ctx, L);
     else if (e.hud.matchEnd) this.drawMatchEnd(ctx, L);
@@ -574,37 +577,40 @@ export class CsHud {
 
   private drawMatchHud(ctx: Ctx, L: HudLayout) {
     const e = this.engine, h = e.hud, { W, H } = L;
+    const emphasis = this.emphasis.update({ clock: e.clock, alive: e.player?.alive,
+      weaponKey: `${e.player?.slot || ''}:${e.gunId || ''}:${h.weaponName}`,
+      location: h.location, scopeKey: h.scope ? h.scopeLabel : '',
+      sessionKey: `${e.selectedMap || ''}:${e.mode || ''}:${e.round || 0}` });
     // Optic masking belongs to the world layer. Painting it after HUD panels
     // would blacken the radar, score and objective outside the lens.
     this.drawAimUnderlay(ctx, W, H);
     const radar = radarRect(L), rs = radar.w;
     e.drawRadarContent(ctx, radar.x, radar.y, rs);
-    if (!L.short) {
-      ctx.fillStyle = UI.hud; ctx.fillRect(radar.x, radar.y + rs + 3, rs, 18);
+    if (!L.short && emphasis.location) {
+      uiStatusBand(ctx, radar.x, radar.y + rs + 3, rs, 18);
       this.text(ctx, h.location, radar.x + rs / 2, radar.y + rs + 12, 11, C.dim, 'center', false, rs - 8);
     }
     const score = scoreStripRect(L, rs), { x: sx, y: sy, w: sw } = score;
-    this.panel(ctx, sx, sy, sw, score.h, true);
-    ctx.fillStyle = 'rgba(112,170,209,.17)'; ctx.fillRect(sx, sy, 46, score.h);
-    ctx.fillStyle = 'rgba(197,170,103,.17)'; ctx.fillRect(sx + sw - 46, sy, 46, score.h);
-    ctx.fillStyle = C.blue; ctx.fillRect(sx, sy, 46, 2);
-    ctx.fillStyle = C.gold; ctx.fillRect(sx + sw - 46, sy, 46, 2);
-    uiNumber(ctx, String(h.ctScore), sx + 23, sy + 24, 24, C.blue, 'center');
-    uiNumber(ctx, String(h.tScore), sx + sw - 23, sy + 24, 24, C.gold, 'center');
-    this.text(ctx, h.roundLabel, sx + sw / 2, sy + 12, 11, C.dim, 'center', false, sw - 76);
-    this.text(ctx, h.timerText, sx + sw / 2, sy + 31, 16, h.timerUrgent ? C.red : C.text, 'center', true);
+    uiStatusBand(ctx, sx, sy, sw, score.h);
+    uiNumber(ctx, String(h.ctScore), sx + 23, sy + score.h / 2, 22, C.blue, 'center', 40);
+    uiNumber(ctx, String(h.tScore), sx + sw - 23, sy + score.h / 2, 22, C.gold, 'center', 40);
+    const round = e.mode === 'tdm' && Number.isFinite(e.killLimit) ? this.L('目标 ', 'Goal ') + e.killLimit : h.roundLabel;
+    if (h.timerText) {
+      this.text(ctx, h.timerText, sx + sw / 2, sy + 12, 16, h.timerUrgent ? C.red : C.text, 'center', true, sw - 92);
+      this.text(ctx, round, sx + sw / 2, sy + 28, 11, C.dim, 'center', false, sw - 92);
+    } else this.text(ctx, round, sx + sw / 2, sy + score.h / 2, 11, C.dim, 'center', false, sw - 92);
     this.pips(ctx, h.alivePips.ct, sx + 10, sy + score.h + 6, C.blue);
     this.pips(ctx, h.alivePips.t, sx + sw - 10 - h.alivePips.t.length * 10, sy + score.h + 6, C.amber);
-    uiFont(ctx, 13);
+    uiFont(ctx, 11);
     const hitConfirmationWidth = h.hitOpacity > 0 && h.hitConfirmation ? Math.ceil(ctx.measureText(h.hitConfirmation).width) + 12 : undefined;
     uiFont(ctx, 11);
-    const scopeLabelWidth = h.scope && h.scopeLabel ? Math.ceil(ctx.measureText(h.scopeLabel).width) + 12 : undefined;
+    const scopeLabelWidth = h.scope && h.scopeLabel && emphasis.scope ? Math.ceil(ctx.measureText(h.scopeLabel).width) + 12 : undefined;
     const feedback = matchFeedbackLayout(L, { touch: e.touchMode, hasBuy: !!h.money,
       objective: !!h.objective, objectiveAction: !!h.objectiveAction, center: !!h.center,
-      notice: !!h.notice && !h.center, pickup: !!h.pickup, killfeedCount: Math.min(3, h.killfeed.length),
-      hitConfirmationWidth, scopeLabelWidth });
+      notice: !!h.notice && !h.center, pickup: !!h.pickup && !h.notice && !h.center, killfeedCount: Math.min(3, h.killfeed.length),
+      hitConfirmationWidth, scopeLabelWidth, equipment: emphasis.equipment && h.slots.length > 0 });
     const message = (rect: HudRect, text: string, color: string = C.text) => {
-      this.panel(ctx, rect.x, rect.y, rect.w, rect.h, true);
+      uiStatusBand(ctx, rect.x, rect.y, rect.w, rect.h);
       this.text(ctx, text, rect.x + rect.w / 2, rect.y + rect.h / 2, 12, color, 'center', false, rect.w - 20);
     };
     if (h.objective && feedback.objective) message(feedback.objective, h.objective.text, C.gold);
@@ -629,7 +635,7 @@ export class CsHud {
     if (h.hitOpacity > 0 && feedback.hitConfirmation) {
       const r = feedback.hitConfirmation;
       ctx.save(); ctx.globalAlpha *= Math.min(1, h.hitOpacity);
-      this.text(ctx, h.hitConfirmation, r.x + r.w / 2, r.y + r.h / 2, 13, this.hitColor(), 'center', false, r.w - 12);
+      this.text(ctx, h.hitConfirmation, r.x + r.w / 2, r.y + r.h / 2, 11, this.hitColor(), 'center', false, r.w - 12);
       ctx.restore();
     }
     if (h.scope && feedback.scopeLabel) {
@@ -637,51 +643,102 @@ export class CsHud {
       uiRound(ctx, r.x, r.y, r.w, r.h, UI.hud, undefined, 1);
       this.text(ctx, h.scopeLabel, r.x + r.w / 2, r.y + r.h / 2, 11, C.dim, 'center', false, r.w - 12);
     }
-    const hp = healthPanelRect(L), compactHp = hp.w < 160 || hp.h < 78;
-    uiHudPlate(ctx, hp.x, hp.y, hp.w, hp.h, h.healthLow ? C.red : C.gold);
-    const healthY = hp.y + (h.money ? (hp.h < 78 ? 30 : 34) : 24);
-    if (h.money) this.text(ctx, h.money, hp.x + 10, hp.y + 12, 11, C.green, 'left', false, hp.w - 20);
-    drawHudIcon(ctx, 'health', hp.x + 10, healthY - 7, 14, 14, h.healthLow ? C.red : C.text);
-    uiNumber(ctx, String(h.health), hp.x + 31, healthY, hp.h < 78 ? 22 : 24, h.healthLow ? C.red : C.text);
-    const narrowVitals = hp.w < 120;
-    if (compactHp) this.text(ctx, `${h.killCount} K`, hp.x + hp.w - 10, narrowVitals ? hp.y + hp.h - 13 : healthY, 11, C.dim, 'right');
-    if (hp.h >= 78) uiRound(ctx, hp.x + 10, hp.y + 51, (hp.w - 20) * h.healthPct / 100, 3, h.healthLow ? C.red : C.amber, undefined, 2);
-    drawHudIcon(ctx, 'armor', hp.x + 10, hp.y + hp.h - 20, 13, 13, C.dim);
-    this.text(ctx, String(h.armor), hp.x + 31, hp.y + hp.h - 13, 12, C.dim, 'left', false, narrowVitals ? hp.w - 68 : compactHp ? hp.w - 41 : hp.w - 105);
-    if (!compactHp) this.text(ctx, h.killCount + this.L(' 击杀', ' kills'), hp.x + hp.w - 10, hp.y + hp.h - 14, 11, C.dim, 'right');
-    const wp = weaponPanelRect(L), compactWp = wp.w < 220 || wp.h < 90;
-    uiHudPlate(ctx, wp.x, wp.y, wp.w, wp.h, e.player?.team === 'ct' ? C.blue : C.gold);
-    const inlineFeedback = h.center && !feedback.center ? h.center.title
-      : !h.center && h.notice && !feedback.notice ? h.notice.text
-      : h.objective && !feedback.objective ? h.objective.text
-      : h.pickup && !feedback.pickup ? this.L('拾取 · ', 'Pick up · ') + h.pickup.name : null;
-    const reloading = !!e.player?.alive && e.player.reload > 0;
-    const weaponIcon = !inlineFeedback && wp.w >= 240 && wp.h >= 90 && HUD_FIREARMS.has(e.gunId);
-    const weaponHeading = h.center && !feedback.center ? h.center.title : compactWp && reloading ? h.reloadState : inlineFeedback || h.weaponName;
-    this.text(ctx, weaponHeading, wp.x + 12, wp.y + 16, compactWp ? 12 : 14, reloading || inlineFeedback ? C.gold : C.text, 'left', true, wp.w - (weaponIcon ? 88 : 24));
-    if (weaponIcon) this.drawWeaponArtwork(ctx, e.gunId, wp.x + wp.w - 70, wp.y + 8, 56, 17);
-    if (h.objectiveAction && !feedback.objectiveAction) {
-      // Extremely short/notched windows may have no extra feedback lane. Keep
-      // active planting/defusing visible inside the existing weapon panel,
-      // rather than hiding it or covering the aiming point with a fallback.
-      this.text(ctx, h.objectiveAction.text, wp.x + 12, wp.y + (wp.h < 90 ? 34 : 39), 11, C.gold, 'left', false, wp.w - 24);
-      uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, wp.w - 24, 3, C.border, undefined, 2);
-      uiRound(ctx, wp.x + 12, wp.y + wp.h - 34, (wp.w - 24) * h.objectiveAction.progress01, 3, C.amber, undefined, 2);
-    } else {
-      uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, wp.x + wp.w - 12, wp.y + (compactWp ? 39 : 44), compactWp ? 20 : 26, C.text, 'right', wp.w - 24);
-      if (!compactWp) this.text(ctx, !e.player?.alive && e.player?.reload > 0 ? this.L('已阵亡', 'Eliminated') : h.reloadState, wp.x + 12, wp.y + 44, 11, C.dim, 'left', false, Math.max(0, wp.w - 150));
+    this.drawCompactVitals(ctx, h, healthPanelRect(L));
+    this.drawCompactWeapon(ctx, h, weaponPanelRect(L), feedback);
+    if (emphasis.equipment && feedback.equipment) {
+      const r = feedback.equipment, slots = h.slots, gap = 3, bw = (r.w - 12 - gap * (slots.length - 1)) / Math.max(1, slots.length);
+      uiStatusBand(ctx, r.x, r.y, r.w, r.h);
+      slots.forEach((s, i) => {
+        const x = r.x + 6 + i * (bw + gap);
+        if (s.equipped) { ctx.fillStyle = C.text; ctx.fillRect(x, r.y + r.h - 2, bw, 2); }
+        this.text(ctx, String(s.num), x + bw / 2, r.y + 10, 11, s.empty ? C.faint : s.equipped ? C.text : C.dim, 'center', s.equipped, bw);
+      });
     }
-    const slots = h.slots, gap = 4, bw = (wp.w - 24 - gap * (slots.length - 1)) / Math.max(1, slots.length);
-    slots.forEach((s, i) => {
-      const x = wp.x + 12 + i * (bw + gap), y = wp.y + wp.h - 27;
-      ctx.fillStyle = s.equipped ? 'rgba(204,178,118,.18)' : 'rgba(255,255,255,.035)'; ctx.fillRect(x, y, bw, 19);
-      if (s.equipped) { ctx.fillStyle = C.gold; ctx.fillRect(x, y + 17, bw, 2); }
-      this.text(ctx, s.key === 'grenade' ? `${s.num}·${h.grenadeCount}` : String(s.num), x + bw / 2, y + 10, 11, s.empty ? C.faint : s.equipped ? C.gold : C.dim, 'center', s.equipped);
-    });
     if (h.damageOpacity > 0) { ctx.globalAlpha = Math.min(1, h.damageOpacity); ctx.strokeStyle = '#c33327'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, W, H); ctx.globalAlpha = 1; }
     if (e.touchMode) this.drawTouchControls(ctx, L);
     this.drawHitMarker(ctx, W, H);
   }
+  private drawCompactVitals(ctx: Ctx, h: CsHudView, r: HudRect) {
+    const e = this.engine, narrow = r.w < 120;
+    const money = !h.money ? '' : e.mode === 'tdm' ? this.L('免费装备', 'Free gear')
+      : Number.isFinite(e.player?.money) ? '$ ' + e.player.money : h.money;
+    const height = narrow ? (money ? 60 : 42) : (money ? 48 : 28), top = r.y + r.h - height;
+    uiStatusBand(ctx, r.x, top, r.w, height);
+    const color = h.healthLow ? C.red : C.text, cy = top + 14;
+    drawHudIcon(ctx, 'health', r.x + 8, cy - 6, 12, 12, color);
+    uiNumber(ctx, String(h.health), r.x + 26, cy, 22, color, 'left', narrow ? r.w - 34 : 40);
+    const armorX = narrow ? r.x + 8 : r.x + r.w - 53, armorY = narrow ? top + 33 : cy;
+    drawHudIcon(ctx, 'armor', armorX, armorY - 5.5, 11, 11, C.dim);
+    uiNumber(ctx, String(h.armor), armorX + 15, armorY, 14, C.dim, 'left', narrow ? r.w - 31 : 30);
+    if (money) this.text(ctx, money, r.x + 8, top + height - 10, 11, C.green, 'left', false, r.w - 16);
+  }
+
+  /** Meaningful action/mode only: weapon family descriptions are not combat HUD. */
+  private weaponActionText(h: CsHudView) {
+    const e = this.engine, p = e.player;
+    if (!p?.alive) return { active: '', mode: '' };
+    const item = p.inventory?.[p.slot];
+    if (e.grenadePrime || p.reload > 0 || (typeof e.isDeploying === 'function' && e.isDeploying(p))
+      || (item && typeof e.isCycling === 'function' && e.isCycling(item))) return { active: h.reloadState, mode: '' };
+    const mode = item?.id === 'glock' ? item.burst ? this.L('三连发', 'Burst') : this.L('半自动', 'Semi-auto')
+      : item && ['usp', 'm4a1'].includes(item.id) ? item.suppressed ? this.L('消音', 'Suppressed') : this.L('未消音', 'Unsuppressed') : '';
+    return { active: '', mode };
+  }
+
+  private drawCompactWeapon(ctx: Ctx, h: CsHudView, r: HudRect, feedback: MatchFeedbackLayout) {
+    const e = this.engine, p = e.player, narrow = r.w < 160, split = r.w < 210;
+    const center = h.center && !feedback.center ? h.center.title : '';
+    if (!p?.alive) {
+      uiStatusBand(ctx, r.x, r.y, r.w, 44);
+      this.text(ctx, h.center?.title || this.L('已阵亡', 'Eliminated'), r.x + 8, r.y + 13, 12, C.gold, 'left', true, r.w - 16);
+      if (h.center?.detail && !feedback.center) this.text(ctx, h.center.detail, r.x + 8, r.y + 32, 11, C.dim, 'left', false, r.w - 16);
+      return;
+    }
+    const utility = [h.grenadeCount > 0 ? `HE×${h.grenadeCount}` : '',
+      h.slots.some(s => s.key === 'bomb' && !s.empty) || p.inventory?.bomb ? 'C4' : ''].filter(Boolean).join(' · ');
+    const action = h.objectiveAction && !feedback.objectiveAction ? h.objectiveAction : null;
+    const weaponState = this.weaponActionText(h);
+    const objective = e.bomb?.status === 'planted' && Number.isFinite(e.bomb.fuse)
+      ? `${e.bomb.site?.id || 'C4'} · ${Math.ceil(Math.max(0, e.bomb.fuse))}s` : h.objective?.text || '';
+    const status = center || action?.text || weaponState.active
+      || (!h.center && h.notice && !feedback.notice ? h.notice.text : '')
+      || (h.objective && !feedback.objective ? objective : '')
+      || (!h.notice && !h.center && h.pickup && !feedback.pickup ? this.L('拾取 · ', 'Pick up · ') + h.pickup.name : '') || weaponState.mode;
+    let name = h.weaponName;
+    if (e.gunId === 'knife') name = e.controlSettings.knifeModel === 'butterfly' ? this.L('蝴蝶刀', 'Butterfly')
+      : e.controlSettings.knifeModel === 'karambit' ? this.L('爪刀', 'Karambit') : this.L('经典刀', 'Knife');
+    if (split && e.gunId === 'he') name = 'HE';
+    const primaryH = split ? 42 : 30;
+    uiStatusBand(ctx, r.x, r.y, r.w, primaryH);
+    if (split) {
+      this.text(ctx, name, r.x + 8, r.y + 10, 12, C.text, 'left', true, r.w - 16);
+      uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, r.x + r.w - 8, r.y + 30, r.w < 128 ? 18 : 20, h.ammoText === '0' ? C.gold : C.text, 'right', r.w - 16);
+    } else {
+      this.text(ctx, name, r.x + 8, r.y + 15, 12, C.text, 'left', true, r.w - 144);
+      uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, r.x + r.w - 8, r.y + 15, 22, h.ammoText === '0' ? C.gold : C.text, 'right', 122);
+    }
+    // Reserve a persistent envelope; showing a status never shifts controls.
+    const lineY = split ? r.y + 49 : r.y + 44;
+    uiFont(ctx, 11); const utilityW = utility ? Math.ceil(ctx.measureText(utility).width) + 8 : 0;
+    const separateUtility = narrow;
+    const statusW = r.w - 16 - (utility && !separateUtility ? utilityW + 6 : 0);
+    if (status || (!separateUtility && utility)) {
+      const bottom = action ? (split ? 58 : 56) : lineY - r.y + 8;
+      uiStatusBand(ctx, r.x, r.y + primaryH, r.w, Math.min(r.h, bottom) - primaryH);
+      if (status) this.text(ctx, status, r.x + 8, lineY, 11, center || action || p.reload > 0 ? C.gold : C.dim, 'left', false, statusW);
+      if (!separateUtility && utility) this.text(ctx, utility, r.x + r.w - 8, lineY, 11, C.dim, 'right', false, utilityW);
+    }
+    if (separateUtility && utility) {
+      uiStatusBand(ctx, r.x, r.y + 58, r.w, 18);
+      this.text(ctx, utility, r.x + r.w - 8, r.y + 66, 11, C.dim, 'right', false, r.w - 16);
+    }
+    if (action) {
+      const y = split ? r.y + 56 : r.y + 54;
+      ctx.fillStyle = C.border; ctx.fillRect(r.x + 8, y, statusW, 2);
+      ctx.fillStyle = C.gold; ctx.fillRect(r.x + 8, y, statusW * Math.max(0, Math.min(1, action.progress01)), 2);
+    }
+  }
+
   private drawKillfeedRow(ctx: Ctx, r: HudRect, k: CsHudView['killfeed'][number]) {
     const columns = killfeedColumns(r, k.head), cy = r.y + r.h / 2;
     this.panel(ctx, r.x, r.y, r.w, r.h, true);
@@ -743,8 +800,10 @@ export class CsHud {
     const e = this.engine, tc = computeTouchControls(L, { hasBuy: !!e.hud.money });
     for (const band of tc.look) this.regions.push({ ...band, id: 'look' });
     const j = tc.joystick;
-    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(j.cx, j.cy, j.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(j.cx + e.touchMove.x * j.r * .5, j.cy + e.touchMove.y * j.r * .5, Math.min(20, j.r * .4), 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(j.cx, j.cy, j.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8,13,18,.18)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(240,243,245,.40)'; ctx.lineWidth = 1.25; ctx.stroke();
+    ctx.fillStyle = 'rgba(240,243,245,.45)'; ctx.beginPath(); ctx.arc(j.cx + e.touchMove.x * j.r * .5, j.cy + e.touchMove.y * j.r * .5, Math.min(20, j.r * .4), 0, Math.PI * 2); ctx.fill();
     const move = (x: number, y: number) => {
       const dx = x - j.cx, dy = y - j.cy, len = Math.hypot(dx, dy), s = len > j.r ? j.r / len : 1;
       e.setTouchMove(dx * s / j.r, dy * s / j.r);
@@ -759,8 +818,14 @@ export class CsHud {
       pause: { label: 'Ⅱ', down: () => e.pauseGame() }, buy: { label: this.L('购买', 'Buy'), down: () => e.toggleBuy() },
     };
     for (const b of tc.buttons) {
-      const a = actions[b.id]; ctx.fillStyle = 'rgba(20,30,40,.72)'; ctx.beginPath(); ctx.arc(b.cx, b.cy, b.r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = C.border; ctx.lineWidth = 1.5; ctx.stroke(); this.text(ctx, a.label, b.cx, b.cy, 11, C.text, 'center');
+      const a = actions[b.id];
+      const held = b.id === 'fire' ? e.fireHeld : b.id === 'jump' ? e.keys?.has('Space')
+        : b.id === 'use' ? e.keys?.has('KeyE') : b.id === 'reload' ? e.player?.reload > 0 : false;
+      // The complete >=44px surface stays visible and unchanged as a hit target.
+      ctx.fillStyle = held ? 'rgba(20,30,40,.56)' : b.id === 'fire' ? 'rgba(8,13,18,.38)' : 'rgba(8,13,18,.25)';
+      ctx.beginPath(); ctx.arc(b.cx, b.cy, b.r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = held ? C.gold : 'rgba(240,243,245,.34)'; ctx.lineWidth = 1; ctx.stroke();
+      this.text(ctx, a.label, b.cx, b.cy, 11, held ? C.gold : C.text, 'center', b.id === 'fire');
       this.regions.push({ id: `touch-${b.id}`, ...buttonHit(b), down: a.down, up: a.up });
     }
   }

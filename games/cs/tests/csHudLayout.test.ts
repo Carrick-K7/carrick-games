@@ -136,9 +136,9 @@ describe('csHudLayout: header and scoreboard clear the brand cluster', () => {
     }
   }
 
-  it('preserves established desktop and portrait score-strip positions', () => {
-    expect(scoreStripRect(computeHudLayout(1280, 720), 148)).toEqual({ x: 490, y: 14, w: 300, h: 46 });
-    expect(scoreStripRect(computeHudLayout(390, 844), 109)).toEqual({ x: 12, y: 151, w: 366, h: 46 });
+  it('retains desktop centering and portrait docking with a smaller score budget', () => {
+    expect(scoreStripRect(computeHudLayout(1280, 720), 148)).toEqual({ x: 520, y: 14, w: 240, h: 36 });
+    expect(scoreStripRect(computeHudLayout(390, 844), 109)).toEqual({ x: 12, y: 151, w: 240, h: 36 });
     expect(scoreboardRect(computeHudLayout(844, 390), 10)).toEqual({ x: 112, y: 64, w: 620, h: 314 });
   });
 });
@@ -229,6 +229,8 @@ describe('csHudLayout: touch controls matrix', () => {
       it(`${tag}: every control hit box is >= ${TOUCH_TARGET}px and inside the viewport`, () => {
         const { tc, named } = touchRects(L, hasBuy);
         expect(named.length).toBeGreaterThanOrEqual(hasBuy ? 9 : 8);
+        expect(tc.buttons.map(b => b.id).sort()).toEqual(
+          ['fire', 'jump', 'reload', 'use', 'switch', 'pause', ...(hasBuy ? ['buy'] : [])].sort());
         expect(tc.look.length, `${tag}: aiming must remain possible`).toBeGreaterThan(0);
         for (const { name, rect } of named) {
           expect(rect.w, `${tag} ${name} w`).toBeGreaterThanOrEqual(TOUCH_TARGET - (name.startsWith('look') ? 16 : 0));
@@ -340,10 +342,10 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
           const controls = computeTouchControls(L, { hasBuy: true });
           reserved.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
         }
-        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, killfeedCount: 5,
+        const feedback = matchFeedbackLayout(L, { touch, hasBuy: true, objective: true, objectiveAction: true, center: true, notice: true, pickup: true, equipment: true, killfeedCount: 5,
           hitConfirmationWidth: 120, scopeLabelWidth: 60 });
         expect(feedback.objectiveAction).not.toBeNull();
-        const all = [feedback.objectiveAction, feedback.hitConfirmation, feedback.scopeLabel, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed].filter((rect): rect is HudRect => rect != null);
+        const all = [feedback.objectiveAction, feedback.hitConfirmation, feedback.scopeLabel, feedback.center, feedback.objective, feedback.notice, feedback.pickup, ...feedback.killfeed, feedback.equipment].filter((rect): rect is HudRect => rect != null);
         all.forEach((rect, i) => {
           expectInside(rect, overlayBounds(L));
           for (const obstacle of [...reserved, ...all.slice(0, i)]) {
@@ -365,23 +367,125 @@ describe('csHudLayout: safe overlays, readable table columns and feedback', () =
       const L = computeHudLayout(568, 320, safe), controls = computeTouchControls(L, { hasBuy: true });
       expect(controls.look.length).toBeGreaterThan(0);
       expect(controls.look[0].h).toBeGreaterThanOrEqual(24);
-      expect(healthPanelRect(L).h).toBe(62);
-      expect(weaponPanelRect(L).h).toBe(76);
+      expect(healthPanelRect(L).h).toBe(48);
+      expect(weaponPanelRect(L).h).toBe(60);
     }
   });
 
-  it('keeps objective progress visible in the extreme short-phone 24px lane', () => {
+  it('reclaims a full objective progress row in the extreme short-phone notch', () => {
     const L = computeHudLayout(568, 320, { top: 44, right: 20, bottom: 34, left: 47 });
     const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true });
-    expect(feedback.objectiveAction?.h).toBe(24);
+    expect(feedback.objectiveAction?.h).toBe(40);
     expect(feedback.objectiveAction?.w).toBeGreaterThanOrEqual(96);
     expect(rectsOverlap(feedback.objectiveAction!, aimClearanceRect(L))).toBe(false);
   });
 
   it('empty feedback has no persistent extra panels and caps an oversized killfeed', () => {
     const L = computeHudLayout(1280, 720);
-    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, hitConfirmation: null, scopeLabel: null, killfeed: [] });
+    expect(matchFeedbackLayout(L)).toEqual({ objective: null, objectiveAction: null, center: null, notice: null, pickup: null, equipment: null, hitConfirmation: null, scopeLabel: null, killfeed: [] });
     expect(matchFeedbackLayout(L, { killfeedCount: 100 }).killfeed.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('csHudLayout: minimal persistent plates and transient equipment', () => {
+  it('uses exact stable desktop and narrow row budgets without reducing radar detail', () => {
+    const desktop = computeHudLayout(1280, 720);
+    expect(healthPanelRect(desktop)).toEqual({ x: 18, y: 654, w: 190, h: 48 });
+    expect(weaponPanelRect(desktop)).toEqual({ x: 1022, y: 642, w: 240, h: 60 });
+    expect(radarRect(desktop)).toEqual({ x: 18, y: 18, w: 148, h: 148 });
+    const narrow = computeHudLayout(320, 568, { left: 47, right: 20, top: 44, bottom: 34 });
+    expect(healthPanelRect(narrow).w).toBeCloseTo(100.76);
+    expect(healthPanelRect(narrow).h).toBe(60);
+    expect(weaponPanelRect(narrow)).toEqual({ x: 173.5, y: 446, w: 114.5, h: 76 });
+    expect(radarRect(narrow)).toEqual({ x: 59, y: 166, w: 75, h: 75 });
+    expect(radarRect(computeHudLayout(568, 320))).toEqual({ x: 12, y: 12, w: 96, h: 96 });
+    expect(radarRect(computeHudLayout(390, 844))).toEqual({ x: 12, y: 12, w: 109, h: 109 });
+  });
+
+  it('changes row budgets only at actual panel width thresholds', () => {
+    for (const availW of [240, 120 / .44 - .01, 120 / .44, 319.99, 320, 366]) {
+      const L = computeHudLayout(availW + 24, 568), health = healthPanelRect(L), weapon = weaponPanelRect(L);
+      expect(health.h).toBe(health.w < 120 ? 60 : 48);
+      expect(weapon.h).toBe(weapon.w < 160 ? 76 : 60);
+      expect(health.y + health.h).toBe(L.bottom);
+      expect(weapon.y + weapon.h).toBe(L.bottom);
+    }
+  });
+
+  for (const { width, height, safe } of TOUCH_MATRIX) {
+    const tag = `${width}x${height} ${JSON.stringify(safe)}`;
+    it(`${tag}: CSS geometry and all seven touch IDs are independent of DPR`, () => {
+      const geometry = (dpr: number) => {
+        const viewport = { width, height, dpr, safeArea: safe };
+        const L = computeHudLayout(viewport.width, viewport.height, viewport.safeArea);
+        return { health: healthPanelRect(L), weapon: weaponPanelRect(L), radar: radarRect(L),
+          score: scoreStripRect(L, radarRect(L).w), controls: computeTouchControls(L, { hasBuy: true }),
+          feedback: matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true, objectiveAction: true }) };
+      };
+      const baseline = geometry(1), L = computeHudLayout(width, height, safe);
+      for (const dpr of [1.25, 1.5, 2, 3]) expect(geometry(dpr)).toEqual(baseline);
+      expect(baseline.controls.buttons.map(b => b.id).sort()).toEqual(['buy', 'fire', 'jump', 'pause', 'reload', 'switch', 'use']);
+      expect(baseline.health.w).toBeLessThanOrEqual(190);
+      expect(baseline.weapon.w).toBeLessThanOrEqual(240);
+      expect(baseline.score.w).toBeLessThanOrEqual(240);
+      expect(baseline.score.w).toBeGreaterThanOrEqual(140);
+      expect(baseline.score.h).toBe(36);
+      const plates = [baseline.health, baseline.weapon, baseline.score, baseline.radar];
+      plates.forEach((rect, i) => {
+        expectInside(rect, { x: L.left, y: Math.min(L.top, baseline.score.y), w: L.availW, h: L.bottom - Math.min(L.top, baseline.score.y) });
+        for (const other of [aimClearanceRect(L), L.shellReserve, ...plates.slice(0, i)]) expect(rectsOverlap(rect, other)).toBe(false);
+      });
+    });
+
+    for (const touch of [false, true]) {
+      it(`${tag} touch:${touch}: equipment yields without moving existing priority placement`, () => {
+        const L = computeHudLayout(width, height, safe);
+        for (const busy of [false, true]) {
+          const options = { touch, hasBuy: true, objectiveAction: busy, center: busy, objective: busy,
+            notice: busy, pickup: busy, killfeedCount: busy ? 5 : 0,
+            hitConfirmationWidth: busy ? 120 : undefined, scopeLabelWidth: busy ? 60 : undefined };
+          const before = matchFeedbackLayout(L, options), after = matchFeedbackLayout(L, { ...options, equipment: true });
+          expect(before.equipment).toBeNull();
+          if (!busy) expect(after.equipment).not.toBeNull();
+          expect({ ...after, equipment: null }).toEqual(before);
+          if (after.equipment) {
+            expect(after.equipment.h).toBe(22);
+            expect(after.equipment.w).toBeGreaterThanOrEqual(96);
+            expect(after.equipment.w).toBeLessThanOrEqual(240);
+            expectInside(after.equipment, overlayBounds(L));
+            const radar = radarRect(L), score = scoreStripRect(L, radar.w);
+            const obstacles = [aimClearanceRect(L), L.shellReserve, { ...radar, h: radar.h + (L.short ? 0 : 24) },
+              { ...score, h: score.h + 8 }, healthPanelRect(L), weaponPanelRect(L),
+              ...Object.values(before).flat().filter((rect): rect is HudRect => rect != null)];
+            if (touch) {
+              const controls = computeTouchControls(L, { hasBuy: true });
+              obstacles.push(controls.joystick.hit, ...controls.buttons.map(buttonHit));
+            }
+            for (const obstacle of obstacles) expect(rectsOverlap(after.equipment, obstacle)).toBe(false);
+          }
+        }
+      });
+    }
+  }
+
+  it('prefers the full inventory strip directly above the desktop weapon', () => {
+    const L = computeHudLayout(1280, 720), weapon = weaponPanelRect(L);
+    expect(matchFeedbackLayout(L, { equipment: true }).equipment).toEqual({ x: weapon.x, y: weapon.y - 30, w: 240, h: 22 });
+  });
+
+  it('drops inventory before critical action and hit feedback on a busy notched phone', () => {
+    const L = computeHudLayout(320, 568, { top: 44, right: 20, bottom: 34, left: 47 });
+    const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true, objectiveAction: true,
+      center: true, objective: true, notice: true, pickup: true, killfeedCount: 5, hitConfirmationWidth: 120, scopeLabelWidth: 60 });
+    expect(feedback.equipment).toBeNull();
+    expect(feedback.objectiveAction).not.toBeNull();
+    expect(feedback.hitConfirmation?.w).toBeGreaterThanOrEqual(80);
+    expect(feedback.scopeLabel?.w).toBe(60);
+  });
+
+  it('omits inventory on an unsupported viewport rather than covering controls or aim', () => {
+    const L = computeHudLayout(160, 120);
+    expect(matchFeedbackLayout(L, { touch: true, hasBuy: true, equipment: true }).equipment).toBeNull();
   });
 });
 
@@ -456,11 +560,11 @@ describe('csHudLayout: camera-centered aiming feedback', () => {
     }
   });
 
-  it('keeps a compact two-line round message when an 80px panel would hide aim', () => {
+  it('keeps a compact portrait round message and reclaims the full landscape row clear of aim', () => {
     for (const [W, H] of [[320, 568], [568, 320]]) {
       const L = computeHudLayout(W, H), result = matchFeedbackLayout(L, { touch: true, hasBuy: true, center: true });
       expect(result.center).not.toBeNull();
-      expect(result.center?.h).toBe(56);
+      expect(result.center?.h).toBe(W === 320 ? 56 : 80);
       expectInside(result.center!, overlayBounds(L));
       expect(rectsOverlap(result.center!, aimClearanceRect(L))).toBe(false);
     }
