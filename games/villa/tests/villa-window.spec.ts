@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 
 const CANVAS = '#gameCanvas';
 async function startVilla(page: Page, releaseCursor = true) {
@@ -90,6 +91,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
   });
 
   test('window resizing, picker focus and switching keep the persistent root and clear old game state', async ({ page }) => {
+    await installVillaSwitchTarget(page);
     const errors = captureErrors(page), canvas = await startVilla(page);
     const prepared = await canvas.getAttribute('data-game-prepare-count');
     for (const size of [{ width: 1440, height: 800 }, { width: 844, height: 390 }]) {
@@ -98,7 +100,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
     }
     await page.keyboard.press('Control+k');
     await expect(page.locator('#searchInput')).toBeFocused();
-    await page.locator('.game-list-item[data-id="snake"]').click();
+    await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
     await expect(page.locator('#gameCanvas')).toBeFocused();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);

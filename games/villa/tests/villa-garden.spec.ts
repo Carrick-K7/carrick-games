@@ -1,19 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
 import { VILLA_PET_IDS, VILLA_PET_LABELS } from '../src/villaPets';
 import { VILLA_GARDEN_TREES } from '../src/villaGarden';
 
 const moduleUrl = () => gameModuleUrl('villa');
 async function mount(page: Page, touch = false) {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async ({ url, touch, teaApproach }) => {
     const { VillaGame } = await import(url), canvas = document.createElement('canvas');
     canvas.id = 'villa-garden-test'; Object.assign(canvas.style, { position: 'fixed', top: '20px', left: '10px', zIndex: '10000' }); document.body.append(canvas);
     const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
       isPixelMode: () => false, getRecord: () => null, reportScore: () => { throw new Error('Villa cannot submit scores'); }, requestShellRender: () => {} }) as any;
     game.prepare(); game.start(); cancelAnimationFrame(game.animationId); game.setDisplayScale(touch ? 370 : 1000);
-    // This fixture raises its canvas above Snake; its native modal must stay above it.
+    // The fixture uses a raised canvas; its native modal must stay above it.
     if (touch) game.terminal.element.style.zIndex = '10002';
     const key = (key: string, down = true) => game.handleInput(new KeyboardEvent(down ? 'keydown' : 'keyup', { key }));
     const press = (k: string) => { key(k); key(k, false); };

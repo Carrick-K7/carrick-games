@@ -1,13 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { VILLA_RELAX_SEATS, resolveVillaSeatPosition, villaSeatExitCandidates } from '../src/villaSeating';
 import { VILLA_AQUARIUM, VILLA_TEA_BAR, VILLA_FIREPLACE_WALL } from '../src/villaLivingLayout';
 import { VILLA_CAR } from '../src/villaActivities';
 import { POOL } from '../src/villaWorld';
 
 async function fixture(page: Page) {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const url = gameModuleUrl('villa');
   await page.evaluate(async url => {
     const { VillaGame } = await import(url);

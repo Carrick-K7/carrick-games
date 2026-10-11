@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { createRequire } from 'node:module';
 import { VILLA_FIREPLACE_WALL, VILLA_TEA_BAR, VILLA_AQUARIUM } from '../src/villaLivingLayout';
 import { VILLA_RELAX_SEATS } from '../src/villaSeating';
@@ -27,7 +28,7 @@ const readState = async (page: Page, name: string) => JSON.parse((await canvas(p
 async function mount(page: Page) {
   page.setDefaultTimeout(15_000); const log = { runtime: [] as string[], console: [] as string[] }; diagnostics.set(page, log);
   page.on('pageerror', error => log.runtime.push(error.stack ?? error.message)); page.on('console', message => { if (message.type() === 'error') log.console.push(message.text()); });
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async ({ url, layout }) => {
     const { VillaGame } = await import(url), canvas = document.createElement('canvas'); canvas.id = 'villa-v110-life-test'; canvas.tabIndex = 0;
     Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' }); document.querySelector('#gameApp')!.append(canvas);

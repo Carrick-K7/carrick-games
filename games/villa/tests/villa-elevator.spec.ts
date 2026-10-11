@@ -1,6 +1,7 @@
 import { createVillaElevator, villaElevatorPanelButtons as gamePanelButtons } from '../src/villaElevator';
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 
 const moduleUrl = () => gameModuleUrl('villa');
 
@@ -8,7 +9,7 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const result = await page.evaluate(async url => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas'); document.body.append(canvas);
@@ -86,7 +87,7 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
 test('villa car panel lists floors top-first and drives real open/close buttons', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const url = gameModuleUrl('villa');
   const result = await page.evaluate(async url => {
     const { VillaGame } = await import(url);
@@ -123,7 +124,7 @@ test('villa car panel lists floors top-first and drives real open/close buttons'
 test('a real click on the lift panel works while the pointer is locked', async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1120, height: 700 });
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async url => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas'); canvas.id = 'lift-panel-click'; canvas.tabIndex = 0;
@@ -170,7 +171,7 @@ test('villa elevator floor buttons accept real coarse-pointer taps', async ({ br
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   try {
-    await page.goto('/#/snake');
+    await openVillaFixturePage(page);
     const button = await page.evaluate(async url => {
       const { VillaGame } = await import(url);
       const canvas = document.createElement('canvas'); canvas.id = 'lift-touch';

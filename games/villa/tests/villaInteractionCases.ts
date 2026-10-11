@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage, installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
 import { VILLA_CAR } from '../src/villaActivities';
 import { villaRelaxSeat } from '../src/villaSeating';
@@ -7,7 +8,7 @@ import { villaRelaxSeat } from '../src/villaSeating';
 const moduleUrl = () => process.env.VILLA_MODULE_URL || gameModuleUrl('villa');
 
 export async function mount(page: Page) {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async url => {
     const { VillaGame } = await import(url), canvas = document.createElement('canvas');
     canvas.id = 'villa-native-input'; Object.assign(canvas.style, { position: 'fixed', top: '20px', left: '10px', zIndex: '10000' }); document.body.append(canvas);
@@ -60,6 +61,7 @@ export async function dispose(page: Page) {
 export function registerVillaInteractionTests() {
   test('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
     test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await installVillaSwitchTarget(page);
     await page.goto('/#/villa');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
@@ -69,10 +71,10 @@ export function registerVillaInteractionTests() {
     await button.tap();
     await page.waitForFunction(() => /吃饱|full/.test(document.getElementById('gameCanvas')!.dataset.villaUseFeedback!));
     expect(await page.locator('#gameCanvas').evaluate(c => JSON.parse(c.dataset.villaPets!).find((p: any) => p.id === 'dog').feedCount)).toBe(1);
-    await page.goto('/#/snake');
+    await page.goto(`/#/${VILLA_SWITCH_ID}`);
     // Hash navigation is not a completed game handoff. In software WebKit the
     // old 3D teardown may keep the main thread busy beyond the default5s poll.
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', 'snake', { timeout: 45_000 });
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', VILLA_SWITCH_ID, { timeout: 45_000 });
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
     await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/, { timeout: 45_000 });
     await expect(page.locator('[data-villa-use]')).toHaveCount(0); expect(errors).toEqual([]);

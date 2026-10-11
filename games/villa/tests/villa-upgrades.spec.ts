@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { VILLA_ANIME_FIGURES } from '../src/villaGaming';
 import { VILLA_CAR } from '../src/villaActivities';
 
@@ -9,7 +10,7 @@ test('villa upgrades are physical models with reachable car seats, simulator inp
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const url = gameModuleUrl('villa');
   const result = await page.evaluate(async ([url, carExit]: [string, { x: number; z: number }]) => {
     const { VillaGame } = await import(url);

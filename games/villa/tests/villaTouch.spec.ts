@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 
 test('villa captures the mouse on the first canvas click and releases it for its picker', async ({ page }) => {
   test.setTimeout(60_000);
+  await installVillaSwitchTarget(page);
   await page.goto('/#/villa');
   const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
@@ -20,7 +22,7 @@ test('villa captures the mouse on the first canvas click and releases it for its
   await page.keyboard.press('Control+k');
   await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBeNull();
-  await page.locator('.game-list-item[data-id="snake"]').click();
+  await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
   await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-villa-renderer', /.+/);
 });
 

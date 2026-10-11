@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage, installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 import { VILLA_AQUARIUM } from '../src/villaLivingLayout';
 import { VILLA_GARAGE_BAYS } from '../src/villaEstateLayout';
 
@@ -13,6 +14,7 @@ test.describe('Warm Villa', () => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
+    await installVillaSwitchTarget(page);
     await page.goto('/#/villa');
     const canvas = page.locator('#gameCanvas');
     // Cold software-WebGL setup can outlast the generic 5s locator timeout.
@@ -63,7 +65,7 @@ test.describe('Warm Villa', () => {
     await page.mouse.move(box!.x + box!.width * 0.66, box!.y + box!.height * 0.53, { steps: 4 });
     await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(lookBefore);
     await page.keyboard.press('Control+k');
-    await page.locator('.game-list-item[data-id="snake"]').click();
+    await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
     await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     expect(errors).toEqual([]);
@@ -71,7 +73,7 @@ test.describe('Warm Villa', () => {
 
   test('furnished controller walks both stairs up and down, enters every room, and interacts', async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto('/#/snake');
+    await openVillaFixturePage(page);
     const result = await page.evaluate(async ({ moduleUrl, aquariumApproach, garageBay }) => {
       const { VillaGame } = await import(moduleUrl);
       const canvas = document.createElement('canvas');
@@ -180,7 +182,7 @@ test.describe('Warm Villa', () => {
 
   test('two-finger touch keeps independent movement and look and clears cancelled input', async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto('/#/snake');
+    await openVillaFixturePage(page);
     const result = await page.evaluate(async (moduleUrl) => {
       const { VillaGame } = await import(moduleUrl);
       const canvas = document.createElement('canvas');

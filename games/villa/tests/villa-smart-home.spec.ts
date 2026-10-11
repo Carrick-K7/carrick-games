@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { createRequire } from 'node:module';
 import { VILLA_RACING } from '../src/villaActivities';
 import { VILLA_HOME_LIGHTS } from '../src/villaHome';
@@ -19,7 +20,7 @@ const diagnostics = new WeakMap<Page, { runtime: string[]; console: string[] }>(
 async function mount(page: Page) {
   page.setDefaultTimeout(15_000); const log = { runtime: [] as string[], console: [] as string[] }; diagnostics.set(page, log);
   page.on('pageerror', error => log.runtime.push(error.stack ?? error.message)); page.on('console', message => { if (message.type() === 'error') log.console.push(message.text()); });
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async url => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas'); canvas.id = 'villa-smart-home-test'; canvas.tabIndex = 0;

@@ -1,12 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import type { GameHost } from '@carrick/game-sdk/game';
 
 const moduleUrl = () => gameModuleUrl('villa');
 
 /** One manually stepped real Villa controller/scene per test; no wall-clock physics waits. */
 async function mount(page: Page, touch = false) {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   await page.evaluate(async ({ url, touch }) => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas'); canvas.id = 'villa-life';
@@ -18,7 +19,7 @@ async function mount(page: Page, touch = false) {
     const game = new VillaGame(host) as any;
     game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
     game.setDisplayScale(touch ? 370 : 1000);
-    // This fixture raises its canvas above Snake; its native modal must stay above it.
+    // The fixture uses a raised canvas; its native modal must stay above it.
     if (touch) game.terminal.element.style.zIndex = '10002';
     const key = (key: string, type = 'keydown') => game.handleInput(new KeyboardEvent(type, { key }));
     const press = (name: string) => { key(name); key(name, 'keyup'); };

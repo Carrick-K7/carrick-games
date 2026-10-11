@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 import { VILLA_CAR } from '../src/villaActivities';
 import { VILLA_ESTATE_BOUNDS } from '../src/villaEstateLayout';
 
@@ -8,7 +9,7 @@ const villaUrl = () => gameModuleUrl('villa');
 test('villa sedan drives onto the scenic road, turns, safely exits at an angle and continues around the bend', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const result = await page.evaluate(async ([url, carExit]: [string, { x: number; z: number }]) => {
     const { VillaGame } = await import(url);
     const canvas = document.createElement('canvas'); document.body.append(canvas);
@@ -85,7 +86,7 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
 });
 
 test('villa rejects an exit across the garage wall and stops at the rendered garden fence', async ({ page }) => {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const result = await page.evaluate(async ([url, car, bounds] : [string, { center: { x: number; z: number } }, { maxX: number }]) => {
     const { VillaGame } = await import(url); const canvas = document.createElement('canvas'); document.body.append(canvas);
     const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false, isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;

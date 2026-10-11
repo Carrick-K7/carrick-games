@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
+import { openVillaFixturePage } from './villaBrowserHost';
 
 /** One-key parking through the real game loop: no scene stubbing, the shipped
  *  autopilot drives the shipped car along the shipped roads. */
 async function fixture(page: Page) {
-  await page.goto('/#/snake');
+  await openVillaFixturePage(page);
   const url = gameModuleUrl('villa');
   await page.evaluate(async url => {
     const { VillaGame } = await import(url);
