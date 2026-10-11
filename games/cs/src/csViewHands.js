@@ -71,18 +71,12 @@ export function poseClassicKnifeGrip(rig){
 
 export function poseButterflyKnifeGrip(rig,motion={}){
  poseClassicKnifeGrip(rig);
- const open=motion.knifeOpen||0;
- // Index and thumb retain a pinch on the safe handle; the other fingers
- // release before the free handle swings, then close only after the catch.
- poseViewHand(rig,{fingerCurls:{index:[.70,1.14,.97].map((v,i)=>T.MathUtils.lerp(v,[.60,1.50,1.20][i],open)),middle:[.79,1.15,.80],ring:[.83,1.19,.81],pinky:[.87,1.20,.80]},open,thumb:motion.knifeThumb||0});
- const thumb=rig.bones.thumb_01_r,frame=rig.group.parent?.getWorldQuaternion(new T.Quaternion())||new T.Quaternion();
- const axis=new T.Vector3(0,1,0).applyQuaternion(frame).applyQuaternion(thumb.parent.getWorldQuaternion(new T.Quaternion()).invert());
- thumb.quaternion.premultiply(new T.Quaternion().setFromAxisAngle(axis,-.85*open));
- rig.group.position.z-=.029;rig.group.position.x+=.004+.016*open;rig.group.position.y-=.035*open;
- // Keep the curled index at the same retained-handle contact while the other
- // fingers open. This prevents the hand sliding away during a finger roll.
- const index=handPoint(rig,'index_03').applyQuaternion(rig.group.quaternion).add(rig.group.position);
- rig.group.position.add(new T.Vector3(.012,.002,-.032).sub(index).multiplyScalar(open));
+ const open=T.MathUtils.clamp(Number.isFinite(motion.knifeOpen)?motion.knifeOpen:0,0,.35);
+ const thumb=T.MathUtils.clamp(Number.isFinite(motion.knifeThumb)?motion.knifeThumb:0,0,.15);
+ // Retain the safe handle in the closed index/thumb grip. Only the other
+ // fingers loosen for the free handle; no palm translation or index rollover.
+ poseViewHand(rig,{fingerCurls:{index:[.70,1.14,.97],middle:[.79,1.15,.80],ring:[.83,1.19,.81],pinky:[.87,1.20,.80]},open,thumb});
+ rig.group.position.z-=.029;rig.group.position.x+=.004;
  rig.group.updateMatrixWorld(true);rig.skeleton.update();
  const wrist=new T.Vector3(-.006,.008,.009).multiplyScalar(rig.scale).applyQuaternion(rig.group.quaternion).add(rig.group.position);
  const knuckles=handPoint(rig,'middle_01').applyQuaternion(rig.group.quaternion).add(rig.group.position);

@@ -16,6 +16,12 @@ The firearm and classic/karambit/butterfly knife HUD SVGs in `assets/ui/weapons/
 
 The interface's visual direction draws on CS:GO/Panorama's flat panels, map cards and restrained team colors. No official CS:GO logo, reference-site screenshot or proprietary UI font is shipped by this interface update.
 
+## Current butterfly-knife refinement
+
+The butterfly viewmodel remains locally authored geometry and motion, not extracted Valve animation. Its thin ground blade, bored pivots, handle channels and local procedural satin reflection probe are game-owned. The existing Quaternius CC0 hand mesh remains credited below; only butterfly grip articulation and its offscreen sleeve continuation are adjusted.
+
+Draws now enter in a released, partially open pose and complete the two-hinge opening while retaining the safe handle. The authored inspection alternatives use restrained outward handle fans rather than floating whole-knife finger rolls. There are still two draw and three inspection alternatives with the existing durations and audio cue schedule; this is not a claim of frame-exact original CS:GO motion. A per-instance simulation-clock presentation blend handles interrupted/restarted poses without delaying melee damage or changing reach/cooldown. No additional CS2 resources, third-party textures or animation tracks were imported.
+
 ---
 
 # CS

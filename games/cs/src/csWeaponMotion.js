@@ -3,6 +3,8 @@ import {DEPLOY,chargingGrip,chargingRotation,reachChargingAction,actionPhase,act
 import {poseKnifeGrip,poseClassicKnifeGrip,poseButterflyKnifeGrip,poseViewHand,poseFirearmHand} from './csViewHands.js';
 import {DEFAULT_KNIFE_MODEL} from './csKnifeStyles.js';
 import {sampleButterflyMotion,BUTTERFLY_INSPECT_DURATION} from './csButterflyKnife.js';
+import {resolveButterflyPresentation} from './csButterflyPresentation.js';
+import {butterflyShoulder} from './csButterflyArm.js';
 
 export function reloadKind(id){return id==='p90'?'top':id==='m249'?'belt':['m3','xm1014'].includes(id)?'shell':['usp','glock','deagle'].includes(id)?'pistol':['awp','scout'].includes(id)?'bolt':'magazine';}
 function curve(t,keys){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0]){const [a,x]=keys[i-1],[b,y]=keys[i],u=(t-a)/(b-a),v=u*u*(3-2*u);return x+(y-x)*v;}}return keys.at(-1)[1];}
@@ -181,7 +183,9 @@ function moveArm(arm,target,turn=0,mag=0,rack=0,style='side',lift=0){if(!arm)ret
   arm.hand.position.copy(target);arm.hand.rotation.set(.06,0,turn);const wrist=target.clone().add(new T.Vector3(0,-.039,.018)),direction=wrist.clone().sub(arm.elbow);arm.arm.position.copy(wrist.add(arm.elbow).multiplyScalar(.5));arm.arm.scale.y=direction.length();arm.arm.quaternion.setFromUnitVectors(unitY,direction.normalize());}
 function connectSegment(mesh,a,b){const d=b.clone().sub(a);mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.quaternion.setFromUnitVectors(unitY,d.clone().normalize());mesh.scale.y=d.length()/(mesh.geometry.parameters?.height||1);}
 export function applyWeaponAnimation(model,state={}){
-  const r=model?.userData.rig;if(!r)return null;const motion=sampleWeaponMotion(r.id,{...state,knifeModel:r.knifeModel}),kind=reloadKind(r.id);
+  const r=model?.userData.rig;if(!r)return null;
+  const raw=sampleWeaponMotion(r.id,{...state,knifeModel:r.knifeModel});
+  const motion=r.knifeModel==='butterfly'?resolveButterflyPresentation(r,raw,state):raw,kind=reloadKind(r.id);
   if(r.suppressor){r.suppressor.visible=state.suppressed!==false;r.muzzle.copy(r.suppressor.visible?r.muzzleSuppressed:r.muzzleBare);}
   for(const o of [r.magazine,r.bolt,r.boltHandle,r.slide,r.cover,r.pump]){o.position.copy(o.userData.restPosition);o.quaternion.copy(o.userData.restQuaternion);o.visible=true;}
   r.magazine.position.add(new T.Vector3(...motion.mag));r.magazine.rotation.x=motion.magAngle;r.magazine.visible=motion.magVisible;r.bolt.position.z+=motion.boltTravel;r.bolt.rotation.z=motion.boltRoll;r.boltHandle.rotation.z=motion.boltLift*1.12;r.slide.position.z+=motion.slide;r.cover.rotation.x=motion.cover;r.pump.position.z+=motion.pump;
@@ -208,7 +212,8 @@ export function applyWeaponAnimation(model,state={}){
         // Continue the sleeve to the off-screen shoulder; a wide slash must
         // not expose a floating, capped forearm at the edge of the view.
         const shoulder=new T.Vector3(.65-motion.offset[0],-.50-motion.offset[1],.12-motion.offset[2]).applyQuaternion(new T.Quaternion().setFromEuler(new T.Euler(...motion.rotation)).invert());
-        connectSegment(r.knifeUpperArm,shoulder,r.knifeElbow.clone().addScaledVector(direction,.012));
+        const seam=r.knifeElbow.clone().addScaledVector(direction,.012);
+        connectSegment(r.knifeUpperArm,r.knifeModel==='butterfly'?butterflyShoulder(seam,shoulder):shoulder,seam);
       }
       const sleeveDirection=r.knifeElbow.clone().sub(wrist).normalize();
       connectSegment(r.knifeCuff,wrist.clone().addScaledVector(sleeveDirection,.025),wrist.clone().addScaledVector(sleeveDirection,-.018));

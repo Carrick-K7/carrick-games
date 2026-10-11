@@ -1042,6 +1042,8 @@ export class CsEngine {
   weaponAnimationState(a) {
     const w = this.weaponOf(a), d = WEAPONS[w.id], clock = this.clock;
     return {
+      // Optional presentation clock; combat/cue timing remains actor-owned.
+      animationTime: clock,
       grenadeThrowProgress: a.isPlayer && this.grenadePrime?.released && clock >= this.grenadePrime.throwAt ? (clock - this.grenadePrime.throwAt) / GRENADE_RECOVER_TIME : -1,
       grenadeStrength: this.grenadePrime?.strength ?? 1,
       grenadeProgress: a.isPlayer && this.grenadePrime && clock >= this.grenadePrime.startAt ? Math.min(1, (clock - this.grenadePrime.startAt) / GRENADE_PIN_TIME) : -1,
