@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { canonical, fetchProductionSnapshot, installPublishedArtifact, releaseURL, validateArtifact, validateProductionSnapshot, RELEASE_ORIGIN } from '../../scripts/release-store.mjs';
-import { ciSequence, componentState, counterpartFingerprint, counterpartGeneration, exactTestPath, gameIdentities, guardedTargetFence, isInitialTarget, planOutputs, requireVersionBump, sourceBaseStatus, unitTestOwners } from '../../scripts/ci.mjs';
+import { ciSequence, componentState, counterpartFingerprint, counterpartGeneration, deploymentPort, exactTestPath, gameIdentities, guardedTargetFence, isInitialTarget, planOutputs, requireVersionBump, sourceBaseStatus, unitTestOwners } from '../../scripts/ci.mjs';
 
 const revision = number => number.toString(16).padStart(40, '0');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -54,6 +54,16 @@ test('CI sequence preserves workflow run order and rerun attempts', () => {
   assert.equal(ciSequence({ GITHUB_RUN_NUMBER: '32', GITHUB_RUN_ATTEMPT: '2' }), 32002);
   for (const [run, attempt] of [['0', '1'], ['1', '0'], ['x', '1'], ['1', '1000'], ['1.5', '1']]) {
     assert.throws(() => ciSequence({ GITHUB_RUN_NUMBER: run, GITHUB_RUN_ATTEMPT: attempt }));
+  }
+});
+test('deployment SSH port preserves the legacy default and accepts explicit port boundaries', () => {
+  assert.equal(deploymentPort(), '22');
+  assert.equal(deploymentPort(''), '22');
+  for (const port of ['1', '22', '2222', '65535']) assert.equal(deploymentPort(port), port);
+});
+test('deployment SSH port rejects noncanonical, out-of-range and argument-like values', () => {
+  for (const port of ['0', '65536', '100000', '-1', '+22', '022', '2.5', '1e3', '22 ', ' 22', '22\n', '22 -o ProxyCommand=x', null, 22]) {
+    assert.throws(() => deploymentPort(port), /Invalid deployment SSH port/);
   }
 });
 test('state lookup uses active entry, tombstone, then generation zero', () => {

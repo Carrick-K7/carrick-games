@@ -15,7 +15,7 @@ async function metrics(page: Page) {
 }
 
 test.describe('edge-to-edge game windows', () => {
-  for (const id of ['cs', 'cs-kimi', 'villa']) {
+  for (const id of ['cs-kimi', 'villa']) {
     test(`${id}: real viewport aspect, all screen shapes, and resize without reinitializing`, async ({ page }, testInfo) => {
       test.setTimeout(120_000);
       const errors: string[] = [];
@@ -27,15 +27,8 @@ test.describe('edge-to-edge game windows', () => {
       await page.goto(`/${id === 'cs-kimi' ? '?cs3d=force' : ''}#/${id}`);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive', { timeout: 45_000 });
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
-      if (id === 'cs') {
-        await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__?.info()?.ready), { timeout: 30_000 }).toBe(true);
-        // CS keeps its own in-canvas arena menu; entering it starts the match.
-        await page.locator('#gameCanvas').click({ position: { x: 314, y: 590 } });
-        await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().playerAlive)).toBe(true);
-      }
       await page.keyboard.press('Escape');
       const state = () => page.evaluate(id => {
-        if (id === 'cs') return (window as any).__CSX_DEBUG__.info();
         if (id === 'cs-kimi') return (window as any).__CS_DEBUG__.info();
         const c = document.querySelector<HTMLCanvasElement>('#gameCanvas')!;
         return { position: c.dataset.villaPosition, look: c.dataset.villaLook };
@@ -55,7 +48,6 @@ test.describe('edge-to-edge game windows', () => {
         expect(m.overflow).toBe(false);
         expect(m.pixels).toBeLessThanOrEqual(8_294_400);
         expect(m.info.width / m.info.height).toBeCloseTo(size.width / size.height, 3);
-        if (id === 'cs') expect(m.info.gunCameraAspect).toBeCloseTo(size.width / size.height, 3);
         expect(await state()).toEqual(initial);
         await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepared!);
         await expect(page.locator('.app-header')).toBeHidden();

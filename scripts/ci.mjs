@@ -369,6 +369,11 @@ export async function requireFreshInputs(plan, id) {
   const impact = impactOfPaths(paths, { ...records, lockChanges: lockChanges(plan.revision, latest, records), manifestChanges: manifestChanges(plan.revision, latest) });
   assert(!impact.targets[id]?.runtime && !impact.targets[id]?.test, 'Newer relevant source/dependency/test changes exist; refusing stale publication');
 }
+export function deploymentPort(value = '') {
+  const port = value === '' ? '22' : value;
+  assert(typeof port === 'string' && /^[1-9][0-9]{0,4}$/.test(port) && Number(port) <= 65535, 'Invalid deployment SSH port');
+  return port;
+}
 export async function publish(plan, id) {
   const target = targetPlan(plan, id);
   if (!target.publish) { console.log(`${id}: verification only; no publication selected`); return; }
@@ -402,6 +407,7 @@ export async function publish(plan, id) {
   }
   assert(goodInteger(expectedCounterpartGeneration), 'Missing tested counterpart generation');
   const host = process.env.SSH_HOST;
+  const port = deploymentPort(process.env.DEPLOY_PORT);
   const user = process.env.SSH_USER;
   assert(/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(host ?? '') && /^[A-Za-z_][A-Za-z0-9_-]*$/.test(user ?? ''), 'Invalid deployment SSH host/user');
   assert(process.env.SSH_KEY && process.env.DEPLOY_KNOWN_HOSTS, 'Missing pinned deployment credentials');
@@ -417,7 +423,7 @@ export async function publish(plan, id) {
     const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
     const input = await import('node:fs').then(module => module.createReadStream(archive));
     await new Promise((resolvePromise, reject) => {
-      const child = spawn('ssh', ['-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '--', `${user}@${host}`, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
+      const child = spawn('ssh', ['-p', port, '-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '--', `${user}@${host}`, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
       input.on('error', error => { child.kill(); reject(error); });
       child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
       child.on('error', error => { input.destroy(); reject(error); });

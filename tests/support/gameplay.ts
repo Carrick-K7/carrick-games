@@ -1,5 +1,6 @@
 import { expect, type ConsoleMessage, type Page } from '@playwright/test';
 import { GAMES } from './catalog';
+import { canvasViewportIssues } from './viewport-contract';
 
 /** Shared browser mechanics; never imports a game implementation. */
 export async function collectErrors(page: Page) {
@@ -32,13 +33,26 @@ export async function selectGame(page: Page, gameId: string) {
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: mountTimeout });
     await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/, { timeout: mountTimeout });
     await expect(page.locator('#selectedGameLabel')).toHaveText(zh ? meta.nameZh : meta.name);
-    // Responsive 3D and Gacha own logical dimensions; boards retain theirs.
-    if (['cs', 'cs-kimi', 'villa'].includes(gameId)) {
-      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive', { timeout: gameId === 'villa' ? 30_000 : 5_000 });
-    } else if (gameId !== 'gacha') {
-      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(meta.canvasSize.width));
-      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(meta.canvasSize.height));
-    }
+    // The active release opts into responsive coordinates through the public
+    // viewport marker; never infer its mode from a source-game ID allowlist.
+    await expect.poll(async () => {
+      const sample = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
+        const rect = canvas.getBoundingClientRect();
+        const root = document.getElementById('gameApp')!.getBoundingClientRect();
+        return {
+          mode: canvas.getAttribute('data-viewport-mode'),
+          logicalWidth: Number(canvas.dataset.logicalWidth), logicalHeight: Number(canvas.dataset.logicalHeight),
+          backingWidth: canvas.width, backingHeight: canvas.height, pixelRatio: Number(canvas.dataset.pixelRatio),
+          cssWidth: rect.width, cssHeight: rect.height, offsetX: rect.x - root.x, offsetY: rect.y - root.y,
+          viewportWidth: window.visualViewport?.width ?? window.innerWidth,
+          viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+          devicePixelRatio: window.devicePixelRatio || 1,
+        };
+      });
+      // Preserve Gacha's existing contained-layout adaptation; all other fixed
+      // boards still require their exact catalog dimensions.
+      return canvasViewportIssues(sample, meta.canvasSize, gameId === 'gacha');
+    }).toEqual([]);
   }
   await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
