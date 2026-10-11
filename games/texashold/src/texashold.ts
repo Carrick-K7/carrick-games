@@ -1,13 +1,9 @@
-import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot } from '@carrick/game-sdk/game';
+import { BaseGame, createDefaultGameHost, type GameHost, type GameShellSnapshot, type GameViewport } from '@carrick/game-sdk/game';
 import { getRetroPalette } from '@carrick/game-sdk/render';
 import {
   FloatTexts,
   Particles,
   ScreenShake,
-  drawGlow,
-  drawVignette,
-  fillBevelTile,
-  fillGlassPanel,
   fx,
 } from '@carrick/game-sdk/fx';
 import {
@@ -17,18 +13,16 @@ import {
   type PokerCard,
 } from './texasholdRules.js';
 
+import { pokerLayout, type PokerLayout } from './texasholdLayout.js';
+import { PokerActions, type PokerAction, type PokerActionId } from './texasholdActions.js';
+
 const W = 440;
 const H = 520;
 const STARTING_CHIPS = 200;
 const SMALL_BLIND = 10;
 const BIG_BLIND = 20;
 const TOTAL_HANDS = 10;
-const CARD_W = 36;
 const CARD_H = 50;
-const CARD_GAP = 8;
-const BUTTON_W = 96;
-const BUTTON_H = 28;
-const BUTTON_GAP = 8;
 
 type Suit = 0 | 1 | 2 | 3;
 type Street = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
@@ -91,17 +85,6 @@ interface SeatLayout {
   y: number;
 }
 
-interface ActionButton {
-  id: PlayerAction;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  enabled: boolean;
-  label: string;
-  labelZh: string;
-}
-
 export class TexasHoldGame extends BaseGame {
   score = STARTING_CHIPS;
 
@@ -141,6 +124,7 @@ export class TexasHoldGame extends BaseGame {
   private readonly particles = new Particles();
   private readonly floats = new FloatTexts();
   private readonly shake = new ScreenShake();
+  private actions: PokerActions | null = null;
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
@@ -197,36 +181,51 @@ export class TexasHoldGame extends BaseGame {
     this.scheduleSystemAction(0.65, () => this.performAiTurn());
   }
 
+  override setViewport(viewport: GameViewport) {
+    this.resizeLogicalViewport(viewport);
+  }
+
+  override setPresentationPaused(paused: boolean) {
+    super.setPresentationPaused(paused);
+    this.renderFrame();
+  }
+
+  getDiagnostics() {
+    return {
+      state: this.state, stage: this.stage, completedHands: this.completedHands,
+      pot: this.getPotSize(), currentPlayer: this.currentPlayerIndex,
+      chips: this.players.map(player => player.chips), communityCount: this.community.length,
+      actions: this.getActions().map(({ id, enabled }) => ({ id, enabled })),
+      layout: this.layout(),
+    };
+  }
+
+  private layout(): PokerLayout {
+    return pokerLayout(this.width, this.height, this.viewport?.safeArea);
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     const theme = this.getTheme();
     const zh = this.isZh();
-
-    const palette = getRetroPalette(this.isDarkTheme());
-    const background = ctx.createLinearGradient(0, 0, 0, H);
-    background.addColorStop(0, palette.bg2);
-    background.addColorStop(1, theme.bg);
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.save();
-    ctx.translate(this.shake.x, this.shake.y);
-    this.drawTable(ctx, theme);
-    this.drawCommunity(ctx, theme, zh);
-    this.drawPlayers(ctx, theme, zh);
-    this.particles.draw(ctx);
-    ctx.restore();
-    drawVignette(ctx, W, H, this.isDarkTheme() ? 0.18 : 0.07);
-    this.floats.draw(ctx);
-    this.drawHeader(ctx, theme, zh);
-    this.drawStatusBar(ctx, theme, zh);
-    this.drawActionButtons(ctx, theme, zh);
-
-    if (this.state !== 'playing') {
-      this.drawOverlay(ctx, theme, zh);
+    const layout = this.layout();
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, this.width, this.height);
+    this.drawTable(ctx, theme, layout);
+    this.drawHeader(ctx, theme, zh, layout);
+    this.drawCommunity(ctx, theme, zh, layout);
+    this.drawPlayers(ctx, theme, zh, layout);
+    this.drawStatusBar(ctx, theme, zh, layout);
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.particles.draw(ctx);
+      this.floats.draw(ctx);
     }
+    if (this.state === 'gameOver') this.drawOverlay(ctx, theme, zh);
+    this.syncActions(layout, zh);
   }
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
+    if (this.presentationPaused) return;
+    if (e.target instanceof HTMLElement && e.target.closest('button')) return;
     if (this.state === 'gameOver' && this.isRestartInput(e)) {
       if (e instanceof TouchEvent) e.preventDefault();
       this.init();
@@ -234,7 +233,7 @@ export class TexasHoldGame extends BaseGame {
     }
 
     if (e instanceof KeyboardEvent) {
-      if (e.type !== 'keydown') return;
+      if (e.type !== 'keydown' || e.repeat) return;
       this.handleKeyInput(e);
       return;
     }
@@ -256,6 +255,8 @@ export class TexasHoldGame extends BaseGame {
   override destroy() {
     this.pendingSystemAction = null;
     this.pendingSystemDelay = 0;
+    this.actions?.destroy();
+    this.actions = null;
     super.destroy();
   }
 
@@ -298,19 +299,7 @@ export class TexasHoldGame extends BaseGame {
       return;
     }
 
-    if (!this.isHumanTurn()) return;
-
-    const point = this.canvasPoint(clientX, clientY);
-
-    const button = this.getActionButtons().find((item) =>
-      point.x >= item.x &&
-      point.x <= item.x + item.w &&
-      point.y >= item.y &&
-      point.y <= item.y + item.h
-    );
-
-    if (!button || !button.enabled) return;
-    this.handleHumanAction(button.id);
+    // Betting uses native controls: canvas taps never place an accidental bet.
   }
 
   private handleHumanAction(action: PlayerAction) {
@@ -717,7 +706,7 @@ export class TexasHoldGame extends BaseGame {
     };
     const palette = getRetroPalette(this.isDarkTheme());
     if (this.players[0].chips > 0) {
-      this.particles.emit(fx.confetti(W / 2, 12, [palette.primary, palette.cyan, palette.amber, palette.violet]));
+      this.particles.emit(fx.confetti(this.width / 2, 72, [palette.primary, palette.cyan, palette.amber, palette.violet]));
     } else {
       for (const emit of fx.explosion(this.seatLayout[0].x, this.seatLayout[0].y, [palette.red, palette.amber])) {
         if (!this.isDarkTheme()) emit.blend = 'source-over';
@@ -1008,154 +997,123 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private getTheme(): ThemePalette {
-    const isDark = this.isDarkTheme();
-
+    const dark = this.isDarkTheme();
     return {
-      bg: isDark ? '#0b0f19' : '#fafafa',
-      felt: isDark ? '#10273a' : '#dff7f3',
-      surface: isDark ? '#162133' : '#ffffff',
-      surfaceMuted: isDark ? '#0f1724' : '#e7ecef',
-      border: isDark ? '#274059' : '#b8c7cf',
-      primary: isDark ? '#39C5BB' : '#0d9488',
-      text: isDark ? '#edf2f7' : '#17202a',
-      muted: isDark ? '#94a3b8' : '#5f6b76',
-      cardFace: isDark ? '#f8fafc' : '#ffffff',
-      cardBack: isDark ? '#17324b' : '#d6f4ef',
-      cardBackAlt: isDark ? '#39C5BB' : '#0d9488',
-      red: '#d64545',
-      black: '#1f2937',
-      shadow: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(15,23,42,0.12)',
+      bg: dark ? '#0d1815' : '#f4f6f5',
+      felt: dark ? '#142b24' : '#e5eeea',
+      surface: dark ? '#1c3028' : '#ffffff',
+      surfaceMuted: dark ? '#1b352c' : '#dce8e2',
+      border: dark ? '#345046' : '#c3d5cb',
+      primary: dark ? '#80d7b7' : '#17694f',
+      text: dark ? '#edf5f1' : '#142f24',
+      muted: dark ? '#a3bcb0' : '#526d60',
+      cardFace: '#fdfefa', cardBack: dark ? '#244b3c' : '#c1d8cb',
+      cardBackAlt: dark ? '#6a9a82' : '#608871',
+      red: '#b6404c', black: '#233b31', shadow: 'transparent',
     };
   }
 
-  private isZh(): boolean {
-    return this.isZhLang();
+  private isZh(): boolean { return this.isZhLang(); }
+
+  private text(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign = 'center', weight = 400) {
+    ctx.font = `${weight} ${size}px system-ui, -apple-system, sans-serif`;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
   }
 
-  private drawTable(ctx: CanvasRenderingContext2D, theme: ThemePalette) {
-    ctx.save();
-    fillGlassPanel(ctx, 18, 26, W - 36, 418, 26, {
-      fill: theme.felt,
-      fill2: this.isDarkTheme() ? '#0b2030' : '#c9eee8',
-      border: theme.border,
-      glow: theme.primary,
-      shadow: theme.shadow,
-    });
-
-    ctx.strokeStyle = `${theme.primary}55`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(W / 2, 236, 146, 92, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+  private panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string, border?: string) {
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (border) { ctx.strokeStyle = border; ctx.lineWidth = 1; ctx.stroke(); }
   }
 
-  private drawHeader(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    ctx.fillStyle = theme.text;
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(zh ? '德州扑克' : 'Texas Holdem', 20, 20);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = theme.primary;
-    ctx.fillText(zh ? `筹码 ${this.players[0].chips}` : `Chips ${this.players[0].chips}`, W - 20, 20);
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = theme.text;
-    ctx.font = '13px system-ui, sans-serif';
-    const streetLabel = this.getStreetLabel(zh);
-    const dealerName = zh ? this.players[this.dealerIndex]?.nameZh ?? '--' : this.players[this.dealerIndex]?.name ?? '--';
-    ctx.fillText(`${streetLabel}  ${zh ? '庄' : 'D'}:${dealerName}`, W / 2, 158);
-    ctx.fillText(`${zh ? '底池' : 'POT'} ${this.getPotSize()}`, W / 2, 174);
+  private drawTable(ctx: CanvasRenderingContext2D, theme: ThemePalette, l: PokerLayout) {
+    // A quiet playing surface, not a second framed dashboard around the game.
+    const y = l.top + 24;
+    const bottom = l.human.y + l.human.h + 10;
+    this.panel(ctx, l.left, y, l.width, bottom - y, l.wide ? (bottom - y) / 2 : Math.min(48, l.width / 6), theme.felt);
   }
 
-  private drawCommunity(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    const totalWidth = CARD_W * 5 + CARD_GAP * 4;
-    const startX = (W - totalWidth) / 2;
-    const y = 188;
+  private drawHeader(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean, l: PokerLayout) {
+    const hand = Math.min(TOTAL_HANDS, this.completedHands + (this.state === 'playing' ? 1 : 0));
+    this.text(ctx, zh ? `第 ${hand} / ${TOTAL_HANDS} 局` : `Hand ${hand} / ${TOTAL_HANDS}`, l.left + 4, l.top + 8, 13, theme.text, 'left', 500);
+    this.text(ctx, this.getStreetLabel(zh), l.left + l.width / 2, l.top + 8, 13, theme.muted);
+    this.text(ctx, zh ? '盲注 10 / 20' : 'Blinds 10 / 20', l.left + l.width - 4, l.top + 8, 13, theme.muted, 'right');
+  }
 
-    for (let i = 0; i < 5; i += 1) {
-      const x = startX + i * (CARD_W + CARD_GAP);
+  private drawCommunity(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean, l: PokerLayout) {
+    const { x, y, w, h } = l.board;
+    const cx = x + w / 2;
+    const pot = `${zh ? '底池' : 'Pot'}  ${this.getPotSize()}`;
+    this.text(ctx, pot, cx, y - 14, l.compact ? 17 : 21, theme.text, 'center', 600);
+    const gap = 6;
+    const cw = Math.min((w - gap * 4) / 5, h * 0.7);
+    const start = cx - (cw * 5 + gap * 4) / 2;
+    for (let i = 0; i < 5; i++) {
       const card = this.community[i];
-      if (card) {
-        this.drawCard(ctx, x, y, card, true, theme, false);
-      } else {
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = theme.surfaceMuted;
-        this.roundRect(ctx, x, y, CARD_W, CARD_H, 6);
-        ctx.fill();
-        ctx.strokeStyle = theme.border;
-        ctx.stroke();
-        ctx.restore();
+      const px = start + i * (cw + gap);
+      if (card) this.drawCard(ctx, px, y, cw, h, card, true, theme, false);
+      else {
+        this.panel(ctx, px, y, cw, h, 6, theme.surfaceMuted, theme.border);
+        this.text(ctx, '·', px + cw / 2, y + h / 2 + 5, 18, theme.cardBackAlt);
       }
     }
-
-    ctx.textAlign = 'center';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = theme.muted;
-    ctx.fillText(zh ? '公共牌' : 'BOARD', W / 2, y - 10);
   }
 
-  private drawPlayers(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    for (let index = 0; index < this.players.length; index += 1) {
+  private drawPlayers(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean, l: PokerLayout) {
+    for (let index = 1; index < this.players.length; index++) {
       const player = this.players[index];
-      const seat = this.seatLayout[index];
-      const reveal = player.isHuman || this.state !== 'playing' || this.stage === 'showdown' || player.folded;
-      const cardY = player.isHuman ? seat.y : seat.y;
-      const leftX = seat.x - (CARD_W + CARD_GAP / 2);
-      const rightX = seat.x + CARD_GAP / 2;
+      const seat = l.opponents[index - 1];
+      const active = this.currentPlayerIndex === index && this.state === 'playing';
       const dim = player.folded || player.out;
-
-      if (this.currentPlayerIndex === index && this.state === 'playing') {
-        drawGlow(ctx, seat.x, cardY + CARD_H / 2, 72, theme.primary, this.isDarkTheme() ? 0.24 : 0.08);
-      }
-      if (player.hole[0]) this.drawCard(ctx, leftX, cardY, player.hole[0], reveal, theme, dim);
-      if (player.hole[1]) this.drawCard(ctx, rightX, cardY, player.hole[1], reveal, theme, dim);
-
-      ctx.save();
-      ctx.globalAlpha = dim ? 0.55 : 1;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = theme.text;
-      ctx.font = '12px system-ui, sans-serif';
-
+      const color = dim ? theme.muted : theme.text;
       const name = zh ? player.nameZh : player.name;
-      const labelY = player.isHuman ? cardY + CARD_H + 16 : cardY + CARD_H + 14;
-      ctx.fillText(name, seat.x, labelY);
-
-      ctx.fillStyle = theme.muted;
-      ctx.fillText(`${zh ? '筹码' : 'CHIPS'} ${player.chips}`, seat.x, labelY + 12);
-
-      if (player.bet > 0) {
+      const nameLabel = `${active ? '› ' : ''}${name}${player.wonThisHand > 0 ? ` +${player.wonThisHand}` : ''}`;
+      this.text(ctx, nameLabel, seat.x, seat.y, 13, player.wonThisHand > 0 ? theme.primary : color, 'center', active ? 650 : 500);
+      this.text(ctx, String(player.chips), seat.x, seat.y + 20, 17, color, 'center', 600);
+      const ch = l.opponentCardHeight;
+      const cw = ch * 0.72;
+      const cardY = seat.y + 28;
+      for (let i = 0; i < player.hole.length; i++) {
+        this.drawCard(ctx, seat.x - cw - 2 + i * (cw + 4), cardY, cw, ch, player.hole[i], this.state !== 'playing' || player.folded, theme, dim);
+      }
+      const action = this.playerStatus(player, zh);
+      this.text(ctx, action, seat.x, cardY + ch + 17, 11, player.wonThisHand > 0 ? theme.primary : theme.muted);
+      this.drawSeatMarkers(ctx, theme, index, seat.x + Math.min(42, seat.width / 2 - 9), seat.y + 18);
+      this.seatLayout[index] = { x: seat.x, y: cardY };
+      if (active) {
         ctx.fillStyle = theme.primary;
-        ctx.fillText(`${zh ? '本轮' : 'BET'} ${player.bet}`, seat.x, labelY + 24);
+        ctx.fillRect(seat.x - 14, cardY + ch + 22, 28, 2);
       }
-
-      if (player.lastAction) {
-        ctx.fillStyle = player.wonThisHand > 0 ? theme.primary : theme.muted;
-        ctx.fillText(zh ? player.lastAction.zh : player.lastAction.en, seat.x, labelY + 36);
-      } else if (player.out) {
-        ctx.fillStyle = theme.red;
-        ctx.fillText(zh ? '出局' : 'OUT', seat.x, labelY + 36);
-      }
-
-      if (this.showdownHands.has(index) && !player.folded) {
-        const hand = this.showdownHands.get(index)!;
-        ctx.fillStyle = theme.primary;
-        ctx.fillText(zh ? hand.labelZh : hand.label, seat.x, labelY + 48);
-      }
-
-      if (this.currentPlayerIndex === index && this.state === 'playing') {
-        ctx.strokeStyle = theme.primary;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(seat.x, cardY - 10, 8, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      ctx.restore();
-      this.drawSeatMarkers(ctx, theme, index, seat.x, player.isHuman ? cardY + CARD_H + 56 : cardY - 8);
     }
+    const human = this.players[0];
+    const { x, y, h } = l.human;
+    const cw = h * 0.7;
+    for (let i = 0; i < human.hole.length; i++) {
+      this.drawCard(ctx, x + i * (cw + 6), y, cw, h, human.hole[i], true, theme, human.folded || human.out);
+    }
+    const tx = x + cw * 2 + 22;
+    const humanLabel = human.wonThisHand > 0 ? `${zh ? '你' : 'You'} +${human.wonThisHand}` : (zh ? '你的筹码' : 'Your chips');
+    this.text(ctx, humanLabel, tx, y + 14, 12, human.wonThisHand > 0 ? theme.primary : theme.muted, 'left');
+    this.text(ctx, String(human.chips), tx, y + 39, 24, theme.text, 'left', 600);
+    this.text(ctx, this.playerStatus(human, zh), tx, y + 58, 11, theme.primary, 'left');
+    this.drawSeatMarkers(ctx, theme, 0, x - 14, y + 18);
+    this.seatLayout[0] = { x: x + cw, y };
+  }
+
+  private playerStatus(player: Player, zh: boolean): string {
+    const hand = this.showdownHands.get(player.seat);
+    if (player.wonThisHand > 0) return hand ? (zh ? hand.labelZh : hand.label) : (zh ? '赢得底池' : 'Won pot');
+    if (player.out) return zh ? '出局' : 'Out';
+    if (player.folded) return zh ? '已弃牌' : 'Folded';
+    if (hand) return zh ? hand.labelZh : hand.label;
+    // Street bets reset during the runout; the recorded action keeps its true amount.
+    if (player.allIn) return player.lastAction ? (zh ? player.lastAction.zh : player.lastAction.en) : (zh ? '全下' : 'All-in');
+    if (player.bet > 0 && !player.lastAction) return zh ? `下注 ${player.bet}` : `Bet ${player.bet}`;
+    return player.lastAction ? (zh ? player.lastAction.zh : player.lastAction.en) : '';
   }
 
   private drawSeatMarkers(ctx: CanvasRenderingContext2D, theme: ThemePalette, index: number, x: number, y: number) {
@@ -1163,173 +1121,84 @@ export class TexasHoldGame extends BaseGame {
     if (index === this.dealerIndex) markers.push('D');
     if (index === this.smallBlindIndex) markers.push('SB');
     if (index === this.bigBlindIndex) markers.push('BB');
-    if (markers.length === 0) return;
-
-    ctx.save();
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = theme.primary;
-    ctx.fillText(markers.join(' '), x, y);
-    ctx.restore();
-  }
-
-  private drawStatusBar(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    fillGlassPanel(ctx, 18, 450, W - 36, 36, 10, {
-      fill: theme.surface,
-      fill2: theme.surfaceMuted,
-      border: theme.border,
-      shadow: theme.shadow,
+    markers.forEach((marker, i) => {
+      this.panel(ctx, x - 10, y - 12 + i * 22, 22, 18, 5, theme.surface);
+      this.text(ctx, marker, x + 1, y + 1 + i * 22, 10, theme.muted, 'center', 600);
     });
-
-    ctx.textAlign = 'center';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillStyle = theme.text;
-    const line = zh ? this.banner.zh : this.banner.en;
-    ctx.fillText(line || (this.isHumanTurn() ? (zh ? '轮到你行动' : 'Your action') : (zh ? 'AI 思考中' : 'AI thinking')), W / 2, 464);
-
-    const log = this.logs[0];
-    ctx.fillStyle = theme.muted;
-    ctx.fillText(log ? (zh ? log.zh : log.en) : (zh ? '完成 10 局或避免破产' : 'Finish 10 hands or avoid busting'), W / 2, 478);
   }
 
-  private drawActionButtons(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    const buttons = this.getActionButtons();
-    for (const button of buttons) {
-      ctx.save();
-      fillBevelTile(ctx, button.x, button.y, button.w, button.h, 8, button.enabled ? theme.surface : theme.surfaceMuted, {
-        border: button.enabled ? theme.primary : theme.border,
-      });
-
-      ctx.textAlign = 'center';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillStyle = button.enabled ? theme.text : theme.muted;
-      ctx.fillText(zh ? button.labelZh : button.label, button.x + button.w / 2, button.y + 17);
-      ctx.restore();
+  private status(zh: boolean): string {
+    if (this.state !== 'playing') return zh ? '本局结束' : 'Hand complete';
+    if (this.isHumanTurn()) return zh ? '轮到你行动' : 'Your turn';
+    if (this.currentPlayerIndex !== null) {
+      const player = this.players[this.currentPlayerIndex];
+      return zh ? `${player.nameZh} 正在思考…` : `${player.name} is thinking…`;
     }
+    return zh ? '正在发牌…' : 'Dealing…';
   }
 
-  private drawOverlay(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean) {
-    if (this.state === 'gameOver') {
-      this.drawResultOverlay(ctx, {
-        title: zh ? '牌局结束' : 'TOURNAMENT OVER',
-        tone: this.players[0].chips > 0 ? 'success' : 'danger',
-        details: [
-          `${zh ? '得分' : 'SCORE'} ${this.score}`,
-          `${zh ? '完成局数' : 'HANDS'} ${this.completedHands}/${TOTAL_HANDS}`,
-        ],
-        hint: zh ? '点击、空格或回车重新开始' : 'CLICK, SPACE OR ENTER TO RESTART',
-      });
-      return;
+  private drawStatusBar(ctx: CanvasRenderingContext2D, theme: ThemePalette, zh: boolean, l: PokerLayout) {
+    this.text(ctx, this.status(zh), l.left + l.width / 2, l.statusY, 13, this.isHumanTurn() ? theme.primary : theme.muted, 'center', 500);
+  }
+
+  private syncActions(l: PokerLayout, zh: boolean) {
+    this.actions ??= new PokerActions(this.canvas, id => this.activateAction(id));
+    this.actions.sync({ actions: this.getActions(), x: l.dock.x, y: l.dock.y, width: l.dock.w,
+      columns: this.state === 'playing' ? l.columns : 1, dark: this.isDarkTheme(),
+      hidden: this.presentationPaused, status: this.status(zh) });
+  }
+
+  private activateAction(id: PokerActionId) {
+    if (this.presentationPaused) return;
+    if (id === 'next') {
+      if (this.state === 'betweenHands') this.startNewHand();
+      else if (this.state === 'gameOver') this.init();
+    } else if (this.getActions().some(action => action.id === id && action.enabled)) {
+      this.handleHumanAction(id);
     }
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.56)';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = theme.surface;
-    this.roundRect(ctx, 40, 182, W - 80, 128, 14);
-    ctx.fill();
-    ctx.strokeStyle = theme.primary;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = theme.text;
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText(zh ? '本局结束' : 'Round End', W / 2, 218);
-
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = theme.primary;
-    ctx.fillText(zh ? `得分 ${this.score}` : `Score ${this.score}`, W / 2, 242);
-
-    ctx.fillStyle = theme.text;
-    ctx.fillText(zh ? this.banner.zh : this.banner.en, W / 2, 266);
-
-    ctx.fillStyle = theme.muted;
-    const prompt = zh ? '按 Space / Enter 进入下一局' : 'Press Space / Enter for next hand';
-    ctx.fillText(prompt, W / 2, 290);
-    ctx.restore();
+    this.renderFrame();
   }
 
-  private drawCard(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    card: Card,
-    faceUp: boolean,
-    theme: ThemePalette,
-    dim: boolean
-  ) {
-    ctx.save();
-    if (dim) ctx.globalAlpha = 0.55;
-
-    ctx.fillStyle = theme.shadow;
-    ctx.beginPath();
-    ctx.ellipse(x + CARD_W / 2, y + CARD_H + 2, CARD_W * 0.4, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (!faceUp) {
-      fillBevelTile(ctx, x, y, CARD_W, CARD_H, 6, theme.cardBack, {
-        border: theme.cardBackAlt,
-        borderWidth: 1.5,
-      });
-
-      ctx.strokeStyle = theme.cardBackAlt;
-      for (let i = 0; i < 4; i += 1) {
-        ctx.beginPath();
-        ctx.moveTo(x + 7, y + 10 + i * 10);
-        ctx.lineTo(x + CARD_W - 7, y + 4 + i * 10);
-        ctx.stroke();
-      }
-      ctx.restore();
-      return;
-    }
-
-    fillBevelTile(ctx, x, y, CARD_W, CARD_H, 6, theme.cardFace, {
-      border: theme.border,
-    });
-
-    const color = card.suit === 0 || card.suit === 1 ? theme.red : theme.black;
-    const rank = this.rankLabel(card.rank);
-    const suit = this.suitSymbol(card.suit);
-
-    ctx.fillStyle = color;
-    ctx.textAlign = 'left';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText(rank, x + 4, y + 11);
-    ctx.fillText(suit, x + 4, y + 22);
-
-    ctx.textAlign = 'center';
-    ctx.font = '18px system-ui, sans-serif';
-    ctx.fillText(suit, x + CARD_W / 2, y + 32);
-
-    ctx.textAlign = 'right';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText(rank, x + CARD_W - 4, y + CARD_H - 12);
-    ctx.restore();
-  }
-
-  private getActionButtons(): ActionButton[] {
+  private getActions(): PokerAction[] {
+    const zh = this.isZh();
+    if (this.state !== 'playing') return [{ id: 'next', label: this.state === 'gameOver' ? (zh ? '再玩一次' : 'Play again') : (zh ? '下一局' : 'Next hand'), enabled: true, primary: true }];
     const human = this.players[0];
-    const toCall = Math.max(0, this.currentBet - human.bet);
+    const toCall = Math.min(Math.max(0, this.currentBet - human.bet), human.chips);
     const canAct = this.isHumanTurn();
     const canRaise = this.getRaiseTarget(human) > this.currentBet;
-    const callLabel = toCall === 0 ? 'Check' : `Call ${Math.min(toCall, human.chips)}`;
-    const callLabelZh = toCall === 0 ? '过牌' : `跟注 ${Math.min(toCall, human.chips)}`;
-    const raiseTo = this.getRaiseTarget(human);
-    const raiseLabel = canRaise ? `Raise ${raiseTo}` : 'Raise';
-    const raiseLabelZh = canRaise ? `加到 ${raiseTo}` : '加注';
-
-    const totalWidth = BUTTON_W * 4 + BUTTON_GAP * 3;
-    const startX = (W - totalWidth) / 2;
-    const y = H - BUTTON_H - 10;
-
     return [
-      { id: 'fold', x: startX, y, w: BUTTON_W, h: BUTTON_H, enabled: canAct && toCall >= 0, label: 'Fold', labelZh: '弃牌' },
-      { id: 'call', x: startX + (BUTTON_W + BUTTON_GAP), y, w: BUTTON_W, h: BUTTON_H, enabled: canAct, label: callLabel, labelZh: callLabelZh },
-      { id: 'raise', x: startX + 2 * (BUTTON_W + BUTTON_GAP), y, w: BUTTON_W, h: BUTTON_H, enabled: canAct && canRaise, label: raiseLabel, labelZh: raiseLabelZh },
-      { id: 'all-in', x: startX + 3 * (BUTTON_W + BUTTON_GAP), y, w: BUTTON_W, h: BUTTON_H, enabled: canAct && human.chips > 0, label: 'All-in', labelZh: '全下' },
+      { id: 'fold', label: zh ? '弃牌' : 'Fold', enabled: canAct },
+      { id: 'call', label: toCall === 0 ? (zh ? '过牌' : 'Check') : `${zh ? '跟注' : 'Call'} ${toCall}`, enabled: canAct, primary: true },
+      { id: 'raise', label: canRaise ? `${zh ? '加到' : 'Raise to'} ${this.getRaiseTarget(human)}` : (zh ? '加注' : 'Raise'), enabled: canAct && canRaise },
+      { id: 'all-in', label: zh ? '全下' : 'All-in', enabled: canAct && human.chips > 0 },
     ];
+  }
+
+  private drawOverlay(ctx: CanvasRenderingContext2D, _theme: ThemePalette, zh: boolean) {
+    this.drawResultOverlay(ctx, {
+      title: zh ? '牌局结束' : 'Tournament complete',
+      tone: this.players[0].chips > 0 ? 'success' : 'danger',
+      details: [`${zh ? '筹码' : 'Chips'} ${this.score}`, `${zh ? '完成局数' : 'Hands'} ${this.completedHands}/${TOTAL_HANDS}`],
+      hint: zh ? '点击、空格或回车重新开始' : 'Click, Space or Enter to play again',
+    });
+  }
+
+  private drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, card: Card, faceUp: boolean, theme: ThemePalette, dim: boolean) {
+    ctx.save();
+    if (dim) ctx.globalAlpha = 0.45;
+    this.panel(ctx, x, y, w, h, 5, faceUp ? theme.cardFace : theme.cardBack, faceUp ? '#c7d5cd' : theme.cardBackAlt);
+    if (!faceUp) {
+      this.roundRect(ctx, x + 4, y + 4, w - 8, h - 8, 3);
+      ctx.strokeStyle = theme.cardBackAlt;
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+    } else {
+      const color = card.suit < 2 ? theme.red : theme.black;
+      const small = h <= 48;
+      this.text(ctx, this.rankLabel(card.rank), x + (small ? w / 2 : 7), y + (small ? 13 : 20), small ? 12 : 18, color, small ? 'center' : 'left', 600);
+      this.text(ctx, this.suitSymbol(card.suit), x + w * (small ? 0.5 : 0.64), y + h - (small ? 4 : 10), small ? 12 : 24, color);
+    }
+    ctx.restore();
   }
 
   private getStreetLabel(zh: boolean): string {

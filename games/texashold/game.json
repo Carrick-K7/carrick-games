@@ -13,12 +13,19 @@
     "keyboard": [
       { "keys": ["F"], "action": "Fold", "actionZh": "弃牌" },
       { "keys": ["C"], "action": "Call / Check", "actionZh": "跟注 / 过牌" },
-      { "keys": ["R"], "action": "Raise", "actionZh": "加注" },
-      { "keys": ["A"], "action": "All-in", "actionZh": "全下" },
-      { "keys": ["Space", "Enter"], "action": "Advance next hand / restart", "actionZh": "进入下一局 / 重开" }
+      { "keys": ["R"], "action": "Raise", "actionZh": "加注" }
     ],
     "touch": [
-      { "icon": "tap", "action": "Tap Fold / Call / Raise / All-in buttons", "actionZh": "点击弃牌 / 跟注 / 加注 / 全下按钮" }
-    ]
+      { "icon": "tap", "action": "Tap Fold / Call / Raise / All-in buttons", "actionZh": "点击弃牌 / 跟注 / 加注 / 全下按钮" },
+      { "icon": "tap", "action": "Tap Next hand after the showdown", "actionZh": "摊牌后点击下一局" }
+    ],
+    "sections": [{
+      "id": "more", "title": "More actions", "titleZh": "更多操作",
+      "keyboard": [
+        { "keys": ["A"], "action": "All-in", "actionZh": "全下" },
+        { "keys": ["Space", "Enter"], "action": "Next hand / restart", "actionZh": "进入下一局 / 重开" },
+        { "keys": ["Tab"], "action": "Focus an action; Enter to confirm", "actionZh": "选择操作，回车确认" }
+      ]
+    }]
   }
 }

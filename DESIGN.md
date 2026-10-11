@@ -17,7 +17,7 @@ Use system typography, soft mineral surfaces, restrained borders and clear focus
 
   | Action | Target | Anchor, plus safe-area insets |
   |---|---|---|
-  | Carrick Games / `#siteBrand` | 44×44px; exact 22px gamepad, icon-only (the stacked wordmark appears on the `…` menu and library) | Top/left 12px for fixed games; top 12px/right 116px for responsive CS, CS Kimi and Villa |
+  | Carrick Games / `#siteBrand` | 44×44px; exact 22px gamepad, icon-only (the stacked wordmark appears on the `…` menu and library) | Top/left 12px for fixed games; top 12px/right 116px for responsive CS, CS Kimi, Villa and Texas Hold’em |
   | Help / `?` | 44×44px | Top 12px/right 64px |
   | Game/settings menu | 44×44px | Top 12px/right 12px |
 
@@ -151,6 +151,16 @@ Existing expressive game art and mechanics remain game-owned. Use `packages/game
 - Keep particles, shake, tweens and float text meaningful and bounded. Cache detailed sprites with `makeSprite()`/`drawSprite()`; avoid per-frame `shadowBlur` storms.
 - Games use `this.isDarkTheme()` / `this.isZhLang()` and `getRetroPalette()` from `packages/game-sdk/src/render.ts`; shell tokens do not imply a global gameplay palette rewrite.
 - Existing `three` use is limited to CS, CS Kimi and Villa, rendered back into the shared 2D canvas contract. Preserve game-owned renderer/resource budgets and private QA fixtures, not shell knowledge of internal scenes.
+
+### Texas Hold’em Table
+
+Texas Hold’em’s game-owned UI uses responsive CSS-pixel drawing coordinates, not a uniformly shrunken portrait board. Keep the existing betting rules, four seats, blinds, ten-hand tournament, showdown and score reporting unchanged.
+
+- Use a flat mineral-green felt surface, restrained system typography, white/red/ink playing cards and a single teal primary action. Wide screens arrange opponents around a horizontal table; phones stack the board and hand; short landscapes place community and human cards side by side.
+- Reserve the shared responsive utility cluster and 64px top clearance, plus safe areas. Public cards, pot, each stack, dealer/blind markers and current actor remain distinct. Resize and theme/language changes must not redeal.
+- Betting uses four native, keyboard-focusable 48px controls inside the canvas parent. Narrow screens use a two-column grid. Show exact call/raise amounts, disable illegal actions and preserve F/C/R/A shortcuts. Shell overlays immediately hide/disable the dock and pause AI; native Space/Enter activation must not also trigger game-level continuation.
+- Between hands, keep the revealed table and winner/hand values visible with one Next hand action, not a modal covering the cards. Tournament end retains the shared result contract and restart. Respect reduced motion and remove all native controls on teardown.
+- The cover is a captured real betting state from the game-owned presentation test, not an illustration or composed mock-up. Browser checks cover bilingual light/dark desktop, 320px portrait, short/notched landscape, touch/keyboard, resize, pause, payout and restart.
 
 ### CS Tactical Interface
 
