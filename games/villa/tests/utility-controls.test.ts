@@ -82,6 +82,7 @@ type Button = { id: string; label: string; x: number; y: number; w: number; h: n
 // Private access is confined to this focused test; the implementation is never copied.
 type TestVilla = Omit<VillaGame, 'draw'> & {
   running: boolean; presentationPaused: boolean; time: number; state: any; position: any; motion: any;
+  yaw: number; pitch: number; skipLockRecentre: boolean; lockGrantedAt: number; wantPointerLock: boolean;
   immersive: boolean; mapOpen: boolean; touchMode: boolean; mouseLookEnabled: boolean;
   keys: Set<string>; touchActions: Map<number, string>; joystick: unknown; lookTouch: unknown;
   scene: any; terminal: { element: ElementDouble; visible: boolean }; visited: Set<string>;
@@ -105,6 +106,132 @@ function fixture(legacy = false) {
 function elements(root: ElementDouble): ElementDouble[] { return [root, ...root.children.flatMap(elements)]; }
 function target(root: ElementDouble, key: string, value = '') { return elements(root).find(item => item.dataset[key] === value)!; }
 function tap(game: TestVilla, button: Button) { return game.clickUi({ x: button.x + button.w / 2, y: button.y + button.h / 2 }); }
+
+describe('Villa pointer capture ordering', () => {
+  function captureFixture() {
+    const f = fixture();
+    f.game.touchMode = false;
+    f.game.onStart();
+    const listener = (type: string) => vi.mocked(document.addEventListener).mock.calls
+      .find(([event]) => event === type)![1] as (event: unknown) => void;
+    return { ...f, move: listener('mousemove'), lockChange: listener('pointerlockchange') };
+  }
+
+  it('preserves look when native recenter arrives before pointerlockchange', () => {
+    const { game, canvas, move, lockChange } = captureFixture();
+    // Finish an earlier capture, including its zero-delta housekeeping event.
+    game.restorePointerCapture();
+    Object.assign(document, { pointerLockElement: canvas });
+    lockChange({});
+    move({ movementX: 0, movementY: 0 });
+    Object.assign(document, { pointerLockElement: null });
+    lockChange({});
+    const before = { yaw: game.yaw, pitch: game.pitch };
+    game.restorePointerCapture();
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(2);
+    Object.assign(document, { pointerLockElement: canvas });
+    // Chromium traces show (-1553,-106) after closing at (1553,106),
+    // and capture can deliver its recenter with pointerLockElement set
+    // BEFORE pointerlockchange. Reproduce that ordering on recapture.
+    move({ movementX: -1553, movementY: -106 });
+    lockChange({});
+    expect({ yaw: game.yaw, pitch: game.pitch }).toEqual(before);
+    // The later lockchange must not re-arm a consumed guard.
+    move({ movementX: 200, movementY: 0 });
+    expect(game.yaw).toBeCloseTo(before.yaw - 200 * .0023);
+  });
+
+  it.each(['before', 'after'])('keeps zero deltas from consuming the guard %s lockchange', order => {
+    const { game, canvas, move, lockChange } = captureFixture();
+    game.restorePointerCapture();
+    game.time += 10; // An async grant may take much longer than the guard window.
+    Object.assign(document, { pointerLockElement: canvas });
+    const before = { yaw: game.yaw, pitch: game.pitch };
+    if (order === 'after') lockChange({});
+    move({ movementX: 0, movementY: 0 });
+    move({ movementX: -1553, movementY: -106 });
+    if (order === 'before') lockChange({});
+    expect({ yaw: game.yaw, pitch: game.pitch }).toEqual(before);
+    move({ movementX: 12, movementY: 5 });
+    expect(game.yaw).toBeCloseTo(before.yaw - 12 * .0023);
+    expect(game.pitch).toBeCloseTo(before.pitch - 5 * .0023);
+    game.time += .3;
+    move({ movementX: 200, movementY: 0 });
+    expect(game.yaw).toBeCloseTo(before.yaw - 212 * .0023);
+  });
+
+  it('passes the first small move and a later large first move without swallowing player input', () => {
+    const { game, canvas, move, lockChange } = captureFixture();
+    game.restorePointerCapture();
+    Object.assign(document, { pointerLockElement: canvas });
+    lockChange({});
+    const yaw = game.yaw;
+    move({ movementX: 12, movementY: 0 });
+    expect(game.yaw).toBeCloseTo(yaw - 12 * .0023);
+    Object.assign(document, { pointerLockElement: null });
+    lockChange({});
+    game.restorePointerCapture();
+    Object.assign(document, { pointerLockElement: canvas });
+    lockChange({});
+    game.time += .3;
+    move({ movementX: 200, movementY: 0 });
+    expect(game.yaw).toBeCloseTo(yaw - 212 * .0023);
+  });
+
+  it('does not re-request or re-arm pending and already granted capture', () => {
+    const { game, canvas, move, lockChange } = captureFixture();
+    game.restorePointerCapture(); game.restorePointerCapture();
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    Object.assign(document, { pointerLockElement: canvas });
+    lockChange({});
+    move({ movementX: 12, movementY: 0 });
+    const yaw = game.yaw;
+    game.restorePointerCapture();
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    move({ movementX: 200, movementY: 0 });
+    expect(game.yaw).toBeCloseTo(yaw - 200 * .0023);
+  });
+
+  it.each(['throw', 'reject'])('clears a failed capture guard on %s and allows another request', async failure => {
+    const { game, canvas } = captureFixture();
+    canvas.requestPointerLock.mockImplementationOnce(() => {
+      if (failure === 'throw') throw new Error('capture denied');
+      return Promise.reject(new Error('capture denied'));
+    });
+    game.restorePointerCapture();
+    await Promise.resolve(); await Promise.resolve();
+    expect(game.wantPointerLock).toBe(false);
+    expect(game.skipLockRecentre).toBe(false);
+    expect(game.lockGrantedAt).toBe(-Infinity);
+    game.restorePointerCapture();
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(2);
+    expect(game.skipLockRecentre).toBe(true);
+  });
+
+  it('clears cancellation and ignores late movement or failure from the cancelled request', async () => {
+    const { game, canvas, move, lockChange } = captureFixture();
+    let reject!: (reason: Error) => void;
+    canvas.requestPointerLock.mockReturnValueOnce(new Promise((_resolve, rejectRequest) => { reject = rejectRequest; }));
+    game.restorePointerCapture();
+    game.onShellOverlayChange(true);
+    expect(game.wantPointerLock).toBe(false);
+    expect(game.skipLockRecentre).toBe(false);
+    expect(game.lockGrantedAt).toBe(-Infinity);
+    const yaw = game.yaw;
+    Object.assign(document, { pointerLockElement: canvas });
+    move({ movementX: -1553, movementY: -106 });
+    expect(game.yaw).toBe(yaw);
+    Object.assign(document, { pointerLockElement: null });
+    lockChange({});
+    game.onShellOverlayChange(false);
+    game.restorePointerCapture();
+    reject(new Error('stale rejection'));
+    await Promise.resolve(); await Promise.resolve();
+    expect(game.wantPointerLock).toBe(true);
+    expect(game.skipLockRecentre).toBe(true);
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('Villa host menu actions', () => {
   it('registers bilingual stable actions before scene initialization work and republishes on start', () => {

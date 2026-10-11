@@ -97,7 +97,7 @@ export class VillaGame extends BaseGame {
    *  is far larger than hand motion. Without this guard that single event spun
    *  the camera the moment the player re-captured the mouse. */
   private skipLockRecentre = false;
-  /** When the current lock was granted, for the recentre guard's time window. */
+  /** First observed grant time; Infinity while requested but not yet observed. */
   private lockGrantedAt = -Infinity;
   private wantPointerLock = false;
   private lockVersion = 0;
@@ -290,8 +290,12 @@ export class VillaGame extends BaseGame {
       const visibility = () => { if (document.hidden) blur(); };
       const leave = () => { this.lastMouse = null; };
       const pointerMove = (e: MouseEvent) => {
-        if (document.pointerLockElement !== this.canvas || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
+        if (document.pointerLockElement !== this.canvas || !this.wantPointerLock || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
+        // Chromium can deliver the grant's mousemove before pointerlockchange.
+        // Start the window at the first observed grant, not at the async request.
+        if (this.lockGrantedAt === Infinity) this.lockGrantedAt = this.time;
         if (this.skipLockRecentre) {
+          if (e.movementX === 0 && e.movementY === 0) return;
           this.skipLockRecentre = false;
           // Only the browser's own recentre jolt is dropped, and only while it
           // can plausibly be the one arriving right after the grant. A large
@@ -308,14 +312,17 @@ export class VillaGame extends BaseGame {
         if (document.pointerLockElement === this.canvas) {
           if (!this.wantPointerLock || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) this.unlock();
           else {
-            this.mouseLookEnabled = true; this.skipLockRecentre = true; this.lockGrantedAt = this.time;
+            this.mouseLookEnabled = true;
+            if (this.lockGrantedAt === Infinity) this.lockGrantedAt = this.time;
             if (!this.hudHintShown) { this.hudHintShown = true; this.message(this.isZhLang() ? '按 Tab 释放鼠标，即可点击终端与页面按钮。' : 'Press Tab to free the mouse for the terminal and page buttons.'); }
           }
-        } else if (this.releasePending) {
-          this.releasePending = false;
-        } else if (this.wantPointerLock) {
-          // A native Escape or focus loss, not a deliberate panel release.
-          this.wantPointerLock = false; this.mouseLookEnabled = false;
+        } else {
+          this.skipLockRecentre = false; this.lockGrantedAt = -Infinity;
+          if (this.releasePending) this.releasePending = false;
+          else if (this.wantPointerLock) {
+            // A native Escape or focus loss, not a deliberate panel release.
+            this.wantPointerLock = false; this.mouseLookEnabled = false;
+          }
         }
         this.publishState();
       };
@@ -358,11 +365,14 @@ export class VillaGame extends BaseGame {
   private lockPointer() {
     this.primeAudio();
     if (this.touchMode || this.mapOpen || this.terminal?.visible || this.helpOpen || this.shellOpen()) return;
+    if (document.pointerLockElement === this.canvas || this.wantPointerLock) return;
     this.mouseLookEnabled = true; this.lastMouse = null; this.wantPointerLock = true;
+    this.skipLockRecentre = true; this.lockGrantedAt = Infinity;
     const version = ++this.lockVersion;
     const fallback = () => {
       if (version === this.lockVersion && this.running && !this.mapOpen && !this.terminal?.visible && !this.helpOpen && !this.shellOpen()) {
         this.wantPointerLock = false; this.mouseLookEnabled = true;
+        this.skipLockRecentre = false; this.lockGrantedAt = -Infinity;
       }
     };
     try {
@@ -498,6 +508,7 @@ export class VillaGame extends BaseGame {
 
   private unlock() {
     this.wantPointerLock = false; this.lockVersion++;
+    this.skipLockRecentre = false; this.lockGrantedAt = -Infinity;
     if (document.pointerLockElement === this.canvas) { this.releasePending = true; document.exitPointerLock?.(); }
   }
 
