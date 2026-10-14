@@ -35,6 +35,8 @@ export async function selectGame(page: Page, gameId: string) {
     await expect(page.locator('#selectedGameLabel')).toHaveText(zh ? meta.nameZh : meta.name);
     // The active release opts into responsive coordinates through the public
     // viewport marker; never infer its mode from a source-game ID allowlist.
+    // A software-GL first frame can keep the main thread busy beyond the default
+    // 5s assertion window. Use the existing bounded mount budget, not weaker geometry.
     await expect.poll(async () => {
       const sample = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
         const rect = canvas.getBoundingClientRect();
@@ -52,7 +54,7 @@ export async function selectGame(page: Page, gameId: string) {
       // Preserve Gacha's existing contained-layout adaptation; all other fixed
       // boards still require their exact catalog dimensions.
       return canvasViewportIssues(sample, meta.canvasSize, gameId === 'gacha');
-    }).toEqual([]);
+    }, { timeout: mountTimeout, message: `${gameId}: first rendered frame must satisfy its public viewport contract` }).toEqual([]);
   }
   await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
