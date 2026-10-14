@@ -7,7 +7,8 @@ import { KEYBOARD_GAMES as KEYBOARD_PROFILES, CLICK_GAMES as CLICK_PROFILES, sel
 const KEYBOARD_GAMES = selectedProfiles(KEYBOARD_PROFILES);
 const CLICK_GAMES = selectedProfiles(CLICK_PROFILES);
 const ALL_GAME_IDS = [...KEYBOARD_GAMES, ...CLICK_GAMES].map(game => game.id);
-const entryRoute = `/#/${process.env.GAME_ID || 'gacha'}`;
+if (!ALL_GAME_IDS.length) throw new Error('No published games selected for browser smoke coverage');
+const entryRoute = `/#/${ALL_GAME_IDS.includes('gacha') ? 'gacha' : ALL_GAME_IDS[0]}`;
 
 test.describe('Carrick Games - Lifecycle', () => {
   test.beforeEach(async ({ page }) => {

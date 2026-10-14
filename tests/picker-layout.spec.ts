@@ -2,14 +2,23 @@ import { expect, test, type Page } from '@playwright/test';
 import { GAMES } from './support/catalog';
 import { gameModuleUrl } from './support/releases';
 
+function fixture(id: string) {
+  const game = GAMES.find(game => game.id === id);
+  if (!game) throw new Error(`Picker fixture is missing from the tested catalog: ${id}`);
+  return game;
+}
+const currentGame = fixture('sudoku');
+const candidateGame = fixture('minesweeper');
+
 const viewports = [
   { width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 1024, height: 600 },
   { width: 390, height: 844 }, { width: 360, height: 640 }, { width: 320, height: 568 }, { width: 667, height: 375 },
 ];
 async function openShell(page: Page) {
   await page.addInitScript(() => { localStorage.setItem('cg-lang', 'en'); localStorage.setItem('cg-theme', 'light'); });
-  await page.goto('/#/snake');
-  await expect(page.locator('#selectedGameLabel')).toHaveText('Snake');
+  await page.goto(`/#/${currentGame.id}`);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', currentGame.id);
+  await expect(page.locator('#selectedGameLabel')).toHaveText(currentGame.name);
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await page.evaluate(() => document.fonts.ready);
 }
@@ -136,9 +145,12 @@ test.describe('coarse-pointer library interaction', () => {
     await expect(page.locator('#gameCanvas')).toBeFocused();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await openPicker(page);
-    await search.tap(); await search.fill('俄罗斯方块');
-    await expect(page.locator('.game-list-item')).toHaveCount(1);
-    await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', 'tetris');
+    await search.tap();
+    for (const query of [candidateGame.nameZh, candidateGame.name]) {
+      await search.fill(query);
+      await expect(page.locator('.game-list-item')).toHaveCount(1);
+      await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', candidateGame.id);
+    }
     await search.fill('not-a-game-987654');
     await expect(page.locator('.game-list-item')).toHaveCount(0);
     await expect(page.locator('.search-empty')).toBeVisible();
@@ -158,24 +170,25 @@ test('categories combine with search; selecting the current game preserves its i
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', '2');
   await openPicker(page);
   const prepare = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
-  await page.locator('[data-category="puzzle"]').click();
-  await expect(page.locator('.game-list-item')).toHaveCount(GAMES.filter(game => game.group === 'puzzle').length);
-  await page.locator('#searchInput').fill('sudoku');
+  await page.locator(`[data-category="${candidateGame.group}"]`).click();
+  await expect(page.locator('.game-list-item')).toHaveCount(GAMES.filter(game => game.group === candidateGame.group).length);
+  await page.locator('#searchInput').fill(candidateGame.name);
   await expect(page.locator('.game-list-item')).toHaveCount(1);
+  await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', candidateGame.id);
   await page.locator('[data-category="all"]').click();
-  await page.locator('#searchInput').fill('snake');
-  await page.locator('.game-list-item[data-id="snake"]').click();
+  await page.locator('#searchInput').fill(currentGame.name);
+  await page.locator(`.game-list-item[data-id="${currentGame.id}"]`).click();
   await expect(page.locator('.library-dialog')).toBeHidden();
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepare!);
   await expect(page.locator('#gameCanvas')).toBeFocused();
   await openPicker(page);
-  await expect(page.locator('#searchInput')).toHaveValue('snake');
+  await expect(page.locator('#searchInput')).toHaveValue(currentGame.name);
   await expect(page.locator('.game-list-item')).toHaveCount(1);
 });
 
 test('selecting the running card cancels a loading candidate and resumes the old instance', async ({ page }) => {
   await openShell(page);
-  const canvas = page.locator('#gameCanvas'), candidateUrl = gameModuleUrl('tetris');
+  const canvas = page.locator('#gameCanvas'), candidateUrl = gameModuleUrl(candidateGame.id);
   // Distinguish the existing instance from a newly created one with a reset counter.
   await page.locator('#overflowBtn').click(); await page.locator('#restartBtn').click();
   await expect(canvas).toHaveAttribute('data-game-prepare-count', '2');
@@ -187,22 +200,22 @@ test('selecting the running card cancels a loading candidate and resumes the old
   try {
     await openPicker(page);
     const requested = page.waitForRequest(`**${candidateUrl}`);
-    await page.locator('.game-list-item[data-id="tetris"]').click();
+    await page.locator(`.game-list-item[data-id="${candidateGame.id}"]`).click();
     await requested;
     await expect(page.locator('.library-dialog')).toBeHidden();
     await openPicker(page);
-    await page.locator('.game-list-item[data-id="snake"]').click();
+    await page.locator(`.game-list-item[data-id="${currentGame.id}"]`).click();
     await expect(page.locator('.library-dialog')).toBeHidden();
     await expect(canvas).toHaveAttribute('data-game-running', 'true');
     await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
     await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
     await expect(canvas).toHaveAttribute('data-game-version', version!);
-    await expect(page).toHaveURL(/#\/snake$/);
+    await expect(page).toHaveURL(new RegExp(`#/${currentGame.id}$`));
     await expect(canvas).toBeFocused();
     releaseCandidate();
     await page.unrouteAll({ behavior: 'wait' });
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('#selectedGameLabel')).toHaveText('Snake');
+    await expect(page.locator('#selectedGameLabel')).toHaveText(currentGame.name);
     await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
     await expect(canvas).toHaveAttribute('data-game-version', version!);
     await expect(page.locator('#loadError')).toBeHidden();

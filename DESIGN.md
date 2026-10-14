@@ -74,6 +74,7 @@ Initial routing prefers a direct `#id`, otherwise the last successfully loaded g
 
 - Desktop: **320px wide**, top **64px**, right **12px**, plus safe area. Mobile: bottom sheet with bounded internal overflow, 44px actions and no game resize.
 - Information order: **Choose a game first**, then relevant game actions/restart/demo/level controls, language/theme, and subtle versions. Keep the full brand in its header without moving Choose below a decorative block.
+- The game-library entry is one full-width, at least **76px-high** button: grid icon, accent-weighted **Choose a game / 选择游戏** action inside the button, a secondary **Current: / 当前：** line with the fully wrapping 16px game name, and a persistent right chevron. Keep the quiet tinted surface; do not present the game name alone as if it were a passive status field. The desktop shortcut is secondary and hidden on touch/narrow screens; text, icon and arrow all activate the same target.
 - Language and light/dark/system theme selections **keep the menu open** and repaint game/presentation immediately. Contextual action/level selection may close its disclosure after a choice. All real targets, including close and level cells, are at least 44px.
 - Use one close affordance in the panel. No redundant Return-to-game, duplicate Controls, start action or browser-fullscreen entry.
 - Parking keeps a compact Level disclosure; demo appears only where supported. Genuine gameplay Resume and urgent gameplay feedback stay game-owned rather than being mistaken for shell presentation pause.

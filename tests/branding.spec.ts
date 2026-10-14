@@ -58,7 +58,7 @@ for (const mobile of [false, true]) {
 }
 
 test('the browser reads explicit install metadata and matching icon assets', async ({ page, request }) => {
-  await page.goto('/#/snake');
+  await page.goto('/#/minesweeper');
   const shellBase = await activeShellBase(page);
   const manifestUrl = `${shellBase}app.webmanifest`, logoUrl = `${shellBase}brand/logo.svg`;
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', manifestUrl);

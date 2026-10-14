@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { builtCatalog } from './support/releases';
 
 const sizes = [
   { width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 2560, height: 1080 },
@@ -83,7 +84,7 @@ test.describe('edge-to-edge game windows', () => {
       Element.prototype.requestFullscreen = async () => { (window as any).__nativeCalls++; };
       document.exitFullscreen = async () => { (window as any).__nativeCalls++; };
     });
-    await page.goto('/#/snake');
+    await page.goto('/#/minesweeper');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('#startOverlay, #fullscreenBtn, #resumeBtn, #helpReturnBtn, #fullscreenNotice')).toHaveCount(0);
     // Headless DOM keys cannot stand in for browser chrome fullscreen. Check
@@ -102,10 +103,13 @@ test.describe('edge-to-edge game windows', () => {
     await page.locator('#helpCloseBtn').click();
     await page.locator('#overflowBtn').click(); await f11();
     await page.locator('#gamePickerBtn').click(); await f11();
-    await page.locator('.game-list-item[data-id="tetris"]').click();
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', '420');
+    await page.locator('.game-list-item[data-id="sudoku"]').click();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', 'sudoku');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('#gameCanvas')).toBeFocused();
+    const board = builtCatalog().games.find(game => game.id === 'sudoku')!;
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(board.canvasSize.width));
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(board.canvasSize.height));
     expect(await page.evaluate(() => (window as any).__nativeCalls)).toBe(0);
     const m = await metrics(page);
     expect(Math.min(Math.abs(m.canvas.width - m.root.width), Math.abs(m.canvas.height - m.root.height))).toBeLessThan(1);
@@ -116,7 +120,7 @@ test.describe('edge-to-edge game windows', () => {
       Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false });
       Object.defineProperty(Element.prototype, 'requestFullscreen', { configurable: true, value: undefined });
     });
-    await page.goto('/#/snake');
+    await page.goto('/#/minesweeper');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await page.locator('#helpBtn').click();
     await page.locator('#helpCloseBtn').click();

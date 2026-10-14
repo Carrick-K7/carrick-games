@@ -1,3 +1,5 @@
+import { GAMES } from './catalog';
+
 /** Existing browser input exercises, independent of game implementation imports. */
 export interface GameProfile {
   id: string;
@@ -41,8 +43,16 @@ export const CLICK_GAMES: GameProfile[] = [
 ];
 
 export const ALL_GAME_IDS = [...KEYBOARD_GAMES, ...CLICK_GAMES].map(game => game.id);
-export function selectedProfiles(profiles: readonly GameProfile[]): GameProfile[] {
-  const target = process.env.GAME_ID;
+export function selectAvailableProfiles(profiles: readonly GameProfile[], availableIds: readonly string[], requestedTarget?: string): GameProfile[] {
+  const target = requestedTarget === 'shell' ? undefined : requestedTarget;
+  const available = new Set(availableIds);
+  for (const id of available) {
+    if (!ALL_GAME_IDS.includes(id)) throw new Error(`Published game has no browser input profile: ${id}`);
+  }
   if (target && !ALL_GAME_IDS.includes(target)) throw new Error(`Unknown test GAME_ID: ${target}`);
-  return profiles.filter(game => !target || game.id === target);
+  if (target && !available.has(target)) throw new Error(`Test GAME_ID is absent from the pinned catalog: ${target}`);
+  return profiles.filter(game => available.has(game.id) && (!target || game.id === target));
+}
+export function selectedProfiles(profiles: readonly GameProfile[]): GameProfile[] {
+  return selectAvailableProfiles(profiles, GAMES.map(game => game.id), process.env.GAME_ID);
 }

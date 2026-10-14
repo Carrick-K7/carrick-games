@@ -172,14 +172,15 @@ function updateGameTitle() {
   const meta = getCurrentMeta();
   const selectedGameLabel = document.getElementById('selectedGameLabel');
   if (selectedGameLabel) {
-    selectedGameLabel.textContent = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '选择游戏' : 'Select a game');
+    selectedGameLabel.textContent = meta ? (zh ? meta.nameZh : meta.name) : (zh ? '浏览全部游戏' : 'Browse all games');
+  }
+  const currentLabel = document.getElementById('pickerCurrentLabel');
+  if (currentLabel) {
+    currentLabel.hidden = !meta;
+    currentLabel.textContent = zh ? '当前：' : 'Current: ';
   }
   const picker = document.getElementById('gamePickerBtn');
-  const gameName = meta ? (zh ? meta.nameZh : meta.name) : '';
-  if (picker) {
-    picker.setAttribute('aria-label', zh ? `切换游戏${gameName ? `：${gameName}` : ''}` : `Switch game${gameName ? `: ${gameName}` : ''}`);
-    picker.title = zh ? '打开游戏库' : 'Open game library';
-  }
+  if (picker) picker.title = zh ? '打开游戏库' : 'Open game library';
   const canvas = document.getElementById('gameCanvas');
   if (canvas && meta) {
     const gameName = zh ? meta.nameZh : meta.name;

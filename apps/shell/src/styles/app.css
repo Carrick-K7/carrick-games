@@ -120,10 +120,14 @@ button:active:not(:disabled) { transition-duration: 60ms; }
 .menu-section { padding: 16px 0; }
 .menu-section + .menu-section { border-top: 1px solid var(--border); }
 .menu-label { margin-bottom: 8px; color: var(--muted); font-size: 13px; font-weight: 500; }
-.game-picker-trigger { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--accent-soft); text-align: left; }
-.game-picker-trigger:hover { border-color: var(--accent); }
+.game-picker-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--accent-soft); text-align: left; }
+.game-picker-trigger:hover, .game-picker-trigger:focus-visible { border-color: var(--accent); }
+.game-picker-trigger:active { background: var(--inset); }
 .game-picker-trigger svg { flex: 0 0 18px; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
-.selected-game-label { flex: 1; min-width: 0; color: var(--text); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.picker-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.picker-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; color: var(--accent); font-size: 15px; font-weight: 600; }
+.picker-current { color: var(--muted); font-size: 14px; font-weight: 400; }
+.selected-game-label { font-size: 16px; }
 .picker-shortcut, .library-keyboard-hints kbd { display: inline-flex; align-items: center; justify-content: center; min-height: 23px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: 11px/1.4 var(--font-ui); white-space: nowrap; }
 .menu-current-game { padding: 8px 0; }
 .menu-current-game:not(:has(button:not([hidden]), summary)) { display: none; }

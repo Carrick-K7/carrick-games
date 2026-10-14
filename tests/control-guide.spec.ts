@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { builtCatalog } from './support/releases';
 
 async function openGuide(page: Page, id: string) {
   await page.goto(`/#/${id}`);
@@ -10,6 +11,22 @@ async function openGuide(page: Page, id: string) {
   await page.keyboard.press('Shift+Slash');
   await expect(page.locator('#helpOverlay')).toBeVisible();
   await expect(page.locator('#overflowMenu')).toBeHidden();
+  const release = builtCatalog().games.find(game => game.id === id)!;
+  const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
+  await expect(page.locator('#helpGameName')).toHaveText(zh ? release.nameZh : release.name);
+  await expect(page.locator('#helpGameVersion')).toHaveText(`v${release.version}`);
+  const keyboard = [...(release.controls.keyboard ?? []), ...(release.controls.sections ?? []).flatMap(section => section.keyboard ?? [])];
+  const touch = [...(release.controls.touch ?? []), ...(release.controls.sections ?? []).flatMap(section => section.touch ?? [])];
+  await expect(page.locator('#keyboardPanel .input-map-row')).toHaveCount(keyboard.length);
+  await expect(page.locator('#touchHelp .guide-touch-row')).toHaveCount(touch.length);
+  for (const [index, row] of keyboard.entries()) {
+    const rendered = page.locator('#keyboardPanel .input-map-row').nth(index);
+    await expect(rendered).toContainText(zh ? row.actionZh : row.action);
+    await expect(rendered.locator('kbd')).toHaveText(row.keys);
+  }
+  for (const [index, row] of touch.entries()) {
+    await expect(page.locator('#touchHelp .guide-touch-row').nth(index)).toContainText(zh ? row.actionZh : row.action);
+  }
   await page.evaluate(() => document.fonts.ready);
   await page.locator('#helpOverlay').evaluate(async element => Promise.all(element.getAnimations({ subtree: true })
     .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
@@ -21,7 +38,7 @@ test.describe('unified operation guides', () => {
   test('all game families drop the same reference panel under the top-right utilities', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     let commonStyle: unknown;
-    for (const id of ['snake', 'wordle', 'cs', 'cs-kimi', 'villa']) {
+    for (const id of ['minesweeper', 'sudoku', 'cs', 'cs-kimi', 'villa']) {
       await openGuide(page, id);
       const guide = page.locator('#helpOverlay'), canvas = page.locator('#gameCanvas');
       const before = await canvas.boundingBox();
@@ -103,26 +120,33 @@ test.describe('unified operation guides', () => {
     await expect(page.locator('#helpOverlay')).toBeHidden();
     await expect(page.locator('#overflowMenu')).toBeVisible();
     await page.locator('#gamePickerBtn').click();
-    await page.locator('.game-list-item[data-id="snake"]').click();
+    await page.locator('.game-list-item[data-id="minesweeper"]').click();
     await expect(page.locator('#helpOverlay')).toBeHidden();
   });
 });
 
-test('read help mid-game without losing a life, then continue immediately from the keyboard', async ({ page }) => {
-  await page.goto('/#/snake');
+test('read help without advancing play, then continue immediately from the keyboard', async ({ page }) => {
+  await page.goto('/#/parking');
   const canvas = page.locator('#gameCanvas');
   await expect(canvas).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
+  const initial = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  await page.keyboard.down('ArrowUp');
+  try {
+    await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).not.toBe(initial);
+  } finally { await page.keyboard.up('ArrowUp'); }
   await page.keyboard.press('Shift+Slash');
   await expect(page.locator('#helpOverlay')).toBeVisible();
   await expect(canvas).toHaveAttribute('data-game-presentation', 'paused');
   const image = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
-  await page.waitForTimeout(2500); // Long enough for an unpaused snake to hit the wall.
+  await page.waitForTimeout(2500); // The presentation pause must freeze the complete board frame.
   expect(await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).toBe(image);
   await expect(canvas).not.toHaveAttribute('data-game-result', /.+/);
   await page.locator('#helpCloseBtn').click();
   await expect(canvas).toBeFocused();
-  await page.keyboard.press('ArrowUp');
-  await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).not.toBe(image);
+  await page.keyboard.down('ArrowUp');
+  try {
+    await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL())).not.toBe(image);
+  } finally { await page.keyboard.up('ArrowUp'); }
   await expect(page.locator('#helpOverlay')).toBeHidden();
   await expect(canvas).toHaveAttribute('data-game-prepare-count', '1');
 });
@@ -131,7 +155,7 @@ test.describe('touch control guide', () => {
   test.setTimeout(120_000);
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
   test('one bottom sheet defaults to touch, blocks touch-through, and supports hardware-keyboard help', async ({ page }, testInfo) => {
-    for (const id of ['snake', 'cs', 'villa']) {
+    for (const id of ['minesweeper', 'cs', 'villa']) {
       await openGuide(page, id);
       await expect(page.locator('#helpOverlay')).toHaveAttribute('aria-modal', 'true');
       await expect(page.locator('#keyboardPanel')).toBeHidden();

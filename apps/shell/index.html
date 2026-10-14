@@ -55,11 +55,13 @@
           <section class="menu-group" data-menu-group="game" aria-labelledby="gameMenuGroupLabel">
           <h2 class="menu-group-title" id="gameMenuGroupLabel">This game</h2>
           <div class="menu-section menu-game-switch">
-            <div class="menu-label" id="pickerMenuLabel">Choose a game</div>
-            <button class="game-picker-trigger" id="gamePickerBtn" type="button" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" aria-keyshortcuts="Control+k Meta+k">
+            <button class="game-picker-trigger" id="gamePickerBtn" type="button" aria-labelledby="pickerMenuLabel pickerCurrentGame" aria-haspopup="dialog" aria-controls="gameLibrary" aria-expanded="false" aria-keyshortcuts="Control+k Meta+k">
               <svg class="picker-grid" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg>
-              <span class="selected-game-label" id="selectedGameLabel">Select a game</span>
-              <kbd class="picker-shortcut" id="pickerShortcut" aria-hidden="true">Ctrl K</kbd>
+              <span class="picker-copy">
+                <span class="picker-heading"><span id="pickerMenuLabel">Choose a game</span><kbd class="picker-shortcut" id="pickerShortcut" aria-hidden="true">Ctrl K</kbd></span>
+                <span class="picker-current" id="pickerCurrentGame"><span id="pickerCurrentLabel" hidden>Current: </span><span class="selected-game-label" id="selectedGameLabel">Browse all games</span></span>
+              </span>
+              <svg class="picker-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6"/></svg>
             </button>
           </div>
           <div class="menu-section menu-current-game">

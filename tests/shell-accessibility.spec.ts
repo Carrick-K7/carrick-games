@@ -1,9 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { GAMES } from './support/catalog';
 
+const currentGame = GAMES.find(game => game.id === 'sudoku');
+if (!currentGame) throw new Error('Accessibility fixture Sudoku is missing from the tested catalog');
+
 test('visual-viewport zoom reflows the library instead of shrinking text or losing its only scroller', async ({ page }) => {
   await page.setViewportSize({ width: 1120, height: 900 });
-  await page.goto('/#/snake');
+  await page.goto(`/#/${currentGame.id}`);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', currentGame.id);
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await page.evaluate(() => document.fonts.ready);
   const prepare = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
@@ -47,14 +51,15 @@ test('visual-viewport zoom reflows the library instead of shrinking text or losi
 
 test('forced colors and reduced motion retain visible selection, controls and keyboard access', async ({ page }) => {
   await page.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' });
-  await page.goto('/#/snake');
+  await page.goto(`/#/${currentGame.id}`);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', currentGame.id);
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   for (const id of ['siteBrand', 'helpBtn', 'overflowBtn']) {
     const box = (await page.locator(`#${id}`).boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44); expect(box.height).toBe(44);
   }
   await page.keyboard.press('Control+k');
-  const current = page.locator('.game-list-item[data-id="snake"]');
+  const current = page.locator(`.game-list-item[data-id="${currentGame.id}"]`);
   await expect(current).toHaveAttribute('aria-current', 'true');
   await expect(current).toHaveCSS('outline-style', 'solid');
   await current.focus(); await page.keyboard.press('Enter');

@@ -1,17 +1,61 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { GAMES, type GameMeta } from './support/catalog';
+import { canvasViewportIssues } from './support/viewport-contract';
+
+// Resolve names, controls and dimensions from the catalog under verification,
+// including the shell cell's pinned published releases, not source-only games.
+function fixture(id: string): GameMeta {
+  const game = GAMES.find(game => game.id === id);
+  if (!game) throw new Error(`Shell design fixture is missing from the tested catalog: ${id}`);
+  return game;
+}
+const currentGame = fixture('sudoku');
+const searchGame = fixture('minesweeper');
+const spacedGame = fixture('aimlab');
+// Exercise the widest published board-game key rows (letters, number rows,
+// arrows), retaining the longer source-catalog cases when they are available.
+const mappingWidth = (game: GameMeta) => Math.max(0, ...(game.controls.keyboard ?? []).slice(0, 3).map(row => row.keys.length));
+const longMappingGames = GAMES.filter(game => ['puzzle', 'tabletop'].includes(game.group) && mappingWidth(game) >= 4)
+  .sort((a, b) => mappingWidth(b) - mappingWidth(a) || a.order - b.order).slice(0, 4);
 
 type Language = 'en' | 'zh';
 type Theme = 'dark' | 'light';
 async function openShell(page: Page, lang: Language = 'en', theme: Theme = 'dark') {
   await page.addInitScript(({ lang, theme }) => { localStorage.setItem('cg-lang', lang); localStorage.setItem('cg-theme', theme); }, { lang, theme });
-  await page.goto('/#/snake');
-  await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? '贪吃蛇' : 'Snake');
+  await page.goto(`/#/${currentGame.id}`);
+  await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', currentGame.id);
+  await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? currentGame.nameZh : currentGame.name);
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await expect(page.locator('#startOverlay')).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
 }
 async function bounds(locator: Locator) {
   const box = await locator.boundingBox(); expect(box).not.toBeNull(); return box!;
+}
+async function expectCanvasFit(page: Page, game: GameMeta, topInset = 0) {
+  await expect.poll(async () => {
+    const sample = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
+      const rect = canvas.getBoundingClientRect(), root = document.getElementById('gameApp')!.getBoundingClientRect();
+      return {
+        mode: canvas.getAttribute('data-viewport-mode'),
+        logicalWidth: Number(canvas.dataset.logicalWidth), logicalHeight: Number(canvas.dataset.logicalHeight),
+        backingWidth: canvas.width, backingHeight: canvas.height, pixelRatio: Number(canvas.dataset.pixelRatio),
+        cssWidth: rect.width, cssHeight: rect.height, offsetX: rect.x - root.x, offsetY: rect.y - root.y,
+        viewportWidth: window.visualViewport?.width ?? innerWidth,
+        viewportHeight: window.visualViewport?.height ?? innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      };
+    });
+    const issues = canvasViewportIssues(sample, game.canvasSize, game.id === 'gacha');
+    const stageHeight = sample.viewportHeight - topInset;
+    const scale = Math.min(sample.viewportWidth / sample.logicalWidth, stageHeight / sample.logicalHeight);
+    const width = sample.logicalWidth * scale, height = sample.logicalHeight * scale;
+    if (![width, height].every(value => Number.isFinite(value) && value > 0)) issues.push('invalid logical canvas size');
+    if (Math.abs(sample.cssWidth - width) > 1 || Math.abs(sample.cssHeight - height) > 1) issues.push('canvas must maximize its stage at its logical aspect ratio');
+    if (Math.abs(sample.offsetX - (sample.viewportWidth - width) / 2) > 1
+      || Math.abs(sample.offsetY - topInset - (stageHeight - height) / 2) > 1) issues.push('canvas must be centered in its stage');
+    return issues;
+  }, { message: `${game.id} must settle into its logical viewport contract` }).toEqual([]);
 }
 async function noOverflow(page: Page) {
   const s = await page.evaluate(() => ({ w: innerWidth, h: innerHeight, sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight }));
@@ -50,10 +94,9 @@ test.describe('game-window shell design contracts', () => {
         const help = await bounds(page.locator('#helpBtn')), menuButton = await bounds(page.locator('#overflowBtn'));
         expect(help.width).toBe(44); expect(help.height).toBe(44);
         expect(menuButton.x - help.x - help.width).toBe(8);
+        await expectCanvasFit(page, currentGame);
         const root = await bounds(page.locator('#gameApp')), canvas = await bounds(page.locator('#gameCanvas'));
         expect(root).toEqual({ x: 0, y: 0, ...viewport });
-        expect(canvas.width).toBeCloseTo(Math.min(viewport.width, viewport.height), 0);
-        expect(canvas.height).toBeCloseTo(canvas.width, 0);
         expect(canvas.x).toBeGreaterThanOrEqual(0); expect(canvas.y).toBeGreaterThanOrEqual(0);
         expect(canvas.x + canvas.width).toBeLessThanOrEqual(viewport.width + 1);
         expect(canvas.y + canvas.height).toBeLessThanOrEqual(viewport.height + 1);
@@ -61,7 +104,7 @@ test.describe('game-window shell design contracts', () => {
         await openMenu(page);
         await expect(page.locator('#overflowMenu')).toHaveAttribute('aria-modal', 'true');
         await expect(page.locator('main')).toHaveAttribute('inert', '');
-        await expect(page.locator('#gamePickerBtn')).toHaveAccessibleName(/Snake|贪吃蛇/);
+        await expect(page.locator('#gamePickerBtn')).toHaveAccessibleName(new RegExp(lang === 'zh' ? currentGame.nameZh : currentGame.name));
         expect(await bounds(page.locator('#gameCanvas'))).toEqual(canvas);
         const menu = await bounds(page.locator('#overflowMenu'));
         expect(menu.x).toBeGreaterThanOrEqual(0); expect(menu.y).toBeGreaterThanOrEqual(0);
@@ -133,36 +176,39 @@ test.describe('game-window shell design contracts', () => {
     const search = page.locator('#searchInput');
     await search.fill('no-such-game-987654321'); await expect(page.locator('.game-list-item')).toHaveCount(0);
     await expect(page.locator('.search-empty')).toBeVisible(); await search.press('ArrowDown'); await expect(search).toBeFocused();
-    for (const query of ['俄罗斯方块', 'Tetris']) {
+    for (const query of [searchGame.nameZh, searchGame.name]) {
       await search.fill(query); await expect(page.locator('.game-list-item')).toHaveCount(1);
-      await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', 'tetris');
+      await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', searchGame.id);
     }
     await search.press('ArrowDown'); await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/#\/tetris$/); await expect(page.locator('#selectedGameLabel')).toHaveText('Tetris');
+    await expect(page).toHaveURL(new RegExp(`#/${searchGame.id}$`)); await expect(page.locator('#selectedGameLabel')).toHaveText(searchGame.name);
     await expect(page.locator('.library-dialog')).toBeHidden(); await expect(page.locator('#gameCanvas')).toBeFocused();
-    await expect(page.locator('#gameCanvas')).toHaveAccessibleName(/Tetris/);
+    await expect(page.locator('#gameCanvas')).toHaveAccessibleName(`${searchGame.name} game canvas`);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });
 
   test('search accepts real spaces without starting the game and Enter selects the first result', async ({ page }) => {
     await openShell(page); await openPicker(page);
-    const search = page.locator('#searchInput'); await search.pressSequentially('space shooter');
-    await expect(search).toHaveValue('space shooter'); await expect(search).toBeFocused();
-    await expect(page.locator('#selectedGameLabel')).toHaveText('Snake'); await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+    const query = spacedGame.name.toLowerCase();
+    expect(query).toContain(' ');
+    const search = page.locator('#searchInput'); await search.pressSequentially(query);
+    await expect(search).toHaveValue(query); await expect(search).toBeFocused();
+    await expect(page.locator('#selectedGameLabel')).toHaveText(currentGame.name); await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('.game-list-item')).toHaveCount(1);
-    await search.press('Enter'); await expect(page).toHaveURL(/#\/spaceshooter$/);
+    await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', spacedGame.id);
+    await search.press('Enter'); await expect(page).toHaveURL(new RegExp(`#/${spacedGame.id}$`));
     await expect(page.locator('#gameCanvas')).toBeFocused();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });
 
   test('Chinese IME confirmation stays in search until composition is finished', async ({ page }) => {
     await openShell(page, 'zh'); await openPicker(page);
-    const search = page.locator('#searchInput'); await search.fill('俄罗斯方块');
+    const search = page.locator('#searchInput'); await search.fill(searchGame.nameZh);
     for (const event of [{ key: 'Enter', isComposing: true }, { key: 'ArrowDown', isComposing: true }, { key: 'Enter', keyCode: 229 }]) {
       await search.dispatchEvent('keydown', event); await expect(search).toBeFocused();
-      await expect(page.locator('.library-dialog')).toBeVisible(); await expect(page.locator('#selectedGameLabel')).toHaveText('贪吃蛇');
+      await expect(page.locator('.library-dialog')).toBeVisible(); await expect(page.locator('#selectedGameLabel')).toHaveText(currentGame.nameZh);
     }
-    await search.press('Enter'); await expect(page.locator('#selectedGameLabel')).toHaveText('俄罗斯方块');
+    await search.press('Enter'); await expect(page.locator('#selectedGameLabel')).toHaveText(searchGame.nameZh);
     await expect(page.locator('.library-dialog')).toBeHidden();
   });
 
@@ -174,15 +220,19 @@ test.describe('game-window shell design contracts', () => {
       await page.locator('#gameCanvas').focus(); await page.keyboard.down('ArrowRight');
       await expect(page.locator('.vkey[data-key="ArrowRight"]')).toHaveClass(/pressed/);
       if (mode === 'menu') await openMenu(page); else await openPicker(page);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-presentation', 'paused');
       await expect(page.locator('html')).toHaveAttribute('data-test-released-key', 'ArrowRight');
       await expect(page.locator('.vkey[data-key="ArrowRight"]')).not.toHaveClass(/pressed/);
       await page.keyboard.up('ArrowRight'); await page.keyboard.press('Escape');
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-presentation', 'active');
     }
   });
 
   test('long input mappings are usable in an optional overlay and never resize the game', async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 720 }); await openShell(page);
-    for (const id of ['wordle', 'sudoku', 'connectfour', 'solitaire']) {
+    expect(longMappingGames.length, 'catalog must exercise multiple long board-game mappings').toBeGreaterThanOrEqual(2);
+    for (const game of longMappingGames) {
+      const id = game.id;
       await page.goto(`/#/${id}`);
       // Hash navigation keeps the previous game intact during preflight.
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id);
@@ -193,7 +243,9 @@ test.describe('game-window shell design contracts', () => {
       await settleAnimations(page.locator('#helpOverlay'));
       const panel = page.locator('#keyboardPanel'); await expect(panel).toBeVisible();
       const box = await bounds(panel), keys = panel.locator('.vkey:visible');
-      expect(await keys.count()).toBeGreaterThan(0);
+      const essentialKeyCount = (game.controls.keyboard ?? []).slice(0, 3).reduce((count, row) => count + row.keys.length, 0);
+      await expect(keys).toHaveCount(essentialKeyCount);
+      expect(essentialKeyCount).toBeGreaterThanOrEqual(4);
       for (const key of await keys.all()) {
         const k = await bounds(key);
         expect(k.x).toBeGreaterThanOrEqual(box.x - 1); expect(k.x + k.width).toBeLessThanOrEqual(box.x + box.width + 1);
@@ -209,7 +261,7 @@ test.describe('game-window shell design contracts', () => {
     await openShell(page); const root = page.locator('html');
     for (const lang of ['zh', 'en'] as const) {
       await openMenu(page); await page.locator(`.lang-btn[data-lang="${lang}"]`).click();
-      await expect(root).toHaveAttribute('data-lang', lang); await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? '贪吃蛇' : 'Snake');
+      await expect(root).toHaveAttribute('data-lang', lang); await expect(page.locator('#selectedGameLabel')).toHaveText(lang === 'zh' ? currentGame.nameZh : currentGame.name);
       await expect(page.locator('#overflowMenu')).toBeVisible(); expect(await page.evaluate(() => localStorage.getItem('cg-lang'))).toBe(lang);
     }
     for (const theme of ['light', 'dark', 'system'] as const) {
@@ -223,24 +275,20 @@ test.describe('game-window shell design contracts', () => {
     }
   });
 
-  for (const id of ['snake', 'tetris', 'gacha']) {
+  for (const game of [currentGame, searchGame, fixture('gacha')]) {
+    const id = game.id;
     test(`narrow landscape fits ${id} after portrait rotation`, async ({ page }) => {
       await page.setViewportSize({ width: 360, height: 800 }); await openShell(page); await page.goto(`/#/${id}`);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/);
+      const prepare = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
       await page.setViewportSize({ width: 667, height: 375 });
-      // Gacha reserves 80px for its persistent progress HUD; maximize the remaining stage.
-      const stageHeight = id === 'gacha' ? 375 - 80 : 375;
-      // A vertical-fit wait is already satisfied by the frame before the game applies
-      // its own responsive stage, so wait for the geometry this test asserts. Reading
-      // that intermediate frame made the case flaky on slower runners.
-      await expect.poll(async () => {
-        const b = await bounds(page.locator('#gameCanvas'));
-        return {
-          fits: b.y + b.height <= 376,
-          maximized: Math.min(Math.abs(b.width - 667), Math.abs(b.height - stageHeight)) <= 1,
-          reserved: b.y >= (id === 'gacha' ? 79 : 0), // Subpixel canvas rounding.
-        };
-      }, { message: `${id} must settle into the rotated stage` }).toEqual({ fits: true, maximized: true, reserved: true });
+      // Gacha owns the 80px progress band; other games use the full host viewport.
+      // Wait for the actual logical size and contain/responsive contract to settle,
+      // not the previous game's dimensions or a square-board assumption.
+      await expectCanvasFit(page, game, id === 'gacha' ? 80 : 0);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepare!);
       const b = await bounds(page.locator('#gameCanvas'));
       expect(b.width).toBeGreaterThan(100); expect(b.x).toBeGreaterThanOrEqual(0); expect(b.y).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(668); expect(Math.abs(b.x + b.width / 2 - 667 / 2)).toBeLessThanOrEqual(2);
@@ -258,7 +306,7 @@ test.describe('game-window shell design contracts', () => {
       return { animation: seconds(style.animationDuration), transition: seconds(style.transitionDuration) };
     }));
     for (const item of motion) { expect(Math.max(...item.animation)).toBeLessThanOrEqual(.001); expect(Math.max(...item.transition)).toBeLessThanOrEqual(.001); }
-    await page.locator('#searchInput').fill('Snake'); await page.locator('.game-list-item[data-id="snake"]').click();
+    await page.locator('#searchInput').fill(currentGame.name); await page.locator(`.game-list-item[data-id="${currentGame.id}"]`).click();
     await expect(page.locator('.library-dialog')).toBeHidden();
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   });

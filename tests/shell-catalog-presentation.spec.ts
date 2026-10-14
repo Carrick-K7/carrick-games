@@ -33,7 +33,7 @@ async function catalogFixture(page: Page, catalog: GameCatalog) {
   };
 }
 
-async function startSnake(page: Page) {
+async function startBoard(page: Page) {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.addInitScript(() => {
@@ -43,7 +43,7 @@ async function startSnake(page: Page) {
     state.__catalogUnhandled = [];
     window.addEventListener('unhandledrejection', event => state.__catalogUnhandled.push(String(event.reason)));
   });
-  await page.goto('/#/snake');
+  await page.goto('/#/minesweeper');
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
   await page.evaluate(() => document.fonts.ready);
   // A fresh replacement also starts at prepare-count 1; use 2 to detect that regression.
@@ -83,7 +83,7 @@ test.describe('live catalog presentation with a pinned running release', () => {
 
   test('bootstrap finishes paused beneath a newer opened library without losing query or focus', async ({ page }) => {
     const catalog = builtCatalog();
-    test.skip(!catalog.games.some(game => game.id === 'snake'), 'The fixture needs a searchable Snake entry');
+    const searched = catalog.games.find(game => game.id === 'minesweeper')!;
     const initial = catalog.games.find(game => game.id === 'gacha') ?? catalog.games[0]!;
     const fixture = await catalogFixture(page, catalog);
     const discovery = fixture.hold(catalog);
@@ -98,7 +98,7 @@ test.describe('live catalog presentation with a pinned running release', () => {
       await page.keyboard.press('Control+k');
       const library = page.locator('.library-dialog'), search = page.locator('#searchInput');
       await expect(library).toBeVisible();
-      await search.fill('snake');
+      await search.fill(searched.name);
       await expect(search).toBeFocused();
       discovery.release();
       await discovery.finished;
@@ -109,10 +109,10 @@ test.describe('live catalog presentation with a pinned running release', () => {
       await expect(canvas).toHaveAttribute('data-game-version', initial.version);
       await expect(page.locator('#selectedGameLabel')).toHaveText(initial.name);
       await expect(library).toBeVisible();
-      await expect(search).toHaveValue('snake');
+      await expect(search).toHaveValue(searched.name);
       await expect(search).toBeFocused();
       await expect(page.locator('.game-list-item')).toHaveCount(1);
-      await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', 'snake');
+      await expect(page.locator('.game-list-item')).toHaveAttribute('data-id', searched.id);
       await page.keyboard.press('Escape');
       await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
       await expect(canvas).toHaveAttribute('data-game-prepare-count', '1');
@@ -121,15 +121,21 @@ test.describe('live catalog presentation with a pinned running release', () => {
   });
 
   test('an unchanged async refresh preserves cached card DOM, category, query, scroll and focus', async ({ page }) => {
-    const catalog = builtCatalog(), snake = catalog.games.find(game => game.id === 'snake')!;
+    const catalog = builtCatalog(), board = catalog.games.find(game => game.id === 'minesweeper')!;
     const fixture = await catalogFixture(page, catalog);
-    const pageErrors = await startSnake(page);
+    const pageErrors = await startBoard(page);
     const canvas = page.locator('#gameCanvas');
     const prepare = await canvas.getAttribute('data-game-prepare-count');
     await openInitialLibrary(page);
-    const category = categoryFor(snake.group);
+    // Two puzzle cards fit one phone row: select a populated filtered category
+    // so this test still exercises real scroll retention with a smaller catalog.
+    const query = 'a';
+    const matches = catalog.games.filter(game => [game.name, game.nameZh, game.desc, game.descZh].some(text => text.toLowerCase().includes(query)));
+    const categories = [...new Set(matches.map(game => categoryFor(game.group)))];
+    const category = categories.sort((a, b) => matches.filter(game => categoryFor(game.group) === b).length - matches.filter(game => categoryFor(game.group) === a).length)[0]!;
+    expect(matches.filter(game => categoryFor(game.group) === category).length).toBeGreaterThanOrEqual(3);
     await page.locator(`[data-category="${category}"]`).click();
-    await page.locator('#searchInput').fill('a');
+    await page.locator('#searchInput').fill(query);
     const last = page.locator('.game-list-item').last();
     await last.scrollIntoViewIfNeeded();
     const id = await last.getAttribute('data-id');
@@ -163,40 +169,40 @@ test.describe('live catalog presentation with a pinned running release', () => {
       expect(await page.locator('#gameList').evaluate(el => el.scrollTop)).toBe(focusedScroll);
       await page.locator('#libraryCloseBtn').click();
       await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
-      await expect(canvas).toHaveAttribute('data-game-version', snake.version);
+      await expect(canvas).toHaveAttribute('data-game-version', board.version);
       await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
       await expectNoUnhandled(page, pageErrors);
     } finally { refresh.release(); }
   });
 
   test('changed cards retain browsing focus while current game, help and versions stay pinned until explicit update', async ({ page }) => {
-    const catalog = builtCatalog(), snake = catalog.games.find(game => game.id === 'snake')!;
+    const catalog = builtCatalog(), board = catalog.games.find(game => game.id === 'minesweeper')!;
     const fixture = await catalogFixture(page, catalog);
-    const pageErrors = await startSnake(page);
+    const pageErrors = await startBoard(page);
     const canvas = page.locator('#gameCanvas'), prepare = await canvas.getAttribute('data-game-prepare-count');
     await page.locator('#helpBtn').click();
-    await expect(page.locator('#helpGameVersion')).toHaveText(`v${snake.version}`);
+    await expect(page.locator('#helpGameVersion')).toHaveText(`v${board.version}`);
     const originalHelp = await page.locator('#guideBody').textContent();
     await page.locator('#helpCloseBtn').click();
     await openInitialLibrary(page);
-    const category = categoryFor(snake.group);
+    const category = categoryFor(board.group);
     await page.locator(`[data-category="${category}"]`).click();
-    await page.locator('#searchInput').fill('snake');
+    await page.locator('#searchInput').fill(board.name);
     await expect(page.locator('.game-list-item')).toHaveCount(1);
     await page.locator('#libraryCloseBtn').click();
 
     const changed = structuredClone(catalog); changed.generation++;
-    const next = changed.games.find(game => game.id === 'snake')!;
-    next.name = `${snake.name} — Catalog preview`;
+    const next = changed.games.find(game => game.id === 'minesweeper')!;
+    next.name = `${board.name} — Catalog preview`;
     next.desc = 'New catalog copy, not a new running instance.';
     next.controls.keyboard = [{ keys: ['Q'], action: 'Preview-only mapping', actionZh: '仅预览操作' }];
     next.version = '999.0.0-ui-preview';
-    next.revision = snake.revision === 'f'.repeat(40) ? 'e'.repeat(40) : 'f'.repeat(40);
+    next.revision = board.revision === 'f'.repeat(40) ? 'e'.repeat(40) : 'f'.repeat(40);
     next.assetBase = gameAssetBase(next.id, next.version, next.revision);
-    const relocate = (path: string) => new URL(path, `${new URL(page.url()).origin}${snake.assetBase}`).pathname.replace(snake.assetBase, next.assetBase);
-    next.entry = relocate(snake.entry);
-    next.icon = relocate(snake.icon);
-    next.styles = snake.styles.map(relocate);
+    const relocate = (path: string) => new URL(path, `${new URL(page.url()).origin}${board.assetBase}`).pathname.replace(board.assetBase, next.assetBase);
+    next.entry = relocate(board.entry);
+    next.icon = relocate(board.icon);
+    next.styles = board.styles.map(relocate);
     if (next.cover) next.cover.src = relocate(next.cover.src);
     next.sequence++; next.handledRevision = next.revision;
     const parsed = parseCatalog(changed, new URL(page.url()).origin);
@@ -210,38 +216,38 @@ test.describe('live catalog presentation with a pinned running release', () => {
         return route.abort(); // Never execute a fabricated updated release.
       }
       // Artwork still uses real built bytes, inside a schema-valid cloned release URL.
-      return route.continue({ url: route.request().url().replace(next.assetBase, snake.assetBase) });
+      return route.continue({ url: route.request().url().replace(next.assetBase, board.assetBase) });
     });
     const refresh = fixture.hold(changed);
     try {
       await page.locator('#siteBrand').click();
       await refresh.requested;
-      const card = page.locator('.game-list-item[data-id="snake"]');
-      await expect(card.locator('.game-list-name')).toHaveText(snake.name);
+      const card = page.locator(`.game-list-item[data-id="${board.id}"]`);
+      await expect(card.locator('.game-list-name')).toHaveText(board.name);
       await card.focus();
       refresh.release(); await refresh.finished;
       await expect(card.locator('.game-list-name')).toHaveText(next.name);
       await expect(card.locator('.game-list-desc')).toHaveText(next.desc);
       await expect(card).toBeFocused();
       await expect(page.locator(`[data-category="${category}"]`)).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('#searchInput')).toHaveValue('snake');
+      await expect(page.locator('#searchInput')).toHaveValue(board.name);
       await expect(card).toHaveAttribute('aria-current', 'true');
-      await expect(canvas).toHaveAttribute('data-game-version', snake.version);
+      await expect(canvas).toHaveAttribute('data-game-version', board.version);
       await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
       await card.click(); // Continue is not the explicit Update action.
       await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
       await expect(canvas).toBeFocused();
       await page.locator('#overflowBtn').click();
-      await expect(page.locator('#menuGameVersion')).toHaveText(`v${snake.version}`);
-      await expect(page.locator('#selectedGameLabel')).toHaveText(snake.name);
+      await expect(page.locator('#menuGameVersion')).toHaveText(`v${board.version}`);
+      await expect(page.locator('#selectedGameLabel')).toHaveText(board.name);
       await expect(page.locator('#updateGameBtn')).toBeVisible();
       await expect(page.locator('#updateGameBtn')).toContainText(`v${next.version}`);
       await page.locator('#helpBtn').click();
-      await expect(page.locator('#helpGameName')).toHaveText(snake.name);
-      await expect(page.locator('#helpGameVersion')).toHaveText(`v${snake.version}`);
+      await expect(page.locator('#helpGameName')).toHaveText(board.name);
+      await expect(page.locator('#helpGameVersion')).toHaveText(`v${board.version}`);
       expect(await page.locator('#guideBody').textContent()).toBe(originalHelp);
       await expect(page.locator('#guideBody')).not.toContainText('Preview-only mapping');
-      await expect(canvas).toHaveAttribute('data-game-version', snake.version);
+      await expect(canvas).toHaveAttribute('data-game-version', board.version);
       await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
       expect(unexpectedBundles).toEqual([]);
       await expectNoUnhandled(page, pageErrors);
@@ -249,20 +255,20 @@ test.describe('live catalog presentation with a pinned running release', () => {
   });
 
   test('failed refresh keeps the cached library usable without an unhandled rejection or page error', async ({ page }) => {
-    const catalog = builtCatalog(), snake = catalog.games.find(game => game.id === 'snake')!;
+    const catalog = builtCatalog(), board = catalog.games.find(game => game.id === 'minesweeper')!;
     const fixture = await catalogFixture(page, catalog);
-    const pageErrors = await startSnake(page);
+    const pageErrors = await startBoard(page);
     const canvas = page.locator('#gameCanvas'), prepare = await canvas.getAttribute('data-game-prepare-count');
     await openInitialLibrary(page);
-    const category = categoryFor(snake.group);
+    const category = categoryFor(board.group);
     await page.locator(`[data-category="${category}"]`).click();
-    await page.locator('#searchInput').fill('snake');
+    await page.locator('#searchInput').fill(board.name);
     await page.locator('#libraryCloseBtn').click();
     const refresh = fixture.hold({ error: 'Temporarily offline' }, 503);
     try {
       await page.locator('#siteBrand').click();
       await refresh.requested;
-      const card = page.locator('.game-list-item[data-id="snake"]');
+      const card = page.locator(`.game-list-item[data-id="${board.id}"]`);
       await expect(card).toBeVisible();
       await card.focus();
       const originalCard = (await card.elementHandle())!;
@@ -271,14 +277,14 @@ test.describe('live catalog presentation with a pinned running release', () => {
       await settlePresentation(page);
       expect(await originalCard.evaluate(el => el.isConnected)).toBe(true);
       await expect(card).toBeFocused();
-      await expect(page.locator('#searchInput')).toHaveValue('snake');
+      await expect(page.locator('#searchInput')).toHaveValue(board.name);
       await expect(page.locator(`[data-category="${category}"]`)).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#loadError')).toBeHidden();
       await card.click();
       await expect(page.locator('.library-dialog')).toBeHidden();
       await expect(canvas).toHaveAttribute('data-game-running', 'true');
       await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
-      await expect(canvas).toHaveAttribute('data-game-version', snake.version);
+      await expect(canvas).toHaveAttribute('data-game-version', board.version);
       await expect(canvas).toHaveAttribute('data-game-prepare-count', prepare!);
       await expect(canvas).toBeFocused();
       await expectNoUnhandled(page, pageErrors);

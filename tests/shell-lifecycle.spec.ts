@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { builtCatalog, gameModuleUrl } from './support/releases';
-import { GAMES, GAME_GROUPS } from './support/catalog';
-import { ALL_GAME_IDS } from './support/profiles';
+import { GAME_GROUPS } from './support/catalog';
+import { KEYBOARD_GAMES, CLICK_GAMES, selectedProfiles } from './support/profiles';
 import { collectErrors, selectGame, startGame, openOverflow, filterFavicon } from './support/gameplay';
+
+const GAMES = builtCatalog().games.slice().sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+const ALL_GAME_IDS = selectedProfiles([...KEYBOARD_GAMES, ...CLICK_GAMES]).map(game => game.id);
+const board = GAMES.find(game => game.id === 'minesweeper')!;
 
 // Shell-only compatibility assertions, preserved separately from per-game jobs.
 function gameModuleName(url: string): string | null {
@@ -53,11 +57,11 @@ test.describe('Carrick Games - Lifecycle', () => {
 
   test('game picker search narrows the on-demand library', async ({ page }) => {
     await page.keyboard.press('Control+k');
-    await page.locator('#searchInput').fill('I Wanna');
+    await page.locator('#searchInput').fill(board.name);
     await expect(page.locator('.game-list-item')).toHaveCount(1);
-    await expect(page.locator('.game-list-item[data-id="iwanna"]')).toBeVisible();
-    await page.locator('.game-list-item[data-id="iwanna"]').click();
-    await expect(page.locator('#selectedGameLabel')).toHaveText('I Wanna');
+    await expect(page.locator(`.game-list-item[data-id="${board.id}"]`)).toBeVisible();
+    await page.locator(`.game-list-item[data-id="${board.id}"]`).click();
+    await expect(page.locator('#selectedGameLabel')).toHaveText(board.nameZh);
     await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
   });
 
@@ -75,10 +79,10 @@ test.describe('Carrick Games - Lifecycle', () => {
   });
 
   test('game canvas exposes an accessible name and contextual inputs', async ({ page }) => {
-    await selectGame(page, 'snake');
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('aria-label', '贪吃蛇游戏画布');
+    await selectGame(page, 'minesweeper');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('aria-label', `${board.nameZh}游戏画布`);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('tabindex', '0');
-    const controls = GAMES.find(game => game.id === 'snake')!.controls;
+    const controls = GAMES.find(game => game.id === 'minesweeper')!.controls;
     const keyboardCount = (controls.keyboard?.length ?? 0) + (controls.sections ?? []).reduce((count, section) => count + (section.keyboard?.length ?? 0), 0);
     await expect(page.locator('#keyboardPanel .input-map-row')).toHaveCount(keyboardCount);
     await expect(page.locator('#keyboardPanel')).toBeHidden();
@@ -154,12 +158,12 @@ test.describe('Carrick Games - Lifecycle', () => {
     const page = await context.newPage();
     try {
       await page.goto('/');
-      await selectGame(page, 'snake');
+      await selectGame(page, 'minesweeper');
       // Wait for the scheduled first fit instead of racing constructor CSS size.
       await expect.poll(
         () => page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => Math.round(canvas.getBoundingClientRect().width)),
         { timeout: 5000 },
-      ).toBeGreaterThan(400);
+      ).toBeGreaterThan(board.canvasSize.width);
       const metrics = await page.locator('#gameCanvas').evaluate((canvas: HTMLCanvasElement) => {
         const box = canvas.getBoundingClientRect();
         return {
@@ -173,12 +177,12 @@ test.describe('Carrick Games - Lifecycle', () => {
           parkingState: canvas.dataset.parkingState ?? '',
         };
       });
-      expect(metrics.logicalWidth).toBe(400);
-      expect(metrics.logicalHeight).toBe(400);
+      expect(metrics.logicalWidth).toBe(board.canvasSize.width);
+      expect(metrics.logicalHeight).toBe(board.canvasSize.height);
       expect(metrics.pixelRatio).toBeGreaterThanOrEqual(2);
       expect(metrics.width).toBe(Math.round(metrics.logicalWidth * metrics.pixelRatio));
       expect(metrics.height).toBe(Math.round(metrics.logicalHeight * metrics.pixelRatio));
-      expect(metrics.boxWidth).toBeGreaterThan(400);
+      expect(metrics.boxWidth).toBeGreaterThan(board.canvasSize.width);
       expect(Math.abs(metrics.width / 2 - metrics.boxWidth)).toBeLessThanOrEqual(2);
       expect(Math.abs(metrics.height / 2 - metrics.boxHeight)).toBeLessThanOrEqual(2);
       expect(metrics.parkingState).toBe('');
@@ -227,17 +231,17 @@ test.describe('Carrick Games - Lifecycle', () => {
     const touchContext = await browser.newContext({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
     const touch = await touchContext.newPage();
     try {
-      await desktop.goto('/#/snake');
+      await desktop.goto('/#/minesweeper');
       await expect(desktop.locator('#keyboardPanel')).toBeHidden();
       await desktop.locator('#helpBtn').click();
       await expect(desktop.locator('#keyboardPanel .guide-basics .input-map-row').first()).toBeVisible();
       await expect(desktop.locator('#keyboardPanel .compact-mouse, #keyboardPanel button')).toHaveCount(0);
       await expect(desktop.locator('#guideBody [data-guide-mode="keyboard"]')).toHaveAttribute('aria-pressed', 'true');
-      await touch.goto('/#/snake');
+      await touch.goto('/#/minesweeper');
       await touch.locator('#helpBtn').click();
       await expect(touch.locator('#keyboardPanel')).toBeHidden();
       await expect(touch.locator('#touchHelp')).toBeVisible();
-      const controls = GAMES.find(game => game.id === 'snake')!.controls;
+      const controls = GAMES.find(game => game.id === 'minesweeper')!.controls;
       await expect(touch.locator('#touchHelp .guide-basics .guide-touch-row')).toHaveCount(Math.min(3, controls.touch?.length ?? 0));
       await expect(touch.locator('#guideBody [data-guide-mode="touch"]')).toHaveAttribute('aria-pressed', 'true');
       await touch.locator('#guideBody [data-guide-mode="keyboard"]').tap();
@@ -253,13 +257,13 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('mobile game sheet selects different games reliably', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto('/');
-    const idToNameZh: Record<string, string> = { breakout: '打砖块', pong: '乒乓', snake: '贪吃蛇', flappybird: '像素鸟' };
-    for (const id of ['breakout', 'pong', 'snake', 'flappybird']) {
+    const games = ['parking', 'minesweeper', 'sudoku', 'gacha'].map(id => GAMES.find(game => game.id === id)!);
+    for (const { id, nameZh } of games) {
       await page.keyboard.press('Control+k');
       const item = page.locator(`.game-list-item[data-id="${id}"]`);
       await item.scrollIntoViewIfNeeded();
       await item.click();
-      await expect(page.locator('#selectedGameLabel')).toHaveText(idToNameZh[id]);
+      await expect(page.locator('#selectedGameLabel')).toHaveText(nameZh);
       await expect(page.locator('#gameLibrary')).toHaveAttribute('aria-hidden', 'true');
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/${id}`);
@@ -272,7 +276,7 @@ test.describe('Stability', () => {
 
   test('theme toggle does not break games', async ({ page }) => {
     await page.goto('/');
-    await selectGame(page, 'snake');
+    await selectGame(page, 'minesweeper');
     await openOverflow(page);
     await page.locator('.theme-btn[data-set="light"]').click();
     await expect(page.locator('#overflowMenu')).toBeVisible();
@@ -291,7 +295,7 @@ test.describe('Stability', () => {
 
   test('language switch does not break games', async ({ page }) => {
     await page.goto('/');
-    await selectGame(page, 'snake');
+    await selectGame(page, 'minesweeper');
     await openOverflow(page);
     await page.locator('.lang-btn[data-lang="zh"]').click();
     await expect(page.locator('#overflowMenu')).toBeVisible();
