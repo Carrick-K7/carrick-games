@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { builtCatalog } from '../../../tests/support/releases';
 
 for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 }, { width: 667, height: 375 }]) {
   test(`gacha progress stays at page top and clear of canvas/utilities ${viewport.width}`, async ({ page }) => {
@@ -41,7 +42,11 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     await page.keyboard.press('Shift+R');
     await expect(hud.locator('[data-value="pulls"]')).toHaveText('0');
     await expect(hud.locator('[data-value="collection"]')).toHaveText('0.0%');
-    await page.goto('/#/snake');
+    const destination = builtCatalog().games.find(game => game.id !== 'gacha');
+    expect(destination, 'the pinned catalog must provide a real switch destination').toBeTruthy();
+    await page.goto(`/#/${destination!.id}`);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', destination!.id);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(hud).toHaveCount(0);
   });
 }

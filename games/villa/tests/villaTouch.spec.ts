@@ -4,26 +4,34 @@ import { installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 test('villa captures the mouse on the first canvas click and releases it for its picker', async ({ page }) => {
   test.setTimeout(60_000);
   await installVillaSwitchTarget(page);
-  await page.goto('/#/villa');
-  const canvas = page.locator('#gameCanvas');
-  await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
-  await expect(canvas).toHaveAttribute('data-game-running', 'true');
-  // A starved software-GL renderer can take many seconds to grant capture after
-  // the click; the contract is that the click DOES grant it, not how fast.
-  await page.evaluate(() => document.addEventListener('pointerlockerror', () => { (window as any).__lockError = true; }, true));
-  await canvas.click();
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null), { timeout: 30_000 }).toBe('gameCanvas');
-  expect(await page.evaluate(() => (window as any).__lockError ?? false), 'the browser refused pointer capture').toBe(false);
-  const before = await canvas.getAttribute('data-villa-look');
-  // CDP absolute moves under pointer lock emit equal-and-opposite recenter
-  // events. Supply raw relative MouseEvent deltas to the real document listener.
-  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 70, movementY: 12, bubbles: true })));
-  await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(before);
-  await page.keyboard.press('Control+k');
-  await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBeNull();
-  await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
-  await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-villa-renderer', /.+/);
+  try {
+    await page.goto('/#/villa');
+    const canvas = page.locator('#gameCanvas');
+    await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+    await expect(canvas).toHaveAttribute('data-game-running', 'true');
+    // A starved software-GL renderer can take many seconds to grant capture after
+    // the click; the contract is that the click DOES grant it, not how fast.
+    await page.evaluate(() => document.addEventListener('pointerlockerror', () => { (window as any).__lockError = true; }, true));
+    await canvas.click();
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null), { timeout: 30_000 }).toBe('gameCanvas');
+    expect(await page.evaluate(() => (window as any).__lockError ?? false), 'the browser refused pointer capture').toBe(false);
+    const before = await canvas.getAttribute('data-villa-look');
+    // CDP absolute moves under pointer lock emit equal-and-opposite recenter
+    // events. Supply raw relative MouseEvent deltas to the real document listener.
+    await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 70, movementY: 12, bubbles: true })));
+    await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(before);
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBeNull();
+    await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-villa-renderer', /.+/);
+    await expect(canvas).toHaveAttribute('data-game-id', VILLA_SWITCH_ID);
+    await expect(canvas).toHaveAttribute('data-game-running', 'true');
+  } finally {
+    // Library opening refreshes discovery asynchronously; drain the real fetch
+    // callback before Playwright tears down the page, without ignoring errors.
+    await page.unrouteAll({ behavior: 'wait' });
+  }
 });
 
 test('villa coarse-pointer map and real multi-touch use usable targets and independent fingers', async ({ browser }) => {

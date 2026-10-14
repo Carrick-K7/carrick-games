@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { collectErrors, selectGame, startGame, filterFavicon } from '../../../tests/support/gameplay';
-import { gameModuleUrl } from '../../../tests/support/releases';
+import { builtCatalog, gameModuleUrl } from '../../../tests/support/releases';
 
 if (!process.env.GAME_ID || process.env.GAME_ID === 'chess') {
   test.describe('Game rules', () => {
@@ -71,10 +71,14 @@ if (!process.env.GAME_ID || process.env.GAME_ID === 'chess') {
         await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.78);
         await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.58);
       }
-      await selectGame(page, 'snake');
+      const destination = builtCatalog().games.find(game => game.id !== 'chess');
+      expect(destination, 'the pinned catalog must provide a real switch destination').toBeTruthy();
+      await selectGame(page, destination!.id);
       await page.waitForTimeout(700);
       expect(pageErrors).toEqual([]);
-      await expect(page.locator('#selectedGameLabel')).toHaveText('贪吃蛇');
+      await expect(canvas).toHaveAttribute('data-game-id', destination!.id);
+      const zh = await page.locator('html').getAttribute('data-lang') === 'zh';
+      await expect(page.locator('#selectedGameLabel')).toHaveText(zh ? destination!.nameZh : destination!.name);
     });
   });
 
