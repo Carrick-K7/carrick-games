@@ -1711,7 +1711,10 @@ export class CsEngine {
       const motion = applyWeaponAnimation(this.gun, this.weaponAnimationState(player)),
         kick = RECOIL[w.id], viewScale = d.pistol ? 1.6 : d.pellets ? 1.25 : 1;
       placeWeaponView(this.gun, motion, {
-        x: T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) + (moving ? Math.cos(this.viewBob * .5) * .009 : 0),
+        // Keep HE pin/throw contact visible on portrait screens without changing
+        // either camera projection, world aiming, model scale or action timing.
+        x: T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) * (w.id === 'he' ? Math.min(1, this.gunCamera.aspect / (16 / 9)) : 1)
+          + (moving ? Math.cos(this.viewBob * .5) * .009 : 0),
         y: -.225 + (moving ? Math.sin(this.viewBob) * .007 : 0),
         z: -.40 + this.recoil * viewScale,
         pitch: .012 + this.recoil * (d.pistol ? 2.4 : 1.1),

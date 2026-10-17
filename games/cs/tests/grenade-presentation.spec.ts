@@ -43,6 +43,10 @@ for (const [width, height] of [[320, 568], [844, 390]]) test.describe(`grenade h
       for (const [stage, t] of [['idle', 0], ['pin', .4], ['throw', .18], ['throw', .48], ['throw', .8]] as [string, number][]) {
         const s = await grenadePose(page, stage, t);
         expect(s.id).toBe('he'); expect(s.finite).toBe(true); expect(s.frame).toBeGreaterThan(0);
+        if (stage !== 'throw' || t < .22 / .56) {
+          expect(s.heHorizontal.min).toBeGreaterThan(-1);
+          expect(s.heHorizontal.max).toBeLessThan(1);
+        }
         await page.screenshot({ path: testInfo.outputPath(`${stage}-${t}.png`) });
       }
       expect(errors).toEqual([]);

@@ -22,7 +22,19 @@ export async function openGrenadePresentation(page: Page, width = 1280, height =
       e.syncPlayerView(0, false); e.computeHud(); game.draw(canvas.getContext('2d')!);
       const r = e.gun.userData.rig;
       const point = (node: any) => node.getWorldPosition(e.player.pos.clone().set(0, 0, 0)).toArray();
-      return { evidence: 'real-release-grenade-presentation', frame: e.renderer.info.render.frame,
+      // Project real fixed HE mesh vertices, not just a finite transform matrix.
+      const heHorizontal = { min: Infinity, max: -Infinity };
+      if (r.id === 'he') r.fixed.traverse((node: any) => {
+        const positions = node.geometry?.attributes.position;
+        if (!positions) return;
+        const v = e.player.pos.clone();
+        for (let i = 0; i < positions.count; i++) {
+          v.fromBufferAttribute(positions, i).applyMatrix4(node.matrixWorld).project(e.gunCamera);
+          heHorizontal.min = Math.min(heHorizontal.min, v.x);
+          heHorizontal.max = Math.max(heHorizontal.max, v.x);
+        }
+      });
+      return { evidence: 'real-release-grenade-presentation', frame: e.renderer.info.render.frame, heHorizontal,
         clock: e.clock, id: r.id, fixedVisible: r.fixed.visible, pinVisible: r.pin?.visible,
         right: point(r.right?.hand ?? r.knifeRight.group), left: point(r.left?.hand ?? r.knifeLeft.hand),
         wristBend: r.right?.wristBend ?? r.knifeWristBend,
