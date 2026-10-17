@@ -141,7 +141,7 @@ describe('CS modal paint and hit-region audit', () => {
     const f = fixture(zh);
     const required: Partial<Record<Surface, string[]>> = {
       menu: ['menu-map-fy_snow', 'menu-map-de_dust2', 'menu-mode-defusal', 'menu-mode-tdm', 'menu-limit-100', 'menu-team-ct', 'menu-team-t', 'menu-skill-hard', 'menu-pistol-deagle'],
-      'settings-advanced': ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-quality-high', 'settings-quality-low', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
+      'settings-advanced': ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
       'pause-advanced': ['settings-more', 'settings-scoreboard', 'settings-radio', 'settings-restart', 'settings-menu', 'settings-done'],
       result: ['result-menu'], radio: Array.from({ length: 8 }, (_, i) => `radio-choice-${i + 1}`),
     };

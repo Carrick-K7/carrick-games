@@ -77,7 +77,7 @@ describe('CS repaired menu surfaces', () => {
     const render = () => hud.draw(ctx, 568, 320);
     render();
     const close = hud.regions.find(r => r.id === 'settings-close')!, done = hud.regions.find(r => r.id === 'settings-done')!;
-    const bounds = overlayRect(computeHudLayout(568, 320), 480, 440);
+    const bounds = overlayRect(computeHudLayout(568, 320), 480, 360);
     hud.onWheel(1000); render();
     expect(hud.regions.find(r => r.id === 'settings-close')).toMatchObject({ x: close.x, y: close.y, w: close.w, h: close.h });
     expect(hud.regions.find(r => r.id === 'settings-done')).toMatchObject({ x: done.x, y: done.y, w: done.w, h: done.h });

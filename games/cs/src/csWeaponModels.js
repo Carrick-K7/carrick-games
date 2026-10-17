@@ -6,7 +6,7 @@ import {buildButterflyKnife} from './csButterflyKnife.js';
 import {karambitMaterials} from './csKarambitMaterials.js';
 
 const mat=(color,metalness=.0,roughness=.7)=>new T.MeshStandardMaterial({color,metalness,roughness});
-const M={steel:mat(0x30373a,.8,.35),dark:mat(0x111719,.45,.53),edge:mat(0x697375,.82,.33),polymer:mat(0x252925,.06,.88),olive:mat(0x66714b,.04,.89),wood:mat(0x824521,.03,.61),woodLight:mat(0xa16531,.02,.66),knifeScale:mat(0x6e705b,.06,.82),rubber:mat(0x171a19,.0,.96),brass:mat(0xb49449,.74,.31),glass:mat(0x276076,.68,.15),glove:mat(0x333c39,.02,.96),sleeve:mat(0x3b4b51,.0,.98)};
+const M={steel:mat(0x30373a,.8,.35),dark:mat(0x111719,.45,.53),edge:mat(0x697375,.82,.33),polymer:mat(0x252925,.06,.88),olive:mat(0x66714b,.04,.89),wood:mat(0x824521,.03,.61),woodLight:mat(0xa16531,.02,.66),knifeScale:mat(0x6e705b,.06,.82),rubber:mat(0x171a19,.0,.96),brass:mat(0xb49449,.74,.31),glass:mat(0x276076,.68,.15),glove:mat(0x3b3932,.0,.96),sleeve:mat(0x4a4c42,.0,.98)};
 const Y=new T.Vector3(0,1,0);
 function mesh(g,geo,material,x=0,y=0,z=0){const o=new T.Mesh(geo,material);o.position.set(x,y,z);g.add(o);return o;}
 function box(g,x,y,z,w,h,l,m=M.steel){return mesh(g,new T.BoxGeometry(w,h,l),m,x,y,z);}
@@ -251,13 +251,13 @@ export function buildWeapon(id,w,hands=false,knifeModel=DEFAULT_KNIFE_MODEL){
     profile(r.lever,[[-.014,.006],[.026,.006],[.042,-.024],[.043,-.077],[.038,-.077],[.037,-.026],[.022,.001],[-.014,.001]],.012,M.edge);
     r.pin=part(fixed,'grenade-pin');rod(r.pin,[-.020,.050,0],[.016,.050,0],.0017,M.edge);
     mesh(r.pin,new T.TorusGeometry(.011,.0015,8,24),M.edge,-.028,.050,0).rotation.y=Math.PI/2;
-    r.restRight.set(.018,-.009,.028);r.restLeft.set(-.17,-.07,.08);r.supportGrip='pistol';r.muzzle.set(0,.025,-.04);
+    r.restRight.set(.018,-.009,.028);r.restLeft.set(-.17,-.12,.08);r.supportGrip='pistol';r.muzzle.set(0,.025,-.04);
   }else if(id==='armor'){box(fixed,0,0,0,.42,.49,.14,M.olive);for(let i=-1;i<=1;i++)box(fixed,i*.13,-.04,-.095,.10,.19,.063,M.dark);}else if(id==='knife'){if(r.knifeModel==='butterfly')buildButterflyKnife(r,{part,profile,mesh,rod,screw,batch,M});else(r.knifeModel==='classic'?classicKnife:karambit)(r);}else rifle(r,id,w);
     for(const p of [fixed,magazine,action,boltHandle,slide,cover,pump,r.shell,r.suppressor].filter(Boolean))batch(p);
   }
   for(const p of [magazine,action,boltHandle,slide,cover,pump]){p.userData.restPosition=p.position.clone();p.userData.restQuaternion=p.quaternion.clone();}
   if(hands&&id==='knife')makeKnifeHands(g,r);
-  else if(hands&&id!=='armor'){const firearm=(!w.utility&&id!=='knife')||id==='he',style=r.supportGrip||(w.pistol||id==='tmp'?'vertical':'underhand'),arm=firearm?makeGripArm:makeArm;r.left=arm(g,'left',r.restLeft.clone().multiply(core.scale),style);r.right=arm(g,'right',r.restRight.clone().multiply(core.scale),style);const casing=part(g,'ejected-case');cylinder(casing,0,0,0,.0045,w.pistol?.019:.030,M.brass);batch(casing);r.casing=casing;casing.visible=false;
+  else if(hands&&id!=='armor'){const firearm=(!w.utility&&id!=='knife')||id==='he',style=r.supportGrip||(w.pistol||id==='tmp'?'vertical':'underhand'),arm=firearm?makeGripArm:makeArm;const leftRoot=id==='he'?part(g,'grenade-off-hand'):g;r.left=arm(leftRoot,'left',r.restLeft.clone().multiply(core.scale),style);if(id==='he')r.left.root=leftRoot;r.right=arm(g,'right',r.restRight.clone().multiply(core.scale),style);const casing=part(g,'ejected-case');cylinder(casing,0,0,0,.0045,w.pistol?.019:.030,M.brass);batch(casing);r.casing=casing;casing.visible=false;
     if(id==='he')for(const a of [r.left,r.right]){
       const left=a===r.left,y=new T.Vector3(left?.62:-.40,.60,-.65).normalize(),x=new T.Vector3(0,0,left?1:-1);x.addScaledVector(y,-x.dot(y)).normalize();
       a.rotation.setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,new T.Vector3().crossVectors(x,y)));a.grenadeArm=true;

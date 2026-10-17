@@ -20,7 +20,7 @@ class TouchInput extends Event {
 let game: CsGame, e: any, hud: CsHud, ctx: CanvasRenderingContext2D;
 let canvas: HTMLCanvasElement, capture: ReturnType<typeof vi.fn>, labels: string[];
 const BASIC = ['settings-close', 'settings-sensitivity', 'settings-sound-on', 'settings-sound-off',
-  'settings-quality-high', 'settings-quality-low', 'settings-more', 'settings-done'];
+  'settings-more', 'settings-done'];
 const ADVANCED = ['settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly',
   'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-reset'];
 const MATCH = ['settings-scoreboard', 'settings-radio', 'settings-restart'];
@@ -85,7 +85,7 @@ describe('CS simple settings ownership', () => {
   it('Escape opens only compact basic settings with no intermediate pause surface or hidden advanced targets', () => {
     const frame = vi.spyOn(hud as any, 'frame');
     key(); draw();
-    expect(frame.mock.calls[0].slice(2, 5)).toEqual([480, 440, 'Settings']);
+    expect(frame.mock.calls[0].slice(2, 5)).toEqual([480, 360, 'Settings']);
     expect(e.phase).toBe('paused'); expect(e.settingsOpen).toBe(false);
     expect(ids().sort()).toEqual([...BASIC, 'settings-menu'].sort());
     expect(labels).toContain('Continue'); expect(labels).not.toContain('Reset settings');

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { advanceMinimalHud, closeMinimalHudFixture, openMinimalHudFixture, readMinimalHud, setMinimalHudScenario, type MinimalHudSnapshot } from './minimal-hud.fixture';
 import type { AimPaint } from './aiming.fixture';
+import { computeHudLayout, weaponPanelRect } from '../src/csHudLayout';
 
 const shapes = [
   { name: 'desktop', width: 1280, height: 720, touch: false },
@@ -28,6 +29,12 @@ function assertNativePaint(s: MinimalHudSnapshot) {
   expect(texts(s).some(text => /65\s*K|65\s*击杀/.test(text ?? ''))).toBe(false);
   // No inventory strip, even on initial frames or immediately after a weapon change.
   expect(equipment(s)).toEqual([]);
+  const weapon = weaponPanelRect(computeHudLayout(s.viewport.width, s.viewport.height, safeArea));
+  const primaryH = weapon.w < 210 ? 42 : 30;
+  // Only the primary weapon/ammo band: objective fallback progress below it remains allowed.
+  expect(s.paint.filter(p => p.op === 'fillRect' && p.bounds && Math.abs(p.bounds.h - 2) < .001
+    && p.bounds.x >= weapon.x && p.bounds.x + p.bounds.w <= weapon.x + weapon.w
+    && p.bounds.y >= weapon.y && p.bounds.y + p.bounds.h <= weapon.y + primaryH)).toEqual([]);
   expect(texts(s).filter(text => /Deploy|Reload(?:ing)?\s*[·:]?\s*\d|Burst|Semi-auto|Suppress|换弹(?:中)?\s*[·:]?\s*\d|取出武器|部署|三连发|半自动|消音|拉栓|拉环|Cycling bolt|Pulling pin/i.test(text ?? ''))).toEqual([]);
   for (const p of s.paint.filter(p => p.op === 'text' && p.text?.trim())) {
     expect(p.alpha, p.text).toBeGreaterThan(0);

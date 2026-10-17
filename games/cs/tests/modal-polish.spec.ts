@@ -73,7 +73,7 @@ for (const run of runs) test.describe(`CS modal polish · isolated real release 
           if (shape.width === 568) {
             const options: Partial<Record<typeof surface, string[]>> = {
               menu: ['menu-map-fy_snow', 'menu-map-de_dust2', 'menu-mode-elimination', 'menu-mode-tdm', 'menu-limit-30', 'menu-limit-50', 'menu-limit-100', 'menu-team-ct', 'menu-team-t', 'menu-skill-easy', 'menu-skill-normal', 'menu-skill-hard', 'menu-pistol-default', 'menu-pistol-deagle'],
-              settings: ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-quality-high', 'settings-quality-low', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
+              settings: ['settings-sensitivity', 'settings-scope', 'settings-knife-classic', 'settings-knife-karambit', 'settings-knife-butterfly', 'settings-pistol-default', 'settings-pistol-deagle', 'settings-hit-off', 'settings-hit-visual', 'settings-hit-full', 'settings-sound-on', 'settings-sound-off', 'settings-reset', 'settings-more', 'settings-done'],
               pause: ['settings-more', 'settings-scoreboard', 'settings-radio', 'settings-restart', 'settings-menu', 'settings-done'],
               result: ['result-menu'],
             };

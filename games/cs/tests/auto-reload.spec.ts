@@ -7,26 +7,16 @@ const reloadLines = (paint: AimPaint[]) => paint.filter(p => p.op === 'fillRect'
   && p.bounds.x >= weapon.x && p.bounds.x + p.bounds.w <= weapon.x + weapon.w
   && p.bounds.y >= weapon.y && p.bounds.y + p.bounds.h <= weapon.y + weapon.h);
 function assertQuietWeaponText(paint: AimPaint[]) {
+  expect(reloadLines(paint)).toEqual([]);
   const text = paint.filter(p => p.op === 'text').map(p => p.text ?? '');
   expect(text.filter(t => /^[1-5]$/.test(t))).toEqual([]);
   expect(text.filter(t => /Deploy|Reload(?:ing)?\s*[·:]?\s*\d|Burst|Semi-auto|Suppress|换弹(?:中)?\s*[·:]?\s*\d|取出武器|三连发|半自动|消音|Releasing grip|Magazine (?:out|in)|Chambering|Recovering|移手解锁|取出弹匣|装入弹匣|复位上膛|恢复持枪/i.test(t))).toEqual([]);
-}
-function reloadProgress(paint: AimPaint[]) {
-  const lines = reloadLines(paint);
-  expect(lines).toHaveLength(2);
-  const [track, progress] = lines.map(p => p.bounds!);
-  expect(track.w).toBeGreaterThan(0); expect(track.w).toBeLessThanOrEqual(weapon.w - 16);
-  expect(progress).toMatchObject({ x: track.x, y: track.y, h: 2 });
-  expect(progress.w).toBeGreaterThan(0); expect(progress.w).toBeLessThan(track.w);
-  expect(lines.every(p => p.alpha > 0)).toBe(true);
-  assertQuietWeaponText(paint);
-  return progress.w / track.w;
 }
 
 test.describe('CS automatic empty-magazine reload', () => {
   test.setTimeout(120_000);
   test.use({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
-  test('last real shot starts a timed reload without another input and the compact HUD shows only progress', async ({ page }, testInfo) => {
+  test('last real shot starts a timed reload without another input or a HUD progress indicator', async ({ page }, testInfo) => {
     const { errors } = await openAimingFixture(page, { width: 320, height: 568, dpr: 2, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
     try {
       const shot = await fireAimingShot(page, { zoom: 0, hit: 'body', kill: false, feedback: 'visual', ammo: 1, reserve: 7 });
@@ -38,25 +28,24 @@ test.describe('CS automatic empty-magazine reload', () => {
       expect(loading.fireHeld).toBe(false); expect(loading.shotPressed).toBe(false);
       expect(loading.paint.some((p: AimPaint) => p.op === 'text' && p.text === loading.reloadState)).toBe(false);
       expect(loading.paint.some((p: AimPaint) => p.op === 'text' && p.text === '0 / 7')).toBe(true);
-      const initialProgress = reloadProgress(loading.paint);
-      expect(initialProgress).toBeLessThan(.2 / 2.5); // Waits for the real last-shot cooldown.
+      assertQuietWeaponText(loading.paint);
       const frozen = await advance(0);
-      expect(reloadLines(frozen.paint)).toEqual(reloadLines(loading.paint));
+      expect(frozen).toEqual(loading);
       expect(frozen).toMatchObject({ ammo: 0, reserve: 7, reloading: true });
-      await page.screenshot({ path: testInfo.outputPath('compact-auto-reload-progress.png') });
+      await page.screenshot({ path: testInfo.outputPath('compact-auto-reload-no-indicator.png') });
 
       // M4A1 empty reload is 2.2 + .3 seconds; ammunition transfers at 71%,
-      // not when the cosmetic line starts or when Playwright spends wall time.
+      // independent of HUD paint or the wall time spent taking screenshots.
       const beforeInsert = await advance(1.4);
       expect(beforeInsert).toMatchObject({ ammo: 0, reserve: 7, reloading: true });
-      expect(reloadProgress(beforeInsert.paint) - initialProgress).toBeCloseTo(1.4 / 2.5, 5);
+      assertQuietWeaponText(beforeInsert.paint);
       const inserted = await advance(.5);
       expect(inserted).toMatchObject({ ammo: 7, reserve: 0, reloading: true });
-      expect(reloadProgress(inserted.paint) - initialProgress).toBeCloseTo(1.9 / 2.5, 5);
+      assertQuietWeaponText(inserted.paint);
       expect(inserted.paint.some((p: AimPaint) => p.op === 'text' && p.text === '7 / 0')).toBe(true);
       const finishing = await advance(.3);
-      expect(finishing.reloading).toBe(true);
-      expect(reloadProgress(finishing.paint) - initialProgress).toBeCloseTo(2.2 / 2.5, 5);
+      expect(finishing).toMatchObject({ ammo: 7, reserve: 0, reloading: true });
+      assertQuietWeaponText(finishing.paint);
       const done = await advance(.3);
       expect(done.reloading).toBe(false); expect(done.ammo).toBe(7); expect(done.reserve).toBe(0);
       expect(done.fireHeld).toBe(false); expect(done.shotPressed).toBe(false);

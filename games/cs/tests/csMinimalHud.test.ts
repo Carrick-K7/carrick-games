@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsHud } from '../src/csHud';
 import { aimGeometry, computeHudLayout, healthPanelRect, matchFeedbackLayout, rectsOverlap, weaponPanelRect, type HudRect } from '../src/csHudLayout';
 
-type Point = { op: string; x: number; y: number; r?: number };
+type Point = { op: string; x: number; y: number; r?: number; w?: number; h?: number };
 type Paint = { op: string; color: string; alpha: number; path: Point[]; text?: string; bounds?: HudRect; size?: number; rule?: string };
 function recorder() {
   const paint: Paint[] = [], stack: Record<string, unknown>[] = [];
@@ -18,7 +18,7 @@ function recorder() {
     lineTo: (x: number, y: number) => path.push({ op: 'line', x, y }),
     arc: (x: number, y: number, r: number) => path.push({ op: 'arc', x, y, r }),
     rect: (x: number, y: number) => path.push({ op: 'rect', x, y }),
-    roundRect: (x: number, y: number) => path.push({ op: 'roundRect', x, y }),
+    roundRect: (x: number, y: number, w: number, h: number) => path.push({ op: 'roundRect', x, y, w, h }),
     stroke: () => record('stroke'), fill: (rule?: string) => record('fill', { rule }),
     fillRect: (x: number, y: number, w: number, h: number) => record('fillRect', { bounds: { x, y, w, h } }),
     drawImage: () => record('image'),
@@ -171,38 +171,24 @@ describe('minimal CS HUD actual canvas paint', () => {
     }
   });
 
-  for (const [W, H] of shapes) it(`${W}×${H}: real reload paints only a bounded 2px line with complete ammo and utility values`, () => {
+  for (const [W, H] of shapes) it(`${W}×${H}: reload never paints a HUD indicator and retains complete ammo and utility values`, () => {
     const f = fixture(); f.hud.setSafeArea(safe);
     const weapon = weaponPanelRect(computeHudLayout(W, H, safe));
-    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
+    const idle = f.draw(W, H);
+    expect(reloadLines(idle, weapon)).toEqual([]);
     f.engine.player.reloadTotal = 4;
     f.engine.hud.reloadState = 'Reloading · 3s';
-    let previousWidth = -1;
-    for (const remaining of [4, 3, 2, 1, .01]) {
+    for (const remaining of [4, 3, 2, 1, .01, 0, 5]) {
       f.engine.player.reload = remaining;
-      const paint = f.draw(W, H), lines = reloadLines(paint, weapon);
-      expect(lines).toHaveLength(2);
-      const [track, progress] = lines.map(p => p.bounds!);
-      expect(track.w).toBeGreaterThan(0);
-      expect(track.w).toBeLessThanOrEqual(weapon.w - 16);
-      expect(progress).toMatchObject({ x: track.x, y: track.y, h: 2 });
-      expect(progress.w).toBeCloseTo(track.w * (1 - remaining / 4));
-      expect(progress.w).toBeGreaterThanOrEqual(previousWidth);
-      expect(progress.w).toBeLessThanOrEqual(track.w);
-      previousWidth = progress.w;
-      expect(lines.every(p => p.alpha > 0)).toBe(true);
+      const paint = f.draw(W, H);
+      expect(reloadLines(paint, weapon)).toEqual([]);
+      // Reload timing belongs to the weapon animation, not another HUD shape.
+      expect(paint).toEqual(idle);
       expect(texts(paint)).toEqual(expect.arrayContaining(['100 / 200', 'HE×2 · C4', 'M249']));
       expect(texts(paint)).not.toContain(f.engine.hud.reloadState);
-      for (const label of paint.filter(p => p.op === 'text' && p.bounds && contains(weapon, p.bounds))) {
-        expect(rectsOverlap(track, label.bounds!), label.text).toBe(false);
-      }
     }
-    f.engine.player.reload = 5; // A stale remaining value must never overdraw the track.
-    expect(reloadLines(f.draw(W, H), weapon)[1].bounds!.w).toBe(0);
     f.engine.player.reloadTotal = 0;
-    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
-    f.engine.player.reloadTotal = 4; f.engine.player.reload = 0;
-    expect(reloadLines(f.draw(W, H), weapon)).toEqual([]);
+    expect(f.draw(W, H)).toEqual(idle);
   });
 
   it.each([{ id: 'usp', suppressed: true }, { id: 'glock', burst: true }])('prioritizes missing objective over passive $id mode on the deeply inset phone', item => {
@@ -217,12 +203,12 @@ describe('minimal CS HUD actual canvas paint', () => {
     expect(labels).not.toContain('Suppressed'); expect(labels).not.toContain('Burst');
   });
 
-  it('retains critical objective/reload progress and omits stale reload/ammo after death', () => {
+  it('retains objective progress without a reload indicator and omits stale ammo after death', () => {
     const f = fixture(); f.engine.touchMode = true; f.hud.setSafeArea(safe);
     f.engine.player.reload = 2; f.engine.player.reloadTotal = 4; f.engine.hud.reloadState = 'Reloading · 2s';
     const loading = f.draw(320, 568);
     expect(texts(loading)).not.toContain('Reloading · 2s');
-    expect(reloadLines(loading, weaponPanelRect(computeHudLayout(320, 568, safe)))).toHaveLength(2);
+    expect(reloadLines(loading, weaponPanelRect(computeHudLayout(320, 568, safe)))).toEqual([]);
     f.engine.player.alive = false; f.engine.hud.health = 0;
     f.engine.hud.center = { kicker: 'RESPAWNING', title: 'Respawn 2s', detail: 'Team DM' };
     const dead = f.draw(320, 568);
@@ -230,7 +216,36 @@ describe('minimal CS HUD actual canvas paint', () => {
     expect(texts(dead)).not.toContain('100 / 200'); expect(slots(dead)).toEqual([]);
     expect(reloadLines(dead, weaponPanelRect(computeHudLayout(320, 568, safe)))).toEqual([]);
     f.engine.player.alive = true; f.engine.player.reload = 0; f.engine.hud.center = null;
-    f.engine.hud.objectiveAction = { text: 'Defusing B', progress01: .5 };
-    expect(texts(f.draw(320, 568))).toContain('Defusing B');
+    const L = computeHudLayout(320, 568, safe);
+    const objective = matchFeedbackLayout(L, { touch: true, hasBuy: true, objectiveAction: true }).objectiveAction!;
+    expect(objective).not.toBeNull();
+    for (const progress01 of [.25, .5, 1]) {
+      f.engine.hud.objectiveAction = { text: 'Defusing B', progress01 };
+      const paint = f.draw(320, 568);
+      expect(texts(paint)).toContain('Defusing B');
+      expect(paint.some(p => p.op === 'fill' && p.alpha > 0 && p.path.some(point => point.op === 'roundRect'
+        && point.x === objective.x + 10 && point.y === objective.y + objective.h - 7
+        && point.w === (objective.w - 20) * progress01 && point.h === 3))).toBe(true);
+      expect(reloadLines(paint, weaponPanelRect(L))).toEqual([]);
+    }
+  });
+
+  it('preserves the compact objective fallback bar even during a reload', () => {
+    const f = fixture(); f.hud.setSafeArea(safe);
+    const L = computeHudLayout(320, 568, safe), weapon = weaponPanelRect(L);
+    const feedback = matchFeedbackLayout(L, { touch: true, hasBuy: true });
+    f.engine.player.reload = 2; f.engine.player.reloadTotal = 4;
+    for (const progress01 of [.25, .5, 1]) {
+      f.engine.hud.objectiveAction = { text: 'Defusing B', progress01 };
+      f.paint.length = 0;
+      // Exercise the fallback independently of the primary feedback allocator.
+      (f.hud as any).drawCompactWeapon(f.ctx, f.engine.hud, weapon, feedback);
+      expect(texts(f.paint)).toContain('Defusing B');
+      const lines = reloadLines(f.paint, weapon);
+      expect(lines).toHaveLength(2);
+      const [track, progress] = lines.map(p => p.bounds!);
+      expect(track).toMatchObject({ x: weapon.x + 8, y: weapon.y + 56, w: weapon.w - 16, h: 2 });
+      expect(progress).toMatchObject({ x: track.x, y: track.y, w: track.w * progress01, h: 2 });
+    }
   });
 });

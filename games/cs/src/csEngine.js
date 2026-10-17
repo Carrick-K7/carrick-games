@@ -20,7 +20,7 @@ import { GameAudio } from './csAudio.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, lookSensitivity } from './csSettings.js';
 import { GameFocusGuard } from './csInputFocus.js';
 import { RECOIL, shotRecoil, recoverRecoil, viewMuzzle, actorMuzzle, KEY_ACTIONS } from './csWeaponBehavior.js';
-import { assignRoute, routeDestination, chooseRespawn, assignDustRoute, createDustPlan, dustGuardPoint, dustSearchPoint, dustCombatMove } from './csTactics.js';
+import { assignRoute, routeDestination, shuffledTeamSpawns, chooseRespawn, assignDustRoute, createDustPlan, dustGuardPoint, dustSearchPoint, dustCombatMove } from './csTactics.js';
 import { MAPS } from './csMaps.js';
 import { BombRound, BOMB_RULES } from './csBombMode.js';
 import { SHOP, BUY_CATEGORIES, awardMoney, settleRound } from './csEconomy.js';
@@ -452,7 +452,7 @@ export class CsEngine {
     hud.objective = { text, plantVerb: bomb.canPlant(player), defuseVerb: bomb.canDefuse(player) };
     const action = bomb.action?.actor === player ? bomb.action : null;
     hud.objectiveAction = (action || hint) ? {
-      text: action ? (action.kind === 'plant' ? this.L('正在安放', 'Planting') : this.L('正在拆除', 'Defusing')) + ' · ' + Math.max(0, action.duration - action.progress).toFixed(1) + 's' : hint,
+      text: action ? (action.kind === 'plant' ? this.L('正在安放', 'Planting') : this.L('正在拆除', 'Defusing')) + ' · ' + Math.ceil(Math.max(0, action.duration - action.progress)) + 's' : hint,
       progress01: action ? Math.min(1, action.progress / action.duration) : 0,
     } : null;
   }
@@ -819,7 +819,10 @@ export class CsEngine {
     let changed = false;
     for (const a of this.all) {
       if (!a.alive && a.respawnAt && this.clock >= a.respawnAt) {
-        this.spawnActor(a, chooseRespawn(this.world, a, this.all), a.respawnWeapon || (a.team === 'ct' ? 'm4a1' : 'ak47'), true);
+        const spawn = chooseRespawn(this.world, a, this.all, Math.random, other => other.isPlayer ? this.crouching : other.crouching);
+        if (!spawn) continue; // Keep the pending respawn until a physical slot opens.
+        // Mark alive at the chosen position before choosing for the next actor.
+        this.spawnActor(a, spawn, a.respawnWeapon || (a.team === 'ct' ? 'm4a1' : 'ak47'), true);
         changed = true;
       }
     }
@@ -891,10 +894,9 @@ export class CsEngine {
     this.zoom = 0; this.recoil = this.kickPitch = this.kickYaw = 0; this.crouching = false; this.stepTimer = 0;
     this.clearEffects(); this.clearCorpses(); this.clearBomb(); this.populatePickups();
     this.hud.killfeed = [];
-    const counters = { ct: 0, t: 0 };
+    const counters = { ct: 0, t: 0 }, spawns = shuffledTeamSpawns(this.world);
     for (const a of this.all) {
-      const index = counters[a.team]++, spawns = this.world.spawns[a.team],
-        spawn = spawns[(index * 3 + (index % 2 ? 8 : 0)) % spawns.length],
+      const index = counters[a.team]++, spawn = spawns[a.team][index],
         saved = this.mode === 'defusal' && this.round > 1 && a.alive ? { inventory: a.inventory, armor: a.armor, defuseKit: a.defuseKit, helmet: a.helmet, grenades: a.grenades } : null;
       if (a.isPlayer && a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); a.mesh = null; }
       this.spawnActor(a, spawn, this.world.theme === 'desert' && this.mode === 'tdm' ? (a.team === 'ct' ? 'm4a1' : 'ak47') : null);
@@ -1728,10 +1730,16 @@ export class CsEngine {
     }
   }
 
+  respawnCaption() {
+    const remaining = this.player.respawnAt - this.clock;
+    return remaining > 0 ? Math.ceil(remaining) + this.L(' 秒后复活', 's to respawn')
+      : this.L('等待安全出生点', 'Waiting for a safe spawn');
+  }
+
   updateSpectator(dt) {
     const player = this.player;
     this.autoSpectateDelay -= dt;
-    if (this.mode === 'tdm' && this.phase === 'active') this.center('RESPAWNING', Math.max(1, Math.ceil(player.respawnAt - this.clock)) + this.L(' 秒后复活', 's to respawn'), this.L('团队竞技 · 无限复活', 'Team Deathmatch · infinite respawns'));
+    if (this.mode === 'tdm' && this.phase === 'active') this.center('RESPAWNING', this.respawnCaption(), this.L('团队竞技 · 无限复活', 'Team Deathmatch · infinite respawns'));
     const mates = this.all.filter(a => a.alive && a.team === player.team && !a.isPlayer);
     if (this.autoSpectateDelay <= 0 && mates.length) {
       if (!this.spectating?.alive) this.spectating = mates[0];
@@ -1743,7 +1751,7 @@ export class CsEngine {
       this.camera.lookAt(eye.clone().add(new T.Vector3(-Math.sin(a.yaw) * 8, 0, -Math.cos(a.yaw) * 8)));
       if (this.phase === 'active') this.center(
         'SPECTATING · ' + a.name,
-        this.mode === 'tdm' ? Math.max(1, Math.ceil(player.respawnAt - this.clock)) + this.L(' 秒后复活', 's to respawn') : this.L('观战队友', 'Spectating'),
+        this.mode === 'tdm' ? this.respawnCaption() : this.L('观战队友', 'Spectating'),
         this.mode === 'tdm' ? this.L('团队竞技 · 无限复活 · 先达 ', 'TDM · infinite respawns · first to ') + this.killLimit + this.L(' 次击杀获胜', ' kills wins') : this.L('阵亡后等待下一回合 · 点击切换队友', 'Wait for the next round · click to cycle teammates'),
       );
     } else if (this.autoSpectateDelay > 0) {

@@ -22,14 +22,31 @@ export function routeDestination(actor,opponents){
   if(actor.routeIndex<actor.route.length)return actor.route[actor.routeIndex];
   return [...opponents].sort((a,b)=>actor.pos.distanceToSquared(a.pos)-actor.pos.distanceToSquared(b.pos))[0]?.pos;
 }
-export function chooseRespawn(world,actor,actors){
-  let best=world.spawns[actor.team][0],bestScore=-Infinity;
+// Shuffle each team's authored pool independently, without changing map data.
+// A round consumes this order once, including the human player alongside bots.
+export function shuffledTeamSpawns(world,random=Math.random){
+  return {ct:shuffle(world.spawns.ct,random),t:shuffle(world.spawns.t,random)};
+}
+
+// Match the .8m bot separation / standing BSP hull diameter, not hitbox width.
+// canStand checks the standing hull; supportHeight also rules out unsupported feet.
+const SPAWN_CLEARANCE=.8,STANDING_HEIGHT=1.8,RESPAWN_SCORE_WINDOW=4;
+export function chooseRespawn(world,actor,actors,random=Math.random,isCrouching=other=>other.crouching){
+  const candidates=[];let bestScore=-Infinity;
   for(const spawn of world.spawns[actor.team]){
+    const {x,y,z}=spawn.pos,feet=y+.04;
+    if(!world.canStand(x,feet,z,false)||world.supportHeight(x,feet,z,.1,false)===null)continue;
+    if(actors.some(other=>other!==actor&&other.alive&&
+      feet<other.pos.y+(isCrouching(other)?.9:STANDING_HEIGHT)&&feet+STANDING_HEIGHT>other.pos.y&&
+      Math.hypot(x-other.pos.x,z-other.pos.z)<SPAWN_CLEARANCE))continue;
     const eye=spawn.pos.clone().add(new T.Vector3(0,1.61,0));let closest=80,exposure=0,crowding=0;
     for(const other of actors){if(!other.alive||other===actor)continue;const distance=spawn.pos.distanceTo(other.pos);if(other.team!==actor.team){closest=Math.min(closest,distance);if(world.lineClear(eye,other.pos.clone().add(new T.Vector3(0,1.3,0))))exposure+=Math.max(0,36-distance);}else if(distance<2)crowding+=20;}
-    const score=closest-exposure*2-crowding;if(score>bestScore){bestScore=score;best=spawn;}
+    const score=closest-exposure*2-crowding;candidates.push({spawn,score});bestScore=Math.max(bestScore,score);
   }
-  return best;
+  // Keep the existing risk preference: randomness cannot overcome a meaningful
+  // exposure/crowding penalty. No free physical slot means retry on a later tick.
+  const safe=candidates.filter(candidate=>candidate.score>=bestScore-RESPAWN_SCORE_WINDOW);
+  return safe.length?pick(safe,random).spawn:null;
 }
 
 const DUST_ROUTES={long:[[640,64,-64],[1280,640,-64],[1440,1760,-16]],short:[[-320,800,-64],[256,1376,0],[512,1856,96]],tunnels:[[-1536,192,0],[-1664,1056,32],[-1984,1664,32],[-1856,2048,0]],midB:[[-320,800,-64],[-448,1472,-64],[-1280,1952,-64],[-1856,2048,0]]};

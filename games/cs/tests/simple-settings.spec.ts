@@ -5,7 +5,7 @@ import {
 } from './modal-polish.fixture';
 
 const basic = ['settings-close', 'settings-sensitivity', 'settings-sound-on', 'settings-sound-off',
-  'settings-quality-high', 'settings-quality-low', 'settings-more', 'settings-done'];
+  'settings-more', 'settings-done'];
 const ids = (s: ModalSnapshot) => s.regions.flatMap(r => r.id ? [r.id] : []).sort();
 const assertSimple = (s: ModalSnapshot, match = true) => {
   expect(ids(s)).toEqual([...basic, ...(match ? ['settings-menu'] : [])].sort());

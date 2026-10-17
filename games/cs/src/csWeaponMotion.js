@@ -5,6 +5,7 @@ import {DEFAULT_KNIFE_MODEL} from './csKnifeStyles.js';
 import {sampleButterflyMotion,BUTTERFLY_INSPECT_DURATION} from './csButterflyKnife.js';
 import {resolveButterflyPresentation} from './csButterflyPresentation.js';
 import {butterflyShoulder} from './csButterflyArm.js';
+import {sampleGrenadeMotion,grenadePinGrip,stabilizeGrenadeOffhand} from './csGrenadePresentation.js';
 
 export function reloadKind(id){return id==='p90'?'top':id==='m249'?'belt':['m3','xm1014'].includes(id)?'shell':['usp','glock','deagle'].includes(id)?'pistol':['awp','scout'].includes(id)?'bolt':'magazine';}
 function curve(t,keys){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0]){const [a,x]=keys[i-1],[b,y]=keys[i],u=(t-a)/(b-a),v=u*u*(3-2*u);return x+(y-x)*v;}}return keys.at(-1)[1];}
@@ -64,6 +65,7 @@ export const WEAPON_VIEW_FOV=62;
 export function placeWeaponView(model,motion,{x=.25,y=-.225,z=-.40,pitch=.012,yaw=-.04,roll=0}={}){
   model.position.set(x+motion.offset[0],y+motion.offset[1],z+motion.offset[2]);
   model.rotation.set(pitch+motion.rotation[0],yaw+motion.rotation[1],roll+motion.rotation[2]);
+  if(model.userData.rig?.id==='he')stabilizeGrenadeOffhand(model.userData.rig.left,motion,{pitch,yaw,roll});
 }
 
 export function reloadCues(id,empty=false,rounds=1){
@@ -78,6 +80,7 @@ export function reloadLabel(id,t,en=false){const kind=reloadKind(id);if(en){if(k
 export function sampleWeaponMotion(id,{reloadProgress=-1,empty=false,rounds=1,cycleProgress=-1,shotAge=99,knifeHeavy=false,butterflyDrawVariant=0,butterflyInspectVariant=0,knifeModel=DEFAULT_KNIFE_MODEL,ammo=1,inspectProgress=-1,deployProgress=-1,grenadeProgress=-1,grenadeThrowProgress=-1,grenadeStrength=1}={}){
   const kind=reloadKind(id),p=reloadProgress,cycling=(kind==='bolt'||id==='m3')&&cycleProgress>=0&&cycleProgress<1;
   const pose={offset:[0,0,0],rotation:[0,0,0],mag:[0,0,0],magAngle:0,magVisible:true,boltLift:0,boltTravel:0,boltRoll:0,handTravel:0,slide:0,cover:0,pump:0,leftMag:0,leftRack:0,rightRack:0,rightBolt:0,shell:false,shellReach:0,ejectAge:99,grenadePull:0,grenadeReach:0,grenadeReleased:false,grenadeHandOpen:0,coverReach:0};
+  if(id==='he')return sampleGrenadeMotion(pose,{deployProgress,grenadeProgress,grenadeThrowProgress,grenadeStrength});
   if(kind==='pistol')pose.slide=ammo===0?.033:curve(shotAge,[[0,0],[.027,.035],[.115,0]]);
   // Only reciprocating handles follow automatic fire; a rear M4/MP9 handle
   // or the AUG/MP5/P90 charging lever must not shuttle with every shot.
@@ -110,17 +113,6 @@ export function sampleWeaponMotion(id,{reloadProgress=-1,empty=false,rounds=1,cy
     }
   }
   if(id==='m3')pose.boltTravel=pose.pump;
-  if(id==='he'){
-    pose.ejectAge=99;
-    if(deployProgress<0){pose.offset=[-.06,.055,-.02];pose.rotation=[-.08,.12,-.12];}
-    if(grenadeProgress>=0){const t=Math.min(1,grenadeProgress);pose.grenadeReach=envelope(t,0,.23,.65,1);pose.grenadePull=curve(t,[[0,0],[.26,0],[.72,1],[1,1]]);pose.offset=[-.085,.10,.018];pose.rotation=[-.20,.16,-.18];}
-    if(grenadeThrowProgress>=0){
-      const t=grenadeThrowProgress,low=1-grenadeStrength,wind=envelope(t,0,.17,.22,.45),swing=curve(t,[[0,0],[.19,0],[.40,1],[.67,.7],[1,0]]);
-      pose.offset=[-.085+.045*wind-.09*swing,.10+(.12-.20*low)*wind+(.075-.18*low)*swing,.018+.12*wind-.23*swing];
-      pose.rotation=[-.20-(.45-.65*low)*wind+(.48-.85*low)*swing,.16-.20*swing,-.18+.22*swing];
-      pose.grenadePull=1;pose.grenadeReach=0;pose.grenadeReleased=t>=.22/.56;pose.grenadeHandOpen=curve(t,[[0,0],[.26,0],[.41,1],[1,1]]);
-    }
-  }
   if(id==='knife'&&knifeModel==='butterfly')return sampleButterflyMotion(pose,{deployProgress,inspectProgress,shotAge,knifeHeavy,butterflyDrawVariant,butterflyInspectVariant});
   if(id==='knife'&&knifeModel!=='karambit')return sampleClassicKnifeMotion(pose,{deployProgress,inspectProgress,shotAge,knifeHeavy});
   if(id==='knife'){
@@ -170,7 +162,7 @@ function moveArm(arm,target,turn=0,mag=0,rack=0,style='side',lift=0){if(!arm)ret
     arm.hand.quaternion.copy(arm.rotation).slerp(arm.magazineRotation,mag);
     if(rack>0)arm.hand.quaternion.slerp(chargingRotation(style,lift),rack);
     const fingerPose=Math.round(rack*40)/40;
-    if(arm.lastRack!==fingerPose){poseFirearmHand(arm.skin,arm.gripStyle,fingerPose);arm.lastRack=fingerPose;}
+    if(!arm.grenadeArm&&arm.lastRack!==fingerPose){poseFirearmHand(arm.skin,arm.gripStyle,fingerPose);arm.lastRack=fingerPose;}
     arm.hand.position.copy(target).sub(arm.palm.clone().applyQuaternion(arm.hand.quaternion));
     const wrist=new T.Vector3(arm.skin.side==='r'?-.006:.006,.008,.009).multiplyScalar(arm.skin.scale).applyQuaternion(arm.hand.quaternion).add(arm.hand.position);
     const forward=new T.Vector3(0,1,0).applyQuaternion(arm.hand.quaternion),desired=wrist.clone().sub(arm.elbow).normalize(),bend=forward.angleTo(desired);
@@ -235,7 +227,7 @@ export function applyWeaponAnimation(model,state={}){
   if(r.shell){r.shell.visible=motion.shell;const load=r.shellLoadPoint||new T.Vector3(0,-.064,-.018);r.shell.position.copy(load).add(new T.Vector3(-.032,-.106,0).multiplyScalar(1-motion.shellReach));r.shell.rotation.x=(1-motion.shellReach)*.38;}
   if(r.left){const target=r.left.rest.clone();if(kind==='shell'){target.lerp(r.shell.position.clone().add(new T.Vector3(-.015,-.015,.008)).multiply(r.core.scale),motion.leftMag);}else{const grip=r.magGrip?.clone()||(kind==='top'?new T.Vector3(-.036,.12,0):kind==='belt'?new T.Vector3(-.081,-.10,0):new T.Vector3(-.027,-.045,.014));grip.applyEuler(r.magazine.rotation).add(r.magazine.position).multiply(r.core.scale);target.lerp(grip,motion.leftMag);}
     if(r.id==='m249'){const cover=r.cover.position.clone().add(new T.Vector3(0,.018,.13).applyEuler(r.cover.rotation));target.lerp(cover.multiply(r.core.scale),motion.coverReach);}
-    if(r.id==='he')target.lerp(new T.Vector3(-.032-.085*motion.grenadePull,.050,.012).multiply(r.core.scale),motion.grenadeReach);
+    if(r.id==='he')target.copy(grenadePinGrip(r.left,motion,r.core.scale));
     reachChargingAction(target,chargingGrip(r,motion).multiply(r.core.scale),motion.leftRack,DEPLOY[r.id]);
     if(r.id==='m3')target.z+=motion.pump*r.core.scale.z;
     moveArm(r.left,target,-.12-motion.leftMag*.25,motion.leftMag,motion.leftRack,DEPLOY[r.id]?.wrist);
@@ -244,7 +236,10 @@ export function applyWeaponAnimation(model,state={}){
     reachChargingAction(target,handle,motion.rightBolt,d);reachChargingAction(target,chargingGrip(r,motion).multiply(r.core.scale),motion.rightRack,d);
     moveArm(r.right,target,motion.rightBolt*.8+motion.rightRack*.3,0,Math.max(motion.rightBolt,motion.rightRack),d?.wrist,motion.boltLift);
   }
-  if(r.id==='he'&&r.right?.skin){poseViewHand(r.right.skin,{open:motion.grenadeHandOpen,relaxed:true,thumb:motion.grenadeHandOpen,fingerCurls:{index:[.60,.96,.65],middle:[.62,.99,.65],ring:[.65,.99,.64],pinky:[.68,.96,.62]}});}
+  if(r.id==='he'&&r.right?.skin){
+    poseViewHand(r.right.skin,{open:motion.grenadeHandOpen,relaxed:true,thumb:motion.grenadeHandOpen*.70,fingerCurls:{index:[.60,.96,.65],middle:[.62,.99,.65],ring:[.65,.99,.64],pinky:[.68,.96,.62]}});
+    stabilizeGrenadeOffhand(r.left,motion);
+  }
   if(r.casing){const t=motion.ejectAge;r.casing.visible=t>=0&&t<.43;if(r.casing.visible){r.casing.position.copy(r.ejectPort).multiply(r.core.scale).add(tmp.set(t*.65,t*.45-t*t*1.5,t*.18));r.casing.rotation.set(t*13,t*6,t*9);}}
   return motion;
 }

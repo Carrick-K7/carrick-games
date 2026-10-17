@@ -83,7 +83,16 @@ export function uiParagraph(ctx: Ctx, value: string, x: number, top: number, wid
   return lines.length * lineHeight;
 }
 export function uiButton(ctx: Ctx, x: number, y: number, w: number, h: number, label: string,
-  opts: { selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean; hovered?: boolean; tone?: UiTone } = {}) {
+  opts: { selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean; hovered?: boolean; tone?: UiTone; modern?: boolean; quiet?: boolean } = {}) {
+  if (opts.modern) {
+    const fill = opts.disabled ? 'rgba(255,255,255,.02)' : opts.primary ? (opts.hovered ? '#456b59' : '#365847')
+      : opts.hovered ? '#35444e' : opts.selected ? '#425661' : opts.quiet ? 'rgba(255,255,255,0)' : 'rgba(255,255,255,.035)';
+    uiRound(ctx, x, y, w, h, fill, undefined, 12);
+    uiText(ctx, label, opts.quiet ? x + 12 : x + w / 2, y + h / 2, opts.small ? 13 : 14,
+      opts.disabled ? UI.muted : opts.selected || opts.primary ? UI.text : UI.dim,
+      opts.quiet ? 'left' : 'center', opts.primary || opts.selected, w - 24);
+    return;
+  }
   const accent = opts.tone === 'ct' ? UI.ct : opts.tone === 't' ? UI.t : UI.text;
   const fill = opts.disabled ? '#20282f' : opts.primary ? (opts.hovered ? UI.primaryHover : UI.primary)
     : opts.hovered ? UI.hover : opts.selected ? UI.selected : UI.raised;

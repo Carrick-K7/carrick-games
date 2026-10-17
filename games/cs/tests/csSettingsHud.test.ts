@@ -12,9 +12,11 @@ function settingsFixture() {
   };
   const hud = new CsHud(engine as never);
   const labels: { label: string; x: number; y: number }[] = [];
+  const roundRect = vi.fn(), arc = vi.fn();
   let dy = 0;
   const stack: number[] = [];
   const ctx = new Proxy({
+    roundRect, arc,
     measureText: (text: string) => ({ width: text.length * 6 }),
     fillText: (label: string, x: number, y: number) => labels.push({ label, x, y: y + dy }),
     save: () => stack.push(dy), restore: () => { dy = stack.pop() ?? 0; },
@@ -26,10 +28,29 @@ function settingsFixture() {
     (hud as any).drawSettings(ctx, layout);
     return layout;
   };
-  return { engine, hud, labels, draw };
+  return { engine, hud, labels, draw, roundRect, arc };
 }
 
-describe('CS v28 settings HUD', () => {
+describe('CS modern settings HUD', () => {
+  it('uses a soft panel, rounded controls and circular slider without any quality entry', () => {
+    const { engine, hud, labels, draw, roundRect, arc } = settingsFixture();
+    draw(1280, 720);
+    expect(roundRect.mock.calls[0].slice(2)).toEqual([480, 360, 20]);
+    expect(roundRect.mock.calls.some(c => c[4] === 12)).toBe(true);
+    expect(arc).toHaveBeenCalledWith(expect.any(Number), expect.any(Number), 8, 0, Math.PI * 2);
+    hud.regions.find(r => r.id === 'settings-more')!.down!(0, 0);
+    const seen = new Set<string>(), painted = new Set<string>();
+    for (let step = 0; step < 200; step++) {
+      draw(1280, 720);
+      hud.regions.forEach(r => { if (r.id) seen.add(r.id); });
+      labels.forEach(p => painted.add(p.label));
+      hud.onWheel(4);
+    }
+    expect([...seen].some(id => id.includes('quality'))).toBe(false);
+    expect([...painted].some(label => /Quality|画质/.test(label))).toBe(false);
+    expect(seen.has('settings-hit-full')).toBe(true);
+    expect(engine.setQuality).not.toHaveBeenCalled();
+  });
   for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1280, 720]]) {
     it(`${width}x${height}: owns input and keeps scroll/header/footer clear of shell controls`, () => {
       const { hud, draw } = settingsFixture();

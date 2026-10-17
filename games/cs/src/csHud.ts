@@ -200,7 +200,7 @@ export class CsHud {
     else uiRound(ctx, x, y, w, h, 'rgba(22,29,36,.96)', C.border, 2);
   }
   private button(ctx: Ctx, x: number, y: number, w: number, h: number, label: string, action: () => void,
-    opts: { id: string; selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean; tone?: UiTone }) {
+    opts: { id: string; selected?: boolean; primary?: boolean; disabled?: boolean; small?: boolean; tone?: UiTone; modern?: boolean; quiet?: boolean }) {
     uiButton(ctx, x, y, w, h, label, { ...opts, hovered: !opts.disabled && this.hovered(x, y, w, h) });
     this.push({ id: opts.id, x, y, w, h, disabled: opts.disabled, down: () => action() });
   }
@@ -216,9 +216,17 @@ export class CsHud {
     ctx.fillStyle = 'rgba(5,10,15,.48)'; ctx.fillRect(0, 0, W, H);
   }
   private frame(ctx: Ctx, L: HudLayout, w: number, h: number, title: string, close?: PanelClose,
-    chrome?: { headerH: number; close: HudRect | null }) {
+    chrome?: { headerH: number; close: HudRect | null }, modern = false) {
     const r = overlayRect(L, w, h), c = chrome ?? modalSections(r);
-    this.regions = []; this.dimScreen(ctx, L.W, L.H); this.panel(ctx, r.x, r.y, r.w, r.h);
+    this.regions = []; this.dimScreen(ctx, L.W, L.H);
+    if (modern) {
+      uiRound(ctx, r.x, r.y, r.w, r.h, '#192229', 'rgba(191,207,218,.12)', 20);
+      if (c.headerH > 0) this.text(ctx, title, r.x + 24, r.y + c.headerH / 2, 20, C.text, 'left', true, r.w - 100);
+      if (close && c.close) this.button(ctx, c.close.x + c.close.w - 44, c.close.y, 44, 44,
+        '×', close.run, { id: close.id, modern: true });
+      return r;
+    }
+    this.panel(ctx, r.x, r.y, r.w, r.h);
     if (c.headerH > 0) {
       ctx.fillStyle = UI.header; ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, c.headerH - 2);
       uiRule(ctx, r.x + 1, r.y + c.headerH - 1, r.w - 2);
@@ -344,41 +352,62 @@ export class CsHud {
       if (e.phase === 'paused' && e.matchActive) e.resumeGame();
     };
     const title = this.L('设置', 'Settings'), close = { id: 'settings-close', run: done };
-    const r = this.frame(ctx, L, 480, 440, title, close), sections = modalSections(r, 44);
+    const r = this.frame(ctx, L, 480, 360, title, close, undefined, true), sections = modalSections(r, 44);
     const { body } = sections, x = body.x, w = body.w, top = body.y + (sections.scrollAll ? 56 : 0);
-    const contentH = 288 + (this.settingsExpanded ? 372 + (inMatch ? 168 : 0) : 0) + (e.settingsNote ? 28 : 0);
+    const contentH = 204 + (this.settingsExpanded ? 372 + (inMatch ? 168 : 0) : 0) + (e.settingsNote ? 28 : 0);
+    const button = (bx: number, by: number, bw: number, label: string, action: () => void,
+      opts: { id: string; primary?: boolean; disabled?: boolean; quiet?: boolean }) =>
+      this.button(ctx, bx, by, bw, 44, label, action, { ...opts, modern: true });
+    const choices = (label: string, y: number, options: Choice[]) => {
+      this.text(ctx, label, x, y + 8, 13, C.dim);
+      uiRound(ctx, x, y + 24, w, 44, '#121b22', undefined, 14);
+      const gap = 4, bw = (w - gap * (options.length - 1)) / options.length;
+      options.forEach((o, i) => {
+        const bx = x + i * (bw + gap);
+        this.button(ctx, bx, y + 24, bw, 44, o.label, o.action,
+          { id: o.id, selected: o.selected, disabled: o.disabled, small: bw < 100, modern: true });
+        if (o.selected) uiRound(ctx, bx + bw / 2 - 8, y + 63, 16, 2, C.text, undefined, 1);
+      });
+      return 84;
+    };
     this.settingsScroll.setMax(contentH + (sections.scrollAll ? 112 : 0) - body.h);
     this.beginScroll(ctx, body.x, body.y, body.w, body.h, this.settingsScroll);
-    if (sections.scrollAll) this.inlineHeader(ctx, body, title, close);
+    if (sections.scrollAll) {
+      this.text(ctx, title, x + 4, body.y + 22, 20, C.text, 'left', true, w - 56);
+      button(x + w - 44, body.y, 44, '×', done, { id: close.id });
+    }
     let y = top;
     const slider = (id: string, label: string, value: number, min: number, max: number, format: string, apply: (v: number) => void) => {
       this.text(ctx, label, x, y + 8, 14, C.text, 'left', false, w - 66);
       this.text(ctx, format, x + w, y + 8, 13, C.dim, 'right');
       const sx = x + 8, sw = w - 16, sy = y + 32, t = (value - min) / (max - min);
       uiRound(ctx, sx, sy - 2, sw, 4, C.border, undefined, 2);
-      uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, C.dim, undefined, 2);
-      ctx.fillStyle = C.text; ctx.fillRect(sx + sw * t - 5, sy - 8, 10, 16);
+      uiRound(ctx, sx, sy - 2, Math.max(1, sw * t), 4, '#9ac9ba', undefined, 2);
+      ctx.beginPath(); ctx.arc(sx + sw * t, sy, 8, 0, Math.PI * 2); ctx.fillStyle = C.text; ctx.fill();
       const change = (px: number) => apply(min + Math.max(0, Math.min(1, (px - sx) / sw)) * (max - min));
       this.push({ id, x, y, w, h: 44, dragAxis: 'x', down: change, drag: change }); y += 64;
     };
     slider('settings-sensitivity', this.L('灵敏度', 'Sensitivity'), e.controlSettings.sensitivity, .1, 4, e.controlSettings.sensitivity.toFixed(2), v => e.setSensitivity(v));
-    y += this.choices(ctx, this.L('音效', 'Sound'), x, y, w,
+    y += choices(this.L('音效', 'Sound'), y,
       [true, false].map(on => ({ id: `settings-sound-${on ? 'on' : 'off'}`, label: on ? this.L('开启', 'On') : this.L('关闭', 'Off'), selected: e.audio.enabled === on, action: () => { if (e.audio.enabled !== on) e.toggleSound(); } })));
-    y += this.choices(ctx, this.L('画质', 'Quality'), x, y, w,
-      [['high', this.L('高', 'High')], ['low', this.L('流畅', 'Low')]].map(([id, label]) => ({ id: `settings-quality-${id}`, label, selected: e.quality === id, action: () => e.setQuality(id) })));
-    this.button(ctx, x, y, w, 44, this.settingsExpanded ? this.L('收起更多设置', 'Less settings') : this.L('更多设置', 'More settings'),
-      () => this.setSettingsExpanded(!this.settingsExpanded), { id: 'settings-more' }); y += 56;
+    uiRule(ctx, x, y - 4, w);
+    button(x, y, w, this.settingsExpanded ? this.L('收起更多设置', 'Less settings') : this.L('更多设置', 'More settings'),
+      () => this.setSettingsExpanded(!this.settingsExpanded), { id: 'settings-more', quiet: true });
+    ctx.beginPath(); ctx.strokeStyle = C.dim; ctx.lineWidth = 1.5;
+    const cy = y + 22, direction = this.settingsExpanded ? -1 : 1;
+    ctx.moveTo(x + w - 28, cy - direction * 3); ctx.lineTo(x + w - 23, cy + direction * 2);
+    ctx.lineTo(x + w - 18, cy - direction * 3); ctx.stroke(); y += 56;
     if (this.settingsExpanded) {
       slider('settings-scope', this.L('开镜灵敏度', 'Scoped sensitivity'), e.controlSettings.scopeSensitivity, .1, 2, e.controlSettings.scopeSensitivity.toFixed(2) + ' ×', v => e.setScopeSensitivity(v));
-      y += this.choices(ctx, this.L('近战模型', 'Knife model'), x, y, w,
+      y += choices(this.L('近战模型', 'Knife model'), y,
         [['classic', this.L('经典刀', 'Classic')], ['karambit', this.L('爪刀', 'Karambit')], ['butterfly', this.L('蝴蝶刀', 'Butterfly')]].map(([id, label]) => ({ id: `settings-knife-${id}`, label, selected: e.controlSettings.knifeModel === id, action: () => e.setKnifeModel(id) })));
-      y += this.choices(ctx, this.L('初始手枪 · 下次出生生效', 'Starting pistol · next spawn'), x, y, w, [
+      y += choices(this.L('初始手枪 · 下次出生生效', 'Starting pistol · next spawn'), y, [
         { id: 'settings-pistol-default', label: this.L('阵营默认', 'Faction'), selected: e.selectedPistol === 'default', action: () => e.setPistol('default') },
         { id: 'settings-pistol-deagle', label: 'Desert Eagle', selected: e.selectedPistol === 'deagle', action: () => e.setPistol('deagle') },
       ]);
-      y += this.choices(ctx, this.L('命中反馈', 'Hit feedback'), x, y, w,
+      y += choices(this.L('命中反馈', 'Hit feedback'), y,
         [['off', this.L('关闭', 'Off')], ['visual', this.L('视觉', 'Visual')], ['full', this.L('完整', 'Full')]].map(([id, label]) => ({ id: `settings-hit-${id}`, label, selected: e.controlSettings.hitFeedback === id, action: () => e.setHitFeedback(id) })));
-      this.button(ctx, x, y, w, 44, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset' }); y += 56;
+      button(x, y, w, this.L('恢复默认设置', 'Reset settings'), () => e.resetSettings(), { id: 'settings-reset', quiet: true }); y += 56;
       if (inMatch) {
         const actions = [
           { id: 'settings-scoreboard', label: this.L('记分板', 'Scoreboard'), run: () => { this.setSettingsExpanded(false); e.settingsOpen = false; e.clearHeldInput(); e.hud.scoreboardOpen = true; } },
@@ -387,19 +416,19 @@ export class CsHud {
           { id: 'settings-restart', label: this.L('重新开始', 'Restart match'), run: () => { e.settingsOpen = false; e.startMatch(); } },
         ];
         for (const item of actions) {
-          this.button(ctx, x, y, w, 44, item.label, item.run, { id: item.id, disabled: item.disabled }); y += 56;
+          button(x, y, w, item.label, item.run, { id: item.id, disabled: item.disabled, quiet: true }); y += 56;
         }
       }
     }
     if (e.settingsNote) this.text(ctx, e.settingsNote, x, y + 14, 12, C.dim, 'left', false, w);
     const footer = (f: HudRect) => {
       const backW = inMatch ? Math.max(72, Math.min(128, f.w * .36)) : 0, gap = inMatch ? 8 : 0;
-      this.button(ctx, f.x, f.y, f.w - backW - gap, 44, inMatch ? this.L('继续', 'Continue') : this.L('完成', 'Done'), done, { id: 'settings-done', primary: true });
-      if (inMatch) this.button(ctx, f.x + f.w - backW, f.y, backW, 44, this.L('主菜单', 'Menu'), () => e.toMenu(), { id: 'settings-menu' });
+      button(f.x, f.y, f.w - backW - gap, inMatch ? this.L('继续', 'Continue') : this.L('完成', 'Done'), done, { id: 'settings-done', primary: true });
+      if (inMatch) button(f.x + f.w - backW, f.y, backW, this.L('主菜单', 'Menu'), () => e.toMenu(), { id: 'settings-menu' });
     };
     if (sections.scrollAll) footer({ x, y: top + contentH + 8, w, h: 44 });
     this.endScroll(ctx); this.scrollbar(ctx, this.settingsScroll, x + w + 5, body.y, body.h);
-    if (sections.footer) { uiRule(ctx, r.x + 1, sections.footer.y - (sections.compact ? 4 : 12), r.w - 2); footer(sections.footer); }
+    if (sections.footer) footer(sections.footer);
   }
 
   // Modal routing is exclusive: no underlying menu text or controls bleed
@@ -704,12 +733,6 @@ export class CsHud {
       this.text(ctx, name, r.x + 8, r.y + 15, 12, C.text, 'left', true, r.w - 144);
       uiNumber(ctx, `${h.ammoText} / ${h.reserveText}`, r.x + r.w - 8, r.y + 15, 22, h.ammoText === '0' ? C.gold : C.text, 'right', 122);
     }
-    // Quiet real reload feedback without action/countdown prose.
-    if (p.reload > 0 && p.reloadTotal > 0) {
-      const progress = Math.max(0, Math.min(1, 1 - p.reload / p.reloadTotal));
-      ctx.fillStyle = C.border; ctx.fillRect(r.x + 8, r.y + primaryH - 2, r.w - 16, 2);
-      ctx.fillStyle = C.gold; ctx.fillRect(r.x + 8, r.y + primaryH - 2, (r.w - 16) * progress, 2);
-    }
     // Reserve a persistent envelope; showing a status never shifts controls.
     const lineY = split ? r.y + 49 : r.y + 44;
     uiFont(ctx, 11); const utilityW = utility ? Math.ceil(ctx.measureText(utility).width) + 8 : 0;
@@ -718,7 +741,7 @@ export class CsHud {
     if (status || (!separateUtility && utility)) {
       const bottom = action ? (split ? 58 : 56) : lineY - r.y + 8;
       uiStatusBand(ctx, r.x, r.y + primaryH, r.w, Math.min(r.h, bottom) - primaryH);
-      if (status) this.text(ctx, status, r.x + 8, lineY, 11, center || action || p.reload > 0 ? C.gold : C.dim, 'left', false, statusW);
+      if (status) this.text(ctx, status, r.x + 8, lineY, 11, center || action ? C.gold : C.dim, 'left', false, statusW);
       if (!separateUtility && utility) this.text(ctx, utility, r.x + r.w - 8, lineY, 11, C.dim, 'right', false, utilityW);
     }
     if (separateUtility && utility) {
