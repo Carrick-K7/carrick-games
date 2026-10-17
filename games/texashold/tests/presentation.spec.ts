@@ -24,6 +24,7 @@ async function fixture(page: Page, zh = true, dark = true) {
     game.community = [{ rank: 14, suit: 3 }, { rank: 10, suit: 1 }, { rank: 7, suit: 2 }];
     game.stage = 'flop';
     game.players[0].hole = [{ rank: 14, suit: 0 }, { rank: 13, suit: 3 }];
+    game.motion.settle();
     game.renderFrame();
     // Bind real keyboard/canvas handlers without a nondeterministic AI frame loop.
     game.bindInput();
@@ -123,6 +124,7 @@ test('all-in, fold, check and shortcuts keep the original betting rules', async 
     });
     if (action === 'call') await expect(button(page, action)).toHaveText('过牌');
     await page.keyboard.press({ 'all-in': 'a', fold: 'f', call: 'c', raise: 'r' }[action]);
+    if (action === 'all-in') await page.keyboard.press('Enter');
     const player = await page.evaluate(() => (window as any).poker.players[0]);
     expect(player.chips).toBe(action === 'all-in' ? 0 : action === 'raise' ? 180 : 200);
     expect(player.folded).toBe(action === 'fold');
@@ -138,6 +140,7 @@ test('all-in action amounts survive later streets in both languages', async ({ p
       const player = g.players[0];
       if (shortCall) { player.chips = 5; g.currentBet = 80; }
       g.handleHumanAction(shortCall ? 'call' : 'all-in');
+      if (!shortCall) g.confirmAllIn();
       const before = [g.playerStatus(player, false), g.playerStatus(player, true)];
       g.advanceStreet();
       g.renderFrame();
@@ -187,6 +190,7 @@ test('showdown stays visible; next hand and terminal restart remain single actio
       p.chips = 160; p.committed = 40; p.bet = 40;
     });
     g.resolveShowdown();
+    g.motion.settle();
     g.renderFrame();
   });
   await expect(button(page, 'next')).toHaveText('下一局');
@@ -227,7 +231,7 @@ test('real betting state cover capture', async ({ page }, testInfo) => {
         else if (g.isHumanTurn()) g.handleHumanAction('call');
         else g.update(0.1);
       }
-      g.particles.clear(); g.floats.clear();
+      g.particles.clear(); g.floats.clear(); g.motion.settle();
       g.renderFrame();
       return g.getDiagnostics();
     } finally { Math.random = random; }
@@ -245,7 +249,7 @@ test('long English showdown labels stay within narrow seats', async ({ page }, t
     const g = (window as any).poker;
     g.state = 'betweenHands';
     g.players.forEach((p: any, i: number) => {
-      p.wonThisHand = 200; p.chips = 800;
+      p.committed = 40; p.wonThisHand = 240; p.chips = 800;
       g.showdownHands.set(i, { label: 'Three of a Kind', labelZh: '三条' });
     });
     const ctx = document.querySelector('canvas')!.getContext('2d')!;
@@ -259,7 +263,7 @@ test('long English showdown labels stay within narrow seats', async ({ page }, t
     ctx.fillText = original;
     return records.filter(r => r.text.includes('Three of a Kind') || r.text.includes('+200'));
   });
-  expect(texts).toHaveLength(8);
+  expect(texts).toHaveLength(7);
   for (const t of texts) {
     const left = t.align === 'center' ? t.x - t.width / 2 : t.x;
     expect(left).toBeGreaterThanOrEqual(0);

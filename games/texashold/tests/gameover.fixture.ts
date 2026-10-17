@@ -5,7 +5,7 @@ async function suicideTexashold(page: Page) {
   // All-in and see result
   await page.keyboard.press('a');
   await page.waitForTimeout(200);
-  await page.keyboard.press('Space');
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(15000);
 }
 

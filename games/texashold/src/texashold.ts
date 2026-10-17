@@ -5,6 +5,7 @@ import {
   Particles,
   ScreenShake,
   fx,
+  ease,
 } from '@carrick/game-sdk/fx';
 import {
   evaluatePreflopStrength,
@@ -15,6 +16,8 @@ import {
 
 import { pokerLayout, type PokerLayout } from './texasholdLayout.js';
 import { PokerActions, type PokerAction, type PokerActionId } from './texasholdActions.js';
+import { evaluateBestHand, compareHands, explainComparison, type PokerHandValue } from './texasholdHands.js';
+import { PokerMotion } from './texasholdMotion.js';
 
 const W = 440;
 const H = 520;
@@ -56,11 +59,15 @@ interface ThemePalette {
   shadow: string;
 }
 
-interface HandValue {
-  category: number;
-  tiebreakers: number[];
-  label: string;
-  labelZh: string;
+type HandValue = PokerHandValue;
+
+interface HandPot {
+  amount: number;
+  winners: number[];
+  eligible: number[];
+  payouts: Record<number, number>;
+  explanation: LocalizedText;
+  refund: boolean;
 }
 
 interface Player {
@@ -125,9 +132,22 @@ export class TexasHoldGame extends BaseGame {
   private readonly floats = new FloatTexts();
   private readonly shake = new ScreenShake();
   private actions: PokerActions | null = null;
+  private readonly motion = new PokerMotion();
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  private pendingAllIn: string | null = null;
+  private detailsOpen = false;
+  private handPots: HandPot[] = [];
+  private highlightedSeat: number | null = null;
+  private readonly cancelPendingInput = () => {
+    this.pendingAllIn = null;
+    this.detailsOpen = false;
+    if (this.actions) this.renderFrame();
+  };
 
   constructor(host?: GameHost) {
     super(host ?? createDefaultGameHost('gameCanvas', W, H));
+    window.addEventListener('blur', this.cancelPendingInput);
+    document.addEventListener('visibilitychange', this.cancelPendingInput);
   }
 
   init() {
@@ -159,6 +179,10 @@ export class TexasHoldGame extends BaseGame {
   }
 
   update(dt: number) {
+    if (this.presentationPaused) return;
+    this.motion.update(dt);
+    if (this.reducedMotion.matches) this.motion.settle();
+    this.validateConfirmation();
     this.particles.update(dt);
     this.floats.update(dt);
     this.shake.update(dt);
@@ -186,6 +210,7 @@ export class TexasHoldGame extends BaseGame {
   }
 
   override setPresentationPaused(paused: boolean) {
+    if (paused) { this.pendingAllIn = null; this.detailsOpen = false; }
     super.setPresentationPaused(paused);
     this.renderFrame();
   }
@@ -196,7 +221,13 @@ export class TexasHoldGame extends BaseGame {
       pot: this.getPotSize(), currentPlayer: this.currentPlayerIndex,
       chips: this.players.map(player => player.chips), communityCount: this.community.length,
       actions: this.getActions().map(({ id, enabled }) => ({ id, enabled })),
-      layout: this.layout(),
+      layout: this.layout(), allInConfirmation: this.pendingAllIn !== null,
+      visibleHoleSeats: this.players.filter(player => this.revealHole(player)).map(player => player.seat),
+      highlightedSeat: this.highlightedSeat,
+      highlightedCards: this.highlightedSeat === null ? [] : (this.showdownHands.get(this.highlightedSeat)?.bestFive ?? []),
+      netReturns: this.state === 'playing' ? [] : this.players.map(player => player.wonThisHand - player.committed),
+      resultDetails: this.state === 'playing' ? null : this.resultDetails(this.isZh()),
+      motion: this.motion.diagnostics(),
     };
   }
 
@@ -208,6 +239,8 @@ export class TexasHoldGame extends BaseGame {
     const theme = this.getTheme();
     const zh = this.isZh();
     const layout = this.layout();
+    if (this.reducedMotion.matches) this.motion.settle();
+    this.motion.turn(this.state === 'playing' ? this.currentPlayerIndex : null);
     ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, this.width, this.height);
     this.drawTable(ctx, theme, layout);
@@ -215,7 +248,8 @@ export class TexasHoldGame extends BaseGame {
     this.drawCommunity(ctx, theme, zh, layout);
     this.drawPlayers(ctx, theme, zh, layout);
     this.drawStatusBar(ctx, theme, zh, layout);
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    this.drawChipFlights(ctx, theme, layout);
+    if (!this.reducedMotion.matches) {
       this.particles.draw(ctx);
       this.floats.draw(ctx);
     }
@@ -225,7 +259,12 @@ export class TexasHoldGame extends BaseGame {
 
   handleInput(e: KeyboardEvent | TouchEvent | MouseEvent) {
     if (this.presentationPaused) return;
-    if (e.target instanceof HTMLElement && e.target.closest('button')) return;
+    if (e instanceof KeyboardEvent && e.type === 'keydown' && e.key === 'Escape') {
+      if (this.pendingAllIn || this.detailsOpen) { e.preventDefault(); this.cancelPendingInput(); }
+      return;
+    }
+    if (e.target instanceof HTMLElement && e.target.closest('[data-texashold-actions], button')) return;
+    if (this.detailsOpen && (e.type === 'mousedown' || e.type === 'touchstart')) { this.cancelPendingInput(); return; }
     if (this.state === 'gameOver' && this.isRestartInput(e)) {
       if (e instanceof TouchEvent) e.preventDefault();
       this.init();
@@ -255,6 +294,10 @@ export class TexasHoldGame extends BaseGame {
   override destroy() {
     this.pendingSystemAction = null;
     this.pendingSystemDelay = 0;
+    window.removeEventListener('blur', this.cancelPendingInput);
+    document.removeEventListener('visibilitychange', this.cancelPendingInput);
+    this.pendingAllIn = null;
+    this.motion.reset();
     this.actions?.destroy();
     this.actions = null;
     super.destroy();
@@ -262,6 +305,11 @@ export class TexasHoldGame extends BaseGame {
 
   private handleKeyInput(e: KeyboardEvent) {
     const key = e.key.toLowerCase();
+    this.validateConfirmation();
+    if (this.pendingAllIn) {
+      if (e.key === 'Enter') { e.preventDefault(); this.confirmAllIn(); this.renderFrame(); }
+      return;
+    }
 
     if (this.state === 'betweenHands' || this.state === 'gameOver') {
       if (e.key === ' ' || e.key === 'Enter') {
@@ -288,23 +336,39 @@ export class TexasHoldGame extends BaseGame {
     }
   }
 
-  private handlePointerInput(clientX: number, clientY: number) {
-    if (this.state === 'betweenHands') {
-      this.startNewHand();
-      return;
-    }
+  private handlePointerInput(_clientX: number, _clientY: number) {
+    // Inspecting a settled hand must never advance it. Only Next hand / keys do.
+    if (this.pendingAllIn || this.detailsOpen) this.cancelPendingInput();
+  }
 
-    if (this.state === 'gameOver') {
-      this.init();
-      return;
-    }
+  private confirmationKey() {
+    const player = this.players[0];
+    return `${this.completedHands}:${this.stage}:${this.currentPlayerIndex}:${this.currentBet}:${player.bet}:${player.chips}`;
+  }
 
-    // Betting uses native controls: canvas taps never place an accidental bet.
+  private validateConfirmation() {
+    if (this.pendingAllIn && (!this.isHumanTurn() || this.pendingAllIn !== this.confirmationKey())) this.pendingAllIn = null;
+  }
+
+  private confirmAllIn() {
+    this.validateConfirmation();
+    if (!this.pendingAllIn || this.presentationPaused) return;
+    this.pendingAllIn = null;
+    this.performPlayerAction(0, 'all-in');
   }
 
   private handleHumanAction(action: PlayerAction) {
-    if (!this.isHumanTurn()) return;
-    this.performPlayerAction(0, action);
+    if (this.presentationPaused || !this.isHumanTurn()) return;
+    this.validateConfirmation();
+    // Keyboard and native controls share legality; a disabled raise must not fall back to all-in.
+    if (!this.getActions().some(button => button.id === action && button.enabled)) return;
+    if (action === 'all-in') {
+      if (this.pendingAllIn) this.confirmAllIn();
+      else this.pendingAllIn = this.confirmationKey();
+    } else if (!this.pendingAllIn) {
+      this.performPlayerAction(0, action);
+    }
+    this.renderFrame();
   }
 
   private isHumanTurn(): boolean {
@@ -317,6 +381,12 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private startNewHand() {
+    this.pendingAllIn = null;
+    this.detailsOpen = false;
+    this.handPots = [];
+    this.highlightedSeat = null;
+    this.motion.reset();
+    this.particles.clear(); this.floats.clear();
     this.pendingSystemAction = null;
     this.pendingSystemDelay = 0;
     this.showdownHands.clear();
@@ -357,7 +427,10 @@ export class TexasHoldGame extends BaseGame {
     for (let round = 0; round < 2; round += 1) {
       for (const index of live) {
         const card = this.deck.pop();
-        if (card) this.players[index].hole.push(card);
+        if (card) {
+          this.players[index].hole.push(card);
+          this.motion.deal(`hole:${index}:${round}`, (round * live.length + live.indexOf(index)) * 0.03);
+        }
       }
     }
 
@@ -452,6 +525,7 @@ export class TexasHoldGame extends BaseGame {
 
     if (action === 'fold') {
       player.folded = true;
+      this.motion.fold(playerIndex);
       player.acted = true;
       player.lastAction = { en: 'Fold', zh: '弃牌' };
     } else if (action === 'call') {
@@ -562,6 +636,10 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private resolveShowdown() {
+    if (this.state !== 'playing') return;
+    this.pendingAllIn = null;
+    this.motion.showdown();
+    this.handPots = [];
     this.currentPlayerIndex = null;
     this.showdownHands.clear();
 
@@ -614,13 +692,32 @@ export class TexasHoldGame extends BaseGame {
       const share = Math.floor(segment / orderedWinners.length);
       let remainder = segment % orderedWinners.length;
 
+      const payouts: Record<number, number> = {};
       for (const winnerIndex of orderedWinners) {
         const payout = share + (remainder > 0 ? 1 : 0);
         if (remainder > 0) remainder -= 1;
+        payouts[winnerIndex] = payout;
         this.players[winnerIndex].chips += payout;
         this.players[winnerIndex].wonThisHand += payout;
       }
 
+      const refund = this.players.filter(player => player.committed >= level).length === 1;
+      const loserHands = eligible.filter(({ index }) => !orderedWinners.includes(index))
+        .map(({ index }) => this.showdownHands.get(index)!).sort((a, b) => this.compareHands(b, a));
+      const explanation = refund ? { en: 'Uncalled chips returned', zh: '退回未被跟注的筹码' }
+        : orderedWinners.length > 1 ? explainComparison(bestHand, bestHand)
+        : loserHands[0] ? explainComparison(bestHand, loserHands[0])
+        : { en: 'Only eligible hand', zh: '唯一有资格赢取此底池的手牌' };
+      const eligibleSeats = eligible.map(({ index }) => index);
+      const previousPot = this.handPots[this.handPots.length - 1];
+      // Folded contribution levels do not create new side pots. Merge presentation
+      // tiers with identical eligibility; retain the existing accounting payouts.
+      if (!refund && previousPot && !previousPot.refund && previousPot.eligible.join(',') === eligibleSeats.join(',')) {
+        previousPot.amount += segment;
+        for (const [seat, payout] of Object.entries(payouts)) previousPot.payouts[Number(seat)] = (previousPot.payouts[Number(seat)] ?? 0) + payout;
+      } else {
+        this.handPots.push({ amount: segment, winners: [...orderedWinners], eligible: eligibleSeats, payouts, explanation, refund });
+      }
       const names = orderedWinners.map((index) => this.players[index].name).join(' / ');
       const namesZh = orderedWinners.map((index) => this.players[index].nameZh).join(' / ');
       this.pushLog(
@@ -635,9 +732,12 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private awardFoldWin(winnerIndex: number) {
+    if (this.state !== 'playing') return;
     const pot = this.getPotSize();
     this.players[winnerIndex].chips += pot;
     this.players[winnerIndex].wonThisHand += pot;
+    this.handPots = [{ amount: pot, winners: [winnerIndex], eligible: [winnerIndex], payouts: { [winnerIndex]: pot },
+      explanation: { en: 'Everyone else folded', zh: '其他玩家均已弃牌' }, refund: false }];
     this.pushLog(
       `${this.players[winnerIndex].name} wins ${pot} uncontested`,
       `${this.players[winnerIndex].nameZh} 直接收下 ${pot}`
@@ -646,25 +746,18 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private emitPayoutFx() {
-    const palette = getRetroPalette(this.isDarkTheme());
-    for (let index = 0; index < this.players.length; index += 1) {
-      const player = this.players[index];
-      if (player.wonThisHand <= 0) continue;
-      const seat = this.seatLayout[index];
-      for (const emit of fx.pop(seat.x, seat.y + CARD_H / 2, [palette.amber, palette.primary])) {
-        emit.count = Math.min(emit.count, player.isHuman ? 10 : 6);
-        if (!this.isDarkTheme()) emit.blend = 'source-over';
-        this.particles.emit(emit);
-      }
-      this.floats.add(seat.x, seat.y - 8, `+${player.wonThisHand}`, {
-        color: palette.amber,
-        size: player.isHuman ? 16 : 13,
-        life: 1,
-      });
+    for (const player of this.players) {
+      if (player.wonThisHand > 0) this.motion.transfer(player.seat, player.wonThisHand, 'payout', this.showdownHands.size ? 0.24 : 0);
     }
   }
 
   private finishHand() {
+    if (this.state !== 'playing') return;
+    this.pendingAllIn = null;
+    this.detailsOpen = false;
+    const contested = this.handPots.filter(pot => !pot.refund);
+    const bestSeat = contested.some(pot => pot.winners.includes(0)) ? 0 : contested[0]?.winners[0];
+    this.highlightedSeat = bestSeat !== undefined && this.showdownHands.has(bestSeat) ? bestSeat : null;
     this.pendingSystemAction = null;
     this.pendingSystemDelay = 0;
     this.currentPlayerIndex = null;
@@ -747,6 +840,7 @@ export class TexasHoldGame extends BaseGame {
     player.chips -= amount;
     player.bet += amount;
     player.committed += amount;
+    this.motion.transfer(player.seat, amount, 'bet');
     if (player.chips <= 0) {
       player.chips = 0;
       player.allIn = true;
@@ -831,7 +925,10 @@ export class TexasHoldGame extends BaseGame {
   private dealCommunityCards(count: number) {
     for (let i = 0; i < count; i += 1) {
       const card = this.deck.pop();
-      if (card) this.community.push(card);
+      if (card) {
+        this.motion.deal(`board:${this.community.length}`, i * 0.035, true);
+        this.community.push(card);
+      }
     }
   }
 
@@ -868,85 +965,9 @@ export class TexasHoldGame extends BaseGame {
     return Math.max(0, Math.min(100, score));
   }
 
-  private evaluateBestHand(cards: Card[]): HandValue {
-    const counts = this.getRankCounts(cards);
-    const groups = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
-    const distinctRanks = Array.from(new Set(cards.map((card) => card.rank))).sort((a, b) => b - a);
-    const flushSuit = ([0, 1, 2, 3] as Suit[]).find((suit) =>
-      cards.filter((card) => card.suit === suit).length >= 5
-    );
-    const straightHigh = this.findStraightHigh(distinctRanks);
+  private evaluateBestHand(cards: Card[]): HandValue { return evaluateBestHand(cards); }
 
-    if (flushSuit !== undefined) {
-      const flushRanks = cards
-        .filter((card) => card.suit === flushSuit)
-        .map((card) => card.rank)
-        .sort((a, b) => b - a);
-      const straightFlushHigh = this.findStraightHigh(flushRanks);
-      if (straightFlushHigh > 0) {
-        return { category: 8, tiebreakers: [straightFlushHigh], label: 'Straight Flush', labelZh: '同花顺' };
-      }
-    }
-
-    const fourKind = groups.find(([, count]) => count === 4);
-    if (fourKind) {
-      const kicker = distinctRanks.find((rank) => rank !== fourKind[0]) ?? 0;
-      return { category: 7, tiebreakers: [fourKind[0], kicker], label: 'Four of a Kind', labelZh: '四条' };
-    }
-
-    const trips = groups.filter(([, count]) => count === 3).map(([rank]) => rank);
-    const pairs = groups.filter(([, count]) => count >= 2).map(([rank]) => rank);
-    if (trips.length >= 1 && pairs.filter((rank) => rank !== trips[0]).length >= 1) {
-      const pairRank = pairs.find((rank) => rank !== trips[0]) ?? 0;
-      return { category: 6, tiebreakers: [trips[0], pairRank], label: 'Full House', labelZh: '葫芦' };
-    }
-    if (trips.length >= 2) {
-      return { category: 6, tiebreakers: [trips[0], trips[1]], label: 'Full House', labelZh: '葫芦' };
-    }
-
-    if (flushSuit !== undefined) {
-      const topFlush = cards
-        .filter((card) => card.suit === flushSuit)
-        .map((card) => card.rank)
-        .sort((a, b) => b - a)
-        .slice(0, 5);
-      return { category: 5, tiebreakers: topFlush, label: 'Flush', labelZh: '同花' };
-    }
-
-    if (straightHigh > 0) {
-      return { category: 4, tiebreakers: [straightHigh], label: 'Straight', labelZh: '顺子' };
-    }
-
-    if (trips.length >= 1) {
-      const kickers = distinctRanks.filter((rank) => rank !== trips[0]).slice(0, 2);
-      return { category: 3, tiebreakers: [trips[0], ...kickers], label: 'Three of a Kind', labelZh: '三条' };
-    }
-
-    const pairRanks = groups.filter(([, count]) => count === 2).map(([rank]) => rank);
-    if (pairRanks.length >= 2) {
-      const topPairs = pairRanks.slice(0, 2);
-      const kicker = distinctRanks.find((rank) => rank !== topPairs[0] && rank !== topPairs[1]) ?? 0;
-      return { category: 2, tiebreakers: [...topPairs, kicker], label: 'Two Pair', labelZh: '两对' };
-    }
-
-    if (pairRanks.length === 1) {
-      const kickers = distinctRanks.filter((rank) => rank !== pairRanks[0]).slice(0, 3);
-      return { category: 1, tiebreakers: [pairRanks[0], ...kickers], label: 'Pair', labelZh: '一对' };
-    }
-
-    return { category: 0, tiebreakers: distinctRanks.slice(0, 5), label: 'High Card', labelZh: '高牌' };
-  }
-
-  private compareHands(a: HandValue, b: HandValue): number {
-    if (a.category !== b.category) return a.category - b.category;
-    const length = Math.max(a.tiebreakers.length, b.tiebreakers.length);
-    for (let i = 0; i < length; i += 1) {
-      const left = a.tiebreakers[i] ?? 0;
-      const right = b.tiebreakers[i] ?? 0;
-      if (left !== right) return left - right;
-    }
-    return 0;
-  }
+  private compareHands(a: HandValue, b: HandValue): number { return compareHands(a, b); }
 
   private getRankCounts(cards: Card[]): Map<number, number> {
     const counts = new Map<number, number>();
@@ -954,24 +975,6 @@ export class TexasHoldGame extends BaseGame {
       counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
     }
     return counts;
-  }
-
-  private findStraightHigh(ranks: number[]): number {
-    const values = Array.from(new Set(ranks));
-    if (values.includes(14)) values.push(1);
-    values.sort((a, b) => a - b);
-
-    let run = 1;
-    let best = 0;
-    for (let i = 1; i < values.length; i += 1) {
-      if (values[i] === values[i - 1] + 1) {
-        run += 1;
-        if (run >= 5) best = values[i];
-      } else if (values[i] !== values[i - 1]) {
-        run = 1;
-      }
-    }
-    return best;
   }
 
   private createDeck(): Card[] {
@@ -1055,7 +1058,8 @@ export class TexasHoldGame extends BaseGame {
     for (let i = 0; i < 5; i++) {
       const card = this.community[i];
       const px = start + i * (cw + gap);
-      if (card) this.drawCard(ctx, px, y, cw, h, card, true, theme, false);
+      if (card) this.drawAnimatedCard(ctx, px, y, cw, h, card, true, theme, false,
+        `board:${i}`, true, undefined, this.highlighted(card));
       else {
         this.panel(ctx, px, y, cw, h, 6, theme.surfaceMuted, theme.border);
         this.text(ctx, '·', px + cw / 2, y + h / 2 + 5, 18, theme.cardBackAlt);
@@ -1071,14 +1075,18 @@ export class TexasHoldGame extends BaseGame {
       const dim = player.folded || player.out;
       const color = dim ? theme.muted : theme.text;
       const name = zh ? player.nameZh : player.name;
-      const nameLabel = `${active ? '› ' : ''}${name}${player.wonThisHand > 0 ? ` +${player.wonThisHand}` : ''}`;
+      const net = player.wonThisHand - player.committed;
+      const selected = this.highlightedSeat === index;
+      const nameLabel = `${active ? '› ' : selected ? '✓ ' : ''}${name}${this.state !== 'playing' && player.committed > 0 ? ` ${this.signed(net)}` : ''}`;
       this.text(ctx, nameLabel, seat.x, seat.y, 13, player.wonThisHand > 0 ? theme.primary : color, 'center', active ? 650 : 500);
       this.text(ctx, String(player.chips), seat.x, seat.y + 20, 17, color, 'center', 600);
       const ch = l.opponentCardHeight;
       const cw = ch * 0.72;
       const cardY = seat.y + 28;
       for (let i = 0; i < player.hole.length; i++) {
-        this.drawCard(ctx, seat.x - cw - 2 + i * (cw + 4), cardY, cw, ch, player.hole[i], this.state !== 'playing' || player.folded, theme, dim);
+        this.drawAnimatedCard(ctx, seat.x - cw - 2 + i * (cw + 4), cardY, cw, ch, player.hole[i], this.revealHole(player), theme, dim,
+          `hole:${index}:${i}`, this.state !== 'playing' && this.revealHole(player), player.folded ? index : undefined,
+          this.highlightedSeat === index && this.highlighted(player.hole[i]));
       }
       const action = this.playerStatus(player, zh);
       this.text(ctx, action, seat.x, cardY + ch + 17, 11, player.wonThisHand > 0 ? theme.primary : theme.muted);
@@ -1086,20 +1094,32 @@ export class TexasHoldGame extends BaseGame {
       this.seatLayout[index] = { x: seat.x, y: cardY };
       if (active) {
         ctx.fillStyle = theme.primary;
-        ctx.fillRect(seat.x - 14, cardY + ch + 22, 28, 2);
+        const emphasis = this.reducedMotion.matches ? 1 : this.motion.turnProgress();
+        const lineWidth = 28 + 12 * (1 - emphasis);
+        ctx.fillRect(seat.x - lineWidth / 2, cardY + ch + 22, lineWidth, 2);
       }
     }
     const human = this.players[0];
     const { x, y, h } = l.human;
     const cw = h * 0.7;
     for (let i = 0; i < human.hole.length; i++) {
-      this.drawCard(ctx, x + i * (cw + 6), y, cw, h, human.hole[i], true, theme, human.folded || human.out);
+      this.drawAnimatedCard(ctx, x + i * (cw + 6), y, cw, h, human.hole[i], !human.folded, theme, human.folded || human.out,
+        `hole:0:${i}`, false, human.folded ? 0 : undefined, this.highlightedSeat === 0 && this.highlighted(human.hole[i]));
     }
     const tx = x + cw * 2 + 22;
-    const humanLabel = human.wonThisHand > 0 ? `${zh ? '你' : 'You'} +${human.wonThisHand}` : (zh ? '你的筹码' : 'Your chips');
+    const humanLabel = zh ? '你的筹码' : 'Your chips';
     this.text(ctx, humanLabel, tx, y + 14, 12, human.wonThisHand > 0 ? theme.primary : theme.muted, 'left');
     this.text(ctx, String(human.chips), tx, y + 39, 24, theme.text, 'left', 600);
-    this.text(ctx, this.playerStatus(human, zh), tx, y + 58, 11, theme.primary, 'left');
+    const humanStatus = this.state === 'playing' ? this.playerStatus(human, zh)
+      : `${zh ? '净收益' : 'Net'} ${this.signed(human.wonThisHand - human.committed)}`;
+    this.text(ctx, humanStatus, tx, y + 58, 11, theme.primary, 'left');
+    if (this.isHumanTurn()) {
+      ctx.fillStyle = theme.primary;
+      const progress = this.reducedMotion.matches ? 1 : this.motion.turnProgress();
+      ctx.globalAlpha = 0.4 + progress * 0.6;
+      ctx.fillRect(x, y + h + 5, cw * 2 + 6, 2);
+      ctx.globalAlpha = 1;
+    }
     this.drawSeatMarkers(ctx, theme, 0, x - 14, y + 18);
     this.seatLayout[0] = { x: x + cw, y };
   }
@@ -1128,7 +1148,17 @@ export class TexasHoldGame extends BaseGame {
   }
 
   private status(zh: boolean): string {
-    if (this.state !== 'playing') return zh ? '本局结束' : 'Hand complete';
+    if (this.state !== 'playing') {
+      const actualPots = this.handPots.filter(pot => !pot.refund);
+      const winners = [...new Set(actualPots.flatMap(pot => pot.winners))];
+      if (actualPots.length > 1) return zh ? '多底池结算 · 点击详情查看' : 'Multiple pots · Details available';
+      if (winners.length > 1) return zh ? '平分底池 · 点击详情查看' : 'Split pot · Details available';
+      const winner = this.players[winners[0]];
+      const hand = winner && this.showdownHands.get(winner.seat);
+      return winner ? `${zh ? winner.nameZh : winner.name} ${zh ? '获胜' : 'wins'}${hand ? ` · ${zh ? hand.labelZh : hand.label}` : ''}`
+        : (zh ? '本局结束' : 'Hand complete');
+    }
+    if (this.pendingAllIn) return zh ? `确认投入剩余 ${this.players[0].chips} 筹码？` : `Commit your remaining ${this.players[0].chips} chips?`;
     if (this.isHumanTurn()) return zh ? '轮到你行动' : 'Your turn';
     if (this.currentPlayerIndex !== null) {
       const player = this.players[this.currentPlayerIndex];
@@ -1144,13 +1174,18 @@ export class TexasHoldGame extends BaseGame {
   private syncActions(l: PokerLayout, zh: boolean) {
     this.actions ??= new PokerActions(this.canvas, id => this.activateAction(id));
     this.actions.sync({ actions: this.getActions(), x: l.dock.x, y: l.dock.y, width: l.dock.w,
-      columns: this.state === 'playing' ? l.columns : 1, dark: this.isDarkTheme(),
-      hidden: this.presentationPaused, status: this.status(zh) });
+      columns: this.state === 'playing' ? l.columns : 2, dark: this.isDarkTheme(),
+      hidden: this.presentationPaused, status: this.status(zh),
+      details: this.detailsOpen && this.state !== 'playing' ? this.resultDetails(zh) : undefined });
   }
 
   private activateAction(id: PokerActionId) {
     if (this.presentationPaused) return;
-    if (id === 'next') {
+    if (id === 'cancel') {
+      this.pendingAllIn = null;
+    } else if (id === 'details') {
+      if (this.state !== 'playing') this.detailsOpen = !this.detailsOpen;
+    } else if (id === 'next') {
       if (this.state === 'betweenHands') this.startNewHand();
       else if (this.state === 'gameOver') this.init();
     } else if (this.getActions().some(action => action.id === id && action.enabled)) {
@@ -1161,11 +1196,21 @@ export class TexasHoldGame extends BaseGame {
 
   private getActions(): PokerAction[] {
     const zh = this.isZh();
-    if (this.state !== 'playing') return [{ id: 'next', label: this.state === 'gameOver' ? (zh ? '再玩一次' : 'Play again') : (zh ? '下一局' : 'Next hand'), enabled: true, primary: true }];
+    this.validateConfirmation();
+    if (this.state !== 'playing') return [
+      { id: 'details', label: this.detailsOpen ? (zh ? '收起详情' : 'Hide details') : (zh ? '结算详情' : 'Hand details'), enabled: true },
+      { id: 'next', label: this.state === 'gameOver' ? (zh ? '再玩一次' : 'Play again') : (zh ? '下一局' : 'Next hand'), enabled: true, primary: true },
+    ];
     const human = this.players[0];
     const toCall = Math.min(Math.max(0, this.currentBet - human.bet), human.chips);
     const canAct = this.isHumanTurn();
     const canRaise = this.getRaiseTarget(human) > this.currentBet;
+    if (this.pendingAllIn) return [
+      { id: 'cancel', label: zh ? '取消' : 'Cancel', enabled: true },
+      { id: 'call', label: toCall === 0 ? (zh ? '过牌' : 'Check') : `${zh ? '跟注' : 'Call'} ${toCall}`, enabled: false },
+      { id: 'raise', label: zh ? '加注' : 'Raise', enabled: false },
+      { id: 'all-in', label: zh ? `确认全下 ${human.chips}` : `Confirm ${human.chips}`, enabled: true, primary: true },
+    ];
     return [
       { id: 'fold', label: zh ? '弃牌' : 'Fold', enabled: canAct },
       { id: 'call', label: toCall === 0 ? (zh ? '过牌' : 'Check') : `${zh ? '跟注' : 'Call'} ${toCall}`, enabled: canAct, primary: true },
@@ -1181,6 +1226,83 @@ export class TexasHoldGame extends BaseGame {
       details: [`${zh ? '筹码' : 'Chips'} ${this.score}`, `${zh ? '完成局数' : 'Hands'} ${this.completedHands}/${TOTAL_HANDS}`],
       hint: zh ? '点击、空格或回车重新开始' : 'Click, Space or Enter to play again',
     });
+  }
+
+  private signed(amount: number) { return amount > 0 ? `+${amount}` : amount < 0 ? `−${Math.abs(amount)}` : '0'; }
+
+  private revealHole(player: Player) {
+    return player.isHuman && !player.folded || this.state !== 'playing' && !player.folded && this.showdownHands.has(player.seat);
+  }
+
+  private highlighted(card: PokerCard): boolean {
+    if (this.state === 'playing' || this.highlightedSeat === null) return false;
+    return this.showdownHands.get(this.highlightedSeat)?.bestFive?.some(best => best.rank === card.rank && best.suit === card.suit) ?? false;
+  }
+
+  private resultDetails(zh: boolean) {
+    const human = this.players[0];
+    const selected = this.highlightedSeat === null ? null : this.players[this.highlightedSeat];
+    const hand = selected && this.showdownHands.get(selected.seat);
+    const title = selected && hand ? `${zh ? selected.nameZh : selected.name} · ${zh ? hand.labelZh : hand.label}` : (zh ? '本手结算' : 'Hand settlement');
+    const rows = [zh
+      ? `你的投入 ${human.committed} · 收回 ${human.wonThisHand} · 净收益 ${this.signed(human.wonThisHand - human.committed)}`
+      : `You committed ${human.committed} · Returned ${human.wonThisHand} · Net ${this.signed(human.wonThisHand - human.committed)}`];
+    if (hand?.bestFive) rows.push(`${zh ? '高亮最佳五张' : 'Highlighted best five'}: ${hand.bestFive.map(card => `${this.rankLabel(card.rank)}${this.suitSymbol(card.suit as Suit)}`).join(' ')}`);
+    this.handPots.forEach((pot, i) => {
+      const label = pot.refund ? (zh ? '退回' : 'Return') : i === 0 ? (zh ? '主池' : 'Main pot') : (zh ? `边池 ${i}` : `Side pot ${i}`);
+      const names = pot.winners.map(index => `${zh ? this.players[index].nameZh : this.players[index].name} ${pot.payouts[index]}`).join(' / ');
+      rows.push(`${label} ${pot.amount} → ${names}. ${zh ? pot.explanation.zh : pot.explanation.en}`);
+    });
+    return { title, body: rows.join('\n') };
+  }
+
+  private drawChipFlights(ctx: CanvasRenderingContext2D, theme: ThemePalette, l: PokerLayout) {
+    if (this.reducedMotion.matches) return;
+    const pot = { x: l.board.x + l.board.w / 2, y: l.board.y - 8 };
+    for (const flight of this.motion.chips) {
+      const raw = this.motion.progress(flight.start, flight.duration);
+      if (raw <= 0 || raw >= 1) continue;
+      const seat = this.seatLayout[flight.seat];
+      const from = flight.kind === 'bet' ? seat : pot;
+      const to = flight.kind === 'bet' ? pot : seat;
+      const p = ease('outCubic', raw);
+      const x = from.x + (to.x - from.x) * p;
+      const y = from.y + (to.y - from.y) * p;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, raw * 8, (1 - raw) * 6);
+      for (let chip = 0; chip < 3; chip++) {
+        ctx.beginPath(); ctx.ellipse(x, y - chip * 3, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = theme.primary; ctx.fill(); ctx.strokeStyle = theme.felt; ctx.lineWidth = 1; ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  private drawAnimatedCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
+    card: Card, faceUp: boolean, theme: ThemePalette, dim: boolean, key: string, flip: boolean,
+    foldedSeat?: number, highlighted = false) {
+    const reduce = this.reducedMotion.matches;
+    let progress = reduce ? 1 : this.motion.card(key);
+    if (flip && key.startsWith('hole:') && faceUp && !reduce) progress = Math.min(progress, this.motion.revealProgress());
+    const fold = foldedSeat === undefined ? 0 : reduce ? 1 : this.motion.folded(foldedSeat);
+    ctx.save();
+    ctx.globalAlpha = progress < 1 ? Math.min(1, progress * 4) : 1;
+    if (!reduce) ctx.translate(0, flip ? 0 : (1 - ease('outCubic', progress)) * -8 + fold * 4);
+    if (flip && progress < 1) {
+      ctx.translate(x + w / 2, 0); ctx.scale(Math.max(0.03, Math.abs(1 - progress * 2)), 1); ctx.translate(-x - w / 2, 0);
+    }
+    this.drawCard(ctx, x, y, w, h, card, faceUp && (!flip || progress >= 0.5), theme, dim && foldedSeat === undefined);
+    if (foldedSeat !== undefined) {
+      // Face down from the first folded frame: even the transition cannot leak ranks.
+      ctx.globalAlpha *= 0.55 * fold;
+      this.panel(ctx, x, y, w, h, 5, theme.felt);
+    }
+    if (highlighted && (reduce || this.motion.highlightReady()) && progress >= 1) {
+      this.roundRect(ctx, x + 1, y + 1, w - 2, h - 2, 4);
+      ctx.strokeStyle = theme.primary; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = theme.primary; ctx.fillRect(x + 5, y + h - 4, Math.max(4, w - 10), 2);
+    }
+    ctx.restore();
   }
 
   private drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, card: Card, faceUp: boolean, theme: ThemePalette, dim: boolean) {

@@ -17,12 +17,14 @@
     ],
     "touch": [
       { "icon": "tap", "action": "Tap Fold / Call / Raise / All-in buttons", "actionZh": "点击弃牌 / 跟注 / 加注 / 全下按钮" },
-      { "icon": "tap", "action": "Tap Next hand after the showdown", "actionZh": "摊牌后点击下一局" }
+      { "icon": "tap", "action": "All-in requires a separate confirmation", "actionZh": "全下需要再次确认，可点击取消" },
+      { "icon": "tap", "action": "Inspect Hand details or tap Next hand after showdown", "actionZh": "摊牌后查看结算详情，或点击下一局" }
     ],
     "sections": [{
       "id": "more", "title": "More actions", "titleZh": "更多操作",
       "keyboard": [
-        { "keys": ["A"], "action": "All-in", "actionZh": "全下" },
+        { "keys": ["A", "Enter"], "action": "Prepare all-in, then Enter to confirm", "actionZh": "准备全下，再按回车确认" },
+        { "keys": ["Escape"], "action": "Cancel all-in / close hand details", "actionZh": "取消全下 / 收起结算详情" },
         { "keys": ["Space", "Enter"], "action": "Next hand / restart", "actionZh": "进入下一局 / 重开" },
         { "keys": ["Tab"], "action": "Focus an action; Enter to confirm", "actionZh": "选择操作，回车确认" }
       ]
