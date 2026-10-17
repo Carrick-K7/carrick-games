@@ -11,12 +11,13 @@ async function ready(page: Page) {
   return (await info(page)).chips[0];
 }
 
-test('native double click does not confirm and opening the shell menu cancels', async ({ page }) => {
+for (const overlay of ['help', 'menu']) test(`native double click does not confirm and opening shell ${overlay} cancels`, async ({ page }) => {
   const chips = await ready(page);
   await allIn(page).dblclick();
   await expect.poll(async () => (await info(page)).allInConfirmation).toBe(true);
   expect((await info(page)).chips[0]).toBe(chips);
-  await page.keyboard.press('?');
+  if (overlay === 'help') await page.keyboard.press('?');
+  else await page.locator('#overflowBtn').click();
   await expect(page.locator('[data-texashold-actions]')).toBeHidden();
   expect((await info(page)).allInConfirmation).toBe(false);
   expect((await info(page)).chips[0]).toBe(chips);
