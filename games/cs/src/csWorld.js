@@ -55,10 +55,10 @@ export class SnowWorld {
       const o=lumps[7].o+n*20,first=i32(o+4),num=u16(o+8),texinfo=ti[u16(o+10)];if(!texinfo)continue;const tx=textures[texinfo.texture];if(!tx||/sky|clip|origin|aaatrigger|null|nodraw/.test(tx.name))continue;
       let b=buckets.get(texinfo.texture);if(!b){b={p:[],uv:[]};buckets.set(texinfo.texture,b);}const face=[];
       for(let j=0;j<num;j++){const e=surface[first+j],vertex=verts[edges[Math.abs(e)][e<0?1:0]];if(vertex)face.push(vertex);}
-      const coord=v=>[(v[0]*texinfo.s[0]+v[1]*texinfo.s[1]+v[2]*texinfo.s[2]+texinfo.s[3])/tx.w,(v[0]*texinfo.t[0]+v[1]*texinfo.t[1]+v[2]*texinfo.t[2]+texinfo.t[3])/tx.h];
+      const coord=v=>[texinfo.s,texinfo.t].map(axis=>(v[0]*axis[0]+v[1]*axis[1]+v[2]*axis[2]+axis[3])*SCALE/Math.max(.001,Math.hypot(axis[0],axis[1],axis[2])));
       for(let j=1;j<face.length-1;j++){const tri=[face[0],face[j],face[j+1]],world=tri.map(v=>this.convert(v));for(let k=0;k<3;k++){b.p.push(...world[k].toArray());b.uv.push(...coord(tri[k]));}if(Math.abs(world[0].y-world[1].y)<.02&&Math.abs(world[0].y-world[2].y)<.02)this.radarTriangles.push(world.map(v=>v.toArray()));}
     }
-    for(const [key,b] of buckets){const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(b.p,3));geo.setAttribute('uv',new T.Float32BufferAttribute(b.uv,2));geo.computeVertexNormals();const mesh=new T.Mesh(geo,materials[key]);mesh.castShadow=true;mesh.receiveShadow=true;this.mapGroup.add(mesh);this.solids.push(mesh);}
+    for(const [key,b] of buckets){const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(b.p,3));geo.setAttribute('uv',new T.Float32BufferAttribute(b.uv,2));geo.computeVertexNormals();const mesh=new T.Mesh(geo,materials[key]);mesh.userData.sourceTextureName=textures[key].name;mesh.userData.uvMeters=true;mesh.castShadow=true;mesh.receiveShadow=true;this.mapGroup.add(mesh);this.solids.push(mesh);}
     this.mapGroup.updateMatrixWorld(true);const bbox=new T.Box3().setFromObject(this.mapGroup);this.bounds={minX:bbox.min.x,maxX:bbox.max.x,minZ:bbox.min.z,maxZ:bbox.max.z,minY:bbox.min.y};this.center=new T.Vector3((bbox.min.x+bbox.max.x)/2,1,(bbox.min.z+bbox.max.z)/2);this.size=Math.max(bbox.max.x-bbox.min.x,bbox.max.z-bbox.min.z);
     for(const e of this.entities){
       if(!e.origin)continue;
@@ -197,8 +197,9 @@ export class SnowWorld {
     const floor=new T.Mesh(new T.PlaneGeometry(this.size*7,this.size*7),new T.MeshStandardMaterial({color:0xc4d9e5,roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=this.bounds.minY-.1;floor.receiveShadow=true;this.environment.add(floor);
   }
   dispose(){
+    if(this.disposed)return;this.disposed=true;
     const geometries=new Set(),materials=new Set(this.materials),textures=new Set();for(const group of [this.mapGroup,this.environment]){group.traverse(o=>{if(o.geometry)geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[])materials.add(m);});group.removeFromParent();}
-    for(const g of geometries)g.dispose();for(const m of materials){if(m.map)textures.add(m.map);m.dispose();}for(const t of textures)t.dispose();this.solids=[];this.nodes=[];this.grid.clear();this.levels.clear();this.externalTextures.clear();
+    for(const g of geometries)g.dispose();for(const m of materials){if(m.userData.worldMaterialPalette)continue;for(const value of Object.values(m))if(value?.isTexture)textures.add(value);m.dispose();}for(const t of textures)t.dispose();this.solids=[];this.nodes=[];this.grid.clear();this.levels.clear();this.externalTextures.clear();
   }
   update(dt,time){if(!this.snow)return;const a=this.snow.geometry.attributes.position;for(let i=0;i<a.count;i++){a.array[i*3]+=(.15+Math.sin(time+i)*.1)*dt;a.array[i*3+1]-=(.4+(i%9)*.08)*dt;if(a.array[i*3+1]<0)a.array[i*3+1]=24;}a.needsUpdate=true;}
 }

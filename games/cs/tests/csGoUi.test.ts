@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CsHud } from '../src/csHud';
+import { MAPS } from '../src/csMaps.js';
 import { UI, uiButton, uiHudPlate, uiText } from '../src/csHudUi';
 
 function recorder() {
@@ -87,7 +88,7 @@ describe('CS-owned map preview resources', () => {
     expect(ops).toContainEqual({ type: 'fillRect', x: 0, y: 0, w: 200, h: 84, color: UI.raised });
   });
   it('ships real WebP preview files, not external image URLs or illustrated fixtures', () => {
-    for (const name of ['fy_snow', 'de_dust2']) {
+    for (const name of Object.keys(MAPS)) {
       const bytes = readFileSync(join(process.cwd(), 'games/cs/public/assets/ui/maps', `${name}.webp`));
       expect(bytes.subarray(0, 4).toString()).toBe('RIFF'); expect(bytes.subarray(8, 12).toString()).toBe('WEBP');
       expect(bytes.length).toBeGreaterThan(10000); expect(bytes.length).toBeLessThan(100000);

@@ -50,10 +50,6 @@ export interface CsHudView {
 }
 const C = { text: UI.text, dim: UI.dim, faint: UI.muted, amber: UI.accent,
   border: UI.border, blue: UI.ct, red: '#ef8175', green: UI.cash, gold: UI.t };
-const MAP_EN: Record<string, { name: string; intro: string; hint: string }> = {
-  fy_snow: { name: 'Snow Arena', intro: 'A compact snow arena with weapons to pick up on the ground.', hint: 'Flank along the side ramps to reach the rear AWP balcony.' },
-  de_dust2: { name: 'Dust II', intro: 'Fight through long A, mid doors and B tunnels. Two bomb sites.', hint: 'Buy at your spawn, then attack or defend sites A and B.' },
-};
 const HUD_FIREARMS = new Set(['ak47', 'm4a1', 'awp', 'mp5', 'tmp', 'p90', 'mac10', 'sg552', 'aug', 'scout', 'g3sg1', 'm3', 'xm1014', 'm249', 'deagle', 'usp', 'glock']);
 const HUD_KNIVES = new Set(['knife-classic', 'knife-karambit', 'knife-butterfly']);
 type Choice = { id: string; label: string; selected: boolean; action: () => void; disabled?: boolean; tone?: UiTone };
@@ -247,15 +243,18 @@ export class CsHud {
   // One menu for every device. The action footer does not depend on how many
   // mode options exist, so Team DM cannot push Start below a short window.
   private drawMenu(ctx: Ctx, L: HudLayout) {
-    const e = this.engine, map = (MAPS as any)[e.selectedMap], en = MAP_EN[e.selectedMap];
+    const e = this.engine, map = (MAPS as any)[e.selectedMap];
+    const en = { name: map.nameEn, intro: map.introEn, hint: map.hintEn };
+    const cards = Object.values(MAPS).map(m => ({ id: m.id, name: this.L(m.name, m.nameEn) }));
     const title = L.availW < 400 ? this.L('CS / 对战', 'CS / Play') : this.L('CS / 对战准备', 'CS / Play');
     const close = { id: 'menu-settings', label: this.L('设置', 'Settings'), icon: '⚙', run: () => e.openSettings() };
     const r = this.frame(ctx, L, 980, 638, title, close), sections = modalSections(r);
     const topExtra = (sections.scrollAll ? 56 : 0) + (e.hud.menuError ? 32 : 0);
     const body = { ...sections.body, y: sections.body.y + topExtra, h: Math.max(1, sections.body.h - topExtra) };
     const wide = body.w >= 720, gap = 32, colW = wide ? (body.w - gap) / 2 : body.w;
-    const mapCardH = wide ? Math.min(280, Math.max(96, body.h - 180)) : 84;
-    const mapH = wide ? mapCardH + 44 : 228;
+    const mapRows = wide ? Math.ceil(cards.length / 2) : cards.length;
+    const mapCardH = wide ? Math.min(184, Math.max(112, (body.h - 182) / mapRows - 12)) : 84;
+    const mapH = 26 + mapRows * (mapCardH + 12) + (wide ? 6 : 10);
     const configH = 336 + (e.selectedMode === 'tdm' ? 84 : 0);
     const contentH = wide ? Math.max(mapH + 124, configH) + 12 : mapH + configH + 28;
     this.menuScroll.setMax(contentH + topExtra + (sections.scrollAll ? 60 : 0) - sections.body.h);
@@ -263,15 +262,11 @@ export class CsHud {
     if (sections.scrollAll) this.inlineHeader(ctx, sections.body, title, close);
     if (e.hud.menuError) this.text(ctx, e.hud.menuError, body.x, body.y - 18, 12, C.red, 'left', false, body.w);
     this.text(ctx, this.L('选择地图', 'Map'), body.x, body.y + 8, 13, C.dim);
-    const cards = [
-      { id: 'fy_snow', name: this.L('雪地竞技场', 'Snow Arena'), detail: this.L('雪地近距离交战 · 地面拾枪', 'Close-range rounds · ground pickups') },
-      { id: 'de_dust2', name: this.L('炙热沙城Ⅱ', 'Dust II'), detail: this.L('经典沙城 · A / B 双包点', 'Classic Dust II · sites A and B') },
-    ];
     cards.forEach((card, i) => {
       const cw = wide ? (colW - 12) / 2 : colW;
       const ch = mapCardH;
-      const x = wide ? body.x + i * (cw + 12) : body.x;
-      const y = body.y + 26 + (wide ? 0 : i * 96);
+      const x = wide ? body.x + (i % 2) * (cw + 12) : body.x;
+      const y = body.y + 26 + (wide ? Math.floor(i / 2) * (ch + 12) : i * 96);
       const selected = e.selectedMap === card.id, hover = this.hovered(x, y, cw, ch);
       const thumbW = Math.min(84, Math.round(cw * .28));
       this.drawMapPreview(ctx, card.id, x, y, wide ? cw : thumbW, ch);
@@ -520,7 +515,7 @@ export class CsHud {
     this.text(ctx, title, r.x + 20, r.y + 26, layout.headerH < 60 ? 18 : 21, C.text, 'left', false, r.w - 92);
     if (layout.headerH >= 60) {
       const map = (MAPS as any)[e.selectedMap];
-      const info = [map ? this.L(map.name, MAP_EN[e.selectedMap]?.name || map.name) : '', e.hud.roundLabel, e.hud.timerText].filter(Boolean).join(' · ');
+      const info = [map ? this.L(map.name, map.nameEn || map.name) : '', e.hud.roundLabel, e.hud.timerText].filter(Boolean).join(' · ');
       this.text(ctx, info, r.x + 20, r.y + 54, 12, C.dim, 'left', false, r.w - 40);
     }
     const { body, rowHeight, teamHeaderHeight, maxScroll, footer } = layout;

@@ -122,7 +122,12 @@ describe('v28 engine settings and presentation', () => {
     expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(Math.sqrt(230400 / (480 * 800)));
     expect([e.width, e.height, e.camera.aspect]).toEqual([480, 800, .6]);
     e.softwareRendering = false; e.applyQuality();
+    expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(Math.sqrt(1200000 / (480 * 800)));
+    expect(e.renderer.shadowMap.enabled).toBe(false);
+    e.resize(1280, 720, 2);
     expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(2); expect(e.renderer.shadowMap.enabled).toBe(true);
+    e.resize(3840, 2160, 2);
+    expect(e.renderer.setPixelRatio).toHaveBeenLastCalledWith(Math.sqrt(4500000 / (3840 * 2160)));
   });
 
   it('refreshes DPR-only changes without moving cameras or resetting the match', async () => {

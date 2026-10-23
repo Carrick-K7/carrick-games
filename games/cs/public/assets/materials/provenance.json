@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "legalCodeUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "inspectedDate": "2026-10-23",
+  "pillowVersion": "12.3.0",
+  "processing": "1k photographic PBR JPG -> RGB Lanczos 512x512 -> WebP method=6; albedo quality=86, normal=90, roughness=86. No synthesis, baking, or Valve assets. OpenGL normals; roughness grayscale copied into RGB, sampled from G.",
+  "families": {
+    "plaster": {
+      "sourceId": "plastered_wall",
+      "page": "https://polyhaven.com/a/plastered_wall",
+      "apiUrl": "https://api.polyhaven.com/files/plastered_wall",
+      "infoUrl": "https://api.polyhaven.com/info/plastered_wall",
+      "authors": {
+        "Amal Kumar": "All"
+      },
+      "sourceDimensionsMm": [
+        1999.9996423721313,
+        1999.9996423721313
+      ],
+      "repeatMeters": 2,
+      "maps": {
+        "map": {
+          "path": "assets/materials/plaster-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 22238,
+          "sha256": "12e9b67132a8b35e891f3b7685977572bacd8fbb77806378c2e71fe219b3bd78",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_diff_1k.jpg",
+          "sourceBytes": 617080,
+          "sourceMd5": "9f64cd14ded4938e64ab6c6bb3de3c19",
+          "sourceSha256": "73312ebb6eabc8e0a55addd8a82a8924bcd1e717b9488a887cc77f14b6ea554e"
+        },
+        "normalMap": {
+          "path": "assets/materials/plaster-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 77644,
+          "sha256": "e370032fded6970f80802bd1183372340550358502a5742e06060fa1d81b2918",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_nor_gl_1k.jpg",
+          "sourceBytes": 1072153,
+          "sourceMd5": "e3e00c5d9a589621bf3cc541d9fb7d81",
+          "sourceSha256": "504e1f7baf4b68714c64b6670e7954bebe99efe31c49f7ce5a2089e4b76023b5"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/plaster-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 2738,
+          "sha256": "c1e580ed515fe1c87b33fa9ad4fe79a6150efb3332c5ebf149c8f0b7c0eddb08",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_rough_1k.jpg",
+          "sourceBytes": 387134,
+          "sourceMd5": "5c5f8e9c43bf183b45274575a7eac318",
+          "sourceSha256": "844aaa32fda1130262ad8a50084aec7bd5ebce272c8af5e6ba076734beedcd66"
+        }
+      }
+    },
+    "sandstone": {
+      "sourceId": "sandstone_blocks_05",
+      "page": "https://polyhaven.com/a/sandstone_blocks_05",
+      "apiUrl": "https://api.polyhaven.com/files/sandstone_blocks_05",
+      "infoUrl": "https://api.polyhaven.com/info/sandstone_blocks_05",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "sourceDimensionsMm": [
+        3000,
+        3000
+      ],
+      "repeatMeters": 3,
+      "maps": {
+        "map": {
+          "path": "assets/materials/sandstone-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 84082,
+          "sha256": "42fe0d45a0b80da9873bcec0b1730b726fa018f1366a569994165d0cc478b6ad",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sandstone_blocks_05/sandstone_blocks_05_diff_1k.jpg",
+          "sourceBytes": 635678,
+          "sourceMd5": "2c3651fdf1071d7b60d82f0e86953968",
+          "sourceSha256": "d17c322d9e793ab9fc198948a34f2632595560471ff8714f2b0e052bc75c9ee3"
+        },
+        "normalMap": {
+          "path": "assets/materials/sandstone-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 129512,
+          "sha256": "acd3c5ee341d23936d8b4f7706726b54c284324a94d47ab9b021aa991cd3e69d",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sandstone_blocks_05/sandstone_blocks_05_nor_gl_1k.jpg",
+          "sourceBytes": 1224895,
+          "sourceMd5": "cb9d5f4e66155a34236d6e2420ce276b",
+          "sourceSha256": "ab42361855310d8de9b11470c6b21e512c9926decd5548dc9e9d72bd6cc06f3e"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/sandstone-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 19038,
+          "sha256": "4f70729251564ad17fb0cfca282204d2281432ccbe84e38141f07dd96a88ade4",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sandstone_blocks_05/sandstone_blocks_05_rough_1k.jpg",
+          "sourceBytes": 210439,
+          "sourceMd5": "a03b0c00935fb50ebe141a4356abc03b",
+          "sourceSha256": "4f4d27fc3186e18db5423ddbd41902cd5c5bd5642d4cdea89610c1b5d1f9821d"
+        }
+      }
+    },
+    "brick": {
+      "sourceId": "brick_wall_001",
+      "page": "https://polyhaven.com/a/brick_wall_001",
+      "apiUrl": "https://api.polyhaven.com/files/brick_wall_001",
+      "infoUrl": "https://api.polyhaven.com/info/brick_wall_001",
+      "authors": {
+        "Rob Tuytel": "Processing",
+        "Dimitrios Savva": "Photography"
+      },
+      "sourceDimensionsMm": [
+        3000,
+        3000
+      ],
+      "repeatMeters": 3,
+      "maps": {
+        "map": {
+          "path": "assets/materials/brick-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 60496,
+          "sha256": "b2ada8bf98b9b9928ba3efccc1a5c5f26dfac0231ccce48f8ee2e60cab500762",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_001/brick_wall_001_diffuse_1k.jpg",
+          "sourceBytes": 574381,
+          "sourceMd5": "955d2d4500eb549be0f2873305782798",
+          "sourceSha256": "6a1233ec0186703de830354d89f122991e61e67fb67e0846c7eaf6c5aefea902"
+        },
+        "normalMap": {
+          "path": "assets/materials/brick-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 92518,
+          "sha256": "36163de105cf851671be33a7500781a5a152c76f5352946c55555390a94d57e1",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_001/brick_wall_001_nor_gl_1k.jpg",
+          "sourceBytes": 295279,
+          "sourceMd5": "be151875ed0897fc716aeef6daac8bd5",
+          "sourceSha256": "8afbe3919308b168a6b7235fe7b930f670cfffa1a34de39ee790d55c9d7bda09"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/brick-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 19112,
+          "sha256": "39f771b6d4736651c70365ce49d0a5f121d91978dac07135b604ffdccfe8e989",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_001/brick_wall_001_rough_1k.jpg",
+          "sourceBytes": 211093,
+          "sourceMd5": "618ceca60a4321aecc6d61eebe53d551",
+          "sourceSha256": "a23342b02e6c5af106aaece16130aa9153a801cb1a84d5f3e0d06ce248677f38"
+        }
+      }
+    },
+    "cobble": {
+      "sourceId": "cobblestone_floor_02",
+      "page": "https://polyhaven.com/a/cobblestone_floor_02",
+      "apiUrl": "https://api.polyhaven.com/files/cobblestone_floor_02",
+      "infoUrl": "https://api.polyhaven.com/info/cobblestone_floor_02",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "sourceDimensionsMm": [
+        2000,
+        2000
+      ],
+      "repeatMeters": 2,
+      "maps": {
+        "map": {
+          "path": "assets/materials/cobble-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 45750,
+          "sha256": "ef8556312bf9f7ca230fe914ab8e350be0f50729268d07066eed85555c9860b2",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/cobblestone_floor_02/cobblestone_floor_02_diff_1k.jpg",
+          "sourceBytes": 221882,
+          "sourceMd5": "59e545f5aefa797ae8bf69fcee7c97c7",
+          "sourceSha256": "b1be7866d908135276ae6bdb566cf81789caf3092d12ad1c1915131fc747fd53"
+        },
+        "normalMap": {
+          "path": "assets/materials/cobble-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 66634,
+          "sha256": "e4b167de6aa1610a3ce10632598aad40c6f717c89aa09c1a70773448d12b300d",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/cobblestone_floor_02/cobblestone_floor_02_nor_gl_1k.jpg",
+          "sourceBytes": 208641,
+          "sourceMd5": "f77017e6de48e5e9d98a7bc08284126d",
+          "sourceSha256": "838f9f169956fceac4996967ff14dfcbc47b658bbedf1e60c0cd4536977aa064"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/cobble-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 29264,
+          "sha256": "aab49a3f645597ecb84318a57e3e98a8e418f97a759e7d18daaef8fe90546912",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/cobblestone_floor_02/cobblestone_floor_02_rough_1k.jpg",
+          "sourceBytes": 163268,
+          "sourceMd5": "4acdc1ec3e095c2c45831fa640ba7e2e",
+          "sourceSha256": "39d802084263449216d7467c7d8a2134939a165eb8581f033048bfb1344ba2a1"
+        }
+      }
+    },
+    "concrete": {
+      "sourceId": "concrete_floor_02",
+      "page": "https://polyhaven.com/a/concrete_floor_02",
+      "apiUrl": "https://api.polyhaven.com/files/concrete_floor_02",
+      "infoUrl": "https://api.polyhaven.com/info/concrete_floor_02",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "sourceDimensionsMm": [
+        2000,
+        2000
+      ],
+      "repeatMeters": 2,
+      "maps": {
+        "map": {
+          "path": "assets/materials/concrete-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 97584,
+          "sha256": "82e7445360f8ee120ec0fa4589caab6842fd289189e2d437cd2129307ad876ab",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_diff_1k.jpg",
+          "sourceBytes": 776097,
+          "sourceMd5": "1cfee53d2f82fa59726ab7ae6a2e8c09",
+          "sourceSha256": "6db84a6d87dc50508b9d134d6fbd2b7e876b8081a5f43a118a249ca18de73af5"
+        },
+        "normalMap": {
+          "path": "assets/materials/concrete-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 36476,
+          "sha256": "61c0944d20d8175b6b10261775431285be949bf0a3f25570b0b5eb35d294dc7c",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_nor_gl_1k.jpg",
+          "sourceBytes": 192757,
+          "sourceMd5": "c2065fd81f571f4e39163ea5661128fb",
+          "sourceSha256": "fcda391b57a816d646ae15544688be53790478da5cd48dbe514b3c6901415e61"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/concrete-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 25792,
+          "sha256": "55e8a75fe99422ce30b1fb019841c158e274232f1e7a21dbbddffb8718dec0a3",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_rough_1k.jpg",
+          "sourceBytes": 318550,
+          "sourceMd5": "653d60d0db1872a49138455cf31c8326",
+          "sourceSha256": "c7f026a611b7859903c61ec7fd4574944157223e9e7796413dd6e2a66eaeac7a"
+        }
+      }
+    },
+    "wood": {
+      "sourceId": "wood_planks",
+      "page": "https://polyhaven.com/a/wood_planks",
+      "apiUrl": "https://api.polyhaven.com/files/wood_planks",
+      "infoUrl": "https://api.polyhaven.com/info/wood_planks",
+      "authors": {
+        "Amal Kumar": "All"
+      },
+      "sourceDimensionsMm": [
+        1499.999761581421,
+        1499.999761581421
+      ],
+      "repeatMeters": 1.5,
+      "maps": {
+        "map": {
+          "path": "assets/materials/wood-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 23258,
+          "sha256": "1abf558ae7e130b22a973bd53187685697d9fbf25a33180c2166c8900b6e46e9",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_planks/wood_planks_diff_1k.jpg",
+          "sourceBytes": 609525,
+          "sourceMd5": "922505c35c2d0dc6a44da7ac77757134",
+          "sourceSha256": "3b0669f683e4bf10f5a55a381cfa9669a7b8dfd921901829daa3b35acc2bbdec"
+        },
+        "normalMap": {
+          "path": "assets/materials/wood-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 20714,
+          "sha256": "a5f0a18728ac4bd812d7e9a09a536e0eac5f558f1e701bd8422afd8a74887ddc",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_planks/wood_planks_nor_gl_1k.jpg",
+          "sourceBytes": 652441,
+          "sourceMd5": "98d2313130880f8ed7b87e843f6ba149",
+          "sourceSha256": "d02abf113e17a8abe97e1be3e9d6d88add242e8c2291e2200d37aa8c68909f25"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/wood-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 4462,
+          "sha256": "7132c7865710f11efdfde56085bb824d7365282add0f0b19f90b6fc6739d7ec5",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_planks/wood_planks_rough_1k.jpg",
+          "sourceBytes": 299757,
+          "sourceMd5": "69c9313315808cc9d858a648c2335fec",
+          "sourceSha256": "1b7f115bfa25619b0a2db554eb1ab88a6fc5ef0b74ba4890611eae04d00b9829"
+        }
+      }
+    },
+    "metal": {
+      "sourceId": "rusty_painted_metal",
+      "page": "https://polyhaven.com/a/rusty_painted_metal",
+      "apiUrl": "https://api.polyhaven.com/files/rusty_painted_metal",
+      "infoUrl": "https://api.polyhaven.com/info/rusty_painted_metal",
+      "authors": {
+        "Amal Kumar": "All"
+      },
+      "sourceDimensionsMm": [
+        2200.000047683716,
+        2200.000047683716
+      ],
+      "repeatMeters": 2.2,
+      "maps": {
+        "map": {
+          "path": "assets/materials/metal-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 15120,
+          "sha256": "e0d9ac019e9cf498767632748f62b866abe97321c7e5c713b9c01bc358fdc4a4",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rusty_painted_metal/rusty_painted_metal_diff_1k.jpg",
+          "sourceBytes": 471866,
+          "sourceMd5": "3846f5567b6e7985b275a6b3867a648f",
+          "sourceSha256": "b086937b45c3628116a838363364a29bd3c5d2542cff906ec1d92d681ee80e15"
+        },
+        "normalMap": {
+          "path": "assets/materials/metal-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 7304,
+          "sha256": "83ad3f304c29516d8750719d5383d84ad6a230672e2fdd50582381c163b5984f",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rusty_painted_metal/rusty_painted_metal_nor_gl_1k.jpg",
+          "sourceBytes": 484158,
+          "sourceMd5": "b5a2c2b08219304dcd4e0b00837f3e2d",
+          "sourceSha256": "f3372e2f60517df2d0e02c1472eb24071d95182d771c30b7ecd8e1b5142768bb"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/metal-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 6978,
+          "sha256": "91c6388b283cb1fc45ee65218ff2de3bcf845b4bdc8e7d6640660a210b804c4b",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rusty_painted_metal/rusty_painted_metal_rough_1k.jpg",
+          "sourceBytes": 318766,
+          "sourceMd5": "4d1a17deece24665d877f818b59b7d38",
+          "sourceSha256": "2d1c355c793c5886ef9dcecfc06da354e30218a84a9fe28de37741d2f2ed5aaa"
+        }
+      }
+    },
+    "roof": {
+      "sourceId": "clay_roof_tiles",
+      "page": "https://polyhaven.com/a/clay_roof_tiles",
+      "apiUrl": "https://api.polyhaven.com/files/clay_roof_tiles",
+      "infoUrl": "https://api.polyhaven.com/info/clay_roof_tiles",
+      "authors": {
+        "Amal Kumar": "All"
+      },
+      "sourceDimensionsMm": [
+        4000,
+        4000
+      ],
+      "repeatMeters": 4,
+      "maps": {
+        "map": {
+          "path": "assets/materials/roof-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 65166,
+          "sha256": "847edee27c36a897acf7ffa0154bbbffb7dfe91a2b647e88dafaffea158d647f",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/clay_roof_tiles/clay_roof_tiles_diff_1k.jpg",
+          "sourceBytes": 878367,
+          "sourceMd5": "d862ac9932b09b0918b5971ddb77099c",
+          "sourceSha256": "aac0f4e742a2cce21afb5dfb523b47c720c6a8e2782a312b823608fe3f80eae6"
+        },
+        "normalMap": {
+          "path": "assets/materials/roof-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 102358,
+          "sha256": "feafe991b5a0c1fbbaac3a2f583b46b5dd61fe0c96635e1cadde6face340829a",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/clay_roof_tiles/clay_roof_tiles_nor_gl_1k.jpg",
+          "sourceBytes": 1101177,
+          "sourceMd5": "d861a708c94c824befc8aac668052776",
+          "sourceSha256": "e6b364661f6c3045bf5268f684047968fc6550e5fa9b22b4b1266df47b495faa"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/roof-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 8924,
+          "sha256": "a65e02a6316102f7465bfd6680431363b6c35d696cf9da06a12cbf3ab82c75a0",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/clay_roof_tiles/clay_roof_tiles_rough_1k.jpg",
+          "sourceBytes": 306665,
+          "sourceMd5": "a5881067d2ba78e439f4782b1f6045bd",
+          "sourceSha256": "9dbddfda928ea582e520d5e6fe7fadcfb886a169df9aa8ecaefa689363679b58"
+        }
+      }
+    },
+    "snow": {
+      "sourceId": "snow_02",
+      "page": "https://polyhaven.com/a/snow_02",
+      "apiUrl": "https://api.polyhaven.com/files/snow_02",
+      "infoUrl": "https://api.polyhaven.com/info/snow_02",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "sourceDimensionsMm": [
+        2000,
+        2000
+      ],
+      "repeatMeters": 2,
+      "maps": {
+        "map": {
+          "path": "assets/materials/snow-albedo.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 21084,
+          "sha256": "d5c64edfc910f4eee58a499b1bacec9ed04cf9988c72b3bb2b5deebbd15835c4",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_diff_1k.jpg",
+          "sourceBytes": 325497,
+          "sourceMd5": "fc54766c6b36ff298699115a619d440b",
+          "sourceSha256": "523a4e69c90b96d787dd69b897f29a2b3761a017024405c60aa630d1e8e9009a"
+        },
+        "normalMap": {
+          "path": "assets/materials/snow-normal.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 100378,
+          "sha256": "a9536c92b7e5622c1d07c1b7394b484d9c6ec0101c6bcafcb42f726689a52ad2",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_nor_gl_1k.jpg",
+          "sourceBytes": 1081858,
+          "sourceMd5": "f16b5701f9ad521cdd6af10c1d6d2b48",
+          "sourceSha256": "9495ec680616b8340e2cbecbd151bff84c690cfad4209e90cc98d2d0ba81f810"
+        },
+        "roughnessMap": {
+          "path": "assets/materials/snow-roughness.webp",
+          "width": 512,
+          "height": 512,
+          "encodedBytes": 4030,
+          "sha256": "4335a93c0c5592fe36339efd739975b9472ad93805a4639ad3f43093507fd7ee",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/snow_02/snow_02_rough_1k.jpg",
+          "sourceBytes": 146089,
+          "sourceMd5": "1dbae0269e53dbf80d4fd1c4335f25a2",
+          "sourceSha256": "b6dea8039ac2a5beaed6fd41834fb55540cc76b492edd1d48ba2da2f30f1cb75"
+        }
+      }
+    }
+  }
+}

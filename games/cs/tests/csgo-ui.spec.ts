@@ -24,9 +24,8 @@ test.describe('CS tactical interface presentation', () => {
         expect(response.status()).toBe(200); assets.push(new URL(response.url()).pathname);
       }
     });
-    const snow = page.waitForResponse(r => r.url().endsWith('/assets/ui/maps/fy_snow.webp'));
-    const dust = page.waitForResponse(r => r.url().endsWith('/assets/ui/maps/de_dust2.webp'));
-    await ready(page); await Promise.all([snow, dust]);
+    const previews = ['fy_snow', 'de_dust2', 'de_inferno', 'de_mirage'].map(id => page.waitForResponse(r => r.url().endsWith(`/assets/ui/maps/${id}.webp`)));
+    await ready(page); await Promise.all(previews);
     const base = (await page.locator('#gameCanvas').getAttribute('data-game-asset-base'))!;
     const before = (await uiRegion(page, 'menu-mode-tdm'))!;
     await page.mouse.move(0, 0);
@@ -35,6 +34,11 @@ test.describe('CS tactical interface presentation', () => {
     await expect.poll(() => colorAt(page, before.x + 8, before.y + 8)).toEqual([52, 70, 82]);
     expect(await uiRegion(page, 'menu-mode-tdm')).toEqual(before);
     await page.screenshot({ path: testInfo.outputPath('tactical-map-selection.png') });
+    for (const id of ['de_inferno', 'de_mirage']) {
+      await activateUi(page, `menu-map-${id}`);
+      await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().map)).toBe(id);
+      await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().ready)).toBe(true);
+    }
     await activateUi(page, 'menu-start');
     await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().playerAlive)).toBe(true);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

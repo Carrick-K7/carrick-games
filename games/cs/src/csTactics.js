@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {isTacticalWorld} from './csMaps.js';
 
 const asVector=n=>new T.Vector3(n.x,n.y,n.z);
 function axes(world,team){const average=t=>world.spawns[t].reduce((p,s)=>p.add(s.pos),new T.Vector3()).multiplyScalar(1/world.spawns[t].length),home=average(team),away=average(team==='ct'?'t':'ct'),forward=away.clone().sub(home).setY(0).normalize();return{home,forward,right:new T.Vector3(-forward.z,0,forward.x)};}
@@ -6,7 +7,7 @@ function axes(world,team){const average=t=>world.spawns[t].reduce((p,s)=>p.add(s
 // Routes start at walkable flank waypoints and cross into the other half before
 // switching to pursuit. They do not repeatedly replan the same shortest middle path.
 export function assignRoute(world,actor,index,rotation=0,mode='defusal'){
-  if(world.theme==='desert'){assignDustRoute(world,actor,index,rotation,null,null,Math.random,mode);return;}
+  if(isTacticalWorld(world)){assignDustRoute(world,actor,index,rotation,null,null,Math.random,mode);return;}
   const {forward,right}=axes(world,actor.team),lane=[-1,1,0,-1,1][(index+rotation)%5],width=world.size*.275;
   actor.lane=lane;actor.route=[];actor.routeIndex=0;actor.path=[];actor.pathTime=0;
   let from=actor.pos;
@@ -50,17 +51,33 @@ export function chooseRespawn(world,actor,actors,random=Math.random,isCrouching=
 }
 
 const DUST_ROUTES={long:[[640,64,-64],[1280,640,-64],[1440,1760,-16]],short:[[-320,800,-64],[256,1376,0],[512,1856,96]],tunnels:[[-1536,192,0],[-1664,1056,32],[-1984,1664,32],[-1856,2048,0]],midB:[[-320,800,-64],[-448,1472,-64],[-1280,1952,-64],[-1856,2048,0]]};
+const routesFor=world=>world.tacticalRoutes||{A:{long:DUST_ROUTES.long,short:DUST_ROUTES.short},B:{tunnels:DUST_ROUTES.tunnels,midB:DUST_ROUTES.midB}};
+const routePoint=(world,raw)=>world.tacticalRoutes?new T.Vector3(...raw):world.convert(raw);
 const pick=(items,random)=>items[Math.min(items.length-1,Math.floor(random()*items.length))];
 function shuffle(items,random){const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 export function createDustPlan(world,random=Math.random,defenderCount=5){
   const mobile=shuffle([{site:'A',role:'push'},{site:'B',role:'flank'},{site:pick(['A','B'],random),role:'rotate'}],random).slice(0,Math.max(0,defenderCount-2));
   const defenders=shuffle([{site:'A',role:'anchor'},{site:'B',role:'anchor'},...mobile],random);
-  return {site:pick(world.bombSites,random).id,style:pick(['rush','split','default'],random),entry:Math.floor(random()*2),order:shuffle([0,1,2,3,4],random),defence:defenders.map(d=>d.site),roles:defenders.map(d=>d.role)};
+  const site=pick(world.bombSites,random).id;
+  return {site,style:pick(['rush','split','default'],random),entry:Math.floor(random()*Object.keys(routesFor(world)[site]).length),order:shuffle([0,1,2,3,4],random),defence:defenders.map(d=>d.site),roles:defenders.map(d=>d.role)};
 }
 export function dustGuardPoint(world,actor,site,random=Math.random){
   const candidates=world.nodes.filter(n=>{const d=Math.hypot(n.x-site.x,n.z-site.z);return d>2.5&&d<7&&Math.abs(n.y-site.y)<1;});
   for(const n of shuffle(candidates,random).slice(0,18)){const p=asVector(n);if(world.path(actor.pos,p).length)return p;}
   return site.clone();
+}
+function defenceOpening(world,siteId,route,hunt,role){
+  const reversed=[...route].reverse();
+  if(!world.tacticalRoutes)return reversed.slice(0,hunt||role==='flank'?4:2);
+  if(hunt)return reversed;
+  const site=world.bombSites.find(s=>s.id===siteId),out=[];let walked=0,previous=null;
+  for(const raw of reversed){
+    const point=routePoint(world,raw);if(previous)walked+=point.distanceTo(previous);out.push(raw);previous=point;
+    // Authored route waypoints are dense near a site: count distance and leave
+    // the actual plant zone before ending a push, rather than stopping after 2.
+    if(walked>=(role==='flank'?24:10)&&(!site||!site.box.containsPoint(point.clone().add(new T.Vector3(0,.35,0)))))break;
+  }
+  return out;
 }
 export function assignDustRoute(world,actor,index,rotation=0,targetSite=null,plan=null,random=Math.random,mode='defusal'){
   const order=plan?.order[index%5]??Math.floor(random()*5),attack=actor.team==='t',hunt=mode!=='defusal';
@@ -69,20 +86,20 @@ export function assignDustRoute(world,actor,index,rotation=0,targetSite=null,pla
   actor.role=hunt?'hunt':attack?['entry','entry','support','flank','lurk'][order]:plan?.roles?.[index%5]||['anchor','push','anchor','flank','rotate'][order];
   actor.pace=.96+random()*.16;actor.openingWait=hunt?0:attack?(plan?.style==='rush'?random()*.35:random()*1.35):random()*.4;
   actor.combatOffset=random()*8;actor.searchUntil=0;actor.patrolAt=0;
-  const options=siteId==='B'?['tunnels','midB']:['long','short'];
-  const entry=plan?.style==='rush'?(siteId==='B'?'tunnels':options[plan.entry||0]):plan?.style==='split'?options[order%2]:pick(options,random);
+  const routes=routesFor(world),siteRoutes=routes[siteId],options=Object.keys(siteRoutes);
+  const entry=plan?.style==='rush'?options[(!world.tacticalRoutes&&siteId==='B'?0:plan.entry||0)%options.length]:plan?.style==='split'?options[order%options.length]:pick(options,random);
   actor.routeName=attack?entry:hunt?'hunt-'+entry:actor.role==='anchor'?'guard-'+siteId:actor.role+'-'+entry;
   const pushing=!attack&&(hunt||['push','flank'].includes(actor.role));
-  const sources=attack?DUST_ROUTES[entry]:pushing?[...DUST_ROUTES[entry]].reverse().slice(0,hunt||actor.role==='flank'?4:2):[];
-  let from=actor.pos;for(const raw of sources){const desired=world.convert(raw),n=world.closest(desired);if(!n)continue;const p=asVector(n);if(world.path(from,p).length){actor.route.push(p);from=p;}}
+  const sources=attack?siteRoutes[entry]:pushing?defenceOpening(world,siteId,siteRoutes[entry],hunt,actor.role):[];
+  let from=actor.pos;for(const raw of sources){const desired=routePoint(world,raw),n=world.closest(desired);if(!n)continue;const p=asVector(n);if(world.path(from,p).length){actor.route.push(p);from=p;}}
   const site=world.bombSites.find(s=>s.id===siteId);if(site&&!pushing){const n=world.closest(site.pos);if(n){const p=attack?asVector(n):dustGuardPoint(world,actor,site.pos,random);if(world.path(from,p).length){actor.route.push(p);if(!attack)actor.guardPoint=p;}}}
   if(hunt&&!attack){const home=pick(world.spawns.t,random).pos,n=world.closest(home);if(n)actor.route.push(asVector(n));}
 }
 
 // Search known junctions, not the live coordinates of hidden opponents.
 export function dustSearchPoint(world,actor,random=Math.random){
-  const junctions=shuffle(Object.values(DUST_ROUTES).flat(),random);
-  for(const raw of junctions){const n=world.closest(world.convert(raw));if(!n)continue;const p=asVector(n),d=p.distanceTo(actor.pos);if(d>7&&d<45&&world.path(actor.pos,p).length)return p;}
+  const junctions=shuffle(Object.values(routesFor(world)).flatMap(site=>Object.values(site)).flat(),random);
+  for(const raw of junctions){const n=world.closest(routePoint(world,raw));if(!n)continue;const p=asVector(n),d=p.distanceTo(actor.pos);if(d>7&&d<45&&world.path(actor.pos,p).length)return p;}
   return dustGuardPoint(world,actor,world.bombSites.find(s=>s.id===actor.objectiveSite)?.pos||world.center,random);
 }
 

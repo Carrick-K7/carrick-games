@@ -9,6 +9,8 @@
 
 import * as T from 'three';
 import { SnowWorld } from './csWorld.js';
+import { AuthoredWorld } from './csAuthoredWorld.js';
+import { upgradeWorldMaterials } from './csMapPresentation.js';
 import { WEAPONS, SOLDIER_HITBOX, makeWeapon, makeSoldier, attachSoldierWeapon, poseSoldierWeapon } from './csWeapons.js';
 import { preloadSoldiers, updateSkinnedSoldier, poseSkinnedSoldierDeath } from './csSkinnedSoldier.js';
 import { applyWeaponAnimation, reloadCues, reloadLabel, inspectDuration, placeWeaponView, WEAPON_VIEW_FOV } from './csWeaponMotion.js';
@@ -21,7 +23,7 @@ import { DEFAULT_SETTINGS, loadSettings, saveSettings, lookSensitivity } from '.
 import { GameFocusGuard } from './csInputFocus.js';
 import { RECOIL, shotRecoil, recoverRecoil, viewMuzzle, actorMuzzle, KEY_ACTIONS } from './csWeaponBehavior.js';
 import { assignRoute, routeDestination, shuffledTeamSpawns, chooseRespawn, assignDustRoute, createDustPlan, dustGuardPoint, dustSearchPoint, dustCombatMove } from './csTactics.js';
-import { MAPS } from './csMaps.js';
+import { MAPS, isTacticalWorld } from './csMaps.js';
 import { BombRound, BOMB_RULES } from './csBombMode.js';
 import { SHOP, BUY_CATEGORIES, awardMoney, settleRound } from './csEconomy.js';
 
@@ -217,6 +219,9 @@ export class CsEngine {
       for (const p of this.pickupItems) { this.scene.remove(p.mesh); freeGeometry(p.mesh); p.ring?.material.dispose(); }
       if (this.gun) { this.gunScene.remove(this.gun); freeGeometry(this.gun); }
       this.world?.dispose?.();
+      // Abort optional photo work immediately; the pending geometry is retired
+      // by loadMap after its current BSP/authored load has safely completed.
+      this.pendingWorld?.materialPalette?.dispose();
       this.renderer?.dispose();
     } finally {
       // Clones release their skeletons above; immutable template GPU resources
@@ -230,15 +235,22 @@ export class CsEngine {
 
   applyQuality() {
     if (!this.renderer) return;
-    const low = this.quality === 'low';
+    const low = this.quality === 'low', constrained = this.touchMode || Math.min(this.width, this.height) < 600;
     const dpr = this.renderDpr;
     // Software GL must read the offscreen WebGL canvas back into the shared
     // shell canvas. Bound that transfer without changing logical HUD geometry.
-    const pixels = this.softwareRendering ? 230400 : 4500000;
+    const pixels = this.softwareRendering ? 230400 : constrained ? 1200000 : 4500000;
     this.renderer.setPixelRatio(Math.min(dpr, low || this.softwareRendering ? 1 : 2, Math.sqrt(pixels / (this.width * this.height))));
-    this.renderer.shadowMap.enabled = !low && !this.softwareRendering;
+    this.renderer.shadowMap.enabled = !low && !this.softwareRendering && !constrained;
     this.sun.shadow.needsUpdate = true;
-    if (this.world?.snow) this.world.snow.visible = !low;
+    if (this.world?.materialPalette) {
+      this.world.materialPalette.applyQuality({ detail: !low && !this.softwareRendering && !constrained,
+        anisotropy: Math.min(4, this.renderer.capabilities?.getMaxAnisotropy?.() || 1) });
+      // Initial mobile/low loads omit detail maps. Upgrading later fetches only
+      // the missing slots, with the palette's bounded, coalesced loader.
+      void this.world.materialPalette.load();
+    }
+    if (this.world?.snow) this.world.snow.visible = !low && !constrained;
   }
 
   setQuality(q) { this.controlSettings.quality = q === 'low' ? 'low' : 'high'; this.applySettings(); }
@@ -277,23 +289,28 @@ export class CsEngine {
     if (this.ready && this.world?.config.id === id) return true;
     this.mapLoading = true; this.ready = false;
     this.hud.menuStart = { enabled: false, label: this.L('正在装载 ', 'Loading ') + MAPS[id].name + '…' };
-    const candidate = new SnowWorld(this.scene, MAPS[id], this.assetUrl);
+    const World = MAPS[id].authored ? AuthoredWorld : SnowWorld;
+    const candidate = new World(this.scene, MAPS[id], this.assetUrl);
     this.pendingWorld = candidate;
     candidate.mapGroup.visible = false; candidate.environment.visible = false;
     try {
       await candidate.load(MAPS[id].asset);
       if (this.disposed) { candidate.dispose?.(); return false; }
-      if (!candidate.spawns.ct.length || !candidate.spawns.t.length || (id === 'de_dust2' && candidate.bombSites.length !== 2)) throw new Error(this.L('地图出生点或包点不完整', 'Map spawns or bomb sites incomplete'));
+      if (!candidate.spawns.ct.length || !candidate.spawns.t.length || (MAPS[id].modes.includes('defusal') && candidate.bombSites.length !== 2)) throw new Error(this.L('地图出生点或包点不完整', 'Map spawns or bomb sites incomplete'));
+      await upgradeWorldMaterials(candidate, this.assetUrl, { detail: this.quality !== 'low' && !this.softwareRendering && !this.touchMode && Math.min(this.width, this.height) >= 600,
+        anisotropy: Math.min(4, this.renderer?.capabilities?.getMaxAnisotropy?.() || 1) });
+      if (this.disposed) { candidate.dispose?.(); return false; }
       for (const a of this.all) { if (a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); } }
       this.all = []; this.bots = []; this.player = null; this.clearEffects(); this.clearCorpses(); this.clearBomb();
       this.world?.dispose?.(); this.world = candidate; this.selectedMap = id;
       this.world.mapGroup.visible = true; this.world.environment.visible = true;
       if (!MAPS[id].modes.includes(this.selectedMode)) this.selectedMode = MAPS[id].defaultMode;
-      const desert = this.world.theme === 'desert', sky = desert ? 0xc7c4b1 : 0xa9c4d8;
+      const desert = isTacticalWorld(this.world), atmosphere = MAPS[id].atmosphere || {}, sky = atmosphere.sky ?? (desert ? 0xc7c4b1 : 0xa9c4d8);
       this.scene.background = new T.Color(sky);
-      this.scene.fog = new T.Fog(sky, desert ? 110 : 48, desert ? 245 : 145);
-      this.ambient.color.setHex(desert ? 0xfff1d4 : 0xe1f0ff);
-      this.ambient.groundColor.setHex(desert ? 0x877256 : 0x687d8d);
+      this.scene.fog = new T.Fog(sky, atmosphere.fogNear ?? (desert ? 110 : 48), atmosphere.fogFar ?? (desert ? 245 : 145));
+      this.ambient.color.setHex(atmosphere.ambient ?? (desert ? 0xfff1d4 : 0xe1f0ff));
+      this.ambient.groundColor.setHex(atmosphere.ground ?? (desert ? 0x877256 : 0x687d8d));
+      this.sun.color.setHex(atmosphere.sun ?? 0xffeeda);
       this.sun.target.position.copy(this.world.center);
       this.sun.position.copy(this.world.center).add(new T.Vector3(-35, 70, 25));
       const size = Math.max(36, this.world.size * .55);
@@ -432,7 +449,7 @@ export class CsEngine {
     hud.buyTimeText = this.mode === 'tdm'
       ? this.L('在出生购买区内更换装备', 'Swap equipment inside your spawn buy zone')
       : this.L('购买时间剩余 ', 'Buy time left ') + Math.ceil(Math.max(0, BOMB_RULES.buyTime - (bomb?.elapsed || 0))) + this.L(' 秒', 's');
-    hud.money = this.world?.theme === 'desert'
+    hud.money = isTacticalWorld(this.world)
       ? (this.mode === 'defusal' ? '$ ' + player.money + ' · B ' + this.L('购买', 'Buy') : 'B ' + this.L('更换装备', 'Swap gear'))
       : null;
     if (this.mode !== 'defusal' || !bomb) { hud.objective = null; hud.objectiveAction = null; return; }
@@ -486,7 +503,7 @@ export class CsEngine {
     const bomb = this.bomb, world = this.world, clock = this.clock;
     const report = this.all.filter(a => a.alive && a.team === b.team && a.lastSeen && clock - a.lastSeen.time < 5).sort((a, c) => c.lastSeen.time - a.lastSeen.time)[0]?.lastSeen;
     if (!bomb || this.mode !== 'defusal') {
-      if (world.theme !== 'desert') return routeDestination(b, opponents);
+      if (!isTacticalWorld(world)) return routeDestination(b, opponents);
       if (report && b.pos.distanceTo(report.pos) > 1.5) return report.pos;
       const opening = routeDestination(b, []);
       if (opening) return opening;
@@ -530,7 +547,7 @@ export class CsEngine {
   // ── Economy / buy menu ───────────────────────────────────────────────────
 
   canBuy(a) {
-    if (!a?.alive || this.world?.theme !== 'desert' || !['freeze', 'active'].includes(this.phase)) return false;
+    if (!a?.alive || !isTacticalWorld(this.world) || !['freeze', 'active'].includes(this.phase)) return false;
     if (this.mode === 'defusal' && this.phase === 'active' && this.bomb.elapsed > BOMB_RULES.buyTime) return false;
     return this.world.buyZones.some(z => (!z.team || z.team === a.team) && z.box.containsPoint(a.pos.clone().add(new T.Vector3(0, .4, 0))));
   }
@@ -632,7 +649,7 @@ export class CsEngine {
   toggleBuy() {
     if (this.buyOpen) { this.closeBuy(); return; }
     if (!this.canBuy(this.player)) {
-      this.notify(this.world.theme === 'desert'
+      this.notify(isTacticalWorld(this.world)
         ? this.L('请在回合开始的购买时间内，回到己方购买区', 'Return to your buy zone during buy time')
         : this.L('雪地竞技场没有购买区 · 武器在地面拾取', 'No buy zone on fy_snow · grab weapons from the ground'), 2);
       return;
@@ -899,7 +916,7 @@ export class CsEngine {
       const index = counters[a.team]++, spawn = spawns[a.team][index],
         saved = this.mode === 'defusal' && this.round > 1 && a.alive ? { inventory: a.inventory, armor: a.armor, defuseKit: a.defuseKit, helmet: a.helmet, grenades: a.grenades } : null;
       if (a.isPlayer && a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); a.mesh = null; }
-      this.spawnActor(a, spawn, this.world.theme === 'desert' && this.mode === 'tdm' ? (a.team === 'ct' ? 'm4a1' : 'ak47') : null);
+      this.spawnActor(a, spawn, isTacticalWorld(this.world) && this.mode === 'tdm' ? (a.team === 'ct' ? 'm4a1' : 'ak47') : null);
       if (this.mode === 'defusal') {
         a.armor = 0;
         if (saved) { Object.assign(a, saved); a.slot = a.inventory.primary ? 'primary' : 'pistol'; }
@@ -1374,7 +1391,7 @@ export class CsEngine {
       flash.position.copy(g.pos); this.scene.add(flash);
       this.effects.push({ mesh: flash, life: .085, total: .085, disposeMat: true, expand: true });
       for (let j = 0; j < 7; j++) {
-        const angle = j * Math.PI * 2 / 7, mesh = new T.Mesh(new T.SphereGeometry(.20, 10, 8), new T.MeshBasicMaterial({ color: this.world.theme === 'desert' ? 0x887d6c : 0x777d80, transparent: true, opacity: .35, depthWrite: false }));
+        const angle = j * Math.PI * 2 / 7, mesh = new T.Mesh(new T.SphereGeometry(.20, 10, 8), new T.MeshBasicMaterial({ color: isTacticalWorld(this.world) ? 0x887d6c : 0x777d80, transparent: true, opacity: .35, depthWrite: false }));
         mesh.position.copy(g.pos).add(new T.Vector3(Math.cos(angle) * .25, .14 + j * .055, Math.sin(angle) * .25));
         mesh.scale.set(1, .7, 1); this.scene.add(mesh);
         this.effects.push({ mesh, life: .48 + j * .035, total: .48 + j * .035, disposeMat: true, expand: true, opacity: .35 });
@@ -1520,14 +1537,14 @@ export class CsEngine {
     }
     let moveX = 0, moveZ = 0;
     if (this.updateBotObjective(b, dt)) return;
-    if (world.theme === 'desert') {
+    if (isTacticalWorld(world)) {
       b.openingWait = Math.max(0, (b.openingWait || 0) - dt);
       if (!b.target && b.openingWait > 0) {
         b.moveSpeed = 0; updateSkinnedSoldier(b.mesh, dt, { speed: 0, grounded: true }); this.updateBotWeapon(b); return;
       }
       if (clock >= (b.strafeAt || 0)) { b.strafe = Math.random() < .5 ? -1 : 1; b.strafeAt = clock + 1.1 + Math.random() * 2.7; }
     }
-    if (world.theme !== 'desert' && b.target?.alive && b.routeIndex < b.route.length && b.pos.distanceTo(b.target.pos) > 16) b.target = null;
+    if (!isTacticalWorld(world) && b.target?.alive && b.routeIndex < b.route.length && b.pos.distanceTo(b.target.pos) > 16) b.target = null;
     if (b.target?.alive) {
       const a = b.target, dx = a.pos.x - b.pos.x, dz = a.pos.z - b.pos.z, len = Math.hypot(dx, dz);
       b.yaw = Math.atan2(-dx, -dz);
@@ -1568,7 +1585,7 @@ export class CsEngine {
           } else { b.target = null; b.aiThink = 0; }
         }
       }
-      if (world.theme === 'desert') {
+      if (isTacticalWorld(world)) {
         const move = dustCombatMove(b, a.pos, def, config.speed * (b.pace || 1), clock, w.id);
         moveX = move.x; moveZ = move.z;
       } else {
@@ -1581,7 +1598,7 @@ export class CsEngine {
         if (destination) b.path = world.path(b.pos, destination);
         b.pathTime = 1.4 + Math.random() * .8;
       }
-      while (b.path.length && Math.hypot(b.path[0].x - b.pos.x, b.path[0].z - b.pos.z) < (world.theme === 'desert' ? .15 : .42) && Math.abs(b.path[0].y - b.pos.y) < (world.theme === 'desert' ? .17 : .8)) b.path.shift();
+      while (b.path.length && Math.hypot(b.path[0].x - b.pos.x, b.path[0].z - b.pos.z) < (isTacticalWorld(world) ? .15 : .42) && Math.abs(b.path[0].y - b.pos.y) < (isTacticalWorld(world) ? .17 : .8)) b.path.shift();
       if (b.path.length) {
         const p = b.path[0], dx = p.x - b.pos.x, dz = p.z - b.pos.z, len = Math.hypot(dx, dz);
         if (len > .01) { moveX = dx / len * config.speed * (b.pace || 1); moveZ = dz / len * config.speed * (b.pace || 1); b.yaw = Math.atan2(-dx, -dz); }
@@ -1857,12 +1874,13 @@ export class CsEngine {
   computeLocation() {
     const player = this.player, world = this.world;
     if (!player || !world) return '';
+    if (world.locationAt) return world.locationAt(player.pos, this.isZh());
     const ours = world.spawns[player.team][0].pos, enemy = world.spawns[player.team === 'ct' ? 't' : 'ct'][0].pos;
     let text = player.pos.distanceTo(ours) < 12 ? player.team.toUpperCase() + this.L(' 出生点', ' spawn')
       : player.pos.distanceTo(enemy) < 12 ? this.L('敌方出生点', 'Enemy spawn')
       : player.pos.y > 2 ? this.L('高台', 'Balcony')
       : this.L('中央交战区', 'Mid arena');
-    if (world.theme === 'desert') {
+    if (isTacticalWorld(world)) {
       const site = world.bombSites.find(s => player.pos.distanceTo(s.pos) < 10);
       if (site) text = site.id + this.L(' 包点', ' site');
       else if (player.pos.x > 30) text = this.L('长 A', 'Long A');

@@ -33,6 +33,8 @@ if (!assetBase.startsWith(`${origin}/games/cs/`) || !entry.startsWith(assetBase)
 const captures = [
   { id: 'fy_snow', positionOffset: [24, 29, 30], targetOffset: [0, 0.5, 0], fov: 57 },
   { id: 'de_dust2', positionOffset: [50, 14, -11.6], targetOffset: [32, 5, -36.6], fov: 67 },
+  { id: 'de_inferno' },
+  { id: 'de_mirage' },
 ];
 const outputs = captures.map(capture => resolve(root, `games/cs/public/assets/ui/maps/${capture.id}.webp`));
 for (const output of outputs) {
@@ -80,6 +82,7 @@ try {
     // Test-owned access only. The SDK loop is never started: no simulation,
     // pointer lock, HUD painting or first-person weapon is present in exports.
     window.__CS_MAP_PREVIEW__ = game;
+    game.hudView.draw = () => {}; // Capture may create the new map thumbnails; never request them while booting.
     game.setViewport({ width, height, dpr: 1, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
     game.setPresentationPaused(true);
     game.prepare();
@@ -96,11 +99,11 @@ try {
       if (e.selectedMap !== capture.id) await e.selectMap(capture.id);
       if (!e.ready || e.mapLoading || e.world?.config.id !== capture.id) throw new Error(`Map did not load: ${capture.id}`);
       const center = e.world.center;
-      const position = capture.positionOffset.map((value, axis) => value + center.toArray()[axis]);
-      const target = capture.targetOffset.map((value, axis) => value + center.toArray()[axis]);
+      const position = capture.positionOffset ? capture.positionOffset.map((value, axis) => value + center.toArray()[axis]) : e.world.previewCamera.position;
+      const target = capture.targetOffset ? capture.targetOffset.map((value, axis) => value + center.toArray()[axis]) : e.world.previewCamera.target;
       e.camera.position.fromArray(position);
       e.camera.lookAt(...target);
-      e.camera.fov = capture.fov;
+      e.camera.fov = capture.fov ?? e.world.previewCamera.fov;
       e.camera.updateProjectionMatrix();
       e.camera.updateMatrixWorld(true);
       const before = e.renderer.info.render.frame;
