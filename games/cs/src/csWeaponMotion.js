@@ -177,7 +177,9 @@ function connectSegment(mesh,a,b){const d=b.clone().sub(a);mesh.position.copy(a)
 export function applyWeaponAnimation(model,state={}){
   const r=model?.userData.rig;if(!r)return null;
   const raw=sampleWeaponMotion(r.id,{...state,knifeModel:r.knifeModel});
-  const motion=r.knifeModel==='butterfly'?resolveButterflyPresentation(r,raw,state):raw,kind=reloadKind(r.id);
+  // Every rig carries the saved knife preference, including firearms/HE/C4.
+  // Only an actual butterfly knife has the grip/linkage pose this blend needs.
+  const motion=r.id==='knife'&&r.knifeModel==='butterfly'?resolveButterflyPresentation(r,raw,state):raw,kind=reloadKind(r.id);
   if(r.suppressor){r.suppressor.visible=state.suppressed!==false;r.muzzle.copy(r.suppressor.visible?r.muzzleSuppressed:r.muzzleBare);}
   for(const o of [r.magazine,r.bolt,r.boltHandle,r.slide,r.cover,r.pump]){o.position.copy(o.userData.restPosition);o.quaternion.copy(o.userData.restQuaternion);o.visible=true;}
   r.magazine.position.add(new T.Vector3(...motion.mag));r.magazine.rotation.x=motion.magAngle;r.magazine.visible=motion.magVisible;r.bolt.position.z+=motion.boltTravel;r.bolt.rotation.z=motion.boltRoll;r.boltHandle.rotation.z=motion.boltLift*1.12;r.slide.position.z+=motion.slide;r.cover.rotation.x=motion.cover;r.pump.position.z+=motion.pump;
