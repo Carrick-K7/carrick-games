@@ -46,25 +46,36 @@ export async function fetchReleaseJSON(path, { fetcher = fetch, allow404 = false
   return value;
 }
 function promotionState(value, label) {
-  requireValue(value && validInteger(value.generation) && validInteger(value.sequence), `Invalid ${label} generation/sequence`);
-  requireValue(value.handledRevision === null || REVISION_PATTERN.test(value.handledRevision ?? ''), `Invalid ${label} handled revision`);
+  requireValue(value && typeof value === 'object' && !Array.isArray(value) && validInteger(value.generation) && validInteger(value.sequence), `Invalid ${label} generation/sequence`);
+  requireValue(value.handledRevision === null || (typeof value.handledRevision === 'string' && REVISION_PATTERN.test(value.handledRevision)), `Invalid ${label} handled revision`);
 }
-export function validateProductionSnapshot(catalog, manifest) {
-  requireValue(manifest?.schemaVersion === 1 && REVISION_PATTERN.test(manifest.revision ?? ''), 'Invalid production shell manifest');
-  const missing = catalog === null;
-  catalog ??= { schemaVersion: 1, apiVersion: 1, generation: 0, games: [] };
-  requireValue(validInteger(catalog.generation), 'Invalid catalog generation');
+/** Only an absent marker with null history is a retryable failed first publish. */
+export function isIntentionalDelist(tombstone) {
+  if (tombstone === undefined) return false;
+  promotionState(tombstone, 'tombstone');
+  requireValue(!Object.hasOwn(tombstone, 'delisted') || tombstone.delisted === true, 'Invalid tombstone delisted marker');
+  return Object.hasOwn(tombstone, 'delisted') || tombstone.handledRevision !== null;
+}
+export function validateProductionCatalog(catalog) {
+  requireValue(catalog && validInteger(catalog.generation), 'Invalid catalog generation');
   const parsed = parseCatalog(catalog, RELEASE_ORIGIN);
   requireValue(parsed.rejected.length === 0 && parsed.catalog.games.length === catalog.games.length, `Invalid published game catalog: ${parsed.rejected.join('; ')}`);
   for (const game of catalog.games) promotionState(game, game.id);
   if (catalog.tombstones !== undefined) {
     requireValue(catalog.tombstones && typeof catalog.tombstones === 'object' && !Array.isArray(catalog.tombstones), 'Invalid tombstones');
     for (const [id, state] of Object.entries(catalog.tombstones)) {
-      requireValue(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) && !catalog.games.some(game => game.id === id), 'Invalid tombstone identity');
-      promotionState(state, id);
+      requireValue(id.length <= 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) && id !== 'shell' && !catalog.games.some(game => game.id === id), 'Invalid tombstone identity');
+      isIntentionalDelist(state);
     }
   }
   if (catalog.shell) promotionState(catalog.shell, 'shell');
+  return catalog;
+}
+export function validateProductionSnapshot(catalog, manifest) {
+  requireValue(manifest?.schemaVersion === 1 && REVISION_PATTERN.test(manifest.revision ?? ''), 'Invalid production shell manifest');
+  const missing = catalog === null;
+  catalog ??= { schemaVersion: 1, apiVersion: 1, generation: 0, games: [] };
+  validateProductionCatalog(catalog);
   const bootstrap = !catalog.shell || catalog.shell.legacy === true;
   if (bootstrap) {
     requireValue(manifest.kind !== 'shell', 'Production shell/catalog changed during snapshot');

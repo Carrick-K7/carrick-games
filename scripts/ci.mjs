@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { ROOT, DIST, fileDigests, filesUnder, gameIds, gameWorkspace, json, posix, shellWorkspace } from './workspaces.mjs';
 import { classifyLockChanges, classifyManifestChanges, compareSemver, impactOfPaths, selectAffected } from './affected.mjs';
-import { canonical, fetchProductionSnapshot, fetchReleaseJSON, installPublishedArtifact, RELEASE_ORIGIN } from './release-store.mjs';
+import { canonical, fetchProductionSnapshot, fetchReleaseJSON, installPublishedArtifact, isIntentionalDelist, validateProductionCatalog, validateProductionSnapshot, RELEASE_ORIGIN } from './release-store.mjs';
 
 const SHA = /^[0-9a-f]{40}$/;
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -31,11 +31,34 @@ export function componentState(snapshot, id) {
   const tombstones = snapshot.catalog.tombstones ?? {};
   return snapshot.catalog.games.find(game => game.id === id) ?? (Object.hasOwn(tombstones, id) ? tombstones[id] : empty);
 }
+export function isHiddenTarget(snapshot, id) {
+  if (id === 'shell') return false;
+  const tombstones = snapshot.catalog.tombstones ?? {};
+  return Object.hasOwn(tombstones, id) && isIntentionalDelist(tombstones[id]);
+}
 export function isInitialTarget(snapshot, id) {
   if (id === 'shell') return !snapshot.catalog.shell || snapshot.catalog.shell.legacy === true;
-  // A tombstone with no handled source is the explicit failed-first-publish
-  // journal, not an active release whose history can safely be guessed.
-  return !snapshot.catalog.games.some(game => game.id === id) && !componentState(snapshot, id).handledRevision;
+  return !isHiddenTarget(snapshot, id) && !snapshot.catalog.games.some(game => game.id === id)
+    && componentState(snapshot, id).handledRevision === null;
+}
+/** Hidden history cannot select automatic publication, but current edits still select tests. */
+export function selectReleaseTargets({ snapshot, ...inputs }) {
+  const hidden = new Set(Object.entries(snapshot.catalog.tombstones ?? {}).filter(([, state]) => isIntentionalDelist(state)).map(([id]) => id));
+  assert(!(inputs.bootstrap && (inputs.mode ?? 'main') === 'main' && hidden.size),
+    'Main bootstrap with intentional delists requires explicit recovery before builds; automatic relisting is forbidden');
+  const selection = selectAffected({ ...inputs,
+    pendingPathsById: Object.fromEntries(Object.entries(inputs.pendingPathsById ?? {}).filter(([id]) => !hidden.has(id))),
+    unknownBaseIds: (inputs.unknownBaseIds ?? []).filter(id => !hidden.has(id)) });
+  const trigger = impactOfPaths(inputs.triggerPaths ?? [], { ...inputs, lockChanges: inputs.triggerLockChanges, manifestChanges: inputs.triggerManifestChanges });
+  return { ...selection, targets: selection.targets.map(target => hidden.has(target.id)
+    ? { ...target, hidden: true, publish: false, runtime: target.runtime || !!trigger.targets[target.id]?.runtime }
+    : target) };
+}
+export function assertPublicationVisible(plan, id, snapshot) {
+  const target = targetPlan(plan, id);
+  const hidden = isHiddenTarget(snapshot, id);
+  assert(!target.publish || !hidden, `${id}: intentional delist forbids automatic publication`);
+  return hidden;
 }
 function hasCommit(revision) {
   if (!SHA.test(revision ?? '')) return false;
@@ -93,7 +116,7 @@ export function requireVersionBump(target, component, previousPackage) {
   if (component.discoveryError) return `${component.id}: ${component.discoveryError}`;
   try {
     compareSemver(component.pkg.version, component.pkg.version);
-    if (target.runtime && previousPackage?.version && compareSemver(component.pkg.version, previousPackage.version) <= 0) {
+    if (target.runtime && !target.hidden && previousPackage?.version && compareSemver(component.pkg.version, previousPackage.version) <= 0) {
       // Name the shared inputs that widened this target. A root manifest or
       // toolchain change otherwise looks like a demand that the component's own
       // unchanged source take a version it does not need.
@@ -108,8 +131,11 @@ export function requireVersionBump(target, component, previousPackage) {
 }
 export function guardedTargetFence(plan, id, snapshot, { sequence, isAncestor = ancestor, packageAt = jsonAt } = {}) {
   const target = targetPlan(plan, id);
+  // This guard precedes even equal-generation/already-current shortcuts. A plan
+  // artifact is not authorization to relist a target hidden since planning.
+  const hidden = assertPublicationVisible(plan, id, snapshot);
   const state = componentState(snapshot, id);
-  if (plan.mode === 'pr' || state.generation === target.expectedGeneration) return state.generation;
+  if ((hidden && !target.publish) || plan.mode === 'pr' || state.generation === target.expectedGeneration) return state.generation;
   if (state.revision === plan.revision && state.handledRevision === plan.revision && state.version === target.version) return state.generation;
   assert(goodInteger(sequence) && sequence > state.sequence, 'A newer CI intent already owns this target');
   assert(state.revision && state.revision === state.handledRevision && !state.legacy && state.active !== false, 'Target was rolled back or is inactive; refusing automatic fence refresh');
@@ -156,7 +182,7 @@ export async function createPlan({ environment = process.env, snapshot = null } 
     const state = componentState(snapshot, component.id);
     const base = mode === 'pr' ? triggerBase : state.handledRevision;
     bases[component.id] = base;
-    if (mode === 'pr') continue;
+    if (mode === 'pr' || isHiddenTarget(snapshot, component.id)) continue;
     const status = sourceBaseStatus(base, revision, { initial: isInitialTarget(snapshot, component.id) });
     if (status === 'initial') {
       pendingPathsById[component.id] = [`${component.dir}/package.json`];
@@ -172,7 +198,7 @@ export async function createPlan({ environment = process.env, snapshot = null } 
       manifestChangesById[component.id] = manifestChanges(base, revision);
     }
   }
-  const selection = selectAffected({ ...records, pendingPathsById, triggerPaths, lockChangesById, triggerLockChanges,
+  const selection = selectReleaseTargets({ snapshot, ...records, pendingPathsById, triggerPaths, lockChangesById, triggerLockChanges,
     manifestChangesById, triggerManifestChanges,
     unknownBaseIds, bootstrap: snapshot.bootstrap && mode === 'main', mode });
   const targets = selection.targets.filter(target => snapshot.bootstrap || !aheadIds.has(target.id)).map(selected => {
@@ -259,21 +285,19 @@ async function artifactFor(id, revision) {
 }
 export async function prepareStore(plan, id) {
   targetPlan(plan, id);
+  // Check live visibility before importing build tooling or preparing any bytes.
+  // Fence refresh remains pre-test only and limited to known automatic ancestors.
+  const snapshot = await fetchProductionSnapshot();
+  const expectedGeneration = guardedTargetFence(plan, id, snapshot, { sequence: process.env.GITHUB_RUN_NUMBER ? ciSequence() : 0 });
   const { buildGame, buildShell, assembleCatalog, atomicJson, installPreviewShell } = await import('./build.mjs');
   const hasFull = existsSync(FULL_STAMP) && (await json(FULL_STAMP)).revision === plan.revision;
   if (plan.sourceOnly) {
     assert(hasFull, 'Bootstrap/source-only verification requires the successful full-source store');
-    const candidate = await artifactFor(id, plan.revision);
-    const snapshot = await fetchProductionSnapshot();
     assert(snapshot.bootstrap, 'Bootstrap ended during this run; replan against the modern published shell');
-    const expectedGeneration = guardedTargetFence(plan, id, snapshot, { sequence: process.env.GITHUB_RUN_NUMBER ? ciSequence() : 0 });
+    const candidate = await artifactFor(id, plan.revision);
     return { ...candidate, snapshot, expectedGeneration };
   }
-  // Replan before testing only when an older automatic ancestor release won.
-  // Rollbacks, newer intents and unknown ancestry cannot acquire fresh fences.
-  const snapshot = await fetchProductionSnapshot();
   assert(!snapshot.bootstrap, 'Production reverted to legacy during verification');
-  const expectedGeneration = guardedTargetFence(plan, id, snapshot, { sequence: process.env.GITHUB_RUN_NUMBER ? ciSequence() : 0 });
   let savedCandidate = null;
   if (hasFull) {
     const candidate = await artifactFor(id, plan.revision);
@@ -374,6 +398,29 @@ export function deploymentPort(value = '') {
   assert(typeof port === 'string' && /^[1-9][0-9]{0,4}$/.test(port) && Number(port) <= 65535, 'Invalid deployment SSH port');
   return port;
 }
+export function deploymentConnection(environment = process.env, { unlist = false } = {}) {
+  const host = environment.SSH_HOST;
+  const port = deploymentPort(environment.DEPLOY_PORT);
+  const user = environment.SSH_USER;
+  assert(/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(host ?? '') && /^[A-Za-z_][A-Za-z0-9_-]*$/.test(user ?? ''), 'Invalid deployment SSH host/user');
+  assert(environment.SSH_KEY && environment.DEPLOY_KNOWN_HOSTS, 'Missing pinned deployment credentials');
+  if (environment.DEPLOY_URL || unlist) assert(environment.DEPLOY_URL?.replace(/\/$/, '') === RELEASE_ORIGIN, 'Unexpected production origin');
+  if (unlist) assert(user === 'ubuntu' && port === '2222', 'Unlist requires the existing ubuntu/2222 restricted publisher');
+  return { host, port, user };
+}
+async function withDeploymentSSH(operation, { environment = process.env, unlist = false } = {}) {
+  const { host, port, user } = deploymentConnection(environment, { unlist });
+  const directory = await mkdtemp(join(environment.RUNNER_TEMP || tmpdir(), 'carrick-ssh-'));
+  const key = join(directory, 'key');
+  const known = join(directory, 'known_hosts');
+  try {
+    await writeFile(key, environment.SSH_KEY + '\n', { mode: 0o600 });
+    await writeFile(known, environment.DEPLOY_KNOWN_HOSTS + '\n', { mode: 0o600 });
+    return await operation(['-p', port, '-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '--', `${user}@${host}`]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 export async function publish(plan, id) {
   const target = targetPlan(plan, id);
   if (!target.publish) { console.log(`${id}: verification only; no publication selected`); return; }
@@ -384,6 +431,7 @@ export async function publish(plan, id) {
   assert(verified.revision === plan.revision && verified.id === id && verified.digest === createHash('sha256').update(canonical(candidate.artifact)).digest('hex'), 'Artifact is not the verified candidate');
   await requireFreshInputs(plan, id);
   const snapshot = await fetchProductionSnapshot();
+  assertPublicationVisible(plan, id, snapshot);
   const state = componentState(snapshot, id);
   const sequence = ciSequence();
   if (state.revision === plan.revision && state.handledRevision === plan.revision && state.version === target.version) {
@@ -406,37 +454,194 @@ export async function publish(plan, id) {
     assert(counterpartFingerprint(snapshot, id) === verified.counterpart, 'Counterpart changed after testing; rerun this cell to verify the new pairing');
   }
   assert(goodInteger(expectedCounterpartGeneration), 'Missing tested counterpart generation');
-  const host = process.env.SSH_HOST;
-  const port = deploymentPort(process.env.DEPLOY_PORT);
-  const user = process.env.SSH_USER;
-  assert(/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(host ?? '') && /^[A-Za-z_][A-Za-z0-9_-]*$/.test(user ?? ''), 'Invalid deployment SSH host/user');
-  assert(process.env.SSH_KEY && process.env.DEPLOY_KNOWN_HOSTS, 'Missing pinned deployment credentials');
-  if (process.env.DEPLOY_URL) assert(process.env.DEPLOY_URL.replace(/\/$/, '') === RELEASE_ORIGIN, 'Unexpected production origin');
-  const secretDirectory = await mkdtemp(join(process.env.RUNNER_TEMP || tmpdir(), 'carrick-ssh-'));
   const archive = join(CI_DIR, `${id}.tar.gz`);
-  const key = join(secretDirectory, 'key');
-  const known = join(secretDirectory, 'known_hosts');
   try {
-    await writeFile(key, process.env.SSH_KEY + '\n', { mode: 0o600 });
-    await writeFile(known, process.env.DEPLOY_KNOWN_HOSTS + '\n', { mode: 0o600 });
-    await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
-    const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
-    const input = await import('node:fs').then(module => module.createReadStream(archive));
-    await new Promise((resolvePromise, reject) => {
-      const child = spawn('ssh', ['-p', port, '-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '--', `${user}@${host}`, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
-      input.on('error', error => { child.kill(); reject(error); });
-      child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
-      child.on('error', error => { input.destroy(); reject(error); });
-      child.on('exit', code => { input.destroy(); code === 0 ? resolvePromise() : reject(new Error(`Restricted publication failed (${code})`)); });
-      input.pipe(child.stdin);
+    await withDeploymentSSH(async sshArgs => {
+      await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
+      const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
+      const input = await import('node:fs').then(module => module.createReadStream(archive));
+      await new Promise((resolvePromise, reject) => {
+        const child = spawn('ssh', [...sshArgs, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
+        input.on('error', error => { child.kill(); reject(error); });
+        child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+        child.on('error', error => { input.destroy(); reject(error); });
+        child.on('exit', code => { input.destroy(); code === 0 ? resolvePromise() : reject(new Error(`Restricted publication failed (${code})`)); });
+        input.pipe(child.stdin);
+      });
+      const observed = componentState(await fetchProductionSnapshot(), id);
+      assert(observed.revision === plan.revision && observed.version === target.version, 'Public state does not identify the published target');
+      console.log(JSON.stringify({ status: 'deployed', id, revision: plan.revision, generation: observed.generation, sequence: observed.sequence }));
     });
-    const observed = componentState(await fetchProductionSnapshot(), id);
-    assert(observed.revision === plan.revision && observed.version === target.version, 'Public state does not identify the published target');
-    console.log(JSON.stringify({ status: 'deployed', id, revision: plan.revision, generation: observed.generation, sequence: observed.sequence }));
   } finally {
-    await rm(secretDirectory, { recursive: true, force: true });
     await rm(archive, { force: true });
   }
+}
+export function validateUnlistContext(environment, checkoutRevision) {
+  assert(environment.GITHUB_EVENT_NAME === 'workflow_dispatch'
+    && environment.GITHUB_REPOSITORY === 'Carrick-K7/carrick-games'
+    && environment.GITHUB_REPOSITORY_OWNER === 'Carrick-K7'
+    && environment.GITHUB_REF === 'refs/heads/main', 'Unlist is restricted to this repository main dispatch');
+  assert(environment.GITHUB_ACTOR === 'Carrick-K7' && environment.GITHUB_TRIGGERING_ACTOR === 'Carrick-K7', 'Unlist requires the authenticated owner and triggering actor');
+  assert(environment.GITHUB_RUN_ATTEMPT === '1', 'Unlist reruns are forbidden; inspect state and create a new dispatch');
+  assert(SHA.test(environment.GITHUB_SHA ?? '') && checkoutRevision === environment.GITHUB_SHA, 'Unlist checkout must match the exact event SHA');
+}
+export function parseUnlistIds(input) {
+  assert(typeof input === 'string', 'game_ids must be a nonempty string');
+  const ids = [...new Set(input.split(/[\s,]+/).filter(Boolean))];
+  assert(ids.length > 0, 'game_ids must contain at least one game');
+  assert(ids.every(id => id.length <= 80 && ID.test(id) && id !== 'shell'), 'game_ids must contain only canonical game IDs, never shell');
+  return ids;
+}
+function targetObservation(catalog, id) {
+  const active = catalog.games.find(game => game.id === id);
+  const tombstones = catalog.tombstones ?? {};
+  const state = active ?? (Object.hasOwn(tombstones, id) ? tombstones[id] : null);
+  if (!state) return { active: false, missing: true };
+  return { active: !!active, version: active?.version ?? null, revision: active?.revision ?? null,
+    generation: state.generation, sequence: state.sequence, handledRevision: state.handledRevision,
+    ...(Object.hasOwn(state, 'delisted') ? { delisted: state.delisted } : {}) };
+}
+export function createUnlistIntent(input, snapshot) {
+  validateProductionSnapshot(snapshot.catalog, snapshot.manifest);
+  assert(snapshot.catalog.shell && !snapshot.catalog.shell.legacy, 'Unlist requires a modern pinned shell');
+  const ids = parseUnlistIds(input);
+  const catalog = snapshot.catalog;
+  // Validate the ENTIRE set and every increment before a transport is opened.
+  const targets = ids.map(id => {
+    const before = targetObservation(catalog, id);
+    assert(!before.missing, `Unknown game ID: ${id}`);
+    const hidden = isHiddenTarget(snapshot, id);
+    const sequence = hidden ? null : before.sequence + 1;
+    // No increment is needed for zero-write hidden targets. A real removal must
+    // leave room for both promotion and the publisher's failure compensation.
+    assert(hidden || (goodInteger(sequence) && sequence > before.sequence && before.generation <= Number.MAX_SAFE_INTEGER - 2), `Unlist fence exhausted: ${id}`);
+    return Object.freeze({ id, hidden, before: Object.freeze(before),
+      expected: Object.freeze({ generation: before.generation, sequence, shellGeneration: catalog.shell.generation }) });
+  });
+  return Object.freeze({ catalogGeneration: catalog.generation, shellGeneration: catalog.shell.generation, targets: Object.freeze(targets) });
+}
+export function unlistCommand(target) {
+  const { id, expected } = target;
+  const ids = parseUnlistIds(id);
+  assert(ids.length === 1 && ids[0] === id, 'Invalid unlist command target');
+  assert(goodInteger(expected.generation) && goodInteger(expected.sequence) && expected.sequence > 0 && goodInteger(expected.shellGeneration), 'Invalid unlist command fences');
+  return `remove-game ${id} ${expected.generation} ${expected.sequence} ${expected.shellGeneration}`;
+}
+function observedUnlistStatus(target, catalog) {
+  const observed = targetObservation(catalog, target.id);
+  if (target.hidden) return isHiddenTarget({ catalog }, target.id) ? 'already-unlisted' : 'failed';
+  return !observed.active && !observed.missing && observed.delisted === true
+    && observed.generation === target.expected.generation + 1 && observed.sequence === target.expected.sequence
+    && observed.handledRevision === target.before.handledRevision ? 'removed' : 'failed';
+}
+/** No retries, refreshed fences, batch transaction, restoration or durable intent ledger. */
+export async function executeUnlistIntent(intent, { transport, readCatalog }) {
+  const results = intent.targets.map(target => ({ id: target.id, before: target.before, expected: target.expected,
+    attempted: false, transport: null, status: target.hidden ? 'already-unlisted' : 'not-attempted', observed: null }));
+  let stopped = false;
+  for (const [index, target] of intent.targets.entries()) {
+    if (target.hidden) continue;
+    const result = results[index];
+    result.attempted = true;
+    try {
+      const outcome = await transport(unlistCommand(target));
+      result.transport = ['ok', 'failed', 'unknown'].includes(outcome) ? outcome : 'unknown';
+    } catch { result.transport = 'unknown'; }
+    // A visible tombstone may still be provisional while the publisher runs its
+    // public check and can compensate. Failed/uncertain SSH always stops here.
+    if (result.transport !== 'ok') { stopped = true; break; }
+    try {
+      const catalog = validateProductionCatalog(await readCatalog());
+      if (observedUnlistStatus(target, catalog) !== 'removed'
+        || catalog.shell?.generation !== intent.shellGeneration) { stopped = true; break; }
+    } catch { stopped = true; break; }
+  }
+  // Reconcile ALL targets against one final read-only catalog, including prior
+  // successes, zero-write targets and targets never attempted after a failure.
+  let finalCatalog = null;
+  try { finalCatalog = validateProductionCatalog(await readCatalog()); } catch { /* truth is unknown, never assume SSH success */ }
+  for (const [index, target] of intent.targets.entries()) {
+    const result = results[index];
+    if (finalCatalog) result.observed = targetObservation(finalCatalog, target.id);
+    // Only a completed successful command plus exact observed state proves a
+    // removal. A provisional tombstone cannot upgrade failed/uncertain transport.
+    if (result.attempted && result.transport !== 'ok') result.status = result.transport;
+    else if (target.hidden || result.attempted) result.status = finalCatalog ? observedUnlistStatus(target, finalCatalog) : 'unknown';
+  }
+  return { schemaVersion: 1, action: 'unlist', ok: results.every(result => ['removed', 'already-unlisted'].includes(result.status)),
+    catalogGeneration: intent.catalogGeneration, shellGeneration: intent.shellGeneration,
+    finalCatalogGeneration: finalCatalog?.generation ?? null, stopped, results };
+}
+function removeOverSSH(sshArgs, command) {
+  return new Promise(resolvePromise => {
+    // No shell, stdin/archive, remote output or secrets in the operation report.
+    const child = spawn('ssh', ['-o', 'ConnectTimeout=15', '-o', 'ConnectionAttempts=1', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2', ...sshArgs, command],
+      { cwd: ROOT, stdio: 'ignore', timeout: 120000 });
+    child.on('error', () => resolvePromise('unknown'));
+    child.on('exit', (code, signal) => resolvePromise(signal || code === null || code === 255 ? 'unknown' : code === 0 ? 'ok' : 'failed'));
+  });
+}
+export async function unlistGames({ input, environment = process.env, checkoutRevision = git(['rev-parse', 'HEAD']), fetcher = fetch, transport, onIntent = () => {} } = {}) {
+  validateUnlistContext(environment, checkoutRevision);
+  parseUnlistIds(input); // Reject syntax/injection even before read-only network I/O.
+  // One sampling attempt only; no retry can silently replace this run's intent.
+  const catalog = await fetchReleaseJSON('/games/index.json', { fetcher });
+  const manifest = await fetchReleaseJSON('/manifest.json', { fetcher });
+  const intent = createUnlistIntent(input, { catalog, manifest });
+  const readCatalog = () => fetchReleaseJSON('/games/index.json', { fetcher });
+  const execute = transport => executeUnlistIntent(intent, { transport, readCatalog });
+  let report;
+  try {
+    onIntent(intent); // Safe public before-identities/fences survive a runner interruption in its log.
+    if (transport || intent.targets.every(target => target.hidden)) report = await execute(transport);
+    else {
+      try {
+        await withDeploymentSSH(async sshArgs => { report = await execute(command => removeOverSSH(sshArgs, command)); }, { environment, unlist: true });
+      } catch (error) {
+        if (!report) throw error;
+        // A credential cleanup failure must not erase already observed outcomes.
+        report = { ...report, ok: false, error: 'credential-cleanup-failed' };
+      }
+    }
+  } catch {
+    // Once an intent exists an unexpected interruption cannot claim zero writes.
+    // Never replay it; retain the tuple and query public truth read-only instead.
+    let observed = null;
+    try { observed = validateProductionCatalog(await readCatalog()); } catch { /* unknown */ }
+    report = { schemaVersion: 1, action: 'unlist', ok: false, phase: 'after-intent', error: 'operation-interrupted; inspect public state',
+      catalogGeneration: intent.catalogGeneration, shellGeneration: intent.shellGeneration, stopped: true,
+      finalCatalogGeneration: observed?.generation ?? null, results: intent.targets.map(target => ({
+        id: target.id, before: target.before, expected: target.expected, attempted: null, transport: 'unknown',
+        status: target.hidden && observed ? observedUnlistStatus(target, observed) : 'unknown',
+        observed: observed ? targetObservation(observed, target.id) : null })) };
+  }
+  return { ...report, revision: environment.GITHUB_SHA };
+}
+export function unlistSummary(report) {
+  const rows = (report.results ?? []).map(result => {
+    const before = result.before;
+    const expected = result.expected;
+    const observed = result.observed;
+    return `| ${result.id} | ${result.status} | ${before.version ?? '-'} / ${before.revision ?? '-'} | ${expected.generation} / ${expected.sequence ?? '-'} / ${expected.shellGeneration} | ${observed ? `${observed.active ? 'active' : 'absent'} / ${observed.generation ?? '-'} / ${observed.sequence ?? '-'}` : 'unknown'} |`;
+  });
+  return `## Game unlist: ${report.ok ? 'success' : 'not all successful'}\n\n`
+    + (report.error ? `${report.error}\n\n` : '')
+    + '| Game | Result | Before actual version / revision | Expected target generation / sequence / shell generation | Final presence / generation / sequence |\n'
+    + '| --- | --- | --- | --- | --- |\n' + rows.join('\n')
+    + '\n\nNo automatic retry or restore. Inspect public state; a new dispatch is a new intent.\n';
+}
+async function unlist() {
+  let report;
+  try {
+    report = await unlistGames({ input: process.env.GAME_IDS,
+      onIntent: intent => console.log(JSON.stringify({ action: 'unlist', phase: 'intent', revision: process.env.GITHUB_SHA, ...intent })) });
+  } catch {
+    // Do not echo arbitrary exception/transport/JSON text into Actions logs.
+    report = { schemaVersion: 1, action: 'unlist', ok: false, phase: 'preflight', error: 'preflight-failed; no operations attempted', results: [] };
+  }
+  console.log(JSON.stringify(report, null, 2));
+  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, unlistSummary(report));
+  if (!report.ok) process.exitCode = 1;
 }
 export function planOutputs(plan) {
   const games = plan.targets.filter(target => target.id !== 'shell');
@@ -447,6 +652,12 @@ export function planOutputs(plan) {
 }
 async function main() {
   const [command, suppliedTarget, ...options] = process.argv.slice(2);
+  // Dispatch does not consume .ci/plan.json, install dependencies or build/test.
+  if (command === 'unlist') {
+    assert(!suppliedTarget && !options.length, 'unlist accepts game_ids only through the environment');
+    await unlist();
+    return;
+  }
   let planPath = PLAN;
   if (options.length) {
     assert(options.length === 2 && options[0] === '--plan', 'Only --plan <path> is supported');
@@ -466,7 +677,7 @@ async function main() {
   if (command === 'verify') await verify(plan, id);
   else if (command === 'prepare') await prepareStore(plan, id);
   else if (command === 'publish') await publish(plan, id);
-  else throw new Error('Usage: node scripts/ci.mjs plan | verify|prepare|publish <id|shell|all> [--plan <path>]');
+  else throw new Error('Usage: node scripts/ci.mjs unlist | plan | verify|prepare|publish <id|shell|all> [--plan <path>]');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch(error => { console.error(error.message); process.exitCode = 1; });

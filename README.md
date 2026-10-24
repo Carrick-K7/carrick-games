@@ -146,6 +146,8 @@ The first migration is a special full-suite gate: seed all tested game identitie
 
 The private `Carrick-K7/carrick-ops` repository owns the restricted publisher, Caddy mounts, rollback wrappers and read-only doctor. Publication validates complete immutable inventories and promotes only one target under generation/sequence/counterpart fences. It never restores a whole catalog over another game's release. All immutable releases are retained—no automatic garbage collection; monitor disk and inodes.
 
+Delisting is a catalog operation, not a new game build. The repository owner can explicitly dispatch the existing workflow on `main` with `game_ids` (space/comma-separated IDs); it reuses the restricted publisher without installing dependencies or building games. The tool chooses fencing values, reports each target's result and stops on uncertainty. Ordinary CI cannot re-list an intentionally delisted game; restoration requires an explicit activation of a retained version/SHA. Existing browser resources remain available. A failed or partial operation is not reported as complete. Old workflow runs cannot be rerun to acquire new fences; inspect the result, then issue a new dispatch for a new intent.
+
 The first cutover pins one validated copy of the in-service legacy release so existing `/assets/`, `/cs/`, `/gacha/`, `/fonts/` and `/brand/` URLs keep serving those bytes. Missing pinned resources return 404, not modern files or SPA HTML. Prior modern immutable URLs also remain reachable. Rollbacks must use the ops wrappers, never a manual symlink switch.
 
 Development, secrets, operations and release closure: `AGENTS.md`. Visual and interaction authority: `DESIGN.md`. Only these three root project documents are maintained.

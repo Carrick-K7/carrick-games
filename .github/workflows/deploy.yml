@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      game_ids:
+        description: Game IDs to unlist, separated by whitespace or commas
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -20,8 +26,39 @@ defaults:
 # There is deliberately no workflow-wide concurrency or all-games-success gate.
 # Only the same component queues behind itself; the server provides final CAS.
 jobs:
+  unlist:
+    name: Owner-requested game unlist
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'Carrick-K7/carrick-games' && github.repository_owner == 'Carrick-K7' &&
+      github.ref == 'refs/heads/main' && github.actor == 'Carrick-K7' &&
+      github.triggering_actor == 'Carrick-K7' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Unlist with fixed snapshot fences and report public truth
+        env:
+          GAME_IDS: ${{ inputs.game_ids }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/ci.mjs unlist
+      - name: Cleanup ephemeral deployment credentials
+        if: always()
+        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+
   plan:
     name: Select affected releases
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -54,7 +91,7 @@ jobs:
   common:
     name: Verify actual shared changes or initial source store
     needs: plan
-    if: needs.plan.outputs.full == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -87,7 +124,7 @@ jobs:
     name: Game ${{ matrix.id }}
     needs: [plan, common]
     if: >-
-      always() && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
+      always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
@@ -143,7 +180,7 @@ jobs:
     name: Shell with currently published games
     needs: [plan, common]
     if: >-
-      always() && needs.plan.result == 'success' && needs.plan.outputs.shell == 'true' &&
+      always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.shell == 'true' &&
       needs.plan.outputs.bootstrap != 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-latest
@@ -188,7 +225,7 @@ jobs:
     name: Initial shell cutover after every game is seeded
     needs: [plan, common, games]
     if: >-
-      always() && needs.plan.result == 'success' && needs.plan.outputs.bootstrap == 'true' &&
+      always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.bootstrap == 'true' &&
       needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
       (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
     runs-on: ubuntu-latest
