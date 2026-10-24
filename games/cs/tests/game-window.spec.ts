@@ -34,9 +34,14 @@ test.describe('edge-to-edge game windows', () => {
     await page.mouse.click(start.clientX, start.clientY);
     await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__.info().playerAlive)).toBe(true);
     await page.keyboard.press('Escape');
-    const state = () => page.evaluate(() => (window as any).__CSX_DEBUG__.info());
+    const state = () => page.evaluate(() => {
+      const { loading, ...match } = (window as any).__CSX_DEBUG__.info();
+      return { match, loading };
+    });
     const initial = await state();
-    expect(typeof initial.mag).toBe('number');
+    expect(typeof initial.match.mag).toBe('number');
+    expect(initial.match.phase).toBe('paused');
+    let previousLoading = initial.loading;
     const prepared = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
     for (const size of sizes) {
       await page.setViewportSize(size);
@@ -51,7 +56,17 @@ test.describe('edge-to-edge game windows', () => {
       expect(m.pixels).toBeLessThanOrEqual(8_294_400);
       expect(m.info.width / m.info.height).toBeCloseTo(size.width / size.height, 3);
       expect(m.info.gunCameraAspect).toBeCloseTo(size.width / size.height, 3);
-      expect(await state()).toEqual(initial);
+      const current = await state();
+      // Pause freezes every match field, not optional network activity. A
+      // resize may also change the requested detail tier without restarting it.
+      expect(current.match).toEqual(initial.match);
+      expect(current.loading).toMatchObject({ canPlay: true, failed: 0 });
+      expect(['materials', 'ready']).toContain(current.loading.stage);
+      expect([9, 27]).toContain(current.loading.total);
+      expect(current.loading.loaded).toBeGreaterThanOrEqual(0);
+      expect(current.loading.loaded).toBeLessThanOrEqual(current.loading.total);
+      if (current.loading.total === previousLoading.total) expect(current.loading.loaded).toBeGreaterThanOrEqual(previousLoading.loaded);
+      previousLoading = current.loading;
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepared!);
       await expect(page.locator('.app-header')).toBeHidden();
       await expect(page.locator('#keyboardPanel')).toBeHidden();
