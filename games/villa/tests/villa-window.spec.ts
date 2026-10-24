@@ -92,23 +92,30 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
 
   test('window resizing, picker focus and switching keep the persistent root and clear old game state', async ({ page }) => {
     await installVillaSwitchTarget(page);
-    const errors = captureErrors(page), canvas = await startVilla(page);
-    const prepared = await canvas.getAttribute('data-game-prepare-count');
-    for (const size of [{ width: 1440, height: 800 }, { width: 844, height: 390 }]) {
-      await page.setViewportSize(size); await assertWindow(page); await assertRenderedCamera(page);
-      await expect(canvas).toHaveAttribute('data-game-prepare-count', prepared!);
+    const errors = captureErrors(page);
+    try {
+      const canvas = await startVilla(page);
+      const prepared = await canvas.getAttribute('data-game-prepare-count');
+      for (const size of [{ width: 1440, height: 800 }, { width: 844, height: 390 }]) {
+        await page.setViewportSize(size); await assertWindow(page); await assertRenderedCamera(page);
+        await expect(canvas).toHaveAttribute('data-game-prepare-count', prepared!);
+      }
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('#searchInput')).toBeFocused();
+      await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
+      await expect(page.locator('#gameCanvas')).toBeFocused();
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
+      await expect(canvas).toHaveAttribute('data-logical-width', '400');
+      await expect(canvas).toHaveAttribute('data-logical-height', '400');
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
+      await page.setViewportSize({ width: 1360, height: 900 });
+      await expect.poll(() => canvas.evaluate(c => c.parentElement?.id)).toBe('canvasWrapper');
+    } finally {
+      // Library opening refreshes discovery asynchronously; drain the real fetch
+      // callback before Playwright tears down the page, without ignoring errors.
+      await page.unrouteAll({ behavior: 'wait' });
     }
-    await page.keyboard.press('Control+k');
-    await expect(page.locator('#searchInput')).toBeFocused();
-    await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
-    await expect(page.locator('#gameCanvas')).toBeFocused();
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
-    await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
-    await expect(canvas).toHaveAttribute('data-logical-width', '400');
-    await expect(canvas).toHaveAttribute('data-logical-height', '400');
-    await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
-    await page.setViewportSize({ width: 1360, height: 900 });
-    await expect.poll(() => canvas.evaluate(c => c.parentElement?.id)).toBe('canvasWrapper');
     expect(errors).toEqual([]);
   });
 

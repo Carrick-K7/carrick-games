@@ -1,5 +1,6 @@
 import { createVillaElevator, villaElevatorPanelButtons as gamePanelButtons } from '../src/villaElevator';
 import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage } from './villaBrowserHost';
 
@@ -123,47 +124,111 @@ test('villa car panel lists floors top-first and drives real open/close buttons'
 
 test('a real click on the lift panel works while the pointer is locked', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.setViewportSize({ width: 1120, height: 700 });
-  await openVillaFixturePage(page);
-  await page.evaluate(async url => {
-    const { VillaGame } = await import(url);
-    const canvas = document.createElement('canvas'); canvas.id = 'lift-panel-click'; canvas.tabIndex = 0;
-    Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' });
-    document.querySelector('#gameApp')!.append(canvas);
-    const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
-      isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;
-    game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
-    game.setViewport({ width: 1120, height: 700, dpr: 1, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
-    game.state.elevator.riding = true; game.state.elevator.phase = 'open'; game.state.elevator.door = 1;
-    game.position = { x: 4.55, y: 0, z: -5.8 }; game.eyeY = 0; game.renderFrame();
-    (window as any).__liftPanel = game;
-  }, moduleUrl());
-  // Lock the pointer exactly like a player who clicked the canvas to look around.
-  await page.locator('#lift-panel-click').click();
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('lift-panel-click');
-  // The crosshair does the aiming while the pointer is locked: face the real
-  // 3D button, then a click selects the floor. This case is about the locked
-  // click reaching the panel, not about how the browser's recentre moved it.
-  const aimed = await page.evaluate((button) => {
-    const game = (window as any).__liftPanel;
-    const eye = { x: game.position.x, y: game.position.y + 1.65, z: game.position.z };
-    const dx = button.x - eye.x, dy = button.y - eye.y, dz = button.z - eye.z;
-    game.yaw = Math.atan2(-dx, -dz); game.pitch = Math.atan2(dy, Math.hypot(dx, dz));
-    const hit = game.elevatorAimButton();
-    return hit ? hit.id : null;
-  }, gamePanelButtons(createVillaElevator()).find((b: any) => b.id === 'elevator-floor-2'));
-  expect(aimed).toBe('elevator-floor-2');
-  await page.mouse.down(); await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
-    // Software rasterisation starves the frame loop in a long single-worker run,
-    // so the press can take far longer than a nominal frame to be processed.
-    { message: 'a locked click on the aimed panel button must select the floor', timeout: 30_000 }).toBe(2);
-  // And the mouse keeps steering the view inside the car: the panel no longer
-  // owns it.
-  const yawBefore = await page.evaluate(() => (window as any).__liftPanel.yaw);
-  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 48, movementY: 6, bubbles: true })));
-  const yawAfter = await page.evaluate(() => (window as any).__liftPanel.yaw);
-  expect(yawAfter).not.toBe(yawBefore);
+  const pageErrors: string[] = [];
+  const recordError = (error: Error) => { if (pageErrors.length < 16) pageErrors.push(error.message.slice(0, 2048)); };
+  page.on('pageerror', recordError);
+  try {
+    await page.setViewportSize({ width: 1120, height: 700 });
+    await openVillaFixturePage(page);
+    await page.evaluate(async url => {
+      const { VillaGame } = await import(url);
+      const canvas = document.createElement('canvas'); canvas.id = 'lift-panel-click'; canvas.tabIndex = 0;
+      Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' });
+      document.querySelector('#gameApp')!.append(canvas);
+      const game = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
+        isPixelMode: () => false, getRecord: () => null, reportScore: () => {}, requestShellRender: () => {} }) as any;
+      game.prepare(); game.start(); cancelAnimationFrame(game.animationId);
+      game.setViewport({ width: 1120, height: 700, dpr: 1, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
+      game.state.elevator.riding = true; game.state.elevator.phase = 'open'; game.state.elevator.door = 1;
+      game.position = { x: 4.55, y: 0, z: -5.8 }; game.eyeY = 0; game.renderFrame();
+      (window as any).__liftPanel = game;
+      // Observe only: never cancel input, change game state or replace a handler.
+      // Capture precedes canvas input; bubble follows Villa's existing document listeners.
+      const trace = { limit: 128, total: 0, dropped: 0, expectedFloor: 2, entries: [] as Record<string, unknown>[] };
+      const identify = (target: EventTarget | null) => target instanceof Element ? `${target.tagName.toLowerCase()}#${target.id}`
+        : target === document ? 'document' : target === window ? 'window' : null;
+      const record = (phase: string, event?: Event) => {
+        const sequence = ++trace.total;
+        let entry: Record<string, unknown>;
+        try {
+          const aimed = game.elevatorAimButton();
+          entry = {
+            sequence, phase, now: performance.now(), simulationTime: game.time,
+            event: event ? { type: event.type, trusted: event.isTrusted, target: identify(event.target),
+              timeStamp: event.timeStamp, eventPhase: event.eventPhase, defaultPrevented: event.defaultPrevented,
+              ...(event instanceof MouseEvent ? { button: event.button, buttons: event.buttons,
+                clientX: event.clientX, clientY: event.clientY, movementX: event.movementX, movementY: event.movementY } : {}) } : null,
+            lock: identify(document.pointerLockElement), wantPointerLock: game.wantPointerLock,
+            skipLockRecentre: game.skipLockRecentre, lockGrantedAt: String(game.lockGrantedAt),
+            running: game.running, presentationPaused: game.presentationPaused, mouseLookEnabled: game.mouseLookEnabled,
+            yaw: game.yaw, pitch: game.pitch, eyeY: game.eyeY, position: { ...game.position },
+            aimed: aimed ? { id: aimed.id, floor: aimed.floor ?? null } : null,
+            elevator: { ...game.state.elevator }, seated: game.state.seated, transitioning: !!game.transition,
+            motion: { offset: game.motion.offset, velocity: game.motion.velocity },
+            mapOpen: game.mapOpen, terminalVisible: game.terminal?.visible, helpOpen: game.helpOpen,
+            shellOverlayOpen: game.shellOverlayOpen, toast: game.toast,
+          };
+        } catch (error) {
+          // A failed diagnostic must not interfere with the native input path.
+          entry = { sequence, phase, observationError: String(error).slice(0, 2048) };
+        }
+        if (trace.entries.length === trace.limit) { trace.entries.shift(); trace.dropped++; }
+        trace.entries.push(entry);
+      };
+      const before = (event: Event) => record('capture', event), after = (event: Event) => record('bubble', event);
+      const types = ['pointerlockchange', 'mousemove', 'mousedown', 'mouseup'];
+      for (const type of types) {
+        document.addEventListener(type, before, { capture: true, passive: true });
+        document.addEventListener(type, after, { passive: true });
+      }
+      (window as any).__liftPanelTrace = { trace, record, dispose: () => {
+        for (const type of types) {
+          document.removeEventListener(type, before, true);
+          document.removeEventListener(type, after);
+        }
+      } };
+      record('fixture-ready');
+    }, moduleUrl());
+    // Lock the pointer exactly like a player who clicked the canvas to look around.
+    await page.locator('#lift-panel-click').click();
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id ?? null)).toBe('lift-panel-click');
+    // The crosshair does the aiming while the pointer is locked: face the real
+    // 3D button, then a click selects the floor. This case is about the locked
+    // click reaching the panel, not about how the browser's recentre moved it.
+    const aimed = await page.evaluate((button) => {
+      const game = (window as any).__liftPanel;
+      (window as any).__liftPanelTrace.record('before-aim');
+      const eye = { x: game.position.x, y: game.position.y + 1.65, z: game.position.z };
+      const dx = button.x - eye.x, dy = button.y - eye.y, dz = button.z - eye.z;
+      game.yaw = Math.atan2(-dx, -dz); game.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      const hit = game.elevatorAimButton();
+      (window as any).__liftPanelTrace.record('after-aim');
+      return hit ? hit.id : null;
+    }, gamePanelButtons(createVillaElevator()).find((b: any) => b.id === 'elevator-floor-2'));
+    expect(aimed).toBe('elevator-floor-2');
+    await page.mouse.down(); await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => (window as any).__liftPanel.state.elevator.target),
+      // RAF is cancelled above and floor selection runs synchronously on mousedown.
+      // Keep the existing observation budget; the trace distinguishes delivery, aim and state.
+      { message: 'a locked click on the aimed panel button must select the floor', timeout: 30_000 }).toBe(2);
+    // And the mouse keeps steering the view inside the car: the panel no longer
+    // owns it.
+    const yawBefore = await page.evaluate(() => (window as any).__liftPanel.yaw);
+    await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 48, movementY: 6, bubbles: true })));
+    const yawAfter = await page.evaluate(() => (window as any).__liftPanel.yaw);
+    expect(yawAfter).not.toBe(yawBefore);
+  } finally {
+    const trace = await page.evaluate(() => {
+      const observer = (window as any).__liftPanelTrace;
+      if (!observer) return { unavailable: 'Fixture trace was not initialized' };
+      observer.record('finally'); observer.dispose(); return observer.trace;
+    }).catch(error => ({ unavailable: String(error) }));
+    page.off('pageerror', recordError);
+    // Persist the diagnostic even with the list reporter and tracing disabled.
+    const tracePath = test.info().outputPath('lift-panel-native-input.json');
+    await writeFile(tracePath, JSON.stringify({ trace, pageErrors }, null, 2));
+    await test.info().attach('lift-panel-native-input', { path: tracePath, contentType: 'application/json' });
+  }
 });
 
 test('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {

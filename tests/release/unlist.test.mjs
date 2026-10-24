@@ -561,6 +561,14 @@ test('workflow isolates dispatch, uses exact SHA/Node22 and constant unlist with
     assert.ok(body.includes("github.event_name != 'workflow_dispatch'"), name);
   }
 });
+test('the shared full gate retains failed browser evidence without weakening verification', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+  const common = workflow.slice(workflow.indexOf('\n  common:'), workflow.indexOf('\n  games:'));
+  assert.match(common, /run: node scripts\/ci\.mjs verify all/);
+  assert.match(common, /name: Preserve failed shared browser evidence\s+if: failure\(\)\s+uses: actions\/upload-artifact@v4/);
+  assert.match(common, /name: shared-attempt-\$\{\{ github.run_attempt \}\}-failure\s+path: test-results\/\s+retention-days: 1\s+if-no-files-found: ignore/);
+  assert.doesNotMatch(common, /continue-on-error|--update-snapshots|--retries/);
+});
 test('stage integration retains fresh inputs, post-test CAS/counterpart and push-only publication guards', async () => {
   const source = await readFile(new URL('../../scripts/ci.mjs', import.meta.url), 'utf8');
   const publish = source.slice(source.indexOf('export async function publish('), source.indexOf('export function validateUnlistContext('));

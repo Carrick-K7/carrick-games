@@ -15,59 +15,65 @@ test.describe('Warm Villa', () => {
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
     await installVillaSwitchTarget(page);
-    await page.goto('/#/villa');
-    const canvas = page.locator('#gameCanvas');
-    // Cold software-WebGL setup can outlast the generic 5s locator timeout.
-    await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
-    await expect(canvas).toHaveAttribute('data-game-running', 'true');
-    // Entering plays immediately; the first canvas click grants mouse capture.
-    await canvas.click();
-    const colors = await canvas.evaluate((c: HTMLCanvasElement) => {
-      const ctx = c.getContext('2d')!;
-      const values = new Set<string>();
-      for (let y = 100; y < c.height - 80; y += Math.max(1, Math.floor(c.height / 35))) {
-        for (let x = 30; x < c.width - 30; x += Math.max(1, Math.floor(c.width / 45))) {
-          values.add(Array.from(ctx.getImageData(x, y, 1, 1).data).join(','));
+    try {
+      await page.goto('/#/villa');
+      const canvas = page.locator('#gameCanvas');
+      // Cold software-WebGL setup can outlast the generic 5s locator timeout.
+      await expect(canvas).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+      await expect(canvas).toHaveAttribute('data-game-running', 'true');
+      // Entering plays immediately; the first canvas click grants mouse capture.
+      await canvas.click();
+      const colors = await canvas.evaluate((c: HTMLCanvasElement) => {
+        const ctx = c.getContext('2d')!;
+        const values = new Set<string>();
+        for (let y = 100; y < c.height - 80; y += Math.max(1, Math.floor(c.height / 35))) {
+          for (let x = 30; x < c.width - 30; x += Math.max(1, Math.floor(c.width / 45))) {
+            values.add(Array.from(ctx.getImageData(x, y, 1, 1).data).join(','));
+          }
         }
+        return values.size;
+      });
+      expect(colors).toBeGreaterThan(150);
+      // Release capture before a locator screenshot's scroll/stability action.
+      await page.keyboard.press('Escape');
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
+      await canvas.screenshot({ path: test.info().outputPath('villa-exterior.png') });
+      await page.keyboard.press('h');
+      await expect(canvas).toHaveAttribute('data-villa-position', '{"x":0,"y":0,"z":11.5}');
+      await page.keyboard.down('w');
+      await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-position'))!).z).toBeLessThan(11.25);
+      await page.keyboard.up('w');
+      await page.keyboard.press('m');
+      await expect(canvas).toHaveAttribute('data-villa-map', 'true');
+      const beforeMap = await canvas.getAttribute('data-villa-position');
+      await page.keyboard.press('3');
+      await page.keyboard.down('w');
+      await page.waitForTimeout(150);
+      await page.keyboard.up('w');
+      expect(await canvas.getAttribute('data-villa-position')).toBe(beforeMap);
+      await page.keyboard.press('Escape');
+      await expect(canvas).toHaveAttribute('data-villa-map', 'false');
+      await expect(canvas).toHaveAttribute('data-villa-time', 'evening');
+      for (const time of ['night', 'day', 'evening']) {
+        await page.keyboard.press('t');
+        await expect(canvas).toHaveAttribute('data-villa-time', time);
       }
-      return values.size;
-    });
-    expect(colors).toBeGreaterThan(150);
-    // Release capture before a locator screenshot's scroll/stability action.
-    await page.keyboard.press('Escape');
-    await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
-    await canvas.screenshot({ path: test.info().outputPath('villa-exterior.png') });
-    await page.keyboard.press('h');
-    await expect(canvas).toHaveAttribute('data-villa-position', '{"x":0,"y":0,"z":11.5}');
-    await page.keyboard.down('w');
-    await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-position'))!).z).toBeLessThan(11.25);
-    await page.keyboard.up('w');
-    await page.keyboard.press('m');
-    await expect(canvas).toHaveAttribute('data-villa-map', 'true');
-    const beforeMap = await canvas.getAttribute('data-villa-position');
-    await page.keyboard.press('3');
-    await page.keyboard.down('w');
-    await page.waitForTimeout(150);
-    await page.keyboard.up('w');
-    expect(await canvas.getAttribute('data-villa-position')).toBe(beforeMap);
-    await page.keyboard.press('Escape');
-    await expect(canvas).toHaveAttribute('data-villa-map', 'false');
-    await expect(canvas).toHaveAttribute('data-villa-time', 'evening');
-    for (const time of ['night', 'day', 'evening']) {
-      await page.keyboard.press('t');
-      await expect(canvas).toHaveAttribute('data-villa-time', time);
+      const lookBefore = await canvas.getAttribute('data-villa-look');
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+      await page.mouse.move(box!.x + box!.width * 0.5, box!.y + box!.height * 0.5);
+      // Mouse movement alone changes view; no held button or drag gesture.
+      await page.mouse.move(box!.x + box!.width * 0.66, box!.y + box!.height * 0.53, { steps: 4 });
+      await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(lookBefore);
+      await page.keyboard.press('Control+k');
+      await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
+      await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+    } finally {
+      // Library opening refreshes discovery asynchronously; drain the real fetch
+      // callback before Playwright tears down the page, without ignoring errors.
+      await page.unrouteAll({ behavior: 'wait' });
     }
-    const lookBefore = await canvas.getAttribute('data-villa-look');
-    const box = await canvas.boundingBox();
-    expect(box).not.toBeNull();
-    await page.mouse.move(box!.x + box!.width * 0.5, box!.y + box!.height * 0.5);
-    // Mouse movement alone changes view; no held button or drag gesture.
-    await page.mouse.move(box!.x + box!.width * 0.66, box!.y + box!.height * 0.53, { steps: 4 });
-    await expect.poll(() => canvas.getAttribute('data-villa-look')).not.toBe(lookBefore);
-    await page.keyboard.press('Control+k');
-    await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
-    await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     expect(errors).toEqual([]);
   });
 
