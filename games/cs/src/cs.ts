@@ -22,6 +22,7 @@ import {
 import { CsEngine } from './csEngine.js';
 import { installGameDebug } from '@carrick/game-sdk/debug';
 import { CsHud, type HudRegion } from './csHud.js';
+import { uiLoadingBackdrop } from './csHudUi.js';
 
 const W = 1280;
 const H = 720;
@@ -271,6 +272,9 @@ export class CsGame extends BaseGame {
       void this.engine.init();
     } else {
       this.engine.toMenu();
+      // A shell restart can happen before the first world exists. Keep an
+      // in-flight boot, or retry failed mandatory resources through the normal gate.
+      if (!this.engine.world) void this.engine.primaryAction();
     }
     // Engine-specific QA stays in this release, not in a shell that can outlive it.
     this.registerCleanup(installGameDebug('__CSX_DEBUG__', {
@@ -289,7 +293,7 @@ export class CsGame extends BaseGame {
       info: () => {
         const engine = this.engine;
         return {
-          phase: engine.phase, mode: engine.mode, map: engine.selectedMap, ready: engine.ready,
+          phase: engine.phase, mode: engine.mode, map: engine.selectedMap, ready: engine.ready, loading: engine.loadingView(),
           round: engine.round, scores: { ...engine.scores }, playerAlive: !!engine.player?.alive,
           playerPos: engine.player ? { x: engine.player.pos.x, y: engine.player.pos.y, z: engine.player.pos.z } : null,
           kills: engine.player?.kills ?? 0,
@@ -323,6 +327,7 @@ export class CsGame extends BaseGame {
       renderWidth: this.engine.canvas3d?.width,
       renderHeight: this.engine.canvas3d?.height,
       buyOpen: this.engine.buyOpen, paused: this.engine.phase === 'paused',
+      loading: this.engine.loadingView(),
     };
   }
 
@@ -339,8 +344,7 @@ export class CsGame extends BaseGame {
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(engine.canvas3d!, 0, 0, this.width, this.height);
     } else {
-      ctx.fillStyle = '#0c141c';
-      ctx.fillRect(0, 0, this.width, this.height);
+      uiLoadingBackdrop(ctx, this.width, this.height);
     }
     this.hudView.draw(ctx, this.width, this.height, this.presentationPaused);
     const end = engine.hud.matchEnd;

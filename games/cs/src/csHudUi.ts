@@ -21,6 +21,31 @@ export const UI_NUMBER_FONT = '"Arial Narrow", "Roboto Condensed", "Bahnschrift"
 export type UiTone = 'neutral' | 'ct' | 't';
 type Ctx = CanvasRenderingContext2D;
 
+/** Asset-independent first paint: never depend on the images being loaded. */
+export function uiLoadingBackdrop(ctx: Ctx, w: number, h: number) {
+  ctx.save();
+  const gradient = typeof ctx.createLinearGradient === 'function' ? ctx.createLinearGradient(0, 0, 0, h) : null;
+  if (gradient) { gradient.addColorStop(0, '#516d7b'); gradient.addColorStop(.6, '#91a5ac'); gradient.addColorStop(1, '#bbc2b8'); }
+  ctx.fillStyle = gradient || '#758e98'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(228,238,237,.16)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = -h; x < w + h; x += 80) { ctx.moveTo(x, 0); ctx.lineTo(x + h, h); }
+  for (let y = h * .62; y < h; y += 44) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke(); ctx.restore();
+}
+
+/** Clearly schematic placeholder, not pretend artwork or a loading dependency. */
+export function uiPreviewPlaceholder(ctx: Ctx, x: number, y: number, w: number, h: number, snow: boolean) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = snow ? '#819eac' : '#b6a381'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = snow ? '#bfcfd0' : '#d1bea0'; ctx.fillRect(x, y + h * .65, w, h * .35);
+  ctx.fillStyle = snow ? '#526e7d' : '#8a785c';
+  ctx.beginPath(); ctx.moveTo(x, y + h * .65); ctx.lineTo(x + w * .25, y + h * .35);
+  ctx.lineTo(x + w * .46, y + h * .58); ctx.lineTo(x + w * .68, y + h * .28);
+  ctx.lineTo(x + w, y + h * .65); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
 export function uiFont(ctx: Ctx, size = 14, bold = false) {
   ctx.font = `${bold ? '600 ' : ''}${size}px ${UI_FONT}`;
 }

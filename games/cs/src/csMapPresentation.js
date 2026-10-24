@@ -28,7 +28,7 @@ function projectedUV(geometry){
 
 /** Replace world surfaces only. Gun, actor, HUD and objective materials stay untouched. */
 export async function upgradeWorldMaterials(world,assetUrl,options={}){
-  if(world.materialPalette)return world.materialPalette.stats();
+  if(world.materialPalette)return options.awaitTextures===false?world.materialPalette.stats():(world.materialsReady||world.materialPalette.load());
   const palette=new WorldMaterialPalette(assetUrl,options);
   world.materialPalette=palette;
   // Both BSP and authored worlds have different geometry ownership. The palette
@@ -84,8 +84,13 @@ export async function upgradeWorldMaterials(world,assetUrl,options={}){
     releaseMaterials(oldSceneryMaterials);
   }
   world.mapGroup.updateMatrixWorld(true);
-  const stats=await palette.load();
   world.sourceMissingTextures=world.missingTextures||[];
-  world.missingTextures=[...new Set(stats.assets.filter(a=>a.slot==='map'&&a.state==='failed').map(a=>a.kind))];
-  return stats;
+  world.missingTextures=[];
+  // Geometry and usable neutral materials are ready now. Optional photographs
+  // refine this same world in place; they must not gate arena entry or movement.
+  world.materialsReady=palette.load().then(stats=>{
+    if(!disposed)world.missingTextures=[...new Set(stats.assets.filter(a=>a.slot==='map'&&a.state==='failed').map(a=>a.kind))];
+    return stats;
+  });
+  return options.awaitTextures===false?palette.stats():world.materialsReady;
 }

@@ -2,7 +2,7 @@
 // viewport; fixed headers/actions never move with selectable content.
 import type { CsEngine } from './csEngine.js';
 import { MAPS } from './csMaps.js';
-import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRule, uiText, uiStatusBand, type UiTone } from './csHudUi.js';
+import { UI, uiButton, uiFont, uiHudPlate, uiNumber, uiParagraph, uiRound, uiRule, uiText, uiStatusBand, uiPreviewPlaceholder, type UiTone } from './csHudUi.js';
 import { drawHudIcon, drawTeamBadge } from './csHudArt.js';
 import { HudEmphasis } from './csHudEmphasis.js';
 import {
@@ -102,7 +102,7 @@ export class CsHud {
     const url = this.engine.assetUrl(path);
     let image = cache.get(url);
     if (!image) {
-      image = new Image(); image.decoding = 'async'; image.src = url;
+      image = new Image(); image.decoding = 'async'; image.loading = 'eager'; image.fetchPriority = 'low'; image.src = url;
       cache.set(url, image);
     }
     return image.complete && image.naturalWidth > 0 ? image : null;
@@ -128,7 +128,17 @@ export class CsHud {
   private drawMapPreview(ctx: Ctx, id: string, x: number, y: number, w: number, h: number) {
     const image = this.mapPreview(id);
     ctx.fillStyle = UI.raised; ctx.fillRect(x, y, w, h);
-    if (!image) return;
+    if (!image) {
+      uiPreviewPlaceholder(ctx, x, y, w, h, id === 'fy_snow');
+      if (w >= 140 && h >= 100) {
+        const cached = typeof this.engine.assetUrl === 'function' ? this.mapPreviews.get(this.engine.assetUrl(`assets/ui/maps/${id}.webp`)) : null;
+        const failed = cached?.complete && !cached.naturalWidth;
+        const cy = y + (h - 56) / 2;
+        uiRound(ctx, x + 8, cy - 12, w - 16, 24, 'rgba(13,27,34,.66)', undefined, 8);
+        this.text(ctx, failed ? this.L('暂无预览', 'Preview unavailable') : this.L('预览载入中…', 'Loading preview…'), x + w / 2, cy, 11, C.text, 'center', false, w - 24);
+      }
+      return;
+    }
     const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
     const sw = w / scale, sh = h / scale;
     ctx.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
@@ -246,7 +256,10 @@ export class CsHud {
     const e = this.engine, map = (MAPS as any)[e.selectedMap];
     const en = { name: map.nameEn, intro: map.introEn, hint: map.hintEn };
     const cards = Object.values(MAPS).map(m => ({ id: m.id, name: this.L(m.name, m.nameEn) }));
-    const title = L.availW < 400 ? this.L('CS / 对战', 'CS / Play') : this.L('CS / 对战准备', 'CS / Play');
+    const loading = typeof e.loadingView === 'function' ? e.loadingView() : null;
+    const status = loading && loading.stage !== 'ready' ? loading : null;
+    const title = e.bootLoading || e.mapLoading ? this.L('CS / 正在加载', 'CS / Loading')
+      : L.availW < 400 ? this.L('CS / 对战', 'CS / Play') : this.L('CS / 对战准备', 'CS / Play');
     const close = { id: 'menu-settings', label: this.L('设置', 'Settings'), icon: '⚙', run: () => e.openSettings() };
     const r = this.frame(ctx, L, 980, 638, title, close), sections = modalSections(r);
     const topExtra = (sections.scrollAll ? 56 : 0) + (e.hud.menuError ? 32 : 0);
@@ -274,13 +287,13 @@ export class CsHud {
         ctx.fillStyle = 'rgba(7,12,17,.12)'; ctx.fillRect(x, y, cw, ch);
         ctx.fillStyle = 'rgba(8,14,20,.9)'; ctx.fillRect(x, y + ch - 56, cw, 56);
         this.text(ctx, card.name, x + 12, y + ch - 35, 16, C.text, 'left', true, cw - 24);
-        this.text(ctx, card.id.toUpperCase(), x + 12, y + ch - 14, 11, C.dim, 'left', false, cw - 24);
+        this.text(ctx, selected && status ? status.label : card.id.toUpperCase(), x + 12, y + ch - 14, 11, C.dim, 'left', false, cw - 24);
       } else {
         ctx.fillStyle = selected ? UI.selected : hover ? UI.hover : UI.raised;
         ctx.fillRect(x + thumbW, y, cw - thumbW, ch);
         this.text(ctx, card.name, x + thumbW + 12, y + 25, 16, C.text, 'left', true, cw - thumbW - 24);
         this.text(ctx, card.id.toUpperCase(), x + thumbW + 12, y + 49, 11, C.dim, 'left', false, cw - thumbW - 24);
-        this.text(ctx, card.id === 'fy_snow' ? this.L('地面拾枪', 'Ground pickups') : this.L('A / B 双包点', 'Sites A / B'), x + thumbW + 12, y + 67, 12, C.dim, 'left', false, cw - thumbW - 24);
+        this.text(ctx, selected && status ? status.label : card.id === 'fy_snow' ? this.L('地面拾枪', 'Ground pickups') : this.L('A / B 双包点', 'Sites A / B'), x + thumbW + 12, y + 67, 12, C.dim, 'left', false, cw - thumbW - 24);
       }
       ctx.strokeStyle = selected ? UI.text : hover ? '#a3b3bf' : C.border;
       ctx.lineWidth = selected ? 2 : 1;
@@ -294,7 +307,7 @@ export class CsHud {
       this.push({ id: `menu-map-${card.id}`, x, y, w: cw, h: ch, disabled: e.bootLoading || e.mapLoading, down: () => e.selectMap(card.id) });
     });
     if (wide) {
-      uiParagraph(ctx, this.L(map.intro, en.intro), body.x, body.y + mapH + 4, colW, 14, C.text, 2, 21);
+      uiParagraph(ctx, status ? status.detail : this.L(map.intro, en.intro), body.x, body.y + mapH + 4, colW, 14, C.text, 2, 21);
       uiParagraph(ctx, this.L(map.hint, en.hint), body.x, body.y + mapH + 58, colW, 13, C.dim, 2, 19);
       this.text(ctx, this.L('5 对 5 · 本地人机', '5 vs 5 · local bot match'), body.x, body.y + mapH + 112, 12, C.faint);
     }

@@ -134,7 +134,7 @@ export class CsEngine {
     this.selectedMode = 'elimination'; this.mode = 'elimination';
     this.selectedKillLimit = 50; this.killLimit = 50; this.matchElapsed = 0;
     this.selectedMap = 'fy_snow'; this.selectedPistol = this.controlSettings.startingPistol;
-    this.radarBase = null; this.bootError = '';
+    this.radarBase = null; this.bootError = ''; this.mapLoadError = '';
     this.settingsNote = '';
 
     this.keys = new Set();
@@ -175,7 +175,7 @@ export class CsEngine {
 
   async init() {
     if (this.disposed || this.bootLoading) return;
-    this.bootLoading = true;
+    this.bootLoading = true; this.bootError = ''; this.mapLoadError = ''; this.hud.menuError = '';
     this.audio.preload();
     try {
       this.renderer?.dispose();
@@ -287,7 +287,7 @@ export class CsEngine {
   async loadMap(id) {
     if (this.disposed || this.mapLoading || this.matchActive || !MAPS[id]) return false;
     if (this.ready && this.world?.config.id === id) return true;
-    this.mapLoading = true; this.ready = false;
+    this.mapLoading = true; this.ready = false; this.mapLoadError = '';
     this.hud.menuStart = { enabled: false, label: this.L('正在装载 ', 'Loading ') + MAPS[id].name + '…' };
     const World = MAPS[id].authored ? AuthoredWorld : SnowWorld;
     const candidate = new World(this.scene, MAPS[id], this.assetUrl);
@@ -297,7 +297,7 @@ export class CsEngine {
       await candidate.load(MAPS[id].asset);
       if (this.disposed) { candidate.dispose?.(); return false; }
       if (!candidate.spawns.ct.length || !candidate.spawns.t.length || (MAPS[id].modes.includes('defusal') && candidate.bombSites.length !== 2)) throw new Error(this.L('地图出生点或包点不完整', 'Map spawns or bomb sites incomplete'));
-      await upgradeWorldMaterials(candidate, this.assetUrl, { detail: this.quality !== 'low' && !this.softwareRendering && !this.touchMode && Math.min(this.width, this.height) >= 600,
+      await upgradeWorldMaterials(candidate, this.assetUrl, { awaitTextures: false, detail: this.quality !== 'low' && !this.softwareRendering && !this.touchMode && Math.min(this.width, this.height) >= 600,
         anisotropy: Math.min(4, this.renderer?.capabilities?.getMaxAnisotropy?.() || 1) });
       if (this.disposed) { candidate.dispose?.(); return false; }
       for (const a of this.all) { if (a.mesh) { this.scene.remove(a.mesh); freeGeometry(a.mesh); } }
@@ -317,6 +317,7 @@ export class CsEngine {
       Object.assign(this.sun.shadow.camera, { left: -size, right: size, top: size, bottom: -size, far: 240 });
       this.sun.shadow.camera.updateProjectionMatrix();
       this.populatePickups(); this.makeRadarBase();
+      this.positionMenuCamera(); // A first paint need not wait for a simulation tick.
       this.ready = true;
       this.hud.menuStart = { enabled: true, label: this.L('进入战场', 'Enter the Arena') + ' ↗' };
       this.applyQuality();
@@ -326,9 +327,37 @@ export class CsEngine {
       if (this.disposed) return false;
       this.ready = !!this.world;
       this.hud.menuStart = { enabled: true, label: this.ready ? this.L('进入战场', 'Enter the Arena') + ' ↗' : this.L('重试加载地图', 'Retry Map Load') };
-      this.notify(this.L('地图加载失败：', 'Map load failed: ') + e.message + this.L(' · 可重新选择或重试', ' · pick another map or retry'), 8);
+      this.mapLoadError = this.L('地图加载失败：', 'Map load failed: ') + e.message + this.L(' · 可重新选择或重试', ' · pick another map or retry');
+      this.notify(this.mapLoadError, 8);
       return false;
     } finally { this.mapLoading = false; this.pendingWorld = null; }
+  }
+
+  loadingView() {
+    const view = { stage: 'ready', label: '', detail: '', loaded: 0, total: 0, failed: 0,
+      canPlay: this.ready && !this.bootLoading && !this.mapLoading && !this.bootError && !this.disposed };
+    if (this.bootError) return { ...view, stage: 'error', label: this.L('加载未完成', 'Loading interrupted'), detail: this.hud.menuError };
+    if (this.mapLoadError) return { ...view, stage: this.ready ? 'fallback' : 'error',
+      label: this.ready ? this.L('当前地图仍可游玩', 'Current map remains playable') : this.L('地图加载未完成', 'Map loading interrupted'), detail: this.mapLoadError };
+    if (this.mapLoading || (!this.ready && !this.bootLoading)) {
+      const map = MAPS[this.pendingWorld?.config?.id || this.selectedMap];
+      return { ...view, stage: 'map', label: this.L('正在准备地图…', 'Preparing map…'),
+        detail: map ? this.L(map.name, map.nameEn) : '' };
+    }
+    if (this.bootLoading) return { ...view, stage: 'characters', label: this.L('正在准备人物…', 'Preparing operators…'),
+      detail: this.L('地图预览暂不可用也不会影响载入。', 'Map previews are optional; preparation continues without them.') };
+    const stats = this.world?.materialPalette?.stats();
+    if (stats && stats.status !== 'cpu-fallback' && stats.status !== 'disposed') {
+      const assets = stats.assets.filter(a => a.slot === 'map' || stats.quality.detail);
+      view.total = assets.length; view.loaded = assets.filter(a => a.state === 'loaded').length;
+      view.failed = assets.filter(a => a.state === 'failed').length;
+      if (assets.some(a => a.state === 'idle' || a.state === 'loading')) return { ...view, stage: 'materials',
+        label: this.L('贴图载入 ', 'Textures ') + view.loaded + '/' + view.total,
+        detail: this.L('可先开始，画面细节会自动补齐。', 'Ready to play; surface detail will appear as it loads.') };
+      if (view.failed) return { ...view, stage: 'fallback', label: this.L('简化画面可用', 'Basic visuals ready'),
+        detail: this.L('部分贴图未载入，不影响对局。', 'Some textures are unavailable; gameplay is unaffected.') };
+    }
+    return view;
   }
 
   selectMap(id) { if (!this.bootLoading && !this.bootError && id !== this.selectedMap) return this.loadMap(id); }
@@ -739,7 +768,7 @@ export class CsEngine {
   populatePickups() {
     for (const p of this.pickupItems) { this.scene.remove(p.mesh); freeGeometry(p.mesh); p.ring && p.ring.material.dispose(); }
     this.pickupItems = [];
-    for (const p of this.world.pickups) {
+    for (const p of this.world?.pickups || []) {
       const g = new T.Group(), weapon = makeWeapon(p.weapon);
       weapon.rotation.z = Math.PI / 2;
       const bounds = new T.Box3().setFromObject(weapon);
@@ -2116,6 +2145,14 @@ export class CsEngine {
 
   // ── Main loop (driven by the shell) ──────────────────────────────────────
 
+  positionMenuCamera() {
+    const world = this.world; if (!world) return;
+    const a = .65 + Math.sin(this.clock * .035) * .08, r = world.size * .64;
+    this.camera.position.set(world.center.x + Math.sin(a) * r, world.size * .40, world.center.z + Math.cos(a) * r);
+    const target = world.center.clone(); target.x -= world.size * .13; target.y = 1.5;
+    this.camera.lookAt(target); this.camera.fov = 63; this.camera.updateProjectionMatrix();
+  }
+
   update(dt) {
     if (this.disposed) return;
     dt = Math.max(0, Math.min(.04, dt));
@@ -2127,13 +2164,7 @@ export class CsEngine {
     const clock = this.clock, world = this.world, player = this.player;
 
     if (this.phase === 'menu') {
-      const a = .65 + Math.sin(clock * .035) * .08, r = world.size * .64;
-      this.camera.position.set(world.center.x + Math.sin(a) * r, world.size * .40, world.center.z + Math.cos(a) * r);
-      const target = world.center.clone();
-      target.x -= world.size * .13; target.y = 1.5;
-      this.camera.lookAt(target);
-      this.camera.fov = 63;
-      this.camera.updateProjectionMatrix();
+      this.positionMenuCamera();
       world.update(dt, clock);
     } else if (['active', 'freeze', 'round-end'].includes(this.phase)) {
       world.update(dt, clock);

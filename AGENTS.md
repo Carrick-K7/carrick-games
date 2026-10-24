@@ -260,6 +260,8 @@ These are ops-side operations owned by the RUNBOOK and the `carrick-ops` scripts
 
 ## Agent Release Closure
 
+**Standing user authorization (2026-10-24):** After requested Carrick Games development is complete and validated, proceed with the intended commit, push and formal deployment without asking for a separate deployment confirmation each time. Honor any narrower instruction in the current request. This does not authorize unrelated worktree changes, bypassing verification or publication fences, relisting hidden games, rollback, or host/service/credential changes. Docs-only and investigation-only requests retain their scoped handoff unless release is explicitly requested.
+
 Respect the user's action scope: a docs-only or investigation task ends with its scoped handoff, not an unauthorized commit/push/deploy. For an approved application release, do not call it DONE after editing, local tests, a commit or a push alone.
 
 1. Complete all intended source/UI/cover/audit work, then release through the actual affected/pinned-counterpart orchestrator and the own, transitive-declared-library and generic checks it selects — never an unconditional all-component gate or a hand-selected subset. After the final change has landed, pass `npm run typecheck`, `npm run test:unit`, `npm run test:release`, `npm run build` and the E2E set the plan selects.

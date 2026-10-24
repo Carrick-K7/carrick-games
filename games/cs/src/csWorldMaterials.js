@@ -287,13 +287,13 @@ export function classifyWorldMaterial(textureName, theme = 'snow') {
  * CPU-only callers never reach this function. Object URLs and image handlers are always released.
  */
 async function loadBrowserTexture(url, { signal, onDownload }) {
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, { signal, priority: 'low' });
   if (!response.ok) throw new Error(`Texture HTTP ${response.status}`);
   const blob = await response.blob();
   onDownload(blob.size);
   if (signal.aborted) throw new Error('Texture load aborted');
   return new Promise((resolve, reject) => {
-    const image = new Image();
+    const image = new Image(); image.decoding = 'async'; image.loading = 'eager';
     const objectUrl = URL.createObjectURL(blob);
     const clean = () => { image.onload = image.onerror = null; signal.removeEventListener('abort', abort); URL.revokeObjectURL(objectUrl); };
     const abort = () => { clean(); image.src = ''; reject(new Error('Texture load aborted')); };

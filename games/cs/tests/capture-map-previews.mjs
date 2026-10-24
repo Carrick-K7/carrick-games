@@ -98,6 +98,10 @@ try {
       const e = window.__CS_MAP_PREVIEW__.engine;
       if (e.selectedMap !== capture.id) await e.selectMap(capture.id);
       if (!e.ready || e.mapLoading || e.world?.config.id !== capture.id) throw new Error(`Map did not load: ${capture.id}`);
+      // Gameplay starts with fallback surfaces; artwork capture intentionally
+      // waits for the complete photographic palette rather than a placeholder.
+      const materials = await e.world.materialsReady;
+      if (materials?.status !== 'loaded') throw new Error(`Map photographs did not finish: ${capture.id}`);
       const center = e.world.center;
       const position = capture.positionOffset ? capture.positionOffset.map((value, axis) => value + center.toArray()[axis]) : e.world.previewCamera.position;
       const target = capture.targetOffset ? capture.targetOffset.map((value, axis) => value + center.toArray()[axis]) : e.world.previewCamera.target;
