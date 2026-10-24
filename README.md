@@ -1,6 +1,6 @@
 # Carrick Games
 
-28 browser games in a quiet, modern interface, with independently versioned static releases.
+A repository of 28 browser games in a quiet, modern interface, with independently versioned static releases and an operator-managed live selection.
 
 Live site: https://games.carrick7.com/
 
@@ -8,7 +8,7 @@ Live site: https://games.carrick7.com/
 
 ## Games
 
-Carrick Games currently ships 28 playable games:
+The repository contains these 28 playable games. The live game's library follows `/games/index.json`; delisted workspaces and their historical resources are retained:
 
 | Game | Chinese | Type |
 |------|---------|------|
