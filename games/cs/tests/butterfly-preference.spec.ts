@@ -76,7 +76,7 @@ test('saved butterfly survives app reload and Snow pistol draw/idle, knife inspe
   await testInfo.attach('saved-preference-live-shell-clocks', { body: Buffer.from(JSON.stringify({ initial, knife, inspect, returned, final: await state(page) }, null, 2)), contentType: 'application/json' });
 });
 
-for (const map of ['fy_snow', 'de_dust2']) {
+for (const map of ['fy_snow', 'de_dust2', 'de_inferno', 'de_mirage']) {
   test(`saved butterfly: ${map} advances sixty real simulation seconds with bots and normal weapon commands`, async ({ page }, testInfo) => {
     const evidence = observeRelease(page), records: any[] = [];
     try {

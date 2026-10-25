@@ -4,6 +4,7 @@ import {poseKnifeGrip,poseClassicKnifeGrip,poseButterflyKnifeGrip,poseViewHand,p
 import {DEFAULT_KNIFE_MODEL} from './csKnifeStyles.js';
 import {sampleButterflyMotion,BUTTERFLY_INSPECT_DURATION} from './csButterflyKnife.js';
 import {resolveButterflyPresentation} from './csButterflyPresentation.js';
+import {placeButterflyContact} from './csButterflyContact.js';
 import {butterflyShoulder} from './csButterflyArm.js';
 import {sampleGrenadeMotion,grenadePinGrip,stabilizeGrenadeOffhand} from './csGrenadePresentation.js';
 
@@ -189,17 +190,25 @@ export function applyWeaponAnimation(model,state={}){
   if(r.knifePivot){
     r.knifeFrame.quaternion.fromArray(motion.knifeGrip);
     r.knifePivot.quaternion.copy(r.knifeRest).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),motion.knifeSpin));
-    if(r.butterflyBlade){r.butterflyBlade.rotation.x=motion.butterflyBlade;r.butterflyHandle.rotation.x=motion.butterflyHandle;}
+    if(r.butterflyBlade){r.butterflyBlade.rotation.x=motion.butterflyBlade;r.butterflyHandle.rotation.x=motion.butterflyHandle;placeButterflyContact(r,motion,null);}
     r.restRight.copy(r.knifePalm).applyQuaternion(r.knifeFrame.quaternion);
     r.muzzle.copy(r.knifeTip).sub(r.knifePivot.position).applyQuaternion(r.knifePivot.quaternion).add(r.knifePivot.position).applyQuaternion(r.knifeFrame.quaternion);
     if(r.butterflyBlade){r.butterflyBlade.updateWorldMatrix(true,false);r.muzzle.copy(r.core.worldToLocal(r.butterflyBlade.localToWorld(r.knifeTip.clone())));}
     if(r.knifeRight){
       const grip=r.knifeModel==='classic'?poseClassicKnifeGrip(r.knifeRight):r.knifeModel==='butterfly'?poseButterflyKnifeGrip(r.knifeRight,motion):poseKnifeGrip(r.knifeRight,motion,r.knifeIndex);r.knifeWrist.copy(grip.wrist);r.knifePalm.copy(grip.palm);r.restRight.copy(grip.palm).applyQuaternion(r.knifeFrame.quaternion);r.knifeIndexLine=grip.indexA?[grip.indexA,grip.indexB]:null;
+      if(r.butterflyBlade){
+        placeButterflyContact(r,motion,r.knifeRight);
+        r.butterflyBlade.updateWorldMatrix(true,false);r.muzzle.copy(r.core.worldToLocal(r.butterflyBlade.localToWorld(r.knifeTip.clone())));
+      }
       const wrist=grip.wrist.clone().applyQuaternion(r.knifeFrame.quaternion),forward=grip.forward.clone().applyQuaternion(r.knifeFrame.quaternion);
       const desired=r.knifeElbowRest.clone().add(tmp.set(-.12,-.10,0).multiplyScalar(motion.knifeElbowIn)),direction=wrist.clone().sub(desired).normalize(),bend=forward.angleTo(direction);
       // The forearm follows the anatomical palm axis. Distribute the turn into
       // the arm instead of hiding a sharply bent wrist inside a sleeve.
-      if(bend>.48)direction.copy(forward).applyQuaternion(new T.Quaternion().identity().slerp(new T.Quaternion().setFromUnitVectors(forward,wrist.clone().sub(desired).normalize()),.48/bend));
+      // A released tang pinch straightens the wrist/forearm instead of keeping
+      // the fist's inward elbow bias under the sweeping handle. This rotates a
+      // fixed-length arm; neither sleeve radius nor wrist seam is rescaled.
+      const wristLimit=r.knifeModel==='butterfly'?.48-.34*Math.max(motion.knifeContact,.75*motion.knifeOpen):.48;
+      if(bend>wristLimit)direction.copy(forward).applyQuaternion(new T.Quaternion().identity().slerp(new T.Quaternion().setFromUnitVectors(forward,wrist.clone().sub(desired).normalize()),wristLimit/bend));
       r.knifeElbow.copy(wrist).addScaledVector(direction,-.43);r.knifeWristBend=forward.angleTo(direction);
       connectSegment(r.knifeForearm,r.knifeElbow,wrist);
       if(r.knifeUpperArm){

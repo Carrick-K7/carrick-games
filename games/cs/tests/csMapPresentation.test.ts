@@ -44,12 +44,15 @@ describe('CS photographic map integration', () => {
   it.each(['de_inferno', 'de_mirage'])('%s borrows palette materials, retains tint and uses only base maps at low detail', async id => {
     const world = new AuthoredWorld(new T.Scene(), (MAPS as any)[id], resolver);
     await world.load(); const calls = world.mapGroup.children.length, before = triangles(world);
+    const owned=new Map([...world.materialMeshes].filter(([,mesh])=>mesh.userData.ownedMapDecoration).map(([kind,mesh])=>[kind,mesh.material]));
     try {
       const s = await upgradeWorldMaterials(world, resolver, { detail: false, loadTexture: loader });
-      expect(s.textureCount).toBe(9); expect(s.gpuBytes).toBeLessThan(13 * 1024 * 1024);
+      expect(s.textureCount).toBe(9); expect(s.gpuBytes+world.decorativeTextureBytes).toBeLessThan(13 * 1024 * 1024);
       expect(world.mapGroup.children.length).toBe(calls); expect(triangles(world)).toBe(before);
       for (const mesh of world.mapGroup.children as T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>[]) {
-        expect(mesh.material.map).not.toBeNull(); expect(mesh.material.normalMap).toBeNull();
+        if(mesh.userData.ownedMapDecoration){expect(mesh.material).toBe(owned.get(mesh.userData.materialKind));expect(mesh.material.userData.worldMaterialPalette).toBeUndefined();}
+        else expect(mesh.material.map).not.toBeNull();
+        expect(mesh.material.normalMap).toBeNull();
         expect(mesh.material.vertexColors).toBe(true);
       }
       const disposals = [...new Set(world.mapGroup.children.map((m: any) => m.material))].map(m => vi.spyOn(m, 'dispose'));

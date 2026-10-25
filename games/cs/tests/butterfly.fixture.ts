@@ -42,12 +42,32 @@ export async function openButterflyFixture(page: Page, width = 1280, height = 72
       const projected = (node: any, local = p.pos.clone().set(0, 0, 0)) => {
         const v = node.localToWorld(local).project(e.gunCamera); return [(v.x + 1) * width / 2, (1 - v.y) * height / 2, v.z];
       };
+      const knifeBounds = {minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity,vertices:0};
+      const bladeBounds = {minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity,vertices:0};
+      r.knifePivot.traverse((node: any) => {
+        const positions = node.geometry?.attributes?.position;
+        if (!positions) return;
+        for (let i=0;i<positions.count;i++) {
+          const v=p.pos.clone().fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld).project(e.gunCamera);
+          const x=(v.x+1)*width/2,y=(1-v.y)*height/2;
+          knifeBounds.minX=Math.min(knifeBounds.minX,x); knifeBounds.maxX=Math.max(knifeBounds.maxX,x);
+          knifeBounds.minY=Math.min(knifeBounds.minY,y); knifeBounds.maxY=Math.max(knifeBounds.maxY,y);knifeBounds.vertices++;
+          if(node.name==='butterfly-ground-blade'){
+            bladeBounds.minX=Math.min(bladeBounds.minX,x);bladeBounds.maxX=Math.max(bladeBounds.maxX,x);
+            bladeBounds.minY=Math.min(bladeBounds.minY,y);bladeBounds.maxY=Math.max(bladeBounds.maxY,y);bladeBounds.vertices++;
+          }
+        }
+      });
       return { evidence: 'controlled-action-sampling-real-release-renderer', action, t, variant, clock: e.clock, frames, renderFrame: e.renderer.info.render.frame,
+        knifeBounds, bladeBounds,
         map: e.selectedMap, knife: r.knifeModel, fov: e.gunCamera.fov,
         bladeAngle: r.butterflyBlade.rotation.x, handleAngle: r.butterflyHandle.rotation.x,
         spin: r.knifePivot.rotation.x, tip: point(r.butterflyBlade, r.knifeTip.clone()),
         hinge: point(r.butterflyHandle), pivot: point(r.knifePivot), wristBend: r.knifeWristBend,
         tipScreen: projected(r.butterflyBlade, r.knifeTip.clone()),
+        handleTipScreen: projected(r.butterflyHandle, p.pos.clone().set(0, -.133, 0)),
+        wristScreen: projected(r.knifeFrame, r.knifeWrist.clone()),
+        referencePose: r.butterflyPresentation?.displayed ?? null,
         finite: e.gun.matrixWorld.elements.every(Number.isFinite) };
     };
     (window as any).__CS_BUTTERFLY_FIXTURE__ = {
@@ -60,6 +80,16 @@ export async function openButterflyFixture(page: Page, width = 1280, height = 72
         return pose('idle', 0);
       },
       pose,
+      isolateViewModel() {
+        // Reference inspection only: retain every held-knife/hand mesh and the
+        // shipped gun lights/projection; remove the unrelated world and HUD.
+        for (const child of e.scene.children) if (!child.isLight && !child.isCamera) child.visible = false;
+        e.scene.background.setHex(0xaec9dc); e.scene.fog = null;
+        // Inspect the shipped meshes at the output's actual pixel resolution,
+        // not an upscaled software-budget buffer; this is not an FPS benchmark.
+        e.renderer.setPixelRatio(1); e.renderer.setSize(width, height, false);
+        game.hudView.draw = () => {};
+      },
       interrupt(kind: 'slash' | 'stab' | 'inspect') {
         e.player.cooldown = 0; e.weaponOf(e.player).readyAt = 0;
         if (kind === 'inspect') e.inspectWeapon(); else e.fire(kind === 'stab');

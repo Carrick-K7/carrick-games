@@ -3,29 +3,29 @@ import * as T from 'three';
 // Generated from the game-owned offline preparation script; release-local files only.
 const MANIFEST_DATA = {
   "plaster": {
-    "sourceId": "plastered_wall",
-    "repeatMeters": 2,
+    "sourceId": "worn_plaster_wall",
+    "repeatMeters": 2.8,
     "maps": {
       "map": {
         "path": "assets/materials/plaster-albedo.webp",
         "width": 512,
         "height": 512,
-        "encodedBytes": 22238,
-        "sha256": "12e9b67132a8b35e891f3b7685977572bacd8fbb77806378c2e71fe219b3bd78"
+        "encodedBytes": 18280,
+        "sha256": "4be099c0ec78182365f61b6a6d477d44a681f45572d03b11d1508e9661ba2bce"
       },
       "normalMap": {
         "path": "assets/materials/plaster-normal.webp",
         "width": 512,
         "height": 512,
-        "encodedBytes": 77644,
-        "sha256": "e370032fded6970f80802bd1183372340550358502a5742e06060fa1d81b2918"
+        "encodedBytes": 23830,
+        "sha256": "cb483843c841fec2736c9ec1216d478d342c9323115abb1fd859d51ab7031f3c"
       },
       "roughnessMap": {
         "path": "assets/materials/plaster-roughness.webp",
         "width": 512,
         "height": 512,
-        "encodedBytes": 2738,
-        "sha256": "c1e580ed515fe1c87b33fa9ad4fe79a6150efb3332c5ebf149c8f0b7c0eddb08"
+        "encodedBytes": 2448,
+        "sha256": "738bc76e9c1f4c2d47224cf732ec2389a9462c4bc84c2ab97fffbdfcc1338924"
       }
     }
   },
@@ -251,7 +251,7 @@ export const WORLD_MATERIAL_MANIFEST = freeze(MANIFEST_DATA);
 export const WORLD_MATERIAL_KINDS = Object.freeze(Object.keys(WORLD_MATERIAL_MANIFEST));
 export const WORLD_MATERIAL_BUDGET = Object.freeze({ maxDownloadBytes: 4 * 1024 * 1024, maxGpuBytes: 48 * 1024 * 1024, maxAnisotropy: 4, maxConcurrent: 4 });
 const FINISH = {
-  plaster: [0xc7bdac, .93, 0, .35], sandstone: [0xb9a17a, .94, 0, .65],
+  plaster: [0xc7bdac, .93, 0, .20], sandstone: [0xb9a17a, .94, 0, .65],
   brick: [0x986e58, .94, 0, .6], cobble: [0x8b8982, .95, 0, .65],
   concrete: [0x99978f, .94, 0, .35], wood: [0x89745b, .88, 0, .45],
   metal: [0x777a78, .75, .25, .4], roof: [0x96654f, .94, 0, .65],

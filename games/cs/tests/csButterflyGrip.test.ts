@@ -43,30 +43,27 @@ describe('butterfly retained safe-handle grip', () => {
     closeVector(point(rig, 'thumb_03'), [-.010647966851622066, .03229176391440947, -.025787957508196544]);
   });
 
-  it('keeps the palm and retained index fixed while only the other fingers loosen', () => {
+  it('releases and splays the fingers without moving the palm or changing bone lengths', () => {
+    // Replaces the old fixed-index/small-release expectations: reference
+    // draw2 and inspect explicitly show an open palm and released fingers.
     const rig = hand(), initial = poseButterflyKnifeGrip(rig);
     const position = rig.group.position.clone(), rotation = rig.group.quaternion.clone();
-    const names = ['index_01', 'index_02', 'index_03', 'index_04_leaf'];
-    const index = names.map(name => point(rig, name));
     const lengths = rig.skeleton.bones.map(bone => bone.position.length());
-    const thumb = point(rig, 'thumb_03'), thumbTip = point(rig, 'thumb_04_leaf');
-    const fingers = ['middle_03', 'ring_03', 'pinky_03'].map(name => point(rig, name));
+    const index = point(rig, 'index_04_leaf'), thumb = point(rig, 'thumb_04_leaf');
+    const fingers = ['middle_04_leaf', 'ring_04_leaf', 'pinky_04_leaf'].map(name => point(rig, name));
     for (let i = 0; i <= 40; i++) {
-      const contact = poseButterflyKnifeGrip(rig, { knifeOpen: i / 40, knifeThumb: i / 40 });
+      const u=i/40, contact = poseButterflyKnifeGrip(rig, { knifeOpen: u, knifeThumb: u, knifeIndexOpen:.25*u, knifeSplay:u });
       expect(rig.group.position.distanceTo(position)).toBeLessThan(1e-10);
       expect(rig.group.quaternion.angleTo(rotation)).toBeLessThan(1e-7);
-      names.forEach((name, j) => expect(point(rig, name).distanceTo(index[j])).toBeLessThan(1e-10));
       expect(contact.wrist.distanceTo(initial.wrist)).toBeLessThan(1e-10);
       expect(contact.palm.distanceTo(initial.palm)).toBeLessThan(1e-10);
       expect(contact.forward.distanceTo(initial.forward)).toBeLessThan(1e-10);
-      expect(point(rig, 'thumb_03').distanceTo(thumb)).toBeLessThan(.003);
-      expect(point(rig, 'thumb_04_leaf').distanceTo(thumbTip)).toBeLessThan(.008);
       expect(rig.skeleton.bones.map(bone => bone.position.length())).toEqual(lengths);
     }
-    ['middle_03', 'ring_03', 'pinky_03'].forEach((name, i) => {
-      const distance = point(rig, name).distanceTo(fingers[i]);
-      expect(distance).toBeGreaterThan(.015);
-      expect(distance).toBeLessThan(.025);
+    expect(point(rig, 'index_04_leaf').distanceTo(index)).toBeGreaterThan(.02);
+    expect(point(rig, 'thumb_04_leaf').distanceTo(thumb)).toBeGreaterThan(.03);
+    ['middle_04_leaf', 'ring_04_leaf', 'pinky_04_leaf'].forEach((name, i) => {
+      expect(point(rig, name).distanceTo(fingers[i])).toBeGreaterThan(.06);
     });
   });
 
@@ -76,7 +73,7 @@ describe('butterfly retained safe-handle grip', () => {
     parent.add(other.group); parent.updateMatrixWorld(true);
     const names = Object.keys(rig.bones);
     const snapshot = (h: ReturnType<typeof createViewHand>) => names.map(name => point(h, name.slice(0, -2)).toArray());
-    poseButterflyKnifeGrip(rig, { knifeOpen: .35, knifeThumb: .15 });
+    poseButterflyKnifeGrip(rig, { knifeOpen: 1, knifeThumb: 1 });
     const maximum = snapshot(rig);
     poseButterflyKnifeGrip(rig, { knifeOpen: 20, knifeThumb: 20 });
     expect(snapshot(rig)).toEqual(maximum);

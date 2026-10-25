@@ -35,11 +35,13 @@ describe('butterfly visual refinement preserves immediate combat', () => {
     expect(tip().distanceTo(before)).toBeLessThan(1e-10);
     const hp = target.health; e.fire(heavy); expect(target.health).toBe(hp);
   });
-  it('keeps pause/deploy guards and original authored action durations/counts', () => {
+  it('keeps pause/deploy guards and compatibility durations with only verified action families', () => {
     const { e, target } = arena(); e.phase = 'paused'; e.fire(); expect(target.health).toBe(100);
     e.phase = 'active'; e.beginDeploy(e.player); e.fire(); expect(target.health).toBe(100);
     expect(e.player.deployFor).toBe(1.05);
     expect(BUTTERFLY_DEPLOY_DURATION).toBe(1.05); expect(BUTTERFLY_INSPECT_DURATION).toBe(3.4);
-    expect(BUTTERFLY_VARIANTS).toEqual({ draw: 2, inspect: 3 });
+    // The former three authored inspect alternatives were not three verified
+    // CSGO clips. This scope correction does not change any combat assertion.
+    expect(BUTTERFLY_VARIANTS).toEqual({ draw: 2, inspect: 1 });
   });
 });

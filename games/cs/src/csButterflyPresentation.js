@@ -1,16 +1,17 @@
 import * as T from 'three';
-import { BUTTERFLY_DEPLOY_DURATION, BUTTERFLY_INSPECT_DURATION } from './csButterflyKnife.js';
+import { BUTTERFLY_DEPLOY_DURATION, BUTTERFLY_INSPECT_DURATION, normalizeButterflyVariant } from './csButterflyKnife.js';
 
 const TAU = Math.PI * 2;
 const copy = pose => Object.fromEntries(Object.entries(pose).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]));
 const ease = t => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 const wrapNear = (from, to) => Math.round((from - to) / TAU) * TAU;
-const angles = ['knifeSpin', 'butterflyBlade', 'butterflyHandle'];
+const angles = ['knifeSpin', 'knifeYaw', 'butterflyBlade', 'butterflyHandle'];
+const contacts = ['knifeSeat', 'knifeThumbOut', 'knifeThumbSweep', 'knifeThumbPin', 'knifeOpen', 'knifeThumb', 'knifeIndexOpen', 'knifeSplay', 'knifeFingerFan', 'knifeContact', 'knifeLowerLeft', 'knifeElbowIn', 'knifeAttack'];
 function phase(state, time) {
   const deploy = state.deployProgress ?? -1, inspect = state.inspectProgress ?? -1, age = state.shotAge ?? 99;
-  if (deploy >= 0 && deploy < 1) return { kind: 'draw', start: time - deploy * BUTTERFLY_DEPLOY_DURATION, variant: state.butterflyDrawVariant ?? 0 };
+  if (deploy >= 0 && deploy < 1) return { kind: 'draw', start: time - deploy * BUTTERFLY_DEPLOY_DURATION, variant: normalizeButterflyVariant('draw',state.butterflyDrawVariant) };
   if (age >= 0 && age < (state.knifeHeavy ? .85 : .48)) return { kind: state.knifeHeavy ? 'stab' : 'slash', start: time - age, variant: 0 };
-  if (inspect >= 0 && inspect < 1 && age > .5) return { kind: 'inspect', start: time - inspect * BUTTERFLY_INSPECT_DURATION, variant: state.butterflyInspectVariant ?? 0 };
+  if (inspect >= 0 && inspect < 1 && age > .5) return { kind: 'inspect', start: time - inspect * BUTTERFLY_INSPECT_DURATION, variant: normalizeButterflyVariant('inspect',state.butterflyInspectVariant) };
   return { kind: 'idle', start: 0, variant: 0 };
 }
 const same = (a, b) => a.kind === b.kind && a.variant === b.variant && Math.abs(a.start - b.start) < 1e-5;
@@ -20,7 +21,7 @@ function discontinuous(a, b) {
     || rotation(a).angleTo(rotation(b)) > .04
     || new T.Quaternion().fromArray(a.knifeGrip).angleTo(new T.Quaternion().fromArray(b.knifeGrip)) > .04
     || angles.some(key => Math.abs((b[key] + wrapNear(a[key], b[key])) - a[key]) > .08)
-    || Math.abs(a.knifeOpen - b.knifeOpen) > .08;
+    || contacts.some(key=>Math.abs(a[key]-b[key])>.08);
 }
 
 /**
@@ -60,7 +61,7 @@ export function resolveButterflyPresentation(rig, raw, state) {
       const euler = new T.Euler().setFromQuaternion(q, 'XYZ'); displayed.rotation = [euler.x, euler.y, euler.z];
       displayed.knifeGrip = new T.Quaternion().fromArray(from.knifeGrip).slerp(new T.Quaternion().fromArray(raw.knifeGrip), t).toArray();
       for (const key of angles) displayed[key] = T.MathUtils.lerp(from[key], raw[key] + transition.winding[key], t);
-      for (const key of ['knifeOpen', 'knifeThumb', 'knifeLowerLeft', 'knifeElbowIn', 'knifeAttack']) displayed[key] = T.MathUtils.lerp(from[key], raw[key], t);
+      for (const key of contacts) displayed[key] = T.MathUtils.lerp(from[key], raw[key], t);
       // Finish releasing/catching the loose fingers after most of the hinge
       // recovery, rather than snapping them closed over a still-moving handle.
       const catchFade = 1 - ease((t - .65) / .35);

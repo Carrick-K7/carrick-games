@@ -37,10 +37,10 @@ export async function upgradeWorldMaterials(world,assetUrl,options={}){
   world.dispose=()=>{if(disposed)return;disposed=true;try{originalDispose();}finally{palette.dispose();}};
   if(world.config.authored){
     world.mapGroup.traverse(mesh=>{
-      if(!mesh.isMesh||!mesh.userData.materialKind)return;
+      if(!mesh.isMesh||!mesh.userData.materialKind||mesh.userData.ownedMapDecoration)return;
       scaleUV(mesh,mesh.userData.materialKind);
     });
-    world.applyMaterialPalette(kind=>palette.material(kind),{owned:false});
+    world.applyMaterialPalette(kind=>WORLD_MATERIAL_MANIFEST[kind]?palette.material(kind):null,{owned:false});
   }else{
     const buckets=new Map(),oldMaterials=new Set(world.materials),oldMeshes=[...world.mapGroup.children];
     for(const mesh of oldMeshes){

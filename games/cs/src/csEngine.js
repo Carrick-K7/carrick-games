@@ -311,8 +311,12 @@ export class CsEngine {
       this.ambient.color.setHex(atmosphere.ambient ?? (desert ? 0xfff1d4 : 0xe1f0ff));
       this.ambient.groundColor.setHex(atmosphere.ground ?? (desert ? 0x877256 : 0x687d8d));
       this.sun.color.setHex(atmosphere.sun ?? 0xffeeda);
+      // Reference-authored maps use neutral sky bounce and a map-specific key,
+      // not the old universal desert wash. Legacy BSP lighting stays unchanged.
+      this.ambient.intensity = atmosphere.ambientIntensity ?? 2.3;
+      this.sun.intensity = atmosphere.sunIntensity ?? 2.7;
       this.sun.target.position.copy(this.world.center);
-      this.sun.position.copy(this.world.center).add(new T.Vector3(-35, 70, 25));
+      this.sun.position.copy(this.world.center).add(new T.Vector3(...(atmosphere.sunOffset || [-35, 70, 25])));
       const size = Math.max(36, this.world.size * .55);
       Object.assign(this.sun.shadow.camera, { left: -size, right: size, top: size, bottom: -size, far: 240 });
       this.sun.shadow.camera.updateProjectionMatrix();
@@ -1756,13 +1760,19 @@ export class CsEngine {
     if (this.gun) {
       const motion = applyWeaponAnimation(this.gun, this.weaponAnimationState(player)),
         kick = RECOIL[w.id], viewScale = d.pistol ? 1.6 : d.pellets ? 1.25 : 1;
+      const butterfly = w.id === 'knife' && this.gun.userData.rig?.id === 'knife' && this.gun.userData.rig.knifeModel === 'butterfly';
+      const viewInset = w.id === 'he' || butterfly ? Math.min(1, this.gunCamera.aspect / (16 / 9)) : 1;
+      // The close tang presentation needs depth on tall screens, not a smaller
+      // knife or a different camera. Wide viewports retain their reference pose.
+      const portraitKnifeDepth = butterfly ? Math.max(0, .205 / Math.max(.25, this.gunCamera.aspect) - .17) : 0;
       placeWeaponView(this.gun, motion, {
-        // Keep HE pin/throw contact visible on portrait screens without changing
-        // either camera projection, world aiming, model scale or action timing.
-        x: T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) * (w.id === 'he' ? Math.min(1, this.gunCamera.aspect / (16 / 9)) : 1)
+        // Keep HE contact and butterfly handling visible on portrait screens;
+        // camera projection, world aim, rigid model scale and timing stay unchanged.
+        x: T.MathUtils.lerp(.25, .10, this.zoom ? .8 : 0) * viewInset
+          - (butterfly ? motion.offset[0] * (1 - viewInset) : 0)
           + (moving ? Math.cos(this.viewBob * .5) * .009 : 0),
         y: -.225 + (moving ? Math.sin(this.viewBob) * .007 : 0),
-        z: -.40 + this.recoil * viewScale,
+        z: -.40 + this.recoil * viewScale - portraitKnifeDepth,
         pitch: .012 + this.recoil * (d.pistol ? 2.4 : 1.1),
         yaw: -.04 - this.kickYaw * .7, roll: this.recoil * (kick?.yaw || 0) * 12,
       });

@@ -1,0 +1,68 @@
+{
+  "baseline": "CS:GO visual references, not CS2 AnimGraph2 or an extracted original asset set",
+  "referenceOnly": true,
+  "mapReferences": [
+    {
+      "map": "de_inferno",
+      "authority": "Valve official CS:GO Inferno revision page",
+      "page": "https://www.counter-strike.net/inferno/",
+      "images": ["asite1-2.jpg", "banana1-2.jpg", "mid1-2.jpg", "tspawn1-2.jpg", "bsite1-2.jpg"],
+      "imageBase": "https://cdn.fastly.steamstatic.com/apps/csgo/images/inferno/",
+      "observed": ["dual arched warehouse shutters and orange balcony apartment at A", "raised site versus low street/pit edge and hay cart", "Banana curb, wood-barrel cover and multi-storey enclosure", "square stone tower with arched belfry tiers", "contrasting plaster, stone trim and directional shade"],
+      "limits": "Visual proportions/compositions, not a complete measured map survey. The official page identifies CS:GO, not current CS2."
+    },
+    {
+      "map": "de_mirage",
+      "authority": "Valve historical Workshop entry",
+      "page": "https://steamcommunity.com/sharedfiles/filedetails/?id=152508932",
+      "image": "https://images.steamusercontent.com/ugc/882984447753219894/D947D4FA6CC0CA4D3DE8D67D8B40A3EFC462EE19/",
+      "observed": ["A-site yellow ordnance racks", "stacked cylindrical cover ends", "tall ornamented pointed entrance"],
+      "limits": "Posted June 2013; the current CS2 wrapper/title does not make this a current-CS2 geometry specification."
+    },
+    {
+      "map": "de_mirage",
+      "authority": "Valve storefront reference, capture date and exact game version unverified",
+      "page": "https://store.steampowered.com/app/730/CounterStrike_2/",
+      "image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/ss_bb2af3e83ac0385ff2055f2ab9697cdd83e351b7.1920x1080.jpg",
+      "observed": ["rectangular damaged-plaster/timber Window", "blue frontage and catwalk left of the Window view", "pointed Connector opening on the right", "lower middle and rising distant approach"],
+      "limits": "Supplemental visible architecture/composition only; not proof of the latest CS2 layout or exact dimensions."
+    }
+  ],
+  "animationReferences": [
+    {
+      "page": "https://www.youtube.com/watch?v=irTzzUBfzGQ",
+      "author": "UNKNOWN Tech",
+      "title": "CS:GO Butterfly Knife Animations (With Rare Animations) [Slow Motion - 4K 60FPS]",
+      "inspectedDelivery": "1280x720 decoded reference frames; the title's 4K label is not the capture resolution",
+      "draw1": {"captionSeconds": 26, "slowMotion": true, "poses": {"29": "closed upright grip", "30": "free handle raised, fingers releasing", "31": "blade opens as wrist turns", "33": "open forward rest"}},
+      "draw2": {"captionSeconds": 49, "slowMotion": true, "poses": {"51": "closed entry", "52": "open palm and raised free handle", "53": "blade down beside thumb, free handle up", "54": "blade up with separated V handles", "55": "handles gathered and fingers close", "56": "settled forward grip"}},
+      "limits": "Editorial title/glitch transitions are excluded. Slow-motion media seconds do not establish native game durations. Later inspect footage could not be decoded reliably in this inspection."
+    },
+    {
+      "page": "https://www.youtube.com/watch?v=2vhjVz4wtgU",
+      "author": "WEBE",
+      "title": "CS:GO - Butterfly Knife [Safari Mesh] All Animations",
+      "commonInspect": {"captionSeconds": 27, "poses": {"31.25": "wrist turns edge-on", "31.5": "palm faces viewer, fingers spread and handle released", "31.75": "blade face up and free handle sweeps across the forearm", "32": "edge-on vertical recovery", "32.5": "blade tang presented above open supporting fingers; handles form V"}},
+      "normalSpeedEvidence": "HUD clock advances 1:05 to 1:03 over media 31 to 33 seconds; 1:59 to 1:51 over 37 to 45. Cut/crossfade at 36–36.5 and explicitly slowed footage from 49 are not timing evidence.",
+      "limits": "One inspect family verified, not three distinct inspect variants. Exact action onset/end, held-input duration and rarity weights remain unverified."
+    },
+    {
+      "page": "https://www.youtube.com/watch?v=H5gnk59aNRQ",
+      "author": "CS:GO Skin Showcase",
+      "title": "★ Butterfly Knife Vanilla - Skin Showcase",
+      "corroborationSeconds": 15,
+      "observed": "The same V-handle/tang presentation in another skin; not evidence of an additional inspect variant."
+    },
+    {
+      "page": "https://steamcommunity.com/sharedfiles/filedetails/?id=931321295",
+      "author": "PatrioTasTV",
+      "posted": "2017-05-23",
+      "original": "https://images.steamusercontent.com/ugc/770525423871463235/BB42B21DC9886DEA27C94A999CF445994AABFD0A/",
+      "sourceSha256": "2517af7d0d171ba33029af8c7bbd046c6f7bfc9a59a3abd73a3f782c6e641274",
+      "verifiedMedia": { "width": 832, "height": 468, "frames": 35, "encodedDurationMs": 2450, "bytes": 7845148 },
+      "observed": "Starts in V inspect hold, shows repeated palm-guided knife/handle rotations, and returns to V inspect hold, not combat-ready grip.",
+      "limits": "Supplemental motion-section evidence only. No native game-speed/input/variant identity or rarity proof; not complete ready-to-inspect-to-ready coverage. It does not justify inventing additional numbered original variants."
+    }
+  ],
+  "notClaimed": ["Valve-exact bone tracks or extracted assets", "complete original inspect-variant set", "original random selection probabilities", "native timing inferred from slowed or edited video", "CS2 animation parity", "survey-accurate complete map topology", "native-device performance from software-rendered screenshots"]
+}

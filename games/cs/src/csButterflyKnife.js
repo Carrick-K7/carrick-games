@@ -55,8 +55,8 @@ function groundBlade(outline){
   return geo;
 }
 
-// Authored balisong. Both hinge axes are X; the retained handle is fixed to the
-// hand. The free handle travels around the upper side of that retained handle.
+// Rigid balisong with two linked X hinges. Grip/contact ownership can transfer
+// from the safe handle to the blade tang; no part changes length or scale.
 export function buildButterflyKnife(r,{part,mesh,rod,batch,M}){
   const frame=part(r.core,'butterfly-grip-frame');r.knifeFrame=frame;
   const pivot=part(frame,'butterfly-grip-pivot',0,0,-.011);r.knifePivot=pivot;
@@ -120,49 +120,88 @@ export function buildButterflyKnife(r,{part,mesh,rod,batch,M}){
 const curve=(t,keys)=>{if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++)if(t<=keys[i][0]){const [a,x]=keys[i-1],[b,y]=keys[i],u=(t-a)/(b-a);return x+(y-x)*u*u*(3-2*u);}return keys.at(-1)[1];};
 const env=(t,a,b,c,d)=>curve(t,[[a,0],[b,1],[c,1],[d,0]]);
 const grip=(p=.06,y=1.05,r=.43)=>new T.Quaternion().setFromEuler(new T.Euler(p,y,r,'ZYX'));
+// Compatibility game durations, NOT measured Valve animation durations. The
+// UNKNOWNTech draw references are explicitly slow motion; WEBE's normal-speed
+// inspect establishes phase order, not a native end boundary or hold-input rule.
 export const BUTTERFLY_DEPLOY_DURATION=1.05;
 export const BUTTERFLY_INSPECT_DURATION=3.4;
 export const BUTTERFLY_DRAW_CUES=[{at:.07,sound:'draw'}];
 export const BUTTERFLY_INSPECT_CUES=[{at:.03,sound:'inspect-start'},{at:.63,sound:'inspect-end'}];
-// Authored alternatives, not extracted Valve tracks or original probabilities.
-export const BUTTERFLY_VARIANTS=Object.freeze({draw:2,inspect:3});
+// Reference scope: UNKNOWNTech irTzzUBfzGQ draw 1/2; WEBE 2vhjVz4wtgU
+// 31–33s and H5gnk59aNRQ 15s establish ONE inspect family. No rare loops,
+// third inspect or original selection probabilities have been verified.
+export const BUTTERFLY_VARIANTS=Object.freeze({draw:2,inspect:1});
+export const normalizeButterflyVariant=(action,value)=>action==='draw'&&value===1?1:0;
 export function chooseButterflyVariant(action,random=Math.random){
   const count=BUTTERFLY_VARIANTS[action];
   if(!count)throw new Error('Unknown butterfly action: '+action);
-  return Math.min(count-1,Math.max(0,Math.floor(random()*count)));
+  const value=random();return Number.isFinite(value)?Math.min(count-1,Math.max(0,Math.floor(value*count))):0;
 }
 export function sampleButterflyMotion(pose,{deployProgress,inspectProgress,shotAge,knifeHeavy,butterflyDrawVariant=0,butterflyInspectVariant=0}){
-  Object.assign(pose,{ejectAge:99,knifeSpin:0,knifeOpen:0,knifeThumb:0,knifeLowerLeft:0,knifeElbowIn:0,knifeAttack:0,butterflyBlade:0,butterflyHandle:0,knifeBaseOffset:[-.025,.015,-.16]});
+  Object.assign(pose,{ejectAge:99,knifeSpin:0,knifeYaw:0,knifeSeat:0,knifeThumbOut:0,knifeThumbSweep:0,knifeThumbPin:1,knifeContact:0,knifeIndexOpen:0,knifeSplay:0,knifeFingerFan:0,knifeOpen:0,knifeThumb:0,knifeLowerLeft:0,knifeElbowIn:0,knifeAttack:0,butterflyBlade:0,butterflyHandle:0,knifeBaseOffset:[-.07,.10,.06]});
   pose.offset=[...pose.knifeBaseOffset];pose.rotation=[0,0,0];const q=grip();
   if(deployProgress>=0&&deployProgress<1){
-    const t=deployProgress,alternate=butterflyDrawVariant===1;
-    const raise=1-curve(t,[[0,0],[.24,1],[1,1]]),turn=env(t,.04,.20,.59,.85);
-    // Enter with the latch already released and the knife partially opened.
-    // A full closed-to-open arc in this fixed view-grip would strike the cuff;
-    // this actual clear path finishes the opening, without masking any pieces.
-    const u=.40+.60*curve(t,alternate?[[0,0],[.09,0],[.30,.48],[.59,1],[1,1]]:[[0,0],[.10,0],[.36,.55],[.67,1],[1,1]]);
-    // Negative blade opening takes the free pivot ABOVE the retained shaft.
-    // Coupled angles move its handle outwards, up, then down on the other side.
-    // The +2PI catch is physically the same orientation as the idle zero.
+    const t=deployProgress,alternate=normalizeButterflyVariant('draw',butterflyDrawVariant)===1;
+    const raise=1-curve(t,[[0,0],[.18,1],[1,1]]),turn=env(t,0,.16,.65,.94);
+    // Closed entry → free handle up → blade opens → gather/regrip. Draw 2
+    // explicitly releases the palm before the blade-down / handle-up phase.
+    // These normalized knot times are authored, not the slow video's seconds.
+    const u=curve(t,[[0,0],[.10,0],[.32,.50],[.60,1],[1,1]]);
     pose.butterflyBlade=-Math.PI*(1-u);pose.butterflyHandle=Math.PI*(1+u);
-    pose.offset[0]+=.040*raise-.018*turn;pose.offset[1]-=.17*raise-.025*turn;
-    q.slerp(alternate?grip(.16,1.18,.22):grip(-.04,1.20,.12),turn);
-    pose.knifeOpen=.22*env(t,.06,.18,.65,.81);pose.knifeThumb=.10*env(t,.06,.18,.65,.81);pose.knifeLowerLeft=.04*turn;
+    pose.knifeYaw=-Math.PI*(1-curve(t,[[0,0],[.34,0],[.69,1],[1,1]]));
+    pose.knifeSeat=.006*(1-curve(t,[[0,0],[.26,0],[.60,1],[1,1]]));
+    pose.offset[0]+=.020*raise-.018*turn;pose.offset[1]+=.040*raise+.025*turn;
+    const drawPalm=grip(.15,2.60,-.42).slerp(grip(.08,1.10,-.42),curve(t,[[0,0],[.10,0],[.24,1],[1,1]]));
+    q.slerp(alternate?drawPalm:grip(-.12,1.75,-.30),turn);
+    const release=env(t,.035,.10,.54,.79);
+    pose.knifeOpen=release;pose.knifeThumb=.18*release;
+    pose.knifeIndexOpen=(alternate?.25:.08)*release;pose.knifeSplay=.7*release;
+    pose.knifeLowerLeft=.04*turn;
+    if(alternate){
+      // UNKNOWNTech early-52/53: free handle above, blade still down beside
+      // the thumb. early-54: blade up with BOTH handles in a V over the palm.
+      pose.butterflyBlade=curve(t,[[0,-Math.PI],[.29,-Math.PI],[.52,-.42],[.62,-.42],[.80,0],[1,0]]);
+      pose.butterflyHandle=curve(t,[[0,Math.PI],[.10,Math.PI],[.25,2*Math.PI],[.29,2*Math.PI],[.52,2*Math.PI-.86],[.62,2*Math.PI-.86],[.80,2*Math.PI],[1,2*Math.PI]]);
+      pose.knifeContact=env(t,.12,.24,.80,.92);pose.knifeFingerFan=pose.knifeContact;
+      pose.knifeSpin=t<=.29?-Math.PI*pose.knifeContact:curve(t,[[.29,-Math.PI],[.52,0],[1,0]]);
+      pose.knifeYaw=-Math.PI*(1-curve(t,[[0,0],[.12,0],[.24,1],[1,1]]));
+      pose.knifeThumbOut=env(t,.02,.10,.52,.62);
+      pose.knifeThumbSweep=env(t,.27,.36,.62,.70);
+      pose.knifeThumbPin=curve(t,[[0,0],[.43,0],[.52,1],[1,1]]);
+      // Do not slide the retained index or close the lower fingers through a
+      // still-free shaft. Gather first (.80), transfer the joined pair (.92),
+      // then catch. These are presentation phases, not new combat/input locks.
+      pose.knifeOpen=env(t,.04,.10,.92,1);
+      pose.knifeIndexOpen=curve(t,[[0,0],[.04,0],[.10,.8],[.24,.8],[.29,.1],[.80,.1],[.92,0],[1,0]]);
+      pose.knifeThumb=.18*env(t,.04,.10,.80,.92);
+    }
   }else if(shotAge>=0&&shotAge<(knifeHeavy?.85:.48)){
     const t=shotAge/(knifeHeavy?.85:.48),strike=curve(t,[[0,0],[.10,.1],[.27,1],[.43,.85],[1,0]]);
     pose.knifeAttack=strike;pose.offset[0]-=(knifeHeavy?.09:.26)*strike;pose.offset[1]+=(knifeHeavy?.045:.026)*strike;pose.offset[2]-=(knifeHeavy?.20:.09)*strike;
     pose.rotation=knifeHeavy?[.06*strike,.13*strike,-.12*strike]:[.10*strike,.25*strike,.85*strike];
     if(knifeHeavy)q.slerp(grip(-.1,1.3,-.88),strike);
   }else if(inspectProgress>=0&&inspectProgress<1&&shotAge>.5){
-    const t=inspectProgress,lift=env(t,0,.18,.80,1),present=env(t,.18,.32,.70,.88);
-    pose.offset[0]-=.040*lift;pose.offset[1]+=.065*lift;pose.offset[2]+=.024*present;
-    let fan=env(t,.12,.27,.68,.84)*.48;
-    if(butterflyInspectVariant===1)fan=env(t,.12,.30,.60,.83)*.68;
-    if(butterflyInspectVariant===2)fan=.36*env(t,.10,.24,.37,.49)+.50*env(t,.46,.60,.72,.88);
-    // Keep the safe handle in the closed grip. Only the free handle fans away
-    // from it; there are no ungrounded index rolls or whole-knife spins.
-    pose.butterflyHandle=-fan;pose.knifeOpen=.20*present;pose.knifeThumb=.09*present;
-    q.slerp(butterflyInspectVariant===1?grip(.10,1.36,.22):grip(.03,1.27,.10),lift);
+    const t=inspectProgress,lift=env(t,0,.15,.80,1);
+    // One verified family, also for stale/invalid legacy inspect IDs. Wrist
+    // edge → palm release → broad-face sweep → edge → tang-supported V hold.
+    const present=env(t,.05,.16,.79,.97);
+    pose.offset[0]-=.080*lift;pose.offset[1]+=.090*lift;pose.offset[2]+=.024*present;
+    pose.knifeContact=env(t,.08,.14,.96,1);
+    pose.butterflyBlade=curve(t,[[0,0],[.08,0],[.15,-.65],[.23,-1.05],[.30,-.05],[.44,-.28],[.77,-.28],[.96,0],[1,0]]);
+    pose.butterflyHandle=curve(t,[[0,0],[.08,0],[.15,-1.35],[.23,-2.25],[.30,-.10],[.44,-.35],[.77,-.35],[.96,0],[1,0]]);
+    pose.knifeSpin=curve(t,[[0,0],[.08,-.10],[.15,-.60],[.23,.15],[.30,-.12],[.44,0],[1,0]]);
+    // Release through the edge-on sweep instead of briefly closing into the
+    // rotating steel at .28. Re-open for return and catch only after gathering.
+    pose.knifeOpen=curve(t,[[0,0],[.08,.25],[.15,1],[.32,1],[.44,.82],[.77,.82],[.80,1],[.96,1],[1,0]]);
+    pose.knifeIndexOpen=.10*present;pose.knifeThumb=.18*present;pose.knifeSplay=present;pose.knifeFingerFan=present;
+    const edge=env(t,.01,.075,.085,.15)+env(t,.23,.30,.32,.44);
+    // Calibrated in the actual 62-degree weapon camera: yaw 2.8 made the
+    // held blade edge-on and showed the back of the glove. Only the transient
+    // roll uses that orientation; the sustained hold presents the broad face.
+    // WEBE 32.5's held V is about 40 degrees in projection, not the former
+    // 74-degree fan. These calibrated hinge angles retain the same tang pin;
+    // the wrist roll puts BOTH handle ends down-left and the broad blade up-right.
+    q.slerp(grip(.08,1.10,-.65),present).slerp(grip(-.10,2.80,-.10),Math.min(1,edge));
     pose.knifeLowerLeft=.10*lift;pose.knifeElbowIn=.04*lift;
   }
   pose.knifeGrip=q.toArray();return pose;

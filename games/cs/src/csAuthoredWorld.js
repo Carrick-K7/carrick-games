@@ -1,6 +1,9 @@
 import * as T from 'three';
 import { SnowWorld } from './csWorld.js';
-import { CLASSIC_MAPS } from './csClassicMaps.js';
+import { decorativeMaterial, addWorldSky } from './csMapDecorations.js';
+import { CLASSIC_MAPS, AUTHORED_MAP_SOURCES } from './csClassicMaps.js';
+import { bakeWorldReflectionX, staticFormShade } from './csAuthoredSpace.js';
+import { buildReferenceFacades, buildReferenceSetPieces, buildStoneBellTower, buildFoliage, buildLaundry } from './csReferenceArchitecture.js';
 
 export const AUTHORED_HULL = Object.freeze({radius:.42,standing:1.8,crouching:.9,step:.46});
 const EPS = .0001, CELL = 4;
@@ -19,11 +22,11 @@ export class AuthoredWorld extends SnowWorld {
     const definition=CLASSIC_MAPS[id];
     if(!definition)throw new Error(`Unknown authored map: ${id}`);
     super(scene,options,assetUrl);
-    this.definition=definition;
+    this.definition=definition;this.authoredDefinition=AUTHORED_MAP_SOURCES[id];
     this.config={...this.definition,...options,id};this.theme='desert';
     this.tacticalRoutes=this.definition.routes;this.previewCamera=this.definition.previewCamera;
     this.landmarks=this.definition.landmarks;this.authored=true;this.navStep=1;
-    this.collisionBoxes=[];this.collisionGrid=new Map();this.floorCells=new Set();
+    this.collisionBoxes=[];this.collisionGrid=new Map();this.collisionBounds=new T.Box3();this.floorCells=new Set();this.architectureFeatures=[];
     this.ownedMaterials=new Set();this.borrowedMaterials=new Set();this.materialMeshes=new Map();
     this._buckets=new Map();this._disposed=false;this._loaded=false;
     this.mapGroup.name=`authored-${id}`;this.environment.name=`environment-${id}`;
@@ -33,7 +36,7 @@ export class AuthoredWorld extends SnowWorld {
   async load() {
     if(this._disposed)throw new Error('Cannot load a disposed authored world');
     if(this._loaded)return this;
-    const start=performance.now(),d=this.definition;
+    const start=performance.now(),d=this.authoredDefinition,world=this.definition;
     for(const r of d.floors)for(let z=r[1];z<r[3];z++)for(let x=r[0];x<r[2];x++)this.floorCells.add(key(x,z));
     const xs=d.floors.flatMap(r=>[r[0],r[2]]),zs=d.floors.flatMap(r=>[r[1],r[3]]);
     this.bounds={minX:Math.min(...xs)-.5,maxX:Math.max(...xs)+.5,minZ:Math.min(...zs)-.5,maxZ:Math.max(...zs)+.5,minY:-.35};
@@ -51,13 +54,18 @@ export class AuthoredWorld extends SnowWorld {
     for(const p of [...d.ceilings,...(d.extraSteps||[]),...d.props])this.addDescriptor(p);
     for(const portal of d.portals)this.addPortal(portal);
     for(const landmark of d.landmarks)this.addLandmark(landmark);
-    for(const site of d.sites)this.addSiteMark(site);
+    buildReferenceSetPieces(this);
+    if(d.authoredTransform==='reflect-x')bakeWorldReflectionX(this);
+    // Readable marks are authored in FINAL world space, never reflected glyphs.
+    for(const site of world.sites)this.addSiteMark(site);
     this.finishMeshes();
-    this.spawns=Object.fromEntries(Object.entries(d.spawns).map(([team,spawns])=>[team,spawns.map(s=>({pos:vec(s.position),yaw:s.yaw}))]));
-    this.bombSites=d.sites.map(s=>({id:s.id,pos:vec(s.position),box:new T.Box3(new T.Vector3(s.rect[0],-.1,s.rect[1]),new T.Vector3(s.rect[2],2.4,s.rect[3]))}));
-    this.buyZones=Object.entries(d.buyZones).map(([team,r])=>({team,box:new T.Box3(new T.Vector3(r[0],-.1,r[1]),new T.Vector3(r[2],2.5,r[3]))}));
+    addWorldSky(this);
+    this.spawns=Object.fromEntries(Object.entries(world.spawns).map(([team,spawns])=>[team,spawns.map(s=>({pos:vec(s.position),yaw:s.yaw}))]));
+    this.bombSites=world.sites.map(s=>({id:s.id,pos:vec(s.position),box:new T.Box3(new T.Vector3(s.rect[0],-.1,s.rect[1]),new T.Vector3(s.rect[2],2.4,s.rect[3]))}));
+    this.buyZones=Object.entries(world.buyZones).map(([team,r])=>({team,box:new T.Box3(new T.Vector3(r[0],-.1,r[1]),new T.Vector3(r[2],2.5,r[3]))}));
     this.buildNavigation();this._loaded=true;
-    this.stats={drawCalls:this.mapGroup.children.length,triangles:this.mapGroup.children.reduce((n,m)=>n+m.geometry.attributes.position.count/3,0),colliders:this.collisionBoxes.length,navNodes:this.nodes.length,loadMs:performance.now()-start};
+    const staticMeshes=[...this.mapGroup.children,...this.environment.children].filter(m=>m.isMesh);
+    this.stats={drawCalls:staticMeshes.length,triangles:staticMeshes.reduce((n,m)=>n+(m.geometry.index?.count??m.geometry.attributes.position.count)/3,0),colliders:this.collisionBoxes.length,navNodes:this.nodes.length,loadMs:performance.now()-start};
     return this;
   }
 
@@ -77,70 +85,7 @@ export class AuthoredWorld extends SnowWorld {
     }
   }
 
-  buildFacades() {
-    const lines=new Map();
-    const edge=(axis,line,a,side)=>{const k=`${axis},${line},${side}`;if(!lines.has(k))lines.set(k,[]);lines.get(k).push(a);};
-    for(const cell of this.floorCells){const [x,z]=cell.split(',').map(Number);
-      if(!this.floorCells.has(key(x,z-1)))edge('x',z,x,-1);
-      if(!this.floorCells.has(key(x,z+1)))edge('x',z+1,x,1);
-      if(!this.floorCells.has(key(x-1,z)))edge('z',x,z,-1);
-      if(!this.floorCells.has(key(x+1,z)))edge('z',x+1,z,1);
-    }
-    let serial=0;
-    for(const [k,values] of lines){const [axis,lineRaw,sideRaw]=k.split(','),line=Number(lineRaw),side=Number(sideRaw);values.sort((a,b)=>a-b);
-      let begin=values[0],end=begin+1;
-      const emit=()=>{
-        const total=end-begin,parts=Math.ceil(total/5.5),span=total/parts;
-        for(let j=0;j<parts;j++){
-          const mid=begin+(j+.5)*span,h=5.4+(serial++%4)*.65;
-          const p=axis==='x'?[mid,h/2,line+side*.1]:[line+side*.1,h/2,mid];
-          const size=axis==='x'?[span+.02,h,.45]:[.45,h,span+.02];
-          const italian=this.definition.style==='italian';
-          const tints=italian?[0xf2dcc4,0xe3bd9f,0xf0c9af,0xe8dfd0,0xd9b99a]:[0xf1e1c7,0xe5cda6,0xf5ead7,0xddc7a4];
-          const tint=tints[serial%tints.length];
-          this.addBox('plaster',p,size,{tint});
-          // Buildings extend OUT of the playable footprint. Limit depth to half
-          // the gap to another street: opposite facades never fill a passage.
-          const start=begin+j*span,finish=start+span;
-          let depth=3.4+(serial%3)*.7;
-          outer:for(let away=.5;away<=12;away+=.5)for(let at=start+.01;at<finish;at+=.45){
-            const xx=axis==='x'?at:line+side*away,zz=axis==='x'?line+side*away:at;
-            if(this.floorCells.has(key(Math.floor(xx),Math.floor(zz)))){depth=Math.min(depth,Math.max(.35,(away-.5)/2));break outer;}
-          }
-          const mass=axis==='x'?[mid,h/2,line+side*depth/2]:[line+side*depth/2,h/2,mid];
-          this.addBox('plaster',mass,axis==='x'?[span,h,depth]:[depth,h,span],{tint});
-          if(italian)this.addPitchedRoof(axis,mid,line+side*depth/2,span+.14,depth+.18,h,Math.min(1.45,depth*.34));
-          else {
-            this.addBox('sandstone',[mass[0],h+.13,mass[2]],axis==='x'?[span+.14,.26,depth+.15]:[depth+.15,.26,span+.14],{solid:false,tint});
-            this.addBox('plaster',[mass[0],h+.43,mass[2]],axis==='x'?[span,.55,.17]:[.17,.55,span],{solid:false,tint});
-          }
-          const trim=axis==='x'?[span+.04,.48,.52]:[.52,.48,span+.04];
-          this.addBox(this.definition.style==='italian'?'brick':'sandstone',[p[0],.24,p[2]],trim,{solid:false});
-          this.addBox(this.definition.style==='italian'?'roof':'sandstone',[p[0],h+.12,p[2]],axis==='x'?[span+.2,.24,1.4]:[1.4,.24,span+.2],{solid:false});
-          if(span>2){
-            if(serial%3===0){
-              const door=axis==='x'?[mid,1.05,line-side*.15]:[line-side*.15,1.05,mid];
-              this.addBox('wood',door,axis==='x'?[1.15,2.1,.14]:[.14,2.1,1.15],{solid:false,tint:0xbab3a7});
-              this.addBox('sandstone',[door[0],2.15,door[2]],axis==='x'?[1.35,.15,.28]:[.28,.15,1.35],{solid:false});
-            }
-            if(italian&&serial%5===0){
-              const bx=axis==='x'?mid:line-side*.43,bz=axis==='x'?line-side*.43:mid;
-              this.addBox('sandstone',[bx,2.5,bz],axis==='x'?[2.5,.18,.85]:[.85,.18,2.5]);
-              for(const dy of [2.65,3.28])this.addBox('metal',[bx,dy,bz],axis==='x'?[2.5,.065,.85]:[.85,.065,2.5],{solid:false});
-              for(let k=0;k<7;k++)this.addBox('metal',[bx+(axis==='x'?(k-3)*.38:-side*.4),2.97,bz+(axis==='z'?(k-3)*.38:-side*.4)],[.035,.65,.035],{solid:false});
-            }
-            for(const offset of span>4?[-span*.26,span*.26]:[0]){
-              const wx=p[0]+(axis==='x'?offset:-side*.26),wz=p[2]+(axis==='z'?offset:-side*.26);
-              this.addBox('wood',[wx,3.3,wz],axis==='x'?[1.08,1.35,.13]:[.13,1.35,1.08],{solid:false});
-              this.addBox('sandstone',[wx,2.58,wz],axis==='x'?[1.3,.12,.25]:[.25,.12,1.3],{solid:false});
-              for(const dy of [-.42,-.14,.14,.42])this.addBox('wood',[wx,3.3+dy,wz+(axis==='x'?-side*.08:0)],axis==='x'?[1.12,.065,.17]:[.17,.065,1.12],{solid:false});
-            }
-          }
-        }
-      };
-      for(let i=1;i<values.length;i++){if(values[i]===end)end++;else{emit();begin=values[i];end=begin+1;}}emit();
-    }
-  }
+  buildFacades() { buildReferenceFacades(this); }
 
   addPitchedRoof(axis,along,across,width,depth,y,rise) {
     const point=(u,v,h)=>axis==='x'?[along+u,y+h,across+v]:[across+v,y+h,along+u];
@@ -152,31 +97,44 @@ export class AuthoredWorld extends SnowWorld {
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.computeVertexNormals();this.appendGeometry('roof',g);
   }
 
-  addStairs({rect:r,height,direction,steps}) {
+  addStairs({rect:r,height,direction,steps,kind='sandstone'}) {
+    const axis=direction.endsWith('x')?'x':'z',positive=direction.startsWith('+');
     for(let i=0;i<steps;i++){
-      const unit=(r[3]-r[1])/steps,z=r[1]+(i+.5)*unit;
-      const h=height*(direction==='+z'?i+1:steps-i)/steps;
-      this.addBox('sandstone',[(r[0]+r[2])/2,h/2,z],[r[2]-r[0],h,unit+.002],{walkable:true});
+      const start=axis==='x'?r[0]:r[1],end=axis==='x'?r[2]:r[3],unit=(end-start)/steps;
+      const at=start+(i+.5)*unit,h=height*(positive?i+1:steps-i)/steps;
+      const p=axis==='x'?[at,h/2,(r[1]+r[3])/2]:[(r[0]+r[2])/2,h/2,at];
+      this.addBox(kind,p,axis==='x'?[unit+.002,h,r[3]-r[1]]:[r[2]-r[0],h,unit+.002],{walkable:true,name:'stair'});
     }
   }
 
-  addPortal({name,x,z,axis,width,opening,height,bottom=0,kind,sill=0}) {
-    const along=(offset,y,w,h,depth=.7,walkable=false)=>this.addBox(kind,[x+(axis==='x'?offset:0),y,z+(axis==='z'?offset:0)],axis==='x'?[w,h,depth]:[depth,h,w],{walkable,name});
+  addPortal({name,x,z,axis,width,opening,height,bottom=0,kind,sill=0,shape='round',spring:specifiedSpring,peak:specifiedPeak,tint=0xffffff}) {
+    const along=(offset,y,w,h,depth=.7,walkable=false)=>this.addBox(kind,[x+(axis==='x'?offset:0),y,z+(axis==='z'?offset:0)],axis==='x'?[w,h,depth]:[depth,h,w],{walkable,name,tint});
     const side=(width-opening)/2;
     for(const s of [-1,1])along(s*(opening/2+side/2),height/2,side,height);
-    const spring=bottom+2.25,peak=Math.min(height-.25,bottom+3.15);
-    // Eight masonry voussoirs give a recognisable rounded arch and conservative
-    // matching stepped collision. Every opening retains standing head clearance.
-    for(let i=0;i<8;i++){
-      const w=opening/8,u=(i+.5)/8*2-1,lower=spring+(peak-spring)*Math.sqrt(1-u*u);
-      along(-opening/2+(i+.5)*w,(height+lower)/2,w+.005,height-lower);
+    const spring=specifiedSpring??bottom+2.25,peak=specifiedPeak??Math.min(height-.25,bottom+3.15);
+    if(shape==='rectangular')along(0,(height+peak)/2,opening,height-peak);
+    else {
+      const profile=u=>spring+(peak-spring)*(shape==='pointed'?1-Math.abs(u):Math.sqrt(Math.max(0,1-u*u)));
+      for(let i=0;i<16;i++){
+        const left=-1+i/8,right=left+1/8,a=left*opening/2,b=right*opening/2,ya=profile(left),yb=profile(right);
+        const shape=new T.Shape();shape.moveTo(a,ya);shape.lineTo(b,yb);shape.lineTo(b,height);shape.lineTo(a,height);shape.closePath();
+        const g=new T.ExtrudeGeometry(shape,{depth:.7,bevelEnabled:false});
+        if(axis==='z')g.rotateY(-Math.PI/2);
+        g.translate(x+(axis==='z'?.35:0),0,z+(axis==='x'?-.35:0));this.appendGeometry(kind,g,tint);
+        // Conservative colliders bound each actual wedge, never cross head clearance.
+        const lower=Math.min(ya,yb),center=(a+b)/2;
+        const pos=new T.Vector3(x+(axis==='x'?center:0),(height+lower)/2,z+(axis==='z'?center:0));
+        const half=new T.Vector3(...(axis==='x'?[(b-a)/2,(height-lower)/2,.35]:[.35,(height-lower)/2,(b-a)/2]));
+        this.addCollider(new T.Box3(pos.clone().sub(half),pos.clone().add(half)),kind,{name});
+      }
     }
     if(sill)along(0,sill/2,opening,sill,1.05,true);
+    this.architectureFeatures.push({type:'portal',name,shape,opening,spring,peak});
   }
 
   addDescriptor(p) {
-    if(p.shape==='cylinder')this.addCylinder(p.kind,p.position,p.radius,p.height,{solid:p.solid!==false});
-    else this.addBox(p.kind,p.position,p.size,{solid:p.solid!==false,walkable:!!p.walkable});
+    if(p.shape==='cylinder')this.addCylinder(p.kind,p.position,p.radius,p.height,{solid:p.solid!==false,tint:p.tint});
+    else this.addBox(p.kind,p.position,p.size,{solid:p.solid!==false,walkable:!!p.walkable,tint:p.tint});
     if(p.detail==='crate'){
       const [x,y,z]=p.position,[w,h,d]=p.size;
       for(const dx of [-w*.34,w*.34])this.addBox('metal',[x+dx,y,z],[.075,h+.025,d+.025],{solid:false});
@@ -192,37 +150,33 @@ export class AuthoredWorld extends SnowWorld {
       this.addCylinder('sandstone',[x,1.05,z],.20,1.3);
       this.addCylinder('sandstone',[x,1.5,z],l.radius*.52,.17);
       this.addCylinder('sandstone',[x,1.8,z],.12,.6);
-    } else if(l.kind==='bellTower'||l.kind==='minaret'){
+    } else if(l.kind==='bellTower'){
+      buildStoneBellTower(this,l);
+    } else if(l.kind==='minaret'){
       const h=l.height,w=l.kind==='bellTower'?3.4:2.7;
       this.addBox('sandstone',[x,h*.39,z],[w,h*.78,w]);
       for(const dx of [-1,1])for(const dz of [-1,1])this.addBox('sandstone',[x+dx*(w/2-.2),h*.86,z+dz*(w/2-.2)],[.4,h*.2,.4]);
       this.addBox('sandstone',[x,h*.97,z],[w+.5,.35,w+.5]);
       const cap=new T.ConeGeometry(w*.85,h*.18,4);cap.rotateY(Math.PI/4);cap.translate(x,h*1.06,z);this.appendGeometry(l.kind==='bellTower'?'roof':'sandstone',cap);
       if(l.kind==='bellTower')this.addCylinder('metal',[x,h*.85,z],.45,.8,{solid:false});
+    } else if(l.kind==='laundry'){
+      buildLaundry(this,l);
     } else if(l.kind==='canopy'){
       this.addBox('wood',[x,l.height,z],[l.width,.17,l.depth],{solid:true});
       for(const dx of [-1,1])for(const dz of [-1,1])this.addBox('wood',[x+dx*(l.width/2-.14),l.height/2,z+dz*(l.depth/2-.14)],[.13,l.height,.13]);
       for(let i=0;i<6;i++)this.addBox('roof',[x-l.width/2+(i+.5)*l.width/6,l.height+.11,z],[l.width/9,.07,l.depth+.1],{solid:false});
-    } else if(l.kind==='palm'){
-      this.addCylinder('wood',[x,l.height*.43,z],.23,l.height*.86);
-      for(let i=0;i<7;i++){
-        const a=i*Math.PI*2/7,g=new T.ConeGeometry(.48,3.8,3);g.rotateZ(Math.PI*.39);g.rotateY(a);g.translate(x+Math.cos(a)*1.4,l.height-.5,z-Math.sin(a)*1.4);this.appendGeometry('metal',g,0x668254);
-      }
-    } else if(l.kind==='cypress'){
-      this.addCylinder('wood',[x,.8,z],.2,1.6);
-      const g=new T.ConeGeometry(.85,l.height,7);g.translate(x,l.height/2+.4,z);this.appendGeometry('metal',g,0x53664b);
-    }
+    } else if(l.kind==='palm'||l.kind==='cypress')buildFoliage(this,l);
   }
 
   addSiteMark(site) {
-    const r=site.rect,cx=(r[0]+r[2])/2,cz=(r[1]+r[3])/2,w=r[2]-r[0],d=r[3]-r[1];
+    const elevation=site.position[1],r=site.rect,cx=(r[0]+r[2])/2,cz=(r[1]+r[3])/2,w=r[2]-r[0],d=r[3]-r[1];
     for(const s of [-1,1]){
-      this.addBox('brick',[cx,.013,cz+s*(d/2-.5)],[w-1,.018,.09],{solid:false});
-      this.addBox('brick',[cx+s*(w/2-.5),.013,cz],[.09,.018,d-1],{solid:false});
+      this.addBox('brick',[cx,elevation+.013,cz+s*(d/2-.5)],[w-1,.018,.09],{solid:false});
+      this.addBox('brick',[cx+s*(w/2-.5),elevation+.013,cz],[.09,.018,d-1],{solid:false});
     }
     // Stencilled letter built from flat strips, never a network/canvas texture.
-    const [x,,z]=site.position,segments=site.id==='A'?[[0,-.5,1.2,.16],[-.55,0,.16,1.5],[.55,0,.16,1.5],[0,0,1.2,.16]]:[[-.55,0,.16,1.6],[0,-.72,1.2,.16],[0,0,1.2,.16],[0,.72,1.2,.16],[.55,0,.16,1.6]];
-    for(const [dx,dz,sw,sd] of segments)this.addBox('brick',[x+dx,.025,z+dz],[sw,.018,sd],{solid:false});
+    const [x,,z]=site.position,segments=site.id==='A'?[[0,-.5,1.2,.16],[-.55,0,.16,1.5],[.55,0,.16,1.5],[0,0,1.2,.16]]:[[-.55,0,.16,1.6],[0,-.72,1.2,.16],[0,0,1.2,.16],[0,.72,1.2,.16],[.55,-.36,.16,.56],[.55,.36,.16,.56]];
+    for(const [dx,dz,sw,sd] of segments)this.addBox('brick',[x+dx,elevation+.025,z+dz],[sw,.018,sd],{solid:false});
   }
 
   addBox(kind,position,size,options={}) {
@@ -230,34 +184,37 @@ export class AuthoredWorld extends SnowWorld {
     if(options.solid!==false){const p=vec(position),s=vec(size).multiplyScalar(.5);this.addCollider(new T.Box3(p.clone().sub(s),p.clone().add(s)),kind,options);}
   }
   addCylinder(kind,position,radius,height,options={}) {
-    const g=new T.CylinderGeometry(radius,radius,height,12);g.translate(...position);this.appendGeometry(kind,g);
+    const g=new T.CylinderGeometry(radius,radius,height,12);g.translate(...position);this.appendGeometry(kind,g,options.tint??0xffffff);
     if(options.solid!==false){const [x,y,z]=position;this.addCollider(new T.Box3(new T.Vector3(x-radius,y-height/2,z-radius),new T.Vector3(x+radius,y+height/2,z+radius)),kind,{...options,cylinder:{x,z,radius}});}
   }
   addCollider(box,kind,options) {
-    const collider={box,kind,...options};this.collisionBoxes.push(collider);
+    const collider={box,kind,...options};this.collisionBoxes.push(collider);this.collisionBounds.union(box);
     for(let z=Math.floor(box.min.z/CELL);z<=Math.floor(box.max.z/CELL);z++)for(let x=Math.floor(box.min.x/CELL);x<=Math.floor(box.max.x/CELL);x++){
       const k=key(x,z);if(!this.collisionGrid.has(k))this.collisionGrid.set(k,[]);this.collisionGrid.get(k).push(collider);
     }
   }
-  appendGeometry(kind,geometry,tint=0xffffff) {
+  appendGeometry(kind,geometry,tint=0xffffff,{preserveUV=false}={}) {
     const g=geometry.index?geometry.toNonIndexed():geometry;
-    if(!this._buckets.has(kind))this._buckets.set(kind,{positions:[],normals:[],uvs:[],colors:[]});
+    if(!this._buckets.has(kind))this._buckets.set(kind,{positions:[],normals:[],uvs:[],colors:[],uvMode:preserveUV?'authored':'metres'});
     const b=this._buckets.get(kind),p=g.attributes.position,n=g.attributes.normal,c=new T.Color(tint);
     for(let i=0;i<p.count;i++){
       const x=p.getX(i),y=p.getY(i),z=p.getZ(i),nx=n.getX(i),ny=n.getY(i),nz=n.getZ(i);
       b.positions.push(x,y,z);b.normals.push(nx,ny,nz);
       // World-aligned UVs measured in metres, shared across walls and props.
-      b.uvs.push(Math.abs(ny)>.6?x:Math.abs(nx)>.6?z:x,Math.abs(ny)>.6?z:y);
-      b.colors.push(c.r,c.g,c.b);
+      if(preserveUV)b.uvs.push(g.attributes.uv.getX(i),g.attributes.uv.getY(i));
+      else b.uvs.push(Math.abs(ny)>.6?x:Math.abs(nx)>.6?z:x,Math.abs(ny)>.6?z:y);
+      // Analytic static form shading survives low quality (no dynamic AO/lights).
+      // Up-facing stone stays bright; soffits/recesses and wall feet retain depth.
+      const shade=staticFormShade(nx,ny,nz,y);b.colors.push(c.r*shade,c.g*shade,c.b*shade);
     }
     if(g!==geometry)g.dispose();geometry.dispose();
   }
   finishMeshes() {
     for(const [kind,b] of this._buckets){
       const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(b.positions,3));g.setAttribute('normal',new T.Float32BufferAttribute(b.normals,3));g.setAttribute('uv',new T.Float32BufferAttribute(b.uvs,2));g.setAttribute('color',new T.Float32BufferAttribute(b.colors,3));g.computeBoundingSphere();
-      const material=new T.MeshStandardMaterial({name:kind,color:COLORS[kind]||0xffffff,roughness:.9,vertexColors:true});
+      const material=decorativeMaterial(kind)||new T.MeshStandardMaterial({name:kind,color:COLORS[kind]||0xffffff,roughness:.9,vertexColors:true});
       this.ownedMaterials.add(material);this.materials.push(material);
-      const mesh=new T.Mesh(g,material);mesh.name=`${this.definition.id}-${kind}`;mesh.userData.materialKind=kind;mesh.userData.uvMeters=true;mesh.castShadow=true;mesh.receiveShadow=true;
+      const mesh=new T.Mesh(g,material);mesh.name=`${this.definition.id}-${kind}`;mesh.userData.materialKind=kind;mesh.userData.uvMeters=b.uvMode!=='authored';mesh.userData.ownedMapDecoration=!!material.userData.ownedMapDecoration;mesh.castShadow=true;mesh.receiveShadow=true;
       this.mapGroup.add(mesh);this.solids.push(mesh);this.materialMeshes.set(kind,mesh);
     }
     this._buckets.clear();this.mapGroup.updateMatrixWorld(true);
@@ -337,17 +294,27 @@ export class AuthoredWorld extends SnowWorld {
   }
 
   *rayCells(origin,dir,dist) {
-    let x=Math.floor(origin.x/CELL),z=Math.floor(origin.z/CELL),distance=0;
+    if(![origin.x,origin.y,origin.z,dir.x,dir.y,dir.z,dist].every(Number.isFinite)||dist<0||this.collisionBounds.isEmpty())return;
+    // Clip to actual collision extent before DDA: even a 1e20-distance caller
+    // traverses only the finite map, not billions of empty off-map cells.
+    const bounds=this.collisionBounds;let entry=0,exit=dist;
+    for(const axis of ['x','z']){
+      if(Math.abs(dir[axis])<1e-12){if(origin[axis]<bounds.min[axis]||origin[axis]>bounds.max[axis])return;continue;}
+      let a=(bounds.min[axis]-origin[axis])/dir[axis],b=(bounds.max[axis]-origin[axis])/dir[axis];if(a>b)[a,b]=[b,a];
+      entry=Math.max(entry,a);exit=Math.min(exit,b);if(entry>exit)return;
+    }
+    let x=Math.floor((origin.x+dir.x*entry)/CELL),z=Math.floor((origin.z+dir.z*entry)/CELL),distance=entry;
     const sx=Math.sign(dir.x),sz=Math.sign(dir.z),dx=sx?CELL/Math.abs(dir.x):Infinity,dz=sz?CELL/Math.abs(dir.z):Infinity;
     let tx=sx?((x+(sx>0?1:0))*CELL-origin.x)/dir.x:Infinity,tz=sz?((z+(sz>0?1:0))*CELL-origin.z)/dir.z:Infinity;
-    while(distance<=dist){
+    const budget=Math.ceil((bounds.max.x-bounds.min.x)/CELL)+Math.ceil((bounds.max.z-bounds.min.z)/CELL)+5;
+    for(let step=0;step<budget&&distance<=exit;step++){
       yield {distance,colliders:this.collisionGrid.get(key(x,z))||[]};
       if(tx===Infinity&&tz===Infinity)break;
       if(tx<tz){distance=tx;tx+=dx;x+=sx;}else if(tz<tx){distance=tz;tz+=dz;z+=sz;}else{distance=tx;tx+=dx;tz+=dz;x+=sx;z+=sz;}
     }
   }
   raycast(origin,dir,dist=150) {
-    if(this._disposed||dist<=0)return null;
+    if(this._disposed||dist<=0||![origin.x,origin.y,origin.z,dir.x,dir.y,dir.z,dist].every(Number.isFinite)||dir.lengthSq()===0)return null;
     let closest=dist,chosen=null,chosenNormal=null;const tested=new Set();
     for(const cell of this.rayCells(origin,dir,dist)){
       if(cell.distance>closest)break;
@@ -388,7 +355,7 @@ export class AuthoredWorld extends SnowWorld {
     for(const group of [this.mapGroup,this.environment]){group.traverse(o=>{if(o.geometry)geometries.add(o.geometry);});group.removeFromParent();group.clear();}
     for(const g of geometries)g.dispose();for(const m of this.ownedMaterials)this.releaseMaterial(m,textures);
     this.ownedMaterials.clear();this.borrowedMaterials.clear();this.materials=[];this.materialMeshes.clear();this.solids=[];
-    this.collisionBoxes=[];this.collisionGrid.clear();this.floorCells.clear();this.nodes=[];this.grid.clear();this.levels.clear();this.reachable?.clear();this.externalTextures.clear();this._buckets.clear();
+    this.collisionBoxes=[];this.collisionGrid.clear();this.collisionBounds.makeEmpty();this.architectureFeatures=[];this.floorCells.clear();this.nodes=[];this.grid.clear();this.levels.clear();this.reachable?.clear();this.externalTextures.clear();this._buckets.clear();
     this.radarTriangles=[];this.bombSites=[];this.buyZones=[];this.spawns={ct:[],t:[]};this.pickups=[];
   }
 }

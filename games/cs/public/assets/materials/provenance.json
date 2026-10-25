@@ -5,56 +5,67 @@
   "legalCodeUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
   "inspectedDate": "2026-10-23",
   "pillowVersion": "12.3.0",
-  "processing": "1k photographic PBR JPG -> RGB Lanczos 512x512 -> WebP method=6; albedo quality=86, normal=90, roughness=86. No synthesis, baking, or Valve assets. OpenGL normals; roughness grayscale copied into RGB, sampled from G.",
+  "processing": "1k photographic PBR JPG -> RGB Lanczos 512x512 -> WebP method=6; albedo quality=86, normal=90, roughness=86. No synthesis, baking, or Valve assets. OpenGL normals; roughness grayscale copied into RGB, sampled from G. Plaster albedo only, after RGB Lanczos resize and before WebP: Pillow ImageEnhance.Color(image).enhance(0.65), then ImageEnhance.Brightness(image).enhance(1.22), then ImageEnhance.Contrast(image).enhance(0.42), on 8-bit encoded RGB (not linear-light exposure). Contrast blends toward Pillow's rounded mean L luminance to soften existing photographic wear; no added wear. Normal and roughness receive no tone transform.",
   "families": {
     "plaster": {
-      "sourceId": "plastered_wall",
-      "page": "https://polyhaven.com/a/plastered_wall",
-      "apiUrl": "https://api.polyhaven.com/files/plastered_wall",
-      "infoUrl": "https://api.polyhaven.com/info/plastered_wall",
+      "sourceId": "worn_plaster_wall",
+      "page": "https://polyhaven.com/a/worn_plaster_wall",
+      "apiUrl": "https://api.polyhaven.com/files/worn_plaster_wall",
+      "infoUrl": "https://api.polyhaven.com/info/worn_plaster_wall",
       "authors": {
-        "Amal Kumar": "All"
+        "Dimitrios Savva": "All"
       },
       "sourceDimensionsMm": [
-        1999.9996423721313,
-        1999.9996423721313
+        1800.0000715255737,
+        1800.0000715255737
       ],
-      "repeatMeters": 2,
+      "repeatMeters": 2.8,
+      "inspectedDate": "2026-10-25",
+      "pillowVersion": "12.3.0",
+      "webpVersion": "1.6.0",
+      "processing": "1k photographic PBR JPG -> RGB Lanczos 512x512 -> WebP method=6; albedo quality=86, normal=90, roughness=86. No synthesis, baking, or Valve assets. OpenGL normals; roughness grayscale copied into RGB, sampled from G. Plaster albedo only, after RGB Lanczos resize and before WebP: Pillow ImageEnhance.Color(image).enhance(0.65), then ImageEnhance.Brightness(image).enhance(1.22), then ImageEnhance.Contrast(image).enhance(0.42), on 8-bit encoded RGB (not linear-light exposure). Contrast blends toward Pillow's rounded mean L luminance to soften existing photographic wear; no added wear. Normal and roughness receive no tone transform.",
       "maps": {
         "map": {
           "path": "assets/materials/plaster-albedo.webp",
           "width": 512,
           "height": 512,
-          "encodedBytes": 22238,
-          "sha256": "12e9b67132a8b35e891f3b7685977572bacd8fbb77806378c2e71fe219b3bd78",
-          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_diff_1k.jpg",
-          "sourceBytes": 617080,
-          "sourceMd5": "9f64cd14ded4938e64ab6c6bb3de3c19",
-          "sourceSha256": "73312ebb6eabc8e0a55addd8a82a8924bcd1e717b9488a887cc77f14b6ea554e"
+          "encodedBytes": 18280,
+          "sha256": "4be099c0ec78182365f61b6a6d477d44a681f45572d03b11d1508e9661ba2bce",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/worn_plaster_wall/worn_plaster_wall_diff_1k.jpg",
+          "sourceBytes": 750361,
+          "sourceMd5": "31aab3a5bf3859361cd423e15b9735bc",
+          "sourceSha256": "f769bee35504ff713e89e89d2b64c1eb3c373dd184973ac8706310f19fd63efe",
+          "sourceWidth": 1024,
+          "sourceHeight": 1024
         },
         "normalMap": {
           "path": "assets/materials/plaster-normal.webp",
           "width": 512,
           "height": 512,
-          "encodedBytes": 77644,
-          "sha256": "e370032fded6970f80802bd1183372340550358502a5742e06060fa1d81b2918",
-          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_nor_gl_1k.jpg",
-          "sourceBytes": 1072153,
-          "sourceMd5": "e3e00c5d9a589621bf3cc541d9fb7d81",
-          "sourceSha256": "504e1f7baf4b68714c64b6670e7954bebe99efe31c49f7ce5a2089e4b76023b5"
+          "encodedBytes": 23830,
+          "sha256": "cb483843c841fec2736c9ec1216d478d342c9323115abb1fd859d51ab7031f3c",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/worn_plaster_wall/worn_plaster_wall_nor_gl_1k.jpg",
+          "sourceBytes": 680164,
+          "sourceMd5": "2e1cb2651163105acda653e9c9b9b7b8",
+          "sourceSha256": "5d1dc80a354fc7de3f0ada286176b56d50067c85c9f95140aadf7d5db15adee1",
+          "sourceWidth": 1024,
+          "sourceHeight": 1024
         },
         "roughnessMap": {
           "path": "assets/materials/plaster-roughness.webp",
           "width": 512,
           "height": 512,
-          "encodedBytes": 2738,
-          "sha256": "c1e580ed515fe1c87b33fa9ad4fe79a6150efb3332c5ebf149c8f0b7c0eddb08",
-          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall/plastered_wall_rough_1k.jpg",
-          "sourceBytes": 387134,
-          "sourceMd5": "5c5f8e9c43bf183b45274575a7eac318",
-          "sourceSha256": "844aaa32fda1130262ad8a50084aec7bd5ebce272c8af5e6ba076734beedcd66"
+          "encodedBytes": 2448,
+          "sha256": "738bc76e9c1f4c2d47224cf732ec2389a9462c4bc84c2ab97fffbdfcc1338924",
+          "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/worn_plaster_wall/worn_plaster_wall_rough_1k.jpg",
+          "sourceBytes": 242497,
+          "sourceMd5": "7584ca081047d7e025fd80adbdcec4df",
+          "sourceSha256": "383584ed24edd4dd6e6a675fd822ec04152684ba15f4b0eda1f0dbe31979a7c6",
+          "sourceWidth": 1024,
+          "sourceHeight": 1024
         }
-      }
+      },
+      "repeatNote": "Authored 2.8 m repeat softens repetition frequency; source photographed area remains approximately 1.8 m square. Authored UV scale differs from source physical dimensions."
     },
     "sandstone": {
       "sourceId": "sandstone_blocks_05",

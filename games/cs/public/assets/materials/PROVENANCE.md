@@ -1,6 +1,6 @@
 # CS world photographic material palette
 
-These nine tileable photographic PBR material families are Poly Haven assets, **CC0-1.0**, downloaded and checked on 2026-10-23. No Valve/Counter-Strike texture artwork is included. The Counter-Strike-like goal is the architectural surface treatment, not a reproduction of proprietary assets.
+These nine tileable photographic PBR material families are Poly Haven assets, **CC0-1.0**, initially checked on 2026-10-23; the plaster family was replaced and reverified on 2026-10-25. No Valve/Counter-Strike texture artwork is included. The Counter-Strike-like goal is the architectural surface treatment, not a reproduction of proprietary assets.
 
 ## License and exact provenance
 
@@ -12,7 +12,7 @@ The [public API terms](https://raw.githubusercontent.com/Poly-Haven/Public-API/m
 
 | Family | Original material / author | Derived bytes, all three maps | Tile width |
 |---|---|---:|---:|
-| Plaster | [Plastered Wall](https://polyhaven.com/a/plastered_wall), Amal Kumar | 102,620 | 2 m |
+| Plaster | [Worn Plaster Wall](https://polyhaven.com/a/worn_plaster_wall), Dimitrios Savva | 44,558 | 2.8 m |
 | Sandstone | [Sandstone Blocks 05](https://polyhaven.com/a/sandstone_blocks_05), Rob Tuytel | 232,632 | 3 m |
 | Brick | [Brick Wall 001](https://polyhaven.com/a/brick_wall_001), Dimitrios Savva (photography), Rob Tuytel (processing) | 172,126 | 3 m |
 | Cobble | [Cobblestone Floor 02](https://polyhaven.com/a/cobblestone_floor_02), Rob Tuytel | 141,648 | 2 m |
@@ -24,11 +24,11 @@ The [public API terms](https://raw.githubusercontent.com/Poly-Haven/Public-API/m
 
 ## Preparation and budgets
 
-The game-owned [offline preparation script](../../../prepare-world-materials.py) uses existing Python/Pillow tooling, not a new runtime dependency. It requests the original 1k JPG diffuse, OpenGL normal and roughness maps, verifies the provider's MD5 and computes SHA-256, resizes RGB to 512×512 using Lanczos, and writes WebP method 6 (quality 86 albedo/roughness; 90 normal). Roughness is grayscale duplicated into RGB for Three.js's green-channel sampler. Normal directions are sampled as linear data; Three.js normalizes them in the shader. There are no generated-noise architectural substitutes, no runtime procedural texture builds, and no displacement/tessellation cost. The script prints the runtime manifest; after deliberately regenerating assets, update the manifest in the palette module and run its hash tests. Byte-identical encoding requires the recorded Pillow/WebP toolchain; source SHA-256 is retained independently.
+The game-owned [offline preparation script](../../../prepare-world-materials.py) uses existing Python/Pillow tooling, not a new runtime dependency. It requests the original 1k JPG diffuse, OpenGL normal and roughness maps, verifies the provider's MD5 and computes SHA-256, resizes RGB to 512×512 using Lanczos, and writes WebP method 6 (quality 86 albedo/roughness; 90 normal). Roughness is grayscale duplicated into RGB for Three.js's green-channel sampler. Normal directions are sampled as linear data; Three.js normalizes them in the shader. The plaster albedo additionally uses Pillow Color enhancement 0.65, Brightness 1.22, then Contrast 0.42 on the resized encoded 8-bit RGB pixels; this is a documented tone adaptation, not an unmodified photo or linear-light exposure. Its normal and roughness maps are not tone-adjusted. Source physical size is about 1.8 m; 2.8 m is the authored repeat scale, with shader normal strength 0.20. Those art-direction settings are not asserted source measurements. Architectural photographs are not replaced by generated noise. Separately owned original paint, foliage-mask and sky textures are explicitly procedural, need no network fetch, and are included alongside the photographic palette in combined world budgets. There is no displacement/tessellation cost. The script prints the runtime manifest; after deliberately regenerating assets, update the manifest in the palette module and run its hash tests. Byte-identical encoding requires the recorded Pillow/WebP toolchain; source SHA-256 is retained independently.
 
 - **27 images, nine distinct source families**, all 512×512.
-- Full image payload: **1,188,654 bytes (1.134 MiB)**, well below the 4 MiB limit / 2 MiB preference.
-- Basecolor-only image payload: **434,778 bytes (0.415 MiB)**.
+- Full image payload: **1,130,592 bytes (1.078 MiB)**, well below the 4 MiB limit / 2 MiB preference.
+- Basecolor-only image payload: **430,820 bytes (0.411 MiB)**.
 - Full decoded RGBA8 base levels: **28,311,552 bytes (27 MiB)**.
 - Full RGBA8 base plus complete mip chains: **37,748,700 bytes (~36 MiB)**, below 48 MiB. This is texture storage accounting, not a measured driver allocation or total scene memory claim.
 - Basecolor-only RGBA8 with mip chains: **12,582,900 bytes (~12 MiB)**.
@@ -41,7 +41,7 @@ Metadata and this provenance document are small additional release files, not ru
 
 [WorldMaterialPalette](../../../src/csWorldMaterials.js) exports `WORLD_MATERIAL_MANIFEST[kind] = {sourceId, repeatMeters, maps: {map, normalMap, roughnessMap}}`; each map record has `path`, `width`, `height`, `encodedBytes`, `sha256`. The nine kind strings are exported as `WORLD_MATERIAL_KINDS`.
 
-Create one palette per world with its captured `assetUrl`, call synchronous `material(kind)` while constructing meshes, then await `load()`. Materials/maps are shared only inside that instance. UVs should be world meters divided by `repeatMeters`, not legacy BSP texel normalization. All shared textures have unit repeat. `stone` aliases `sandstone`.
+Create one palette per world with its captured `assetUrl`, call synchronous `material(kind)` while constructing meshes, then start `load()` in the background while the ready geometry renders with usable base materials. Gameplay does not wait for optional photographs. Explicit offline artwork capture awaits completed loading; the integration exposes `world.materialsReady` for that purpose. Materials/maps are shared only inside that instance. UVs should be world meters divided by `repeatMeters`, not legacy BSP texel normalization. All shared textures have unit repeat. `stone` aliases `sandstone`.
 
 Use `{detail:false, anisotropy:1}` for low-cost software/mobile startup. This downloads only albedo and uses scalar roughness. `applyQuality()` changes bound slots without cloning/allocating; call `load()` after enabling detail to fetch any as-yet-unloaded maps. Switching down after high detail retains cached maps for cheap subsequent switches; create a low-detail palette initially to minimize retained GPU memory.
 

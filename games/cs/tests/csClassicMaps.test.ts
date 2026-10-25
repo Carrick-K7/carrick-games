@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as T from 'three';
 import { CLASSIC_MAPS } from '../src/csClassicMaps.js';
+import { DECORATIVE_KINDS } from '../src/csMapDecorations.js';
 import { AuthoredWorld, AUTHORED_HULL } from '../src/csAuthoredWorld.js';
 
 type Body = {pos:T.Vector3;vy:number;grounded:boolean};
@@ -41,10 +42,10 @@ describe.each(Object.keys(CLASSIC_MAPS))('%s original authored world',id=>{
       expect(Array.isArray(child.material)).toBe(false);
       expect(child.castShadow&&child.receiveShadow).toBe(true);
       expect(child.geometry.groups).toHaveLength(0);
-      expect(child.userData.uvMeters).toBe(true);
+      expect(child.userData.uvMeters).toBe(child.userData.materialKind!=='foliage');
       const kind=child.userData.materialKind;
       expect(kinds.has(kind)).toBe(false);kinds.add(kind);
-      expect(['plaster','sandstone','brick','cobble','concrete','wood','metal','roof','snow']).toContain(kind);
+      expect(['plaster','sandstone','brick','cobble','concrete','wood','metal','roof','snow',...DECORATIVE_KINDS]).toContain(kind);
       const p=child.geometry.attributes.position,uv=child.geometry.attributes.uv;
       expect(p.count).toBe(uv.count);
       expect([...uv.array].every(Number.isFinite)).toBe(true);
@@ -86,7 +87,7 @@ describe.each(Object.keys(CLASSIC_MAPS))('%s original authored world',id=>{
   });
 
   it('blocks both bullets and the exact .42m actor hull with site cover',()=>{
-    const w=worlds[id],p=id==='de_inferno'?new T.Vector3(17,0,-13):new T.Vector3(22,0,-16);
+    const w=worlds[id],p=id==='de_inferno'?new T.Vector3(17,0,-13):new T.Vector3(-22,0,-16);
     const eye=p.clone().add(new T.Vector3(-4,1,0)),end=p.clone().add(new T.Vector3(4,1,0));
     expect(w.lineClear(eye,end)).toBe(false);
     const hit=w.raycast(eye,new T.Vector3(1,0,0),8);
@@ -153,11 +154,11 @@ describe('mechanics and distinct architecture',()=>{
     expect(Object.keys(inferno.tacticalRoutes.B)).toEqual(['banana']);
     expect(Object.keys(mirage.tacticalRoutes.A)).toEqual(['ramp','palace','connector']);
     expect(Object.keys(mirage.tacticalRoutes.B)).toEqual(['apartments','short']);
-    expect(inferno.landmarks.map(l=>l.kind)).toEqual(expect.arrayContaining(['bellTower','fountain','canopy','cypress']));
+    expect(inferno.landmarks.map(l=>l.kind)).toEqual(expect.arrayContaining(['bellTower','fountain','laundry','cypress']));
     expect(mirage.landmarks.map(l=>l.kind)).toEqual(expect.arrayContaining(['palm','minaret','canopy']));
     expect(inferno.floorCells).not.toEqual(mirage.floorCells);
     expect(inferno.locationAt(new T.Vector3(-29,0,4))).toBe('Banana');
-    expect(mirage.locationAt(new T.Vector3(-29,0,4))).toBe('B Apartments');
+    expect(mirage.locationAt(new T.Vector3(29,0,4))).toBe('B Apartments');
     const banana=inferno.tacticalRoutes.B.banana;
     expect(Math.max(...banana.map(p=>p[0]))-Math.min(...banana.map(p=>p[0]))).toBeGreaterThan(18);
   });
@@ -179,14 +180,16 @@ describe('mechanics and distinct architecture',()=>{
     expect(body.grounded).toBe(true);expect(body.pos.y).toBeCloseTo(1.201,3);
   });
 
-  it('climbs the Mirage window sill with supported stairs in both directions',()=>{
-    const w=worlds.de_mirage,body:Body={pos:new T.Vector3(-2,0,-12),vy:0,grounded:true};
-    travel(w,body,new T.Vector3(-2,1.001,-17),'window approach');
-    expect(body.pos.y).toBeCloseTo(1.001,3);
-    travel(w,body,new T.Vector3(-2,0,-22),'window CT exit');
-    travel(w,body,new T.Vector3(-2,1.001,-17),'window reverse');
-    travel(w,body,new T.Vector3(-2,0,-12),'window mid exit');
-    expect(w.path(new T.Vector3(-2,0,-12),new T.Vector3(-2,0,-22)).length).toBeGreaterThan(0);
+  it('walks CT stairs to the elevated Window, drops to Mid, and physically returns via CT',()=>{
+    const w=worlds.de_mirage,body:Body={pos:new T.Vector3(-1.5,0,-32),vy:0,grounded:true};
+    for(const raw of [[-1.5,1.8,-24],[-1.5,1.8,-22],[2,1.8,-22],[2,2.1,-19.5],[2,2.4,-18.05],[2,2.65,-17],[2,0,-14]])
+      travel(w,body,position(raw),'Window CT stair / interior boost / drop');
+    expect(w.ground(2,-16,3)).toBe(0); // no fabricated exterior walk-up staircase
+    const path=w.path(body.pos,new T.Vector3(2,2.1,-19.5));
+    expect(path.length).toBeGreaterThan(10);
+    for(const point of path)travel(w,body,point,'Window legitimate CT return');
+    travel(w,body,new T.Vector3(2,2.1,-19.5),'Window supported camera perch');
+    expect(body.grounded).toBe(true);
   });
 });
 
@@ -205,7 +208,7 @@ describe('authored instance resource ownership',()=>{
       await world.load();await world.load();
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(world.mapGroup.visible).toBe(false);expect(world.environment.visible).toBe(false);
-      expect(world.mapGroup.children.length).toBe(world.stats.drawCalls);
+      expect(world.mapGroup.children.length+world.environment.children.length).toBe(world.stats.drawCalls);
     }finally{fetchSpy.mockRestore();world.dispose();}
   });
 

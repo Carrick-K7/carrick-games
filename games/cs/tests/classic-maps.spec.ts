@@ -38,7 +38,11 @@ test('four maps use local photographic materials; classic maps render, play and 
       return { id: e.selectedMap, before, frame: e.renderer.info.render.frame, calls: e.renderer.info.render.calls,
         triangles: e.renderer.info.render.triangles, geometryCount: e.renderer.info.memory.geometries,
         renderPixels: e.canvas3d.width * e.canvas3d.height, software: e.softwareRendering,
-        mapMeshes: w.mapGroup.children.length, palette: w.materialPalette.stats(), sites: w.bombSites.map((s: any) => s.id),
+        mapMeshes: w.mapGroup.children.length,
+        photoMeshes: w.mapGroup.children.filter((m: any) => m.material?.userData.worldMaterialPalette).length,
+        decorativeKinds: w.mapGroup.children.filter((m: any) => m.material?.userData.ownedMapDecoration).map((m: any) => m.material.name).sort(),
+        proceduralGpuBytes: w.decorativeTextureBytes || 0,
+        palette: w.materialPalette.stats(), sites: w.bombSites.map((s: any) => s.id),
         actors: e.all.length, missing: w.missingTextures, colors: colors.size, readbackMs };
     };
     (window as any).__CS_CLASSIC_MAPS__ = {
@@ -74,14 +78,20 @@ test('four maps use local photographic materials; classic maps render, play and 
       expect(s.id).toBe(id); expect(s.frame).toBeGreaterThan(s.before); expect(s.colors).toBeGreaterThan(256);
       expect(s.palette.status).toBe('loaded'); expect(s.palette.failedTextures).toBe(0);
       expect(s.palette.textureCount).toBe(9); expect(s.palette.downloadedBytes).toBeLessThan(500000);
-      expect(s.palette.gpuBytes).toBeLessThan(13 * 1024 * 1024); expect(s.renderPixels).toBeLessThanOrEqual(230400);
-      expect(s.mapMeshes).toBeLessThanOrEqual(9); expect(s.missing).toEqual([]);
+      expect(s.palette.gpuBytes + s.proceduralGpuBytes).toBeLessThan(13 * 1024 * 1024); expect(s.renderPixels).toBeLessThanOrEqual(230400);
+      expect(s.photoMeshes).toBeLessThanOrEqual(9);
+      expect(s.mapMeshes).toBe(s.photoMeshes + s.decorativeKinds.length);
+      expect(s.missing).toEqual([]);
       if (id === 'de_inferno' || id === 'de_mirage') {
-        expect(s.sites).toEqual(['A', 'B']); expect(s.calls).toBeLessThanOrEqual(12); expect(s.triangles).toBeLessThan(50000);
+        expect(s.sites).toEqual(['A', 'B']);
+        expect(s.decorativeKinds).toEqual(['foliage', 'glass', 'paint']); expect(s.proceduralGpuBytes).toBeGreaterThan(0);
+        expect(s.proceduralGpuBytes).toBeLessThan(1024 * 1024);
+        // Actual complete static render, including owned decoration and sky.
+        expect(s.calls).toBeLessThanOrEqual(12); expect(s.triangles).toBeLessThan(50000);
         await page.screenshot({ path: testInfo.outputPath(`${id}-low.png`) });
         const detail = await page.evaluate(() => (window as any).__CS_CLASSIC_MAPS__.detail()); records.push(detail);
         expect(detail.palette.textureCount).toBe(27); expect(detail.palette.downloadedBytes).toBeLessThan(1.3 * 1024 * 1024);
-        expect(detail.palette.gpuBytes).toBeLessThan(48 * 1024 * 1024); expect(detail.calls).toBe(s.calls);
+        expect(detail.palette.gpuBytes + detail.proceduralGpuBytes).toBeLessThan(48 * 1024 * 1024); expect(detail.calls).toBe(s.calls);
         await page.screenshot({ path: testInfo.outputPath(`${id}-pbr.png`) });
         for (const mode of ['defusal', 'tdm']) {
           const play = await page.evaluate(mode => (window as any).__CS_CLASSIC_MAPS__.gameplay(mode), mode);

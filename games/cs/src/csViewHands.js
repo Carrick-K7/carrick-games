@@ -22,16 +22,29 @@ export function createViewHand(material,side='r',fitted=false){
  const rig={group,mesh,skeleton,bones:Object.fromEntries(bones.map(b=>[b.name,b])),rest:bones.map(b=>b.quaternion.clone()),data,side,scale:.85};group.scale.setScalar(rig.scale);group.name='karambit-'+side+'-hand';return rig;
 }
 
-export function poseViewHand(rig,{open=0,thumb=0,relaxed=false,inspect=0,indexCurl=inspect,fingerCurls=null}={}){
+export function poseViewHand(rig,{open=0,thumb=0,relaxed=false,inspect=0,indexCurl=inspect,indexOpen=0,splay=0,fingerFan=0,fingerCurls=null}={}){
  const {bones,side}=rig;
  for(let i=0;i<rig.skeleton.bones.length;i++)rig.skeleton.bones[i].quaternion.copy(rig.rest[i]);
  for(const name of ['index','middle','ring','pinky']){
-  const extension=name==='index'&&!relaxed?0:open;
+  const extension=name==='index'&&!relaxed?indexOpen:open;
   const closed=fingerCurls?.[name]||(name==='index'?[T.MathUtils.lerp(.12,.72,indexCurl),T.MathUtils.lerp(.40,1.22,indexCurl),1.05]:[T.MathUtils.lerp(name==='pinky'?.24:.18,.82,inspect),T.MathUtils.lerp(.48,1.25,inspect),T.MathUtils.lerp(1.05,.72,inspect)]);
   for(let j=1;j<=3;j++){
    const bone=bones[name+'_0'+j+'_'+side];rig.group.updateMatrixWorld(true);
    const angle=T.MathUtils.lerp(closed[j-1],relaxed?[.20,.30,.14][j-1]:[.08,.14,.08][j-1],extension)*(side==='r'?1:-1);
    const axis=new T.Vector3(0,0,1).applyQuaternion(bones['hand_'+side].getWorldQuaternion(new T.Quaternion()));
+   const q=new T.Quaternion().setFromAxisAngle(axis,angle).multiply(bone.getWorldQuaternion(new T.Quaternion()));
+   bone.quaternion.copy(bone.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));bone.updateWorldMatrix(false,true);
+  }
+  if(splay){
+   const bone=bones[name+'_01_'+side],angle=({index:-.12,middle:-.035,ring:.07,pinky:.16}[name])*splay;
+   bone.quaternion.multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),angle));
+  }
+  if(fingerFan&&name!=='index'){
+   // Fan in the palm plane, around the hand's normal (not the phalanx's
+   // longitudinal axis). The supporting index/palm and every bone length stay
+   // fixed; the other fingertips remain visibly below the tang in a V hold.
+   const bone=bones[name+'_01_'+side],angle=({middle:-.45,ring:-.50,pinky:-.75}[name])*fingerFan;
+   const axis=new T.Vector3(1,0,0).applyQuaternion(bones['hand_'+side].getWorldQuaternion(new T.Quaternion()));
    const q=new T.Quaternion().setFromAxisAngle(axis,angle).multiply(bone.getWorldQuaternion(new T.Quaternion()));
    bone.quaternion.copy(bone.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));bone.updateWorldMatrix(false,true);
   }
@@ -71,11 +84,11 @@ export function poseClassicKnifeGrip(rig){
 
 export function poseButterflyKnifeGrip(rig,motion={}){
  poseClassicKnifeGrip(rig);
- const open=T.MathUtils.clamp(Number.isFinite(motion.knifeOpen)?motion.knifeOpen:0,0,.35);
- const thumb=T.MathUtils.clamp(Number.isFinite(motion.knifeThumb)?motion.knifeThumb:0,0,.15);
- // Retain the safe handle in the closed index/thumb grip. Only the other
- // fingers loosen for the free handle; no palm translation or index rollover.
- poseViewHand(rig,{fingerCurls:{index:[.70,1.14,.97],middle:[.79,1.15,.80],ring:[.83,1.19,.81],pinky:[.87,1.20,.80]},open,thumb});
+ const unit=value=>T.MathUtils.clamp(Number.isFinite(value)?value:0,0,1);
+ const open=unit(motion.knifeOpen),thumb=unit(motion.knifeThumb);
+ // Release is genuine joint extension, including a separately controlled
+ // index and finger splay. Keep the secure, paired-handle idle fit unchanged.
+ poseViewHand(rig,{fingerCurls:{index:[.70,1.14,.97],middle:[.79,1.15,.80],ring:[.83,1.19,.81],pinky:[.87,1.20,.80]},open,thumb,indexOpen:unit(motion.knifeIndexOpen),splay:unit(motion.knifeSplay),fingerFan:unit(motion.knifeFingerFan)});
  rig.group.position.z-=.029;rig.group.position.x+=.004;
  rig.group.updateMatrixWorld(true);rig.skeleton.update();
  const wrist=new T.Vector3(-.006,.008,.009).multiplyScalar(rig.scale).applyQuaternion(rig.group.quaternion).add(rig.group.position);

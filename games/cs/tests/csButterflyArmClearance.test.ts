@@ -1,7 +1,8 @@
 import * as T from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 import { makeWeapon } from '../src/csWeapons.js';
-import { applyWeaponAnimation, placeWeaponView } from '../src/csWeaponMotion.js';
+import { applyWeaponAnimation, placeWeaponView, sampleWeaponMotion } from '../src/csWeaponMotion.js';
+import { resolveButterflyPresentation } from '../src/csButterflyPresentation.js';
 
 // Scope: real moving blade/free-handle geometry versus the closed, faceted
 // cuff/forearm volumes. The retained handle/glove contact is deliberately not
@@ -206,8 +207,14 @@ describe('butterfly blade and free-handle sleeve clearance', () => {
 
   it('detects the historical identity-rest inspect through the sleeve', () => {
     const f = fixture();
-    f.rig.knifeRest.identity();
-    sample(f, { inspectProgress: .50, butterflyInspectVariant: 1 });
+    // Freeze the complete historical fixed-grip pose, including its wrist/
+    // forearm solve. Overriding today's tang-pinch would not reproduce it.
+    const historical=sampleWeaponMotion('knife',{knifeModel:'butterfly'});
+    Object.assign(historical,{offset:[-.065,.080,-.136],knifeOpen:.20,knifeThumb:.09,knifeLowerLeft:.10,knifeElbowIn:.04,butterflyHandle:-.68,
+      knifeGrip:new T.Quaternion().setFromEuler(new T.Euler(.10,1.36,.22,'ZYX')).toArray()});
+    const state={animationTime:10,inspectProgress:.50};
+    resolveButterflyPresentation(f.rig,historical,state);
+    f.rig.knifeRest.identity();sample(f,state);
     expect(vertexPenetrations(f).some(hit => hit.piece === 'bite' && hit.sleeve === 'forearm' && hit.depth > .020)).toBe(true);
     const triangles = triangleClearance(f);
     expect(triangles.intersections).toBeGreaterThan(100);
@@ -216,7 +223,9 @@ describe('butterfly blade and free-handle sleeve clearance', () => {
 
   it('detects the historical closed-entry draw even with the corrected runtime rest', () => {
     const f = fixture(), t = .17;
-    sample(f, { deployProgress: t, butterflyDrawVariant: 0 });
+    // Restore BOTH old fixed-grip orientation and hinge path. The new draw
+    // turns/regrips, so overriding just its hinges no longer recreates the bug.
+    sample(f, {});
     const u = oldClosedPhase(t);
     f.rig.butterflyBlade.rotation.x = -Math.PI * (1 - u);
     f.rig.butterflyHandle.rotation.x = Math.PI * (1 + u);

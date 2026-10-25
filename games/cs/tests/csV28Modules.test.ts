@@ -102,7 +102,9 @@ describe('v28 grenade physics', () => {
 
 describe('v28 knife, firearm and hand rigs', () => {
   it('selects bounded action variants only at the caller-controlled action boundary', () => {
-    expect(BUTTERFLY_VARIANTS).toEqual({ draw: 2, inspect: 3 });
+    // Only two draws and one inspect family are reference-verified. Old IDs
+    // remain safe inputs, not evidence for invented distinct original clips.
+    expect(BUTTERFLY_VARIANTS).toEqual({ draw: 2, inspect: 1 });
     for (const action of ['draw', 'inspect']) {
       expect(chooseButterflyVariant(action, () => 0)).toBe(0);
       expect(chooseButterflyVariant(action, () => 1)).toBe(BUTTERFLY_VARIANTS[action] - 1);
@@ -116,7 +118,7 @@ describe('v28 knife, firearm and hand rigs', () => {
     }
     expect(random).not.toHaveBeenCalled();
     expect(sampleWeaponMotion('knife', { knifeModel: 'butterfly', inspectProgress: .3, butterflyInspectVariant: 0 }))
-      .not.toEqual(sampleWeaponMotion('knife', { knifeModel: 'butterfly', inspectProgress: .3, butterflyInspectVariant: 1 }));
+      .toEqual(sampleWeaponMotion('knife', { knifeModel: 'butterfly', inspectProgress: .3, butterflyInspectVariant: 1 }));
   });
   it.each(['classic', 'karambit', 'butterfly'])('keeps %s animation finite, hinges fixed and cancellation reversible', knifeModel => {
     const model = makeWeapon('knife', true, knifeModel), rig = model.userData.rig;
