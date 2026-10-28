@@ -27,6 +27,7 @@ export const KEYBOARD_GAMES: GameProfile[] = [
   { id: 'villa', keys: ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift+w', 'e', 'm', 'm', 't', 'h'], delayMs: 2000 },
   { id: 'bubbleshooter', keys: ['ArrowLeft', 'ArrowRight', 'Space'], delayMs: 2000 },
   { id: '2048', keys: ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'], delayMs: 1500 },
+  { id: 'red-homestead', keys: ['ArrowLeft', 'ArrowRight', 'b', 'Escape'], delayMs: 500 },
 ];
 
 export const CLICK_GAMES: GameProfile[] = [

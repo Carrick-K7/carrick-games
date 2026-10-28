@@ -1,6 +1,6 @@
 # Carrick Games
 
-A repository of 28 browser games in a quiet, modern interface, with independently versioned static releases and an operator-managed live selection.
+A repository of 29 browser games in a quiet, modern interface, with independently versioned static releases and an operator-managed live selection.
 
 Live site: https://games.carrick7.com/
 
@@ -8,13 +8,14 @@ Live site: https://games.carrick7.com/
 
 ## Games
 
-The repository contains these 28 playable games. The live game's library follows `/games/index.json`; delisted workspaces and their historical resources are retained:
+The repository contains these 29 playable games. The live game's library follows `/games/index.json`; delisted workspaces and their historical resources are retained:
 
 | Game | Chinese | Type |
 |------|---------|------|
 | Gacha | 抽卡 | Casual |
 | Parking | 停车 | Casual |
 | Warm Villa | 暖居别墅 | Casual |
+| Red Homestead — Early Access | 红色家园 · 先行版 | Casual |
 | Snake | 贪吃蛇 | Casual |
 | Flappy Bird | 像素鸟 | Casual |
 | Doodle Jump | 涂鸦跳跃 | Casual |
@@ -40,6 +41,16 @@ The repository contains these 28 playable games. The live game's library follows
 | Connect Four | 四子连珠 | Board & Card |
 | Solitaire | 纸牌 | Board & Card |
 | Texas Hold'em | 德州扑克 | Board & Card |
+
+## Peaceful City Building: Red Homestead
+
+Red Homestead is an early-access, no-combat isometric city builder. Deploy a construction vehicle, mine finite ore, build housing and public services, and watch a small population use the city. A session stops when ended; a homestead persists in the current browser and does not run while away. Export backups regularly.
+
+- The three bundled maps and their default art are **authored practice content**, not replicas of original Red Alert 2 maps.
+- **Worlds → Classic materials & maps** imports local source resources into actual gameplay, not merely an image viewer. A map requires its MAP/MPR, matching theater INI, ISO palette and referenced TMP tiles; ore needs its overlay data and matching rules declarations. Selected peaceful building SHP and unarmed vehicle VXL/HVA pairs use the matching UNIT palette. Extracted files and unencrypted MIX are supported within the displayed budgets; encrypted MIX is not.
+- Images remain in a separate local browser cache. Portable world backups contain state and material fingerprints, not source artwork. If the cache is cleared or a backup moves to another device, re-import the same materials before restoring that world. Failed imports keep the existing city intact.
+- This is **not a complete RA2 recreation**: full bridges, scenery, original art offsets/animation and VPL lighting remain incomplete. Missing ground tiles produce explicit errors instead of fabricated replacements. Only movement, collection, transport and construction rules run; original war triggers and weapon rules do not.
+- No proprietary game data is supplied, uploaded or granted a redistribution license. See the game-owned [source and compatibility notes](<games/red-homestead/public/CREDITS.md>). Publication status comes from the live catalog, not this source description.
 
 ## 3D Exploration: Warm Villa
 
@@ -88,7 +99,7 @@ Opening the library refreshes the catalog without swapping a running release. **
 ```text
 apps/shell/           Thin host: navigation, loading, preferences and shell UI
   src/ public/ tests/
-games/<id>/          28 independent @carrick/game-<id> packages
+games/<id>/          29 independent @carrick/game-<id> packages
   package.json       Own SemVer and declared dependencies
   game.json          Localized metadata, controls, icon and cover references
   src/index.ts       id, version, apiVersion: 1, create(host)

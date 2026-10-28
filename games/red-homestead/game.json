@@ -1,0 +1,39 @@
+{
+  "id": "red-homestead",
+  "group": "casual",
+  "order": 42,
+  "name": "Red Homestead — Early Access",
+  "nameZh": "红色家园 · 先行版",
+  "desc": "Mine, build and keep a peaceful home. Includes authored practice maps and local classic-material imports; not a complete RA2 recreation.",
+  "descZh": "采矿、建设，留下一座没有战争的家园。内置原创练习场，支持本地经典素材与地图导入；尚非完整红警2复刻。",
+  "canvasSize": { "width": 960, "height": 640 },
+  "icon": "icon.svg",
+  "cover": { "src": "cover.webp", "width": 640, "height": 400 },
+  "controls": {
+    "keyboard": [
+      { "keys": ["Click"], "action": "Select; place the chosen building", "actionZh": "选择；放置已选建筑" },
+      { "keys": ["Drag", "↑", "↓", "←", "→"], "action": "Move the view; wheel to zoom", "actionZh": "移动视野；滚轮缩放" },
+      { "keys": ["Escape"], "action": "Cancel construction or close the current panel", "actionZh": "取消建造或关闭当前面板" }
+    ],
+    "touch": [
+      { "icon": "tap", "action": "Select a building, then tap a free tile", "actionZh": "选择建筑，再轻点空地放置" },
+      { "icon": "swipe", "action": "Drag to move the view", "actionZh": "拖动移动视野" },
+      { "icon": "tap", "action": "Use + / − to zoom; deploy the base to begin", "actionZh": "使用加减按钮缩放；展开基地开始建设" }
+    ],
+    "sections": [
+      { "id": "worlds", "title": "Two ways to play", "titleZh": "两种玩法", "notes": [
+        { "text": "A session stops when you end it. A homestead saves locally and pauses while away. There is no combat or offline catch-up.", "textZh": "悠闲一局在结束后停止。长住家园保存在当前浏览器，离开后暂停。没有战斗或离线补算。", "audience": "all" },
+        { "text": "Export backups regularly. Clearing site storage or changing devices does not preserve local homes.", "textZh": "请定期导出备份。清理网站数据或更换设备不会保留本地家园。", "audience": "all" }
+      ] },
+      { "id": "advanced", "title": "Keyboard shortcuts", "titleZh": "键盘快捷键", "keyboard": [
+        { "keys": ["B"], "action": "Open construction catalog", "actionZh": "打开建造目录" },
+        { "keys": ["Space"], "action": "Pause or resume this city", "actionZh": "暂停或继续城市" },
+        { "keys": ["+", "−"], "action": "Zoom the view", "actionZh": "缩放视野" }
+      ] },
+      { "id": "materials", "title": "Classic materials and scope", "titleZh": "经典素材与支持范围", "notes": [
+        { "text": "The bundled practice maps are original authored content, not classic map replicas. Import matching local MAP, theater INI, PAL and TMP files from Worlds → Classic materials & maps. Original source files are never uploaded or bundled.", "textZh": "内置练习场是原创内容，不冒充经典地图。从家园 → 经典素材与地图导入配套 MAP、地形 INI、PAL 和 TMP。本地原始文件不会上传或随游戏分发。", "audience": "all" },
+        { "text": "Terrain and finite ore participate in gameplay. Bridges, scenery, exact art offsets and VPL lighting remain incomplete. Missing ground assets are reported instead of replaced. Backups contain city state, not private material images; re-import identical sources if the cache is lost.", "textZh": "地图地形和有限矿区可参与玩法；桥梁、布景、精确美术偏移与 VPL 光照仍未完整实现。缺少地块会明确报错，不用假地形替代。备份不含私人素材图片；缓存丢失时需重新导入相同资源。", "audience": "all" }
+      ] }
+    ]
+  }
+}

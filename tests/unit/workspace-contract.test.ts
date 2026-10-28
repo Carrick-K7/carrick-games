@@ -23,12 +23,14 @@ const gameClassFiles = workspaces.flatMap(workspace => workspace.files
   .map(file => ({ id: workspace.meta.id, file })));
 
 describe('game workspace contracts', () => {
-  it('published game catalog matches source and README', () => {
+  it('source game catalog matches the documented repository inventory, not the live selection', () => {
     const ids = GAMES.map(game => game.id);
-    expect(ids).toHaveLength(28);
     expect(new Set(ids).size).toBe(ids.length);
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
-    expect(readme).toContain('Carrick Games currently ships 28 playable games');
+    const documented = /The repository contains these (\d+) playable games\./.exec(readme);
+    expect(documented, 'README must declare the source workspace inventory').not.toBeNull();
+    expect(Number(documented![1])).toBeGreaterThan(0);
+    expect(ids).toHaveLength(Number(documented![1]));
     const readmeNames = [...readme.matchAll(/^\| ([^|]+?) \| [^|]+? \| (?:Casual|Action|Puzzle|Board & Card) \|$/gm)]
       .map(match => match[1]);
     expect(readmeNames).toHaveLength(ids.length);

@@ -37,7 +37,7 @@ apps/shell/
   public/brand/         Exact original SVG and genuine installation PNGs
   public/app.webmanifest  Browser installation identity, not deployment metadata
   tests/                Shell-owned unit tests
-games/<id>/             28 @carrick/game-<id> workspaces
+games/<id>/             29 @carrick/game-<id> workspaces
   package.json          Own SemVer and explicit runtime dependencies
   game.json             Pure localized discovery/presentation metadata
   src/index.ts          Public release entry and ABI exports
