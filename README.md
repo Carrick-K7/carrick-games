@@ -44,7 +44,7 @@ The repository contains these 29 playable games. The live game's library follows
 
 ## Peaceful City Building: Red Homestead
 
-Red Homestead is an early-access, no-combat isometric city builder. Deploy a construction vehicle, mine finite ore, build housing and public services, and watch a small population use the city. A session stops when ended; a homestead persists in the current browser and does not run while away. Export backups regularly.
+[Play Red Homestead / 红色家园](https://games.carrick7.com/#red-homestead): an early-access, no-combat isometric city builder. Deploy a construction vehicle, mine finite ore, build housing and public services, and watch a small population use the city. A session stops when ended; a homestead persists in the current browser and does not run while away. Export backups regularly.
 
 - The three bundled maps and their default art are **authored practice content**, not replicas of original Red Alert 2 maps.
 - **Worlds → Classic materials & maps** imports local source resources into actual gameplay, not merely an image viewer. A map requires its MAP/MPR, matching theater INI, ISO palette and referenced TMP tiles; ore needs its overlay data and matching rules declarations. Selected peaceful building SHP and unarmed vehicle VXL/HVA pairs use the matching UNIT palette. Extracted files and unencrypted MIX are supported within the displayed budgets; encrypted MIX is not.
