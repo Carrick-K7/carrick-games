@@ -39,6 +39,15 @@ describe('art-led catalog presentation', () => {
     expect(html).toContain('正在玩');
     expect(html).not.toContain('重新开始');
   });
+  it('offers return for an existing non-running instance without claiming play or restart', () => {
+    for (const zh of [false, true]) {
+      const html = renderGameCard(game, game.id, zh, false);
+      expect(html).toContain('aria-current="true"');
+      expect(html).toContain(zh ? '返回游戏' : 'Return');
+      expect(html).toContain(zh ? '当前游戏' : 'Current');
+      expect(html).not.toMatch(/Playing|正在玩|Continue|继续游戏|Restart|重新开始/);
+    }
+  });
   it('escapes metadata in labels, descriptions and attributes', () => {
     const html = renderGameCard({ ...game, id: 'x" onclick="bad', name: '<img onerror=bad>', desc: '<script>bad</script>' }, null, false);
     expect(html).not.toContain('<script>');

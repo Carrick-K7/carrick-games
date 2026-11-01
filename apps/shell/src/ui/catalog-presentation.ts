@@ -10,7 +10,7 @@ export interface LibraryGame extends Pick<GameMeta, 'id' | 'name' | 'nameZh' | '
 const arrow = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4"/></svg>';
 const check = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
 
-export function renderGameCard(game: LibraryGame, currentId: string | null, zh: boolean): string {
+export function renderGameCard(game: LibraryGame, currentId: string | null, zh: boolean, currentRunning = true): string {
   const current = game.id === currentId;
   const name = zh ? game.nameZh : game.name;
   const description = zh ? game.descZh : game.desc;
@@ -22,11 +22,14 @@ export function renderGameCard(game: LibraryGame, currentId: string | null, zh: 
   const keyboard = !!(game.controls.keyboard?.length || game.controls.sections?.some(section => section.keyboard?.length));
   const touch = !!(game.controls.touch?.length || game.controls.sections?.some(section => section.touch?.length));
   const input = keyboard && touch ? (zh ? '键鼠 / 触屏' : 'Keys / touch') : touch ? (zh ? '触屏操作' : 'Touch controls') : (zh ? '键鼠操作' : 'Keyboard & mouse');
-  const action = current ? (zh ? '继续游戏' : 'Continue') : (zh ? '开始玩' : 'Play');
+  // A retained loading/stopped scene can be returned to without starting or
+  // replacing it; only a real running receipt warrants Playing/Continue.
+  const action = current ? currentRunning ? (zh ? '继续游戏' : 'Continue') : (zh ? '返回游戏' : 'Return') : (zh ? '开始玩' : 'Play');
+  const status = currentRunning ? (zh ? '正在玩' : 'Playing') : (zh ? '当前游戏' : 'Current');
   return `<button class="game-list-item${current ? ' active' : ''}" type="button" data-id="${escapeHtml(game.id)}" aria-current="${current}" aria-label="${escapeHtml(`${name} — ${action}`)}" aria-describedby="game-description-${escapeHtml(game.id)}" title="${escapeHtml(description)}">
     <span class="game-list-cover" aria-hidden="true">
       <span class="game-list-icon">${renderGameIcon(game.icon)}</span>${image}
-      ${current ? `<span class="game-list-status">${check}${zh ? '正在玩' : 'Playing'}</span>` : ''}
+      ${current ? `<span class="game-list-status">${check}${status}</span>` : ''}
     </span>
     <span class="game-list-copy"><span class="game-list-name">${escapeHtml(name)}</span><span class="game-list-desc" id="game-description-${escapeHtml(game.id)}">${escapeHtml(description)}</span></span>
     <span class="game-list-bottom"><span class="game-list-input">${current ? action : input}</span><span class="game-list-arrow">${arrow}</span></span>
