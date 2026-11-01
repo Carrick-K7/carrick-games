@@ -2,13 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { GAMES } from './support/catalog';
 import { gameModuleUrl } from './support/releases';
 
-function fixture(id: string) {
-  const game = GAMES.find(game => game.id === id);
-  if (!game) throw new Error(`Picker fixture is missing from the tested catalog: ${id}`);
-  return game;
-}
-const currentGame = fixture('sudoku');
-const candidateGame = fixture('minesweeper');
+import { selectCurrentGame, selectSearchGame } from './support/shell-fixtures';
+
+const currentGame = selectCurrentGame(GAMES);
+const candidateGame = selectSearchGame(GAMES, currentGame);
 
 const viewports = [
   { width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 1024, height: 600 },

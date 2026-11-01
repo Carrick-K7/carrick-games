@@ -14,10 +14,11 @@ import {
   getStoredRecord,
   isDarkTheme,
   isZhLang,
-  type GameHost,
   type GameMenuAction,
   type GameViewport,
 } from '@carrick/game-sdk/game';
+import type { GameLifecycleState, LifecycleGameHost } from '@carrick/lifecycle';
+import { GameCloseGate } from './lifecycle.js';
 import { saveStoredRecord } from '@carrick/game-sdk/storage';
 import { isPixelMode } from '@carrick/game-sdk/render';
 import { normalizeKey } from './ui/keyboard-input.js';
@@ -32,6 +33,9 @@ let currentRelease: GameMeta | null = null;
 let currentStyles: (() => void) | undefined;
 let currentActions: readonly GameMenuAction[] = [];
 let activeHostToken = 0;
+let hostSequence = 0;
+let currentLifecycle: { state?: GameLifecycleState; inCall: boolean; intent: number } | undefined;
+const closeGate = new GameCloseGate();
 let loadController: AbortController | undefined;
 let pendingGameName: string | null = null;
 let previousGameName: string | null = null;
@@ -272,7 +276,22 @@ function setLoadingOverlay(active: boolean) {
   syncShellOverlayState();
 }
 
+function updateRecoveryButton(closing = false) {
+  const recovery = document.getElementById('resumePreviousBtn');
+  if (!recovery) return;
+  recovery.hidden = closing || document.getElementById('loadError')?.hidden !== false
+    || (!currentGameInstance && !previousGameName);
+  recovery.textContent = currentGameInstance
+    ? isRunning ? (isZhLang() ? '继续之前的游戏' : 'Resume previous game')
+      : (isZhLang() ? '返回当前游戏' : 'Return to current game')
+    : (isZhLang() ? '重新打开之前的游戏' : 'Restart previous game');
+}
+
 function setLoadError(message: string | null, reloadRequired = false) {
+  // A newer discovery/preflight may clear its own error, but cannot hide the
+  // still-unacknowledged close or its navigation/reload escape paths.
+  const closing = message === null && closeGate.isClosing;
+  if (closing) message = closingGameMessage();
   const error = document.getElementById('loadError');
   const spinner = document.getElementById('loadingSpinner');
   const messageEl = document.getElementById('loadErrorMessage');
@@ -282,15 +301,9 @@ function setLoadError(message: string | null, reloadRequired = false) {
   if (messageEl) messageEl.textContent = message ?? '';
   if (retry instanceof HTMLButtonElement) {
     retry.textContent = isZhLang() ? '重试' : 'Retry';
-    retry.disabled = reloadRequired;
+    retry.disabled = reloadRequired || closing;
   }
-  const resume = document.getElementById('resumePreviousBtn');
-  if (resume) {
-    resume.hidden = !message || (!currentGameInstance && !previousGameName);
-    resume.textContent = currentGameInstance && isRunning
-      ? (isZhLang() ? '继续之前的游戏' : 'Resume previous game')
-      : (isZhLang() ? '重新打开之前的游戏' : 'Restart previous game');
-  }
+  updateRecoveryButton(closing);
   const choose = document.getElementById('chooseAnotherBtn');
   if (choose) { choose.hidden = !message; choose.textContent = isZhLang() ? '选择其他游戏' : 'Choose another game'; }
   const reload = document.getElementById('reloadAppBtn');
@@ -416,9 +429,29 @@ function saveRecord(gameId: string, score: number) {
   saveStoredRecord(gameId, score);
 }
 
-function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement, token: number): GameHost {
+function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement, token: number): LifecycleGameHost {
   const ownsHost = () => activeHostToken === token;
+  const lifecycle = currentLifecycle!;
   return {
+    lifecycle: {
+      protocol: 'carrick-game-lifecycle', version: 1, awaitsDestroy: true,
+      report(state) {
+        if (!ownsHost() || lifecycle.state === 'failed' || !['loading', 'running', 'stopped', 'failed'].includes(state)) return;
+        lifecycle.state = state;
+        isRunning = state === 'running';
+        setGameRunningFlag(isRunning);
+        if (!isRunning) stopScorePolling();
+        // create/prepare/start/restart may report synchronously. Their caller
+        // checks the result rather than later blindly declaring success.
+        if (state === 'failed' && !lifecycle.inCall) void failCurrentGame(new Error('Game reported lifecycle failure'));
+        else if (!lifecycle.inCall) {
+          rememberRunningGame();
+          updateLifecyclePresentation();
+          updateActionButton();
+          if (isRunning) startScorePolling();
+        }
+      },
+    },
     canvas,
     logicalWidth: meta.canvasSize.width,
     logicalHeight: meta.canvasSize.height,
@@ -466,8 +499,17 @@ function renderGameActions() {
         if (owner !== activeHostToken || button.disabled) return;
         // Opening a game-owned panel must not briefly re-capture the pointer.
         if (action.checked === undefined) setOverflowOpen(false);
-        try { action.run(); renderGameActions(); }
-        catch (error) { failCurrentGame(error); }
+        try {
+          if (currentLifecycle) currentLifecycle.inCall = true;
+          action.run();
+          checkLifecycleReport();
+          if (currentLifecycle) currentLifecycle.inCall = false;
+          rememberRunningGame();
+          updateLifecyclePresentation();
+          updateActionButton();
+          if (isRunning) startScorePolling();
+          renderGameActions();
+        } catch (error) { if (owner === activeHostToken) void failCurrentGame(error); }
       });
       container.append(button);
     }
@@ -490,19 +532,65 @@ function renderGameActions() {
   }
 }
 
-function discardCurrentGame() {
+function closingGameMessage() {
+  return isZhLang()
+    ? '正在关闭之前的游戏，保存尚未确认。仍可选择其他游戏或重新加载页面。'
+    : 'Closing the previous game; saving is not confirmed yet. You can choose another game or reload.';
+}
+
+function discardCurrentGame(): Promise<void> {
   const instance = currentGameInstance;
+  const styles = currentStyles;
+  // Revoke ownership synchronously, before calling any game code. Only the
+  // captured instance/style lease may be touched by the eventual completion.
+  activeHostToken = -1;
+  currentLifecycle = undefined;
   currentGameInstance = null;
   currentGameName = null;
   currentRelease = null;
+  currentStyles = undefined;
   currentActions = [];
-  activeHostToken = -1;
+  overlayCaptureOwner = null;
   isRunning = false;
   stopScorePolling();
   setGameRunningFlag(false);
-  try { instance?.destroy(); }
-  catch (error) { try { instance?.stop(); } catch { /* explicit reload remains available */ } throw error; }
-  finally { currentStyles?.(); currentStyles = undefined; }
+  releaseHeldInputs();
+  if (document.pointerLockElement === document.getElementById('gameCanvas')) document.exitPointerLock?.();
+  if (instance || styles) {
+    setLoadError(closingGameMessage());
+    const retry = document.getElementById('retryLoadBtn') as HTMLButtonElement | null;
+    if (retry) retry.disabled = true;
+    const resume = document.getElementById('resumePreviousBtn');
+    if (resume) resume.hidden = true;
+  }
+  const closed = closeGate.close(instance, styles);
+  updateLifecyclePresentation();
+  return closed;
+}
+
+function checkLifecycleReport() {
+  if (currentLifecycle?.state === 'failed') throw new Error('Game reported lifecycle failure');
+}
+
+function updateLifecyclePresentation() {
+  updateRecoveryButton(closeGate.isClosing);
+  if (document.getElementById('gameLibrary')?.classList.contains('open')) {
+    renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
+  }
+}
+
+function finishGameCall() {
+  checkLifecycleReport();
+  if (currentLifecycle) currentLifecycle.inCall = false;
+  // No report is the legacy API-1 synchronous start contract. Once a game
+  // reports, only its explicit running receipt can set the live marker.
+  isRunning = currentLifecycle?.state === undefined || currentLifecycle.state === 'running';
+  setGameRunningFlag(isRunning);
+  updateLifecyclePresentation();
+}
+
+function rememberRunningGame() {
+  if (isRunning && currentGameName) savePreference('cg-last-game', currentGameName);
 }
 
 function cancelPendingLoad() {
@@ -517,7 +605,7 @@ function cancelPendingLoad() {
   renderGameActions();
 }
 
-export async function prepareGame(name: string, preserveUi = false): Promise<boolean> {
+export async function prepareGame(name: string, preserveUi = false, closeSinceIntent = closeGate.checkpoint()): Promise<boolean> {
   const token = ++prepareGameToken;
   loadController?.abort();
   const controller = new AbortController();
@@ -534,7 +622,8 @@ export async function prepareGame(name: string, preserveUi = false): Promise<boo
   const status = document.getElementById('loadingStatus');
   if (status) status.textContent = isZhLang() ? `正在加载 ${title}…` : `Loading ${title}…`;
   let prepared: PreparedRelease | undefined;
-  let mounting = false;
+  let mountedHostToken: number | undefined;
+  let awaitingClose = false;
   const slow = window.setTimeout(() => {
     if (token === prepareGameToken && isLoadingGame && status) status.textContent = isZhLang() ? `仍在加载 ${title}，也可以选择其他游戏。` : `Still loading ${title}. You can choose another game.`;
   }, 5000);
@@ -543,10 +632,17 @@ export async function prepareGame(name: string, preserveUi = false): Promise<boo
     if (!meta) throw new Error('Game is not available in the current catalog');
     // The old simulation remains paused and intact until the complete ESM/CSS preflight succeeds.
     prepared = await prepareRelease(meta, controller.signal);
-    if (token !== prepareGameToken) { prepared.releaseStyles(); return false; }
+    if (token !== prepareGameToken) return false;
+    window.clearTimeout(timeout);
     previousGameName = currentGameName ?? previousGameName;
-    mounting = true;
-    discardCurrentGame();
+    awaitingClose = true;
+    await discardCurrentGame();
+    await closeSinceIntent();
+    awaitingClose = false;
+    if (token !== prepareGameToken) return false;
+    // The network deadline applies only to preflight, never to close receipts.
+    if (controller.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    setLoadError(null);
     const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
     canvas.tabIndex = 0;
     canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
@@ -555,25 +651,34 @@ export async function prepareGame(name: string, preserveUi = false): Promise<boo
     canvas.dataset.gameVersion = meta.version;
     canvas.dataset.gameRevision = meta.revision;
     canvas.dataset.gameAssetBase = meta.assetBase;
-    activeHostToken = token;
+    activeHostToken = mountedHostToken = ++hostSequence;
+    currentLifecycle = { inCall: true, intent: token };
     currentRelease = meta;
+    currentGameName = name;
     currentStyles = prepared.releaseStyles;
-    const next = validateGame(prepared.module.create(createGameHost(meta, canvas, token)));
+    const module = prepared.module;
+    prepared = undefined; // Ownership transferred to this host, not the load intent.
+    const next = validateGame(module.create(createGameHost(meta, canvas, mountedHostToken)));
     currentGameInstance = next;
+    checkLifecycleReport();
     next.prepare();
+    checkLifecycleReport();
     lastViewportKey = '';
     fitGameCanvas();
     next.setPresentationPaused?.(gameOverlayOpen);
     next.onShellOverlayChange?.(gameOverlayOpen);
+    checkLifecycleReport();
     next.start();
-    currentGameName = name;
-    isRunning = true;
+    finishGameCall();
+    if (token !== prepareGameToken) {
+      if (activeHostToken === mountedHostToken) await discardCurrentGame();
+      return false;
+    }
     isLoadingGame = false;
     pendingGameName = null;
-    setGameRunningFlag(true);
-    savePreference('cg-last-game', name);
+    rememberRunningGame();
     setLoadingOverlay(false);
-    startScorePolling();
+    if (isRunning) startScorePolling();
     updateActionButton();
     updateGameTitle();
     renderControls();
@@ -586,15 +691,18 @@ export async function prepareGame(name: string, preserveUi = false): Promise<boo
     focusGameSurface();
     return true;
   } catch (error) {
-    if (token !== prepareGameToken) { prepared?.releaseStyles(); return false; }
-    if (mounting) {
-      try { discardCurrentGame(); } catch (cleanupError) { console.error('Game cleanup failed', cleanupError); }
-      prepared?.releaseStyles();
+    // A failed partial mount is ours to retire even if game code synchronously
+    // issued a newer intent. Never dispose an unrelated current host.
+    if (mountedHostToken !== undefined && activeHostToken === mountedHostToken) {
+      try { await discardCurrentGame(); } catch (cleanupError) { console.error('Game cleanup failed', cleanupError); }
     }
+    if (token !== prepareGameToken) return false;
     isLoadingGame = false;
     const unavailable = !meta;
     const reloadRequired = error instanceof ReleaseReloadRequiredError;
-    setLoadError(reloadRequired
+    setLoadError(awaitingClose
+      ? (isZhLang() ? '游戏关闭失败，保存尚未确认。可以选择其他游戏或重新加载页面。' : 'The game could not close; saving is not confirmed. Choose another game or reload.')
+      : reloadRequired
       ? (isZhLang() ? '浏览器未能恢复此游戏资源。请重新加载页面，或返回之前的游戏。' : 'The browser could not recover this game resource. Reload the application or return to your previous game.')
       : isZhLang()
         ? (unavailable ? '此游戏暂不可用，请选择其他游戏。' : '游戏加载失败，可以重试或选择其他游戏。')
@@ -605,6 +713,7 @@ export async function prepareGame(name: string, preserveUi = false): Promise<boo
     console.error('Game load failed:', error);
     return false;
   } finally {
+    prepared?.releaseStyles();
     window.clearTimeout(slow);
     window.clearTimeout(timeout);
     if (loadController === controller) loadController = undefined;
@@ -647,41 +756,59 @@ function scheduleViewportFit() {
   requestAnimationFrame(() => { fitCanvasScheduled = false; fitGameCanvas(); });
 }
 
-function failCurrentGame(error: unknown) {
+async function failCurrentGame(error: unknown): Promise<void> {
   const failedName = currentGameName;
-  ++prepareGameToken;
-  loadController?.abort();
-  loadController = undefined;
-  pendingGameName = failedName;
+  // A live instance can fail while a newer selection is preflighting. Revoke
+  // that instance, but do not cancel the player's already newer selection.
+  // null is a real default-route target during discovery, not absence of intent.
+  const selecting = isLoadingGame && prepareGameToken !== currentLifecycle?.intent;
+  const token = selecting ? prepareGameToken : ++prepareGameToken;
+  if (!selecting) {
+    loadController?.abort();
+    loadController = undefined;
+    pendingGameName = failedName;
+  }
   previousGameName = failedName ?? previousGameName;
-  try { discardCurrentGame(); } catch (cleanupError) { console.error('Game cleanup failed', cleanupError); }
-  setOverflowOpen(false);
-  setHelpOpen(false, false);
-  closeGameLibrary();
-  isLoadingGame = false;
-  setLoadError(isZhLang()
-    ? '游戏操作未能完成。可以重新打开游戏，或选择其他游戏。'
-    : 'The game action could not finish. Restart the game or choose another game.');
-  setLoadingOverlay(true);
-  updateActionButton();
-  renderControls();
+  const closed = discardCurrentGame();
+  if (!selecting) {
+    setOverflowOpen(false);
+    setHelpOpen(false, false);
+    closeGameLibrary();
+    isLoadingGame = false;
+    setLoadError(isZhLang()
+      ? '游戏操作未能完成。可以重新打开游戏，或选择其他游戏。'
+      : 'The game action could not finish. Restart the game or choose another game.');
+    setLoadingOverlay(true);
+    updateActionButton();
+    renderControls();
+  }
   console.error('Game action failed', error);
+  try { await closed; }
+  catch (cleanupError) {
+    console.error('Game cleanup failed', cleanupError);
+    if (token !== prepareGameToken) return;
+    setLoadError(isZhLang()
+      ? '游戏关闭失败，保存尚未确认。可以选择其他游戏或重新加载页面。'
+      : 'The game could not close; saving is not confirmed. Choose another game or reload.');
+    setLoadingOverlay(true);
+  }
 }
 
 function startPreparedGame() {
   if (!currentGameInstance || isLoadingGame) return;
   try {
+    if (currentLifecycle) currentLifecycle.inCall = true;
     if (isRunning) {
       currentGameInstance.restart();
     } else {
       currentGameInstance.start();
     }
-    isRunning = true;
-    setGameRunningFlag(true);
+    finishGameCall();
+    rememberRunningGame();
     updateActionButton();
-    startScorePolling();
+    if (isRunning) startScorePolling();
   } catch (error) {
-    failCurrentGame(error);
+    void failCurrentGame(error);
   }
 }
 
@@ -690,25 +817,28 @@ function startDemoForCurrentGame() {
   const demoStarter = currentGameInstance.startDemo;
   if (typeof demoStarter !== 'function') return;
   try {
+    if (currentLifecycle) currentLifecycle.inCall = true;
     demoStarter.call(currentGameInstance);
-    isRunning = true;
-    setGameRunningFlag(true);
+    finishGameCall();
+    rememberRunningGame();
     updateActionButton();
-    startScorePolling();
+    if (isRunning) startScorePolling();
   } catch (error) {
-    failCurrentGame(error);
+    void failCurrentGame(error);
   }
 }
 
-export async function loadGame(name: string, replace = false, preserveUi = false) {
-  if (!replace && name === currentGameName && currentGameInstance && isRunning) {
+export async function loadGame(name: string, replace = false, preserveUi = false, closeSinceIntent = closeGate.checkpoint()) {
+  if (!replace && name === currentGameName && currentGameInstance) {
     cancelPendingLoad();
     closeGameLibrary();
     focusGameSurface();
     return;
   }
   if (!preserveUi) closeGameLibrary();
-  if (await prepareGame(name, preserveUi)) {
+  const preparing = prepareGame(name, preserveUi, closeSinceIntent);
+  const intent = prepareGameToken;
+  if (await preparing && intent === prepareGameToken) {
     setHashGame(name);
     focusGameSurface();
   }
@@ -881,7 +1011,7 @@ function renderGameList(filter = '') {
   const count = document.getElementById('libraryResultCount');
   const countText = zh ? `${filtered.length} 款游戏` : `${filtered.length} ${filtered.length === 1 ? 'game' : 'games'}`;
   if (count && count.textContent !== countText) count.textContent = countText;
-  const markup = filtered.length ? filtered.map(game => renderGameCard(game, currentGameName, zh)).join('')
+  const markup = filtered.length ? filtered.map(game => renderGameCard(game, currentGameName, zh, isRunning)).join('')
     : `<div class="search-empty"><strong>${zh ? '暂时没有找到' : 'No games found'}</strong><span>${zh ? '换个关键词，或者看看全部游戏。' : 'Try another name, or make room for something different.'}</span><button type="button" class="quiet-button" data-clear-search>${zh ? '查看全部游戏' : 'Show all games'}</button></div>`;
   // Preserve image readiness and actual focused DOM nodes when discovery is unchanged.
   if (markup !== libraryMarkup) {
@@ -1187,7 +1317,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
       }
       const id = getGameId(event.target);
       if (!id) return;
-      if (id === currentGameName && currentGameInstance && isRunning) {
+      if (id === currentGameName && currentGameInstance) {
         closeUiFromUser(() => { cancelPendingLoad(); closeGameLibrary(); }, event);
       } else void loadGame(id);
     });
@@ -1234,6 +1364,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
     // Reserve intent before discovery, not after it: a slow refresh must never
     // undo a newer card, hash, retry, or explicit current-game resume.
     const token = ++prepareGameToken;
+    const closeSinceIntent = closeGate.checkpoint();
     loadController?.abort();
     loadController = undefined;
     pendingGameName = requested;
@@ -1244,14 +1375,16 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
       if (token !== prepareGameToken) return;
       const target = requested ?? initialChoice();
       if (!target) throw new Error('No available game for this link');
-      await loadGame(target, replace);
+      await loadGame(target, replace, false, closeSinceIntent);
     }).catch(error => { if (token === prepareGameToken) catalogFailure(error); });
   };
   document.getElementById('retryLoadBtn')?.addEventListener('click', () => loadFromCatalog(pendingGameName, true));
   document.getElementById('chooseAnotherBtn')?.addEventListener('click', () => setGameLibraryOpen(true));
   document.getElementById('reloadAppBtn')?.addEventListener('click', () => window.location.reload());
   document.getElementById('resumePreviousBtn')?.addEventListener('click', event => {
-    if (currentGameInstance && isRunning) {
+    // Presence owns recovery; loading/stopped scenes still have state to keep.
+    // Only a retired instance needs reconstruction from previousGameName.
+    if (currentGameInstance) {
       closeUiFromUser(cancelPendingLoad, event);
       if (currentGameName) setHashGame(currentGameName);
     } else if (previousGameName) void loadGame(previousGameName, true);
@@ -1264,7 +1397,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
 
   window.addEventListener('hashchange', () => {
     const target = getHashGame();
-    if (target && target === currentGameName && currentGameInstance && isRunning) {
+    if (target && target === currentGameName && currentGameInstance) {
       cancelPendingLoad(); closeGameLibrary();
       return; // Hash/history navigation is never a pointer-capture gesture.
     }
