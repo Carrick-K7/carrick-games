@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { GAMES, type GameMeta } from './support/catalog';
 import { canvasViewportIssues } from './support/viewport-contract';
+import { selectCurrentGame, selectSearchGame, selectSpacedGame, selectLongMappingGames } from './support/shell-fixtures';
 
 // Resolve names, controls and dimensions from the catalog under verification,
 // including the shell cell's pinned published releases, not source-only games.
@@ -9,14 +10,10 @@ function fixture(id: string): GameMeta {
   if (!game) throw new Error(`Shell design fixture is missing from the tested catalog: ${id}`);
   return game;
 }
-const currentGame = fixture('sudoku');
-const searchGame = fixture('minesweeper');
-const spacedGame = fixture('aimlab');
-// Exercise the widest published board-game key rows (letters, number rows,
-// arrows), retaining the longer source-catalog cases when they are available.
-const mappingWidth = (game: GameMeta) => Math.max(0, ...(game.controls.keyboard ?? []).slice(0, 3).map(row => row.keys.length));
-const longMappingGames = GAMES.filter(game => ['puzzle', 'tabletop'].includes(game.group) && mappingWidth(game) >= 4)
-  .sort((a, b) => mappingWidth(b) - mappingWidth(a) || a.order - b.order).slice(0, 4);
+const currentGame = selectCurrentGame(GAMES);
+const searchGame = selectSearchGame(GAMES, currentGame);
+const spacedGame = selectSpacedGame(GAMES, currentGame);
+const longMappingGames = selectLongMappingGames(GAMES);
 
 type Language = 'en' | 'zh';
 type Theme = 'dark' | 'light';
@@ -230,7 +227,7 @@ test.describe('game-window shell design contracts', () => {
 
   test('long input mappings are usable in an optional overlay and never resize the game', async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 720 }); await openShell(page);
-    expect(longMappingGames.length, 'catalog must exercise multiple long board-game mappings').toBeGreaterThanOrEqual(2);
+    expect(longMappingGames.length, 'catalog must exercise multiple long essential mappings').toBeGreaterThanOrEqual(2);
     for (const game of longMappingGames) {
       const id = game.id;
       await page.goto(`/#/${id}`);

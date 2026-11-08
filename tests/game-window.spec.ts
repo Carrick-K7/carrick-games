@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
+import { GAMES } from './support/catalog';
 import { builtCatalog } from './support/releases';
+import { selectFixedSwitchGames, selectResponsiveWindowGames } from './support/shell-fixtures';
+import { canvasViewportIssues } from './support/viewport-contract';
 
+const responsiveGames = selectResponsiveWindowGames(GAMES);
 const sizes = [
   { width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 2560, height: 1080 },
   { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 320, height: 568 },
@@ -10,32 +14,38 @@ async function metrics(page: Page) {
     const canvas = document.querySelector<HTMLCanvasElement>('#gameCanvas')!, root = document.getElementById('gameApp')!;
     const c = canvas.getBoundingClientRect(), r = root.getBoundingClientRect();
     return { canvas: { x: c.x, y: c.y, width: c.width, height: c.height }, root: { x: r.x, y: r.y, width: r.width, height: r.height },
-      pixels: canvas.width * canvas.height, info: (window as any).__GAME_VIEWPORT_DEBUG__?.info(),
+      pixels: canvas.width * canvas.height,
+      viewport: {
+        mode: canvas.getAttribute('data-viewport-mode'),
+        logicalWidth: Number(canvas.dataset.logicalWidth), logicalHeight: Number(canvas.dataset.logicalHeight),
+        backingWidth: canvas.width, backingHeight: canvas.height, pixelRatio: Number(canvas.dataset.pixelRatio),
+        cssWidth: c.width, cssHeight: c.height, offsetX: c.x - r.x, offsetY: c.y - r.y,
+        viewportWidth: window.visualViewport?.width ?? innerWidth, viewportHeight: window.visualViewport?.height ?? innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      },
       overflow: document.documentElement.scrollHeight > document.documentElement.clientHeight || document.documentElement.scrollWidth > document.documentElement.clientWidth };
   });
 }
 
 test.describe('edge-to-edge game windows', () => {
-  for (const id of ['cs-kimi', 'villa']) {
-    test(`${id}: real viewport aspect, all screen shapes, and resize without reinitializing`, async ({ page }, testInfo) => {
+  // Camera projection, gameplay-state snapshots and private renderer budgets
+  // live in the CS / CS Kimi / Villa owning specs. Shell verifies only the
+  // shared viewport of releases actually present in its tested catalog.
+  for (const game of responsiveGames) {
+    const id = game.id;
+    test(`${id}: shared viewport fits all screen shapes without reinitializing`, async ({ page }, testInfo) => {
       test.setTimeout(120_000);
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
-      // Keep this geometry test independent of CDP pointer-lock recenter deltas.
+      // Keep geometry independent of CDP pointer-lock recenter deltas.
       // Real capture/release is covered by the dedicated interaction specs.
       await page.addInitScript(() => Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', { configurable: true, value: () => undefined }));
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.goto(`/${id === 'cs-kimi' ? '?cs3d=force' : ''}#/${id}`);
+      await page.goto(`/#/${id}`);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive', { timeout: 45_000 });
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id);
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await page.keyboard.press('Escape');
-      const state = () => page.evaluate(id => {
-        if (id === 'cs-kimi') return (window as any).__CS_DEBUG__.info();
-        const c = document.querySelector<HTMLCanvasElement>('#gameCanvas')!;
-        return { position: c.dataset.villaPosition, look: c.dataset.villaLook };
-      }, id);
-      const initial = await state();
-      if (id !== 'villa') expect(typeof initial.mag).toBe('number');
       const prepared = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
       for (const size of sizes) {
         await page.setViewportSize(size);
@@ -43,13 +53,13 @@ test.describe('edge-to-edge game windows', () => {
           const m = await metrics(page);
           return Math.abs(m.canvas.width - size.width) < 1 && Math.abs(m.canvas.height - size.height) < 1
             && Math.abs(m.canvas.x) < 1 && Math.abs(m.canvas.y) < 1
-            && Math.abs(m.info.cameraAspect - size.width / size.height) < .002;
+            && canvasViewportIssues(m.viewport, game.canvasSize).length === 0;
         }).toBe(true);
         const m = await metrics(page);
         expect(m.overflow).toBe(false);
         expect(m.pixels).toBeLessThanOrEqual(8_294_400);
-        expect(m.info.width / m.info.height).toBeCloseTo(size.width / size.height, 3);
-        expect(await state()).toEqual(initial);
+        expect(m.viewport.logicalWidth / m.viewport.logicalHeight).toBeCloseTo(size.width / size.height, 3);
+        expect(canvasViewportIssues(m.viewport, game.canvasSize)).toEqual([]);
         await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-prepare-count', prepared!);
         await expect(page.locator('.app-header')).toBeHidden();
         await expect(page.locator('#keyboardPanel')).toBeHidden();
@@ -59,32 +69,15 @@ test.describe('edge-to-edge game windows', () => {
     });
   }
 
-  test('CS Kimi software renderer follows the viewport without stretching its buffer', async ({ page }, testInfo) => {
-    test.setTimeout(60_000);
-    await page.goto('/?cs3d=off#/cs-kimi');
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
-    await page.keyboard.press('Escape');
-    const initial = await page.evaluate(() => (window as any).__CS_DEBUG__.info());
-    for (const size of [sizes[2], sizes[3], sizes[4], sizes[5]]) {
-      await page.setViewportSize(size);
-      await expect.poll(async () => (await metrics(page)).info.width).toBe(size.width);
-      const m = await metrics(page), aspect = size.width / size.height;
-      expect(m.info.cameraAspect).toBeUndefined();
-      expect(m.info.raycastWidth / m.info.raycastHeight).toBeCloseTo(aspect, 2);
-      expect(m.info.projectionHalfFov).toBeCloseTo(Math.tan(66 * Math.PI / 360) * aspect / (16 / 9), 3);
-      expect(m.canvas).toEqual({ x: 0, y: 0, ...size });
-      expect(await page.evaluate(() => (window as any).__CS_DEBUG__.info())).toEqual(initial);
-      await page.screenshot({ path: testInfo.outputPath(`cs-kimi-software-${size.width}x${size.height}.png`) });
-    }
-  });
-
   test('F11 remains browser-owned in every shell state; resizing and switching stay independent', async ({ page }) => {
+    const [current, board] = selectFixedSwitchGames(builtCatalog().games);
     await page.addInitScript(() => {
       (window as any).__nativeCalls = 0;
       Element.prototype.requestFullscreen = async () => { (window as any).__nativeCalls++; };
       document.exitFullscreen = async () => { (window as any).__nativeCalls++; };
     });
-    await page.goto('/#/minesweeper');
+    await page.goto(`/#/${current.id}`);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', current.id);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('#startOverlay, #fullscreenBtn, #resumeBtn, #helpReturnBtn, #fullscreenNotice')).toHaveCount(0);
     // Headless DOM keys cannot stand in for browser chrome fullscreen. Check
@@ -103,11 +96,10 @@ test.describe('edge-to-edge game windows', () => {
     await page.locator('#helpCloseBtn').click();
     await page.locator('#overflowBtn').click(); await f11();
     await page.locator('#gamePickerBtn').click(); await f11();
-    await page.locator('.game-list-item[data-id="sudoku"]').click();
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', 'sudoku');
+    await page.locator(`.game-list-item[data-id="${board.id}"]`).click();
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', board.id);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await expect(page.locator('#gameCanvas')).toBeFocused();
-    const board = builtCatalog().games.find(game => game.id === 'sudoku')!;
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-width', String(board.canvasSize.width));
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-logical-height', String(board.canvasSize.height));
     expect(await page.evaluate(() => (window as any).__nativeCalls)).toBe(0);
@@ -116,11 +108,13 @@ test.describe('edge-to-edge game windows', () => {
   });
 
   test('no fullscreen API is needed for entering, learning and rotating a game', async ({ page }) => {
+    const [current] = selectFixedSwitchGames(builtCatalog().games);
     await page.addInitScript(() => {
       Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false });
       Object.defineProperty(Element.prototype, 'requestFullscreen', { configurable: true, value: undefined });
     });
-    await page.goto('/#/minesweeper');
+    await page.goto(`/#/${current.id}`);
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', current.id);
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await page.locator('#helpBtn').click();
     await page.locator('#helpCloseBtn').click();
@@ -136,20 +130,20 @@ test.describe('edge-to-edge game windows', () => {
 
 test.describe('bounded high-density game windows', () => {
   test.use({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 2 });
-  test('all three real-3D renderers keep their pixel budgets at 4K / DPR 2', async ({ page }) => {
+  test('available responsive games keep the shared canvas budget at 4K / DPR 2', async ({ page }) => {
     test.setTimeout(180_000);
-    for (const id of ['cs', 'cs-kimi', 'villa']) {
-      await page.goto(`/${id === 'cs-kimi' ? '?cs3d=force' : ''}#/${id}`);
-      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
-      await expect.poll(async () => {
-        const m = await metrics(page);
-        return m.info.width === 3840 && m.info.renderWidth > 0;
-      }, { timeout: 30_000 }).toBe(true);
+    for (const game of responsiveGames) {
+      await page.goto(`/#/${game.id}`);
+      // Hash navigation retains the old running canvas during preflight. Spend
+      // the existing startup budget waiting for this release, never its predecessor.
+      await expect(page.locator(`#gameCanvas[data-game-id="${game.id}"]`)).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', game.id);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-viewport-mode', 'responsive');
+      await expect.poll(async () => canvasViewportIssues((await metrics(page)).viewport, game.canvasSize), { timeout: 30_000 }).toEqual([]);
       const m = await metrics(page);
       expect(m.canvas).toEqual({ x: 0, y: 0, width: 3840, height: 2160 });
-      expect(m.info.cameraAspect).toBeCloseTo(16 / 9, 3);
+      expect(m.viewport.logicalWidth / m.viewport.logicalHeight).toBeCloseTo(16 / 9, 3);
       expect(m.pixels).toBeLessThanOrEqual(8_294_400);
-      expect(m.info.renderWidth * m.info.renderHeight).toBeLessThanOrEqual(id === 'villa' ? 4_200_000 : 4_500_000);
       expect(m.overflow).toBe(false);
     }
   });

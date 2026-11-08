@@ -1,6 +1,6 @@
 {
   "name": "@carrick/shell",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "typecheck": "node ../../scripts/check.mjs types shell"
   },
   "dependencies": {
-    "@carrick/game-sdk": "*"
+    "@carrick/game-sdk": "*",
+    "@carrick/lifecycle": "*"
   }
 }

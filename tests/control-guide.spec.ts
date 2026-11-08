@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { builtCatalog } from './support/releases';
+import { selectGuideGames } from './support/shell-fixtures';
 
 async function openGuide(page: Page, id: string) {
   await page.goto(`/#/${id}`);
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', id, { timeout: 45_000 });
   await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
   await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/, { timeout: 45_000 });
-  if (id === 'cs') await expect.poll(() => page.evaluate(() => (window as any).__CSX_DEBUG__?.info()?.ready), { timeout: 60_000 }).toBe(true);
   // The shared ? shortcut works in every shell state, including pointer capture.
   await page.keyboard.press('Shift+Slash');
   await expect(page.locator('#helpOverlay')).toBeVisible();
@@ -38,7 +38,7 @@ test.describe('unified operation guides', () => {
   test('all game families drop the same reference panel under the top-right utilities', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     let commonStyle: unknown;
-    for (const id of ['minesweeper', 'sudoku', 'cs', 'cs-kimi', 'villa']) {
+    for (const { id } of selectGuideGames(builtCatalog().games)) {
       await openGuide(page, id);
       const guide = page.locator('#helpOverlay'), canvas = page.locator('#gameCanvas');
       const before = await canvas.boundingBox();

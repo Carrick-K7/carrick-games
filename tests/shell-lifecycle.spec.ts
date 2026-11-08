@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { builtCatalog, gameModuleUrl } from './support/releases';
 import { GAME_GROUPS } from './support/catalog';
+import { selectMobileSwitchGames } from './support/shell-fixtures';
 import { KEYBOARD_GAMES, CLICK_GAMES, selectedProfiles } from './support/profiles';
 import { collectErrors, selectGame, startGame, openOverflow, filterFavicon } from './support/gameplay';
 
@@ -257,7 +258,7 @@ test.describe('Carrick Games - Lifecycle', () => {
   test('mobile game sheet selects different games reliably', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto('/');
-    const games = ['parking', 'minesweeper', 'sudoku', 'gacha'].map(id => GAMES.find(game => game.id === id)!);
+    const games = selectMobileSwitchGames(GAMES);
     for (const { id, nameZh } of games) {
       await page.keyboard.press('Control+k');
       const item = page.locator(`.game-list-item[data-id="${id}"]`);

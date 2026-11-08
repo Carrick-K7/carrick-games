@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { GAMES } from './support/catalog';
 
-const currentGame = GAMES.find(game => game.id === 'sudoku');
-if (!currentGame) throw new Error('Accessibility fixture Sudoku is missing from the tested catalog');
+import { selectCurrentGame } from './support/shell-fixtures';
+
+const currentGame = selectCurrentGame(GAMES);
 
 test('visual-viewport zoom reflows the library instead of shrinking text or losing its only scroller', async ({ page }) => {
   await page.setViewportSize({ width: 1120, height: 900 });

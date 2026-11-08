@@ -92,7 +92,8 @@ jobs:
     name: Verify actual shared changes or initial source store
     needs: plan
     if: github.event_name != 'workflow_dispatch' && needs.plan.outputs.full == 'true'
-    runs-on: ubuntu-latest
+    # Locked Playwright supports 24.04; ubuntu-latest can now select unsupported 26.04.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -134,7 +135,7 @@ jobs:
     if: >-
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -191,7 +192,7 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.shell == 'true' &&
       needs.plan.outputs.bootstrap != 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
@@ -236,7 +237,7 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.bootstrap == 'true' &&
       needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
       (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
