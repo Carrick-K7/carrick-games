@@ -75,3 +75,24 @@ test.describe('edge-to-edge game windows', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// Moved from the generic game-window suite; this budget belongs to CS's renderer.
+test.describe('CS bounded high-density renderer', () => {
+  test.use({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 2 });
+  test('real 3D renderer keeps its pixel budget at 4K / DPR 2', async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto('/#/cs');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', 'cs');
+    await expect.poll(async () => {
+      const m = await metrics(page);
+      return m.info.width === 3840 && m.info.renderWidth > 0;
+    }, { timeout: 30_000 }).toBe(true);
+    const m = await metrics(page);
+    expect(m.canvas).toEqual({ x: 0, y: 0, width: 3840, height: 2160 });
+    expect(m.info.cameraAspect).toBeCloseTo(16 / 9, 3);
+    expect(m.pixels).toBeLessThanOrEqual(8_294_400);
+    expect(m.info.renderWidth * m.info.renderHeight).toBeLessThanOrEqual(4_500_000);
+    expect(m.overflow).toBe(false);
+  });
+});

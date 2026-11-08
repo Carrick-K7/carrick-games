@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { GAMES, type GameMeta } from './catalog';
-import { mappingWidth, selectCurrentGame, selectLongMappingGames, selectMobileSwitchGames, selectSearchGame, selectSpacedGame } from './shell-fixtures';
+import { mappingWidth, selectCurrentGame, selectFixedSwitchGames, selectGuideGames, selectLongMappingGames, selectMobileSwitchGames, selectResponsiveWindowGames, selectSearchGame, selectSpacedGame } from './shell-fixtures';
 
 // Pure selector contracts. The normal source and pinned-published Shell gates
 // collect these through tests/**/*.spec.ts; no page or fabricated metadata.
@@ -97,6 +97,52 @@ test('mobile switching retains four distinct real games when source-only Sudoku 
   expect(() => selectMobileSwitchGames(GAMES.slice(0, 3))).toThrow(/at least four distinct games/);
   expect(() => selectMobileSwitchGames([GAMES[0], GAMES[0], GAMES[1], GAMES[2]]))
     .toThrow(/at least four distinct games/);
+});
+
+test('guide samples retain original available cases and cover every actual catalog family', () => {
+  for (const catalog of [GAMES, GAMES.filter(game => !['sudoku', 'cs-kimi'].includes(game.id))]) {
+    const before = JSON.stringify(catalog), selected = selectGuideGames(catalog);
+    expect(new Set(selected.map(game => game.group))).toEqual(new Set(catalog.map(game => game.group)));
+    expect(new Set(selected.map(game => game.id)).size).toBe(selected.length);
+    for (const game of selected) {
+      expect(catalog.find(entry => entry.id === game.id)).toBe(game);
+      expect(game.controls.keyboard!.slice(0, 3).some(row => row.keys.length > 0)).toBe(true);
+      expect(game.controls.touch!.length).toBeGreaterThan(0);
+    }
+    for (const game of catalog.filter(game => ['minesweeper', 'sudoku', 'cs', 'cs-kimi', 'villa'].includes(game.id))) {
+      expect(selected).toContain(game);
+    }
+    expect(JSON.stringify(catalog)).toBe(before);
+  }
+  expect(() => selectGuideGames([])).toThrow(/no compatible operation-guide/);
+  const noKeyboard = GAMES.filter(game => !game.controls.keyboard?.length);
+  if (noKeyboard.length) expect(() => selectGuideGames(noKeyboard)).toThrow(/guide with keyboard essentials/);
+});
+
+test('F11 switches between two actual distinct fixed boards without requiring Sudoku', () => {
+  for (const catalog of [GAMES, GAMES.filter(game => game.id !== 'sudoku')]) {
+    const selected = selectFixedSwitchGames(catalog);
+    expect(selected).toHaveLength(2);
+    expect(selected[0].id).not.toBe(selected[1].id);
+    for (const game of selected) {
+      expect(catalog.find(entry => entry.id === game.id)).toBe(game);
+      expect(['minesweeper', 'sudoku', 'parking']).toContain(game.id);
+    }
+    if (catalog.some(game => game.id === 'minesweeper')) expect(selected[0].id).toBe('minesweeper');
+    const next = ['sudoku', 'parking', 'minesweeper'].find(id => id !== selected[0].id && catalog.some(game => game.id === id));
+    expect(selected[1].id).toBe(next);
+  }
+  expect(() => selectFixedSwitchGames([selectFixedSwitchGames(GAMES)[0]])).toThrow(/distinct fixed switch/);
+});
+
+test('shared responsive window samples contain only tested releases and fail on no suitable sample', () => {
+  for (const catalog of [GAMES, GAMES.filter(game => game.id !== 'cs-kimi')]) {
+    const selected = selectResponsiveWindowGames(catalog);
+    expect(selected.map(game => game.id)).toEqual(['cs', 'cs-kimi', 'villa'].filter(id => catalog.some(game => game.id === id)));
+    for (const game of selected) expect(catalog.find(entry => entry.id === game.id)).toBe(game);
+  }
+  expect(() => selectResponsiveWindowGames(GAMES.filter(game => !['cs', 'cs-kimi', 'villa'].includes(game.id))))
+    .toThrow(/no compatible responsive-window/);
 });
 
 test('insufficient real fixture capabilities fail instead of skipping or fabricating games', () => {

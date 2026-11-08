@@ -50,6 +50,44 @@ export function selectMobileSwitchGames(catalog: readonly GameMeta[]): GameMeta[
   throw new Error('Tested catalog needs at least four distinct games for mobile switching');
 }
 
+/** Retain the original guide samples and represent every actually available family. */
+export function selectGuideGames(catalog: readonly GameMeta[]): GameMeta[] {
+  const hasGuideRows = (game: GameMeta) => !!game.controls.keyboard?.slice(0, 3).some(row => row.keys.length)
+    && !!game.controls.touch?.length;
+  const original = ['minesweeper', 'sudoku', 'cs', 'cs-kimi', 'villa'];
+  const selected = original.flatMap(id => {
+    const game = catalog.find(entry => entry.id === id && hasGuideRows(entry));
+    return game ? [game] : [];
+  });
+  for (const group of new Set(catalog.map(game => game.group))) {
+    if (selected.some(game => game.group === group)) continue;
+    selected.push(choose(catalog, `${group} guide with keyboard essentials and touch rows`, ['texashold'],
+      game => game.group === group && hasGuideRows(game)));
+  }
+  if (!selected.length) throw new Error('Tested catalog has no compatible operation-guide fixtures');
+  return selected;
+}
+
+/** API-1 has no metadata viewport-mode flag; verify known fixed cases in the browser. */
+export function selectFixedSwitchGames(catalog: readonly GameMeta[]): [GameMeta, GameMeta] {
+  const fixedIds = ['minesweeper', 'sudoku', 'parking'];
+  const fixed = (game: GameMeta) => fixedIds.includes(game.id) && !!game.controls.keyboard?.length;
+  const current = choose(catalog, 'fixed initial game', fixedIds, fixed);
+  const candidate = choose(catalog, 'distinct fixed switch game', ['sudoku', 'parking', 'minesweeper'],
+    game => fixed(game) && game.id !== current.id);
+  return [current, candidate];
+}
+
+/** These known responsive releases are samples, not a claim about private renderers. */
+export function selectResponsiveWindowGames(catalog: readonly GameMeta[]): GameMeta[] {
+  const selected = ['cs', 'cs-kimi', 'villa'].flatMap(id => {
+    const game = catalog.find(entry => entry.id === id);
+    return game ? [game] : [];
+  });
+  if (!selected.length) throw new Error('Tested catalog has no compatible responsive-window fixture');
+  return selected;
+}
+
 export const mappingWidth = (game: GameMeta): number => Math.max(0, ...(game.controls.keyboard ?? []).slice(0, 3).map(row => row.keys.length));
 
 export function selectLongMappingGames(catalog: readonly GameMeta[]): GameMeta[] {
