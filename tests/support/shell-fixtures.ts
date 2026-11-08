@@ -38,6 +38,18 @@ export function selectSpacedGame(catalog: readonly GameMeta[], current: GameMeta
     game.id !== current.id && game.name.trim().includes(' ') && uniqueName(catalog, game, game.name));
 }
 
+/** Keep the four real switches, not a source-only game that may be delisted. */
+export function selectMobileSwitchGames(catalog: readonly GameMeta[]): GameMeta[] {
+  const preferred = ['parking', 'minesweeper', 'sudoku', 'gacha', 'texashold', 'red-homestead'];
+  const selected: GameMeta[] = [];
+  for (const id of [...preferred, ...catalog.map(game => game.id)]) {
+    const game = catalog.find(entry => entry.id === id);
+    if (game && !selected.some(entry => entry.id === id)) selected.push(game);
+    if (selected.length === 4) return selected;
+  }
+  throw new Error('Tested catalog needs at least four distinct games for mobile switching');
+}
+
 export const mappingWidth = (game: GameMeta): number => Math.max(0, ...(game.controls.keyboard ?? []).slice(0, 3).map(row => row.keys.length));
 
 export function selectLongMappingGames(catalog: readonly GameMeta[]): GameMeta[] {

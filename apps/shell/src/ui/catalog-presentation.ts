@@ -36,6 +36,76 @@ export function renderGameCard(game: LibraryGame, currentId: string | null, zh: 
   </button>`;
 }
 
+/** Patch only render-owned differences. Comparing the previous template, not
+ * the live DOM, keeps image readiness/error attributes added by load handlers.
+ * This is deliberately limited to the inert markup emitted by renderGameCard.
+ */
+function patchCardNode(live: Node, before: Node, next: Node): void {
+  if (before.isEqualNode(next)) return;
+  if (before.nodeType !== next.nodeType
+    || (before instanceof Element && next instanceof Element && before.tagName !== next.tagName)) {
+    live.parentNode?.replaceChild(next.cloneNode(true), live);
+    return;
+  }
+  if (!(live instanceof Element) || !(before instanceof Element) || !(next instanceof Element)) {
+    live.nodeValue = next.nodeValue;
+    return;
+  }
+  // A different icon/source is new artwork, not the old image's loaded/error
+  // state. Unchanged artwork stays attached, even when status or copy changes.
+  if (next.matches('.game-list-icon')
+    || (next.matches('img') && before.getAttribute('src') !== next.getAttribute('src'))) {
+    live.replaceWith(next.cloneNode(true));
+    return;
+  }
+  if (next.matches('.game-list-cover')
+    && before.querySelector('.game-cover-image')?.getAttribute('src') !== next.querySelector('.game-cover-image')?.getAttribute('src')) {
+    live.removeAttribute('data-image-ready');
+  }
+  for (const { name } of Array.from(before.attributes)) {
+    if (!next.hasAttribute(name)) live.removeAttribute(name);
+  }
+  for (const { name, value } of Array.from(next.attributes)) {
+    if (before.getAttribute(name) !== value) live.setAttribute(name, value);
+  }
+  const liveChildren = Array.from(live.childNodes), oldChildren = Array.from(before.childNodes);
+  const nextChildren = Array.from(next.childNodes);
+  for (let index = 0; index < Math.max(oldChildren.length, nextChildren.length); index++) {
+    const oldChild = oldChildren[index], nextChild = nextChildren[index], liveChild = liveChildren[index];
+    if (!nextChild) liveChild?.parentNode?.removeChild(liveChild);
+    else if (!oldChild || !liveChild) live.appendChild(nextChild.cloneNode(true));
+    else patchCardNode(liveChild, oldChild, nextChild);
+  }
+}
+
+/** Keep each surviving game's native button connected across discovery and
+ * lifecycle updates. Removing a game/filter result is the only removal path;
+ * changes elsewhere must not invalidate a pointer, focus or scroll action.
+ */
+export class GameListRenderer {
+  private readonly templates = new WeakMap<Element, Element>();
+
+  render(list: HTMLElement, markup: string): void {
+    const template = document.createElement('template');
+    template.innerHTML = markup;
+    const key = (element: Element) => element.hasAttribute('data-id') ? `game:${element.getAttribute('data-id')}` : 'empty-results';
+    const existing = new Map(Array.from(list.children).map(element => [key(element), element]));
+    const desired = Array.from(template.content.children);
+    const retained = new Set(desired.map(key));
+    // Remove obsolete cards first, rather than moving every survivor around a
+    // soon-to-be-removed sibling (which would transiently detach those targets).
+    for (const [id, element] of existing) if (!retained.has(id)) element.remove();
+    for (const [index, next] of desired.entries()) {
+      const live = existing.get(key(next)) ?? next.cloneNode(true) as Element;
+      if (existing.has(key(next))) patchCardNode(live, this.templates.get(live) ?? live.cloneNode(true), next);
+      this.templates.set(live, next);
+      // Do not move already-correct nodes: even a needless remove/reinsert can
+      // disturb native focus. Real catalog reordering remains visible.
+      if (list.children[index] !== live) list.insertBefore(live, list.children[index] ?? null);
+    }
+  }
+}
+
 /** Loading and failures preserve the same card geometry and usable fallback. */
 export function settleArtworkImage(image: HTMLImageElement, loaded: boolean): void {
   if (!image.matches('.game-cover-image, .game-icon-image')) return;

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { GAMES, type GameMeta } from './catalog';
-import { mappingWidth, selectCurrentGame, selectLongMappingGames, selectSearchGame, selectSpacedGame } from './shell-fixtures';
+import { mappingWidth, selectCurrentGame, selectLongMappingGames, selectMobileSwitchGames, selectSearchGame, selectSpacedGame } from './shell-fixtures';
 
 // Pure selector contracts. The normal source and pinned-published Shell gates
 // collect these through tests/**/*.spec.ts; no page or fabricated metadata.
@@ -80,6 +80,23 @@ test('long mappings preserve all original top-four board cases and only fill a r
   const otherWide = GAMES.filter(game => !original.includes(game) && mappingWidth(game) >= 4)
     .sort((a, b) => mappingWidth(b) - mappingWidth(a) || a.order - b.order);
   expect(selected.slice(original.length)).toEqual(otherWide.slice(0, Math.max(0, 2 - original.length)));
+});
+
+test('mobile switching retains four distinct real games when source-only Sudoku is absent', () => {
+  for (const catalog of [GAMES, GAMES.filter(game => game.id !== 'sudoku')]) {
+    const before = JSON.stringify(catalog), selected = selectMobileSwitchGames(catalog);
+    expect(selected).toHaveLength(4);
+    expect(new Set(selected.map(game => game.id)).size).toBe(4);
+    for (const game of selected) expect(catalog.find(entry => entry.id === game.id)).toBe(game);
+    expect(JSON.stringify(catalog)).toBe(before);
+    const original = ['parking', 'minesweeper', 'sudoku', 'gacha'];
+    if (original.every(id => catalog.some(game => game.id === id))) {
+      expect(selected.map(game => game.id)).toEqual(original);
+    }
+  }
+  expect(() => selectMobileSwitchGames(GAMES.slice(0, 3))).toThrow(/at least four distinct games/);
+  expect(() => selectMobileSwitchGames([GAMES[0], GAMES[0], GAMES[1], GAMES[2]]))
+    .toThrow(/at least four distinct games/);
 });
 
 test('insufficient real fixture capabilities fail instead of skipping or fabricating games', () => {

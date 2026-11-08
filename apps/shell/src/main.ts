@@ -23,7 +23,7 @@ import { saveStoredRecord } from '@carrick/game-sdk/storage';
 import { isPixelMode } from '@carrick/game-sdk/render';
 import { normalizeKey } from './ui/keyboard-input.js';
 import { guideHasMode, renderGuideMode, renderGuideNoteDisclosure, type GuideMode } from './ui/control-guide.js';
-import { nextGridIndex, renderGameCard, settleArtworkImage } from './ui/catalog-presentation.js';
+import { GameListRenderer, nextGridIndex, renderGameCard, settleArtworkImage } from './ui/catalog-presentation.js';
 import { escapeHtml } from './ui/html.js';
 import { renderLevelGridHTML, type LevelSelectState } from '@carrick/game-sdk/levelselect';
 
@@ -56,6 +56,7 @@ let guideModePreference: GuideMode | null = null;
 let libraryCategory = 'all';
 let previousLibraryQuery = '';
 let libraryMarkup = '';
+const libraryCards = new GameListRenderer();
 let libraryFilterMarkup = '';
 
 function updatePresentationControls() {
@@ -574,9 +575,9 @@ function checkLifecycleReport() {
 
 function updateLifecyclePresentation() {
   updateRecoveryButton(closeGate.isClosing);
-  if (document.getElementById('gameLibrary')?.classList.contains('open')) {
-    renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
-  }
+  // The renderer owns card attributes and their templates even while hidden.
+  // Direct current/active writes would leave its cached before-state untrue.
+  renderGameList((document.getElementById('searchInput') as HTMLInputElement | null)?.value || '');
 }
 
 function finishGameCall() {
@@ -682,11 +683,6 @@ export async function prepareGame(name: string, preserveUi = false, closeSinceIn
     updateActionButton();
     updateGameTitle();
     renderControls();
-    document.querySelectorAll('.game-list-item').forEach(element => {
-      const active = element.getAttribute('data-id') === name;
-      element.classList.toggle('active', active);
-      element.setAttribute('aria-current', String(active));
-    });
     fitGameCanvas();
     focusGameSurface();
     return true;
@@ -997,9 +993,10 @@ function renderGameList(filter = '') {
   if (!list) return;
   const zh = isZhLang();
   const term = filter.trim().toLowerCase();
-  const scrollTop = term === previousLibraryQuery ? list.scrollTop : 0;
+  const visible = document.getElementById('gameLibrary')?.classList.contains('open');
+  const scrollTop = visible && term === previousLibraryQuery ? list.scrollTop : 0;
   const content = list.parentElement;
-  const contentScrollTop = term === previousLibraryQuery ? content?.scrollTop ?? 0 : 0;
+  const contentScrollTop = visible && term === previousLibraryQuery ? content?.scrollTop ?? 0 : 0;
   previousLibraryQuery = term;
   const oldCards = Array.from(list.querySelectorAll<HTMLButtonElement>('.game-list-item'));
   const focused = document.activeElement instanceof HTMLElement && list.contains(document.activeElement) ? document.activeElement : null;
@@ -1013,9 +1010,10 @@ function renderGameList(filter = '') {
   if (count && count.textContent !== countText) count.textContent = countText;
   const markup = filtered.length ? filtered.map(game => renderGameCard(game, currentGameName, zh, isRunning)).join('')
     : `<div class="search-empty"><strong>${zh ? '暂时没有找到' : 'No games found'}</strong><span>${zh ? '换个关键词，或者看看全部游戏。' : 'Try another name, or make room for something different.'}</span><button type="button" class="quiet-button" data-clear-search>${zh ? '查看全部游戏' : 'Show all games'}</button></div>`;
-  // Preserve image readiness and actual focused DOM nodes when discovery is unchanged.
+  // Even a changed current badge or catalog title must keep surviving native
+  // card targets connected while the player is focusing, scrolling or tapping.
   if (markup !== libraryMarkup) {
-    list.innerHTML = markup;
+    libraryCards.render(list, markup);
     libraryMarkup = markup;
     if (focused) {
       const cards = Array.from(list.querySelectorAll<HTMLButtonElement>('.game-list-item'));
@@ -1025,8 +1023,12 @@ function renderGameList(filter = '') {
       target?.focus({ preventScroll: true });
     }
   }
-  list.scrollTop = scrollTop;
-  if (content) content.scrollTop = contentScrollTop;
+  // display:none reads as zero. Do not overwrite the browser's retained scroll
+  // position with that zero when a hidden library receives a lifecycle update.
+  if (visible) {
+    list.scrollTop = scrollTop;
+    if (content) content.scrollTop = contentScrollTop;
+  }
 }
 
 function setLang(lang: 'en' | 'zh') {

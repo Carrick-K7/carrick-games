@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { choose, cleanErrors, instances, lifecycleFixture, moduleSource, publicCapabilityUrl, ready, report, settle } from '../apps/shell/tests/lifecycle-fixture';
 
 // These are generic synthetic API-1 modules, not native/game implementations.
@@ -489,4 +489,286 @@ test('API-1 metadata cannot preflight capability: a future adapter must fail clo
   expect(result).toMatchObject({ oldAccepted: false, before: 1, created: 2, writers: 0, synchronous: true });
   expect(result.notice).toContain('Reload Carrick Games');
   await cleanErrors(page, fixture.errors);
+});
+
+
+async function expectCurrentCard(page: Page, id: string | null, running = false) {
+  const current = page.locator('.game-list-item[aria-current="true"]');
+  await expect(current).toHaveCount(id === null ? 0 : 1);
+  await expect(page.locator('.game-list-item.active')).toHaveCount(id === null ? 0 : 1);
+  await expect(page.locator('.game-list-status')).toHaveCount(id === null ? 0 : 1);
+  if (id !== null) {
+    await expect(current).toHaveAttribute('data-id', id);
+    await expect(current).toHaveClass(/active/);
+    await expect(current).toHaveAttribute('aria-label', `${id} — ${running ? 'Continue' : 'Return'}`);
+    await expect(current.locator('.game-list-status')).toHaveText(running ? 'Playing' : 'Current');
+  }
+}
+
+test('closed-library failure has no current card after reopening the chooser', async ({ page }) => {
+  const fixture = await lifecycleFixture(page, { alpha: { startReport: 'loading' } });
+  await page.goto('/#/gacha'); await ready(page, 'gacha');
+  await page.locator('#siteBrand').click();
+  await expectCurrentCard(page, 'gacha', true);
+  await page.locator('.game-list-item[data-id="alpha"]').click(); await ready(page, 'alpha', false);
+  await expect(page.locator('#gameLibrary')).not.toHaveClass(/open/);
+  await report(page, 1, 'failed');
+  await expect(page.locator('#loadError')).toBeVisible();
+  await expect.poll(async () => (await instances(page))[1]?.destroy).toBe(1);
+  await page.locator('#chooseAnotherBtn').click();
+  await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
+  await expectCurrentCard(page, null);
+  await expect(page.locator('.game-list-item[data-id="alpha"]')).toHaveAttribute('aria-label', 'alpha — Play');
+  await cleanErrors(page, fixture.errors);
+});
+
+test('hidden and visible cards have one renderer-owned current state through lifecycle transitions', async ({ page }) => {
+  const fixture = await lifecycleFixture(page, { alpha: { startReport: 'loading' } });
+  await page.goto('/#/gacha'); await ready(page, 'gacha');
+  await expectCurrentCard(page, 'gacha', true);
+  await choose(page, 'alpha'); await ready(page, 'alpha', false);
+  await expectCurrentCard(page, 'alpha');
+  await report(page, 1, 'stopped'); await expectCurrentCard(page, 'alpha');
+  await report(page, 1, 'running'); await expectCurrentCard(page, 'alpha', true);
+  await page.locator('#siteBrand').click();
+  await expectCurrentCard(page, 'alpha', true);
+  await report(page, 1, 'loading'); await expectCurrentCard(page, 'alpha');
+  await page.locator('.game-list-item[data-id="beta"]').click(); await ready(page, 'beta');
+  await expectCurrentCard(page, 'beta', true);
+  await report(page, 1, 'running'); await report(page, 1, 'failed');
+  await expectCurrentCard(page, 'beta', true);
+  await report(page, 2, 'failed');
+  await expect(page.locator('#loadError')).toBeVisible();
+  await expectCurrentCard(page, null);
+  await page.locator('#chooseAnotherBtn').click(); await expectCurrentCard(page, null);
+  await choose(page, 'gacha'); await ready(page, 'gacha');
+  await expectCurrentCard(page, 'gacha', true);
+  await cleanErrors(page, fixture.errors);
+});
+
+test('hidden lifecycle renders retain chooser query, scroll and real artwork readiness', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  const fixture = await lifecycleFixture(page, { parking: { startReport: 'loading' } }, scrollingFixtureIds);
+  await page.goto('/#/gacha'); await ready(page, 'gacha');
+  await page.locator('#siteBrand').click();
+  await page.locator('#searchInput').fill('fixture');
+  await page.locator('[data-category="casual"]').click();
+  const card = page.locator('.game-list-item[data-id="parking"]');
+  await card.scrollIntoViewIfNeeded();
+  await expect(card.locator('.asset-game-icon')).toHaveAttribute('data-image-ready', 'true');
+  const original = (await card.elementHandle())!, artwork = (await card.locator('.game-icon-image').elementHandle())!;
+  const scroll = await page.locator('#gameList').evaluate(element => element.scrollTop);
+  expect(scroll).toBeGreaterThan(0);
+  await card.click(); await ready(page, 'parking', false);
+  await expectCurrentCard(page, 'parking');
+  await report(page, 1, 'stopped'); await expectCurrentCard(page, 'parking');
+  await report(page, 1, 'loading'); await expectCurrentCard(page, 'parking');
+  await page.locator('#siteBrand').click();
+  await expect(page.locator('#searchInput')).toHaveValue('fixture');
+  await expect(page.locator('[data-category="casual"]')).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.locator('#gameList').evaluate(element => element.scrollTop)).toBe(scroll);
+  expect(await original.evaluate(element => element.isConnected)).toBe(true);
+  expect(await artwork.evaluate(element => element.isConnected && !(element as HTMLImageElement).hidden)).toBe(true);
+  await expect(card.locator('.asset-game-icon')).toHaveAttribute('data-image-ready', 'true');
+  await expectCurrentCard(page, 'parking');
+  await cleanErrors(page, fixture.errors);
+});
+
+// Keep the exact locator.scrollIntoViewIfNeeded action used by the shared
+// gameplay/gameover/mobile tests. A fixture-only moving target holds its stable
+// check open across an explicitly released update, not a timing retry or sleep.
+async function scrollAcrossUpdate(page: Page, id: string, update: () => Promise<void>) {
+  const selector = `.game-list-item[data-id="${id}"]`;
+  const card = page.locator(selector), original = (await card.elementHandle())!;
+  const animation = await page.addStyleTag({ content: `
+    @keyframes fixture-scroll-stability { from { transform: translateX(0); } to { transform: translateX(24px); } }
+    ${selector} { animation: fixture-scroll-stability 300ms linear infinite !important; }
+  ` });
+  expect(await card.evaluate(async element => {
+    await Promise.all(element.getAnimations().map(animation => animation.ready));
+    const before = element.getBoundingClientRect().x;
+    await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+    return element.getBoundingClientRect().x !== before;
+  }), 'fixture movement must be active before starting the native stable check').toBe(true);
+  let settled = false;
+  const scrolling = card.scrollIntoViewIfNeeded().then(() => null, error => String(error)).finally(() => { settled = true; });
+  let result: string | null = null;
+  try {
+    // The native action remains in its stable-element check while the target
+    // visibly moves for eight frames. The update then happens inside that action.
+    await page.evaluate(async () => {
+      for (let i = 0; i < 8; i++) await new Promise<void>(done => requestAnimationFrame(() => done()));
+    });
+    expect(settled, 'the real scroll action must still be in progress at update time').toBe(false);
+    await update();
+  } finally {
+    await animation.evaluate(element => element.remove());
+    result = await scrolling;
+  }
+  expect(result, 'catalog/lifecycle updates must not detach the active native scroll target').toBeNull();
+  expect(await original.evaluate(element => element.isConnected && element === document.querySelector(`.game-list-item[data-id="${element.getAttribute('data-id')}"]`))).toBe(true);
+  await expect(card).toBeInViewport();
+}
+
+const scrollingFixtureIds = ['gacha', ...Array.from({ length: 16 }, (_, i) => `fixture-${i}`), 'parking'];
+
+test.describe('stable catalog DOM during native card scrolling', () => {
+  test.use({ viewport: { width: 390, height: 640 } });
+
+  test('held default import completes legacy start while another card is scrolling', async ({ page }) => {
+    const fixture = await lifecycleFixture(page, {}, scrollingFixtureIds);
+    let release!: () => void, requested = false;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`**${fixture.game('gacha').entry}`, async route => {
+      requested = true; await held;
+      await route.fulfill({ contentType: 'text/javascript', body: fixture.sources.get(fixture.game('gacha').entry)! });
+    });
+    try {
+      await page.goto('/'); await expect.poll(() => requested).toBe(true);
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('.game-list-item')).toHaveCount(scrollingFixtureIds.length);
+      expect(await page.locator('#gameList').evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+      expect(await instances(page)).toHaveLength(0);
+      await scrollAcrossUpdate(page, 'parking', async () => {
+        release(); await ready(page, 'gacha');
+        await expect(page.locator('.game-list-item[data-id="gacha"] .game-list-status')).toHaveText('Playing');
+      });
+      await expect(page.locator('#gameLibrary')).toHaveClass(/open/);
+      await page.locator('.game-list-item[data-id="parking"]').click(); await ready(page, 'parking');
+      expect((await instances(page)).map(item => item.id)).toEqual(['gacha', 'parking']);
+      await cleanErrors(page, fixture.errors);
+    } finally { release(); }
+  });
+
+  test('current lifecycle report updates its label without replacing the unrelated scrolling card', async ({ page }) => {
+    const fixture = await lifecycleFixture(page, { gacha: { startReport: 'loading' } }, scrollingFixtureIds);
+    await page.goto('/'); await ready(page, 'gacha', false);
+    await page.keyboard.press('Control+k');
+    expect(await page.locator('#gameList').evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+    await scrollAcrossUpdate(page, 'parking', async () => {
+      await report(page, 0, 'running');
+      await expect(page.locator('.game-list-item[data-id="gacha"] .game-list-status')).toHaveText('Playing');
+    });
+    await page.locator('.game-list-item[data-id="parking"]').click(); await ready(page, 'parking');
+    await cleanErrors(page, fixture.errors);
+  });
+
+  for (const changedId of ['gacha', 'parking']) {
+    test(`held catalog changes ${changedId} copy visibly while parking scroll keeps its native target`, async ({ page }) => {
+      const fixture = await lifecycleFixture(page, {}, scrollingFixtureIds);
+      await page.goto('/'); await ready(page, 'gacha');
+      let release!: () => void, requested = false;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      await page.route('**/games/index.json', async route => {
+        requested = true; await held; await route.fulfill({ json: fixture.catalog });
+      });
+      try {
+        await page.keyboard.press('Control+k'); await expect.poll(() => requested).toBe(true);
+        const changed = fixture.game(changedId);
+        changed.name = `${changedId} refreshed`;
+        changed.desc = 'Lifecycle fixture refreshed description';
+        await scrollAcrossUpdate(page, 'parking', async () => {
+          release();
+          await expect(page.locator(`.game-list-item[data-id="${changedId}"] .game-list-name`)).toHaveText(changed.name);
+          await expect(page.locator(`.game-list-item[data-id="${changedId}"] .game-list-desc`)).toHaveText(changed.desc);
+        });
+        expect((await instances(page))[0]).toMatchObject({ id: 'gacha', prepare: 1, start: 1, destroy: 0, paused: true });
+        await page.locator('.game-list-item[data-id="parking"]').click(); await ready(page, 'parking');
+        await expect(page.locator('#selectedGameLabel')).toHaveText(fixture.game('parking').name);
+        await cleanErrors(page, fixture.errors);
+      } finally { release(); }
+    });
+  }
+
+  test('the current scrolling card updates in place and retains failed artwork until its source changes', async ({ page }) => {
+    const fixture = await lifecycleFixture(page, { gacha: { startReport: 'loading' } }, scrollingFixtureIds);
+    const current = fixture.game('gacha'); current.order = 100;
+    current.cover = { src: `${current.assetBase}failed.svg`, width: 640, height: 400 };
+    await page.route(`**${current.cover.src}`, route => route.abort());
+    await page.goto('/'); await ready(page, 'gacha', false);
+    await page.keyboard.press('Control+k');
+    const card = page.locator('.game-list-item[data-id="gacha"]');
+    await card.scrollIntoViewIfNeeded();
+    await expect(card.locator('.game-list-cover')).toHaveAttribute('data-image-ready', 'false');
+    const original = (await card.elementHandle())!, artwork = (await card.locator('.game-cover-image').elementHandle())!;
+    await page.locator('#gameList').evaluate(element => { element.scrollTop = 0; });
+    await scrollAcrossUpdate(page, 'gacha', async () => {
+      await report(page, 0, 'running');
+      await expect(card.locator('.game-list-status')).toHaveText('Playing');
+    });
+    expect(await artwork.evaluate(element => element.isConnected && (element as HTMLImageElement).hidden)).toBe(true);
+    await expect(card.locator('.game-list-cover')).toHaveAttribute('data-image-ready', 'false');
+    await card.click(); await ready(page, 'gacha');
+    expect(await instances(page)).toHaveLength(1);
+    current.cover.src = `${current.assetBase}recovered.svg`;
+    await page.keyboard.press('Control+k');
+    await expect(card.locator('.game-cover-image')).toHaveAttribute('src', new URL(current.cover.src, page.url()).href);
+    await card.scrollIntoViewIfNeeded();
+    await expect(card.locator('.game-list-cover')).toHaveAttribute('data-image-ready', 'true');
+    expect(await original.evaluate(element => element.isConnected)).toBe(true);
+    expect(await artwork.evaluate(element => element.isConnected)).toBe(false);
+    await expect(card.locator('.game-cover-image')).toBeVisible();
+    expect((await instances(page))[0]).toMatchObject({ prepare: 1, start: 1, destroy: 0 });
+    await cleanErrors(page, fixture.errors);
+  });
+
+  test('real catalog removals, ordering and empty results preserve surviving cards, query, focus and scroll', async ({ page }) => {
+    const fixture = await lifecycleFixture(page, {}, scrollingFixtureIds);
+    await page.goto('/'); await ready(page, 'gacha');
+    await page.keyboard.press('Control+k');
+    await page.locator('#searchInput').fill('fixture');
+    await page.locator('[data-category="casual"]').click();
+    const card = page.locator('.game-list-item[data-id="parking"]');
+    await card.scrollIntoViewIfNeeded();
+    const original = (await card.elementHandle())!;
+    const unchanged = (await page.locator('.game-list-item[data-id="fixture-12"]').elementHandle())!;
+    await page.locator('#libraryCloseBtn').click();
+    let release!: () => void, requested = false;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/games/index.json', async route => {
+      requested = true; await held; await route.fulfill({ json: fixture.catalog });
+    });
+    try {
+      await page.keyboard.press('Control+k'); await expect.poll(() => requested).toBe(true);
+      await card.focus();
+      const scroll = await page.locator('#gameList').evaluate(element => element.scrollTop);
+      expect(scroll).toBeGreaterThan(0);
+      await page.locator('#gameList').evaluate(element => {
+        const removed: string[] = [];
+        (window as any).__catalogRemovedTargets = removed;
+        new MutationObserver(records => {
+          for (const record of records) for (const node of record.removedNodes) {
+            if (node instanceof HTMLElement && ['parking', 'fixture-12'].includes(node.dataset.id ?? '')) removed.push(node.dataset.id!);
+          }
+        }).observe(element, { childList: true });
+      });
+      fixture.catalog.games = fixture.catalog.games.filter(game => game.id !== 'fixture-0');
+      const added = { ...fixture.game('fixture-1'), id: 'added', order: 18, name: 'Added fixture', nameZh: '新增测试', assetBase: `/games/added/1.0.0/${'c'.repeat(40)}/` };
+      added.entry = `${added.assetBase}entry.js`; added.icon = `${added.assetBase}icon.svg`; added.styles = [];
+      fixture.catalog.games.push(added); fixture.sources.set(added.entry, moduleSource(added));
+      fixture.game('fixture-2').order = 0;
+      fixture.game('gacha').order = 1;
+      fixture.game('parking').name = 'Parking revised';
+      release();
+      await expect(card.locator('.game-list-name')).toHaveText('Parking revised');
+      await expect(page.locator('.game-list-item[data-id="fixture-0"]')).toHaveCount(0);
+      await expect(page.locator('.game-list-item[data-id="added"]')).toBeAttached();
+      await expect(page.locator('.game-list-item').first()).toHaveAttribute('data-id', 'fixture-2');
+      expect(await original.evaluate(element => element.isConnected)).toBe(true);
+      expect(await unchanged.evaluate(element => element.isConnected)).toBe(true);
+      expect(await page.evaluate(() => (window as any).__catalogRemovedTargets)).toEqual([]);
+      await expect(card).toBeFocused();
+      await expect(page.locator('#searchInput')).toHaveValue('fixture');
+      await expect(page.locator('[data-category="casual"]')).toHaveAttribute('aria-pressed', 'true');
+      expect(await page.locator('#gameList').evaluate(element => element.scrollTop)).toBe(scroll);
+      await page.locator('#searchInput').fill('no-matches-anywhere');
+      await expect(page.locator('.game-list-item')).toHaveCount(0);
+      await expect(page.locator('[data-clear-search]')).toBeVisible();
+      await page.locator('[data-clear-search]').click();
+      await expect(page.locator('.game-list-item')).toHaveCount(scrollingFixtureIds.length);
+      await expect(page.locator('#searchInput')).toHaveValue('');
+      await expect(page.locator('#searchInput')).toBeFocused();
+      await cleanErrors(page, fixture.errors);
+    } finally { release(); }
+  });
 });

@@ -79,9 +79,9 @@ export function moduleSource(release: GameRelease, options: FixtureOptions = {})
   `;
 }
 
-export async function lifecycleFixture(page: Page, options: Record<string, FixtureOptions> = {}) {
+export async function lifecycleFixture(page: Page, options: Record<string, FixtureOptions> = {}, ids = ['gacha', 'alpha', 'beta']) {
   const revision = 'c'.repeat(40);
-  const catalog: GameCatalog = { schemaVersion: 1, apiVersion: 1, generation: 0, games: ['gacha', 'alpha', 'beta'].map((id, order) => {
+  const catalog: GameCatalog = { schemaVersion: 1, apiVersion: 1, generation: 0, games: ids.map((id, order) => {
     const assetBase = `/games/${id}/1.0.0/${revision}/`;
     return { id, order, group: 'casual', name: id, nameZh: id, desc: 'Lifecycle fixture', descZh: '生命周期测试',
       canvasSize: { width: 400, height: 400 }, icon: `${assetBase}icon.svg`,
