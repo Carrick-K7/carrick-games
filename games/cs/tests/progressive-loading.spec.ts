@@ -1,6 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { activateUi } from './ui.fixture';
-import { closeProgressiveLoadingFixture, holdReleaseResponses, loadingPaint, loadingSnapshot,
+import { closeProgressiveLoadingFixture, holdReleaseResponses, loadingEvidence, loadingPaint, loadingSnapshot,
   openProgressiveLoadingFixture, waitForPlayable } from './progressive-loading.fixture';
 
 // Shared config has one software-GL worker. No FPS assertion, arbitrary sleep,
@@ -12,6 +14,25 @@ const previews = /^assets\/ui\/maps\/[^/]+\.webp$/;
 const mapIds = ['menu-map-de_dust2', 'menu-map-de_inferno', 'menu-map-de_mirage', 'menu-map-fy_snow'];
 const geometry = (s: any) => s.regions.filter((r: any) => mapIds.includes(r.id) || r.id === 'menu-start')
   .map(({ id, x, y, w, h }: any) => ({ id, x, y, w, h }));
+/** CI uploads test-results, not in-memory body attachments. Persist before assertions. */
+async function preserveSceneEvidence(page: Page, testInfo: TestInfo, stage: string, state: any) {
+  const captured = await loadingEvidence(page);
+  if (!captured) throw new Error(`Missing same-paint scene evidence: ${stage}`);
+  const { rawPng, ...evidence } = captured;
+  const png = rawPng ? Buffer.from(rawPng.split(',')[1], 'base64') : null;
+  const imageName = `${stage}-raw-scene.png`, jsonPath = testInfo.outputPath(`${stage}-scene.json`);
+  const imagePath = testInfo.outputPath(imageName);
+  await writeFile(jsonPath, JSON.stringify({ stage, ...evidence, rawFrame: png ? {
+    file: imageName, sha256: createHash('sha256').update(png).digest('hex'),
+    frame: evidence.state.frame, clock: evidence.state.clock, paints: evidence.state.paints,
+    width: evidence.state.width, height: evidence.state.height,
+  } : null }, null, 2), { flag: 'wx' });
+  if (png) await writeFile(imagePath, png, { flag: 'wx' });
+  await testInfo.attach(`${stage}-scene`, { path: jsonPath, contentType: 'application/json' });
+  if (png) await testInfo.attach(`${stage}-raw-scene`, { path: imagePath, contentType: 'image/png' });
+  expect(evidence.state, 'evidence must describe the exact asserted paint').toEqual(state);
+}
+
 function assertScene(s: any) {
   expect(s.scenePixels.samples).toHaveLength(48);
   expect(s.scenePixels.nonblack, 'raw world frame, not HUD or HTML background').toBeGreaterThan(24);
@@ -96,7 +117,8 @@ test.describe('narrow touch loading', () => {
       expect(characters.delivered).toEqual([]); assertSavedPreferences(startup);
       await page.screenshot({ path: testInfo.outputPath('phone-slow-startup-zh.png') });
       characters.release(); await characters.drain();
-      const pending = await waitForPlayable(page);
+      const pending = await waitForPlayable(page, true);
+      await preserveSceneEvidence(page, testInfo, 'phone-pending', pending);
       expect(pending.loading).toMatchObject({ stage: 'materials', loaded: 0, failed: 0, canPlay: true });
       expect(pending.debugLoading).toEqual(pending.loading);
       expect(pending.texts.join('\n')).toContain(pending.loading.label);
@@ -115,7 +137,8 @@ test.describe('narrow touch loading', () => {
       expect(start.y + start.h).toBeLessThanOrEqual(568);
       await page.screenshot({ path: testInfo.outputPath('phone-pending-textures-zh.png') });
       await activateUi(page, 'menu-start', true);
-      const entered = await loadingPaint(page, 1);
+      const entered = await loadingPaint(page, 1, true);
+      await preserveSceneEvidence(page, testInfo, 'phone-entered', entered);
       expect(entered).toMatchObject({ ready: true, phase: 'freeze', actors: 10, skinnedBots: 9, playerAlive: true });
       expect(entered.playerId).not.toBeNull(); expect(entered.palette.textureCount).toBe(0);
       expect(materialGate.delivered).toEqual([]); expect(previewGate.delivered).toEqual([]);
@@ -123,7 +146,8 @@ test.describe('narrow touch loading', () => {
       assertScene(entered); assertSavedPreferences(entered);
       // Exercise the saved-butterfly preference through real firearm draw→idle
       // updates, not only the first frame which preceded the earlier regression.
-      const playing = await loadingPaint(page, 45);
+      const playing = await loadingPaint(page, 45, true);
+      await preserveSceneEvidence(page, testInfo, 'phone-playing', playing);
       expect(playing.clock - entered.clock).toBeCloseTo(1.5, 7);
       expect(playing.frame).toBeGreaterThan(entered.frame);
       expect(playing.weapon).toBe('usp'); assertScene(playing); assertSavedPreferences(playing);
@@ -131,7 +155,8 @@ test.describe('narrow touch loading', () => {
       materialGate.release(); previewGate.release();
       await materialGate.drain(); await previewGate.drain();
       await expect.poll(async () => (await loadingSnapshot(page)).loading.stage, { timeout: 30_000 }).toBe('ready');
-      const recovered = await loadingPaint(page);
+      const recovered = await loadingPaint(page, 0, true);
+      await preserveSceneEvidence(page, testInfo, 'phone-recovered', recovered);
       expect(recovered).toMatchObject({ worldId: playing.worldId, playerId: playing.playerId,
         clock: playing.clock, pos: playing.pos, phase: playing.phase });
       assertScene(recovered); assertSavedPreferences(recovered);
