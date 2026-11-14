@@ -1,5 +1,6 @@
 import { HOST_API_VERSION, releaseResource, type GameModule, type GameRelease } from '@carrick/game-sdk/catalog';
 import type { Game } from '@carrick/game-sdk/game';
+import { readLocalInputPreparation, type LocalInputPreparationDeclaration } from '@carrick/lifecycle';
 
 const modules = new Map<string, Promise<GameModule>>();
 const failedImports = new Map<string, number>();
@@ -15,6 +16,9 @@ export function validateModule(value: unknown, release: GameRelease): GameModule
   if (!module || module.apiVersion !== HOST_API_VERSION || module.id !== release.id || module.version !== release.version || typeof module.create !== 'function') {
     throw new Error('Game module does not match its published descriptor');
   }
+  // A present unknown declaration is incompatible, not a legacy module. This
+  // happens during JS/CSS preflight, while the previous instance is still intact.
+  readLocalInputPreparation(module as GameModule);
   return module as GameModule;
 }
 export function validateGame(value: unknown): Game {
@@ -93,7 +97,7 @@ function acquireStylesheet(url: string): { ready: Promise<void>; release(): void
     },
   };
 }
-export interface PreparedRelease { module: GameModule; releaseStyles(): void }
+export interface PreparedRelease { module: GameModule; localInputPreparation?: LocalInputPreparationDeclaration; releaseStyles(): void }
 export async function prepareRelease(release: GameRelease, signal: AbortSignal): Promise<PreparedRelease> {
   if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
   const leases = release.styles.map(acquireStylesheet);
@@ -107,7 +111,7 @@ export async function prepareRelease(release: GameRelease, signal: AbortSignal):
     const ready = Promise.all([importGame(release), ...leases.map(lease => lease.ready)]);
     const [module] = await Promise.race([ready, cancelled]);
     if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-    return { module: module as GameModule, releaseStyles: cleanup };
+    return { module: module as GameModule, localInputPreparation: readLocalInputPreparation(module as GameModule), releaseStyles: cleanup };
   } catch (error) { cleanup(); throw error; }
   finally { signal.removeEventListener('abort', abort); }
 }

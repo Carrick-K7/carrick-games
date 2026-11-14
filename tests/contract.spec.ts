@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { builtCatalog } from './support/releases';
 import type { GameCatalog, GameRelease } from '../packages/game-sdk/src/catalog';
+import { releaseInputDeclaration, waitForLocalInputPresentation, assertLocalInputInteractive, exerciseLocalFileChooser } from './support/local-input-preparation';
 
 const published = builtCatalog();
 const target = process.env.GAME_ID;
@@ -34,7 +35,16 @@ for (const release of candidates) {
       if (path.startsWith('/cs/') || path.startsWith('/gacha/')) failures.push(`Legacy game asset path: ${path}`);
     });
     await page.goto(`/#/${release.id}`);
-    await ready(page, release.id);
+    const requirement = await releaseInputDeclaration(page, release);
+    let awaitingInput = false;
+    if (requirement) {
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-id', release.id, { timeout: 45_000 });
+      awaitingInput = await waitForLocalInputPresentation(page, requirement) === 'awaiting-input';
+      if (awaitingInput) await exerciseLocalFileChooser(page);
+    } else {
+      // Ordinary releases retain the original running assertion unchanged.
+      await ready(page, release.id);
+    }
     const canvas = page.locator('#gameCanvas');
     await expect(canvas).toHaveAttribute('data-game-version', release.version);
     await expect(canvas).toHaveAttribute('data-game-revision', release.revision);
@@ -49,6 +59,16 @@ for (const release of candidates) {
     await page.keyboard.press('Escape');
     await expect(canvas).toHaveAttribute('data-game-presentation', 'active');
     await expect(canvas).toHaveAttribute('data-game-prepare-count', prepareCount!);
+    if (awaitingInput) {
+      await assertLocalInputInteractive(page);
+      await page.locator('#siteBrand').click();
+      const current = page.locator(`.game-list-item[data-id="${release.id}"]`);
+      await expect(current).toHaveAttribute('aria-current', 'true');
+      await current.click();
+      await assertLocalInputInteractive(page);
+      await expect(canvas).toHaveAttribute('data-game-prepare-count', prepareCount!);
+      await expect(canvas).toHaveAttribute('data-game-version', release.version);
+    }
     expect(resources).toContain(release.entry);
     expect(resources.filter(path => !path.startsWith(release.assetBase))).toEqual([]);
     expect(errors).toEqual([]);

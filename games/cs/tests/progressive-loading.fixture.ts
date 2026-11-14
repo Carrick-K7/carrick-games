@@ -115,8 +115,10 @@ export async function openProgressiveLoadingFixture(page: Page, zh = false, { wi
         disposed: e.disposed, rendererGone: e.renderer === null, previewCacheSize: hud.mapPreviews.size,
         debugPresent: !!(window as any).__CSX_DEBUG__ };
     }
-    function paint(ticks = 0) {
+    let sceneEvidence: any = null;
+    function paint(ticks = 0, captureEvidence = false) {
       if (destroyed) throw new Error('Fixture cannot paint a destroyed game');
+      sceneEvidence = null;
       for (let i = 0; i < ticks; i++) game.update(1 / 30);
       texts = []; game.draw(ctx); paints++;
       // Read the real WebGL scene without the opaque menu/HUD hiding black output.
@@ -124,15 +126,30 @@ export async function openProgressiveLoadingFixture(page: Page, zh = false, { wi
       if (e.world) { raw.clearRect(0, 0, width, height); raw.drawImage(e.canvas3d, 0, 0, width, height); scenePixels = pixels(raw, 0, 0, width, height); }
       const cards = hud.regions.filter((r: any) => r.id?.startsWith('menu-map-')).map((r: any) => ({
         id: r.id, ...pixels(ctx, r.x + 8, r.y + 8, r.w - 40, Math.max(12, r.h - 68)) }));
-      return { ...snapshot(), scenePixels, cards,
+      const state = { ...snapshot(), scenePixels, cards,
         // Even at 320px the first eight canvas pixels are outside the menu:
         // neither text nor cards can fake this backdrop.
         backdrop: pixels(ctx, 0, 0, Math.min(8, width), height) };
+      if (captureEvidence) {
+        // Opt-in only: snapshot/readiness polls do not encode images. Preserve
+        // this exact paint, not a new render after a failed assertion or teardown.
+        sceneEvidence = {
+          state, capturedAtMs: performance.now(),
+          camera: { position: e.camera.position.toArray(), rotation: e.camera.rotation.toArray(), fov: e.camera.fov, aspect: e.camera.aspect },
+          player: e.player ? { team: e.player.team, yaw: e.player.yaw, pitch: e.player.pitch, spawnCount: e.player.spawnCount } : null,
+          spawnPools: e.world ? Object.fromEntries(Object.entries(e.world.spawns).map(([team, spawns]: any) =>
+            [team, spawns.map((spawn: any) => ({ pos: spawn.pos.toArray(), yaw: spawn.yaw }))])) : null,
+          actors: e.all.map((actor: any) => ({ name: actor.name, team: actor.team, pos: actor.pos.toArray(), yaw: actor.yaw, alive: actor.alive })),
+          renderSize: [e.canvas3d?.width, e.canvas3d?.height], softwareRendering: e.softwareRendering,
+          rawPng: e.world ? scratch.toDataURL('image/png') : null,
+        };
+      }
+      return state;
     }
     game.setViewport({ width, height, dpr: 1, safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
     game.prepare(); game.bindInput();
     (window as any).__CS_PROGRESSIVE__ = {
-      snapshot, paint,
+      snapshot, paint, evidence: () => sceneEvidence,
       menu() { e.toMenu(); return paint(1); },
       settle: () => Promise.all(worlds.map(record => record.world.materialsReady)),
       destroy() { if (!destroyed) { trackWorld(); destroyed = true; game.destroy(); } return snapshot(); },
@@ -142,14 +159,16 @@ export async function openProgressiveLoadingFixture(page: Page, zh = false, { wi
 }
 
 export const loadingSnapshot = (page: Page) => page.evaluate(() => (window as any).__CS_PROGRESSIVE__.snapshot());
-export const loadingPaint = (page: Page, ticks = 0) => page.evaluate(ticks => (window as any).__CS_PROGRESSIVE__.paint(ticks), ticks);
-export async function waitForPlayable(page: Page) {
+export const loadingPaint = (page: Page, ticks = 0, captureEvidence = false) => page.evaluate(
+  ({ ticks, captureEvidence }) => (window as any).__CS_PROGRESSIVE__.paint(ticks, captureEvidence), { ticks, captureEvidence });
+export const loadingEvidence = (page: Page) => page.evaluate(() => (window as any).__CS_PROGRESSIVE__.evidence());
+export async function waitForPlayable(page: Page, captureEvidence = false) {
   await expect.poll(async () => {
     const state = await loadingSnapshot(page);
     if (state.error) throw new Error(state.error);
     return state.ready && !state.bootLoading;
   }, { timeout: 60_000 }).toBe(true);
-  return loadingPaint(page, 1);
+  return loadingPaint(page, 1, captureEvidence);
 }
 
 /** Destroy cancels fetches; release AND drain every interceptor before unroute/close. */
