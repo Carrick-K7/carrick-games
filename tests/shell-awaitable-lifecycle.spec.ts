@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { choose, cleanErrors, instances, lifecycleFixture, moduleSource, publicCapabilityUrl, ready, report, settle } from '../apps/shell/tests/lifecycle-fixture';
+import { preparationFixture } from '../apps/shell/tests/preparation-fixture';
+import { releaseInputDeclaration, waitForLocalInputPresentation, assertLocalInputInteractive, exerciseLocalFileChooser } from './support/local-input-preparation';
 
 // These are generic synthetic API-1 modules, not native/game implementations.
 // Root placement intentionally enters the real pinned-games Shell CI cell.
@@ -8,6 +10,294 @@ test.afterEach(async ({ page }) => {
     for (const control of (window as any).__lifecycleProbe?.controls ?? []) control.resolve?.();
   }).catch(() => undefined); // Page may already be closed by a failed navigation.
   await page.unrouteAll({ behavior: 'wait' });
+});
+
+test.describe('negotiated required local input preparation', () => {
+  async function openPrepared(page: Page, options: Parameters<typeof preparationFixture>[1] = {}) {
+    const fixture = await preparationFixture(page, options);
+    await page.goto('/#/alpha');
+    await waitForLocalInputPresentation(page, (await releaseInputDeclaration(page, fixture.release))!);
+    return fixture;
+  }
+  const attemptReport = (page: Page, index?: number) => page.evaluate(index => (window as any).__lifecycleProbe.controls[0].report(index), index);
+  const freshReport = (page: Page) => page.evaluate(() => { const control = (window as any).__lifecycleProbe.controls[0]; control.begin(); return control.report(); });
+  test('verified resource and interactive file control are ready without running or saving a success preference', async ({ page }) => {
+    const fixture = await preparationFixture(page);
+    const failures: string[] = [], resources: string[] = [];
+    page.on('response', response => { if (response.status() >= 400) failures.push(response.url()); });
+    page.on('request', request => { const path = new URL(request.url()).pathname; if (path.startsWith(fixture.release.assetBase)) resources.push(path); });
+    await page.goto('/#/gacha'); await ready(page, 'gacha');
+    await choose(page, 'alpha');
+    const declaration = await releaseInputDeclaration(page, fixture.release); expect(declaration).toBeDefined();
+    expect(await waitForLocalInputPresentation(page, declaration!)).toBe('awaiting-input');
+    expect((await instances(page))[1]).toMatchObject({ checked: true, capability: true, vm: 0, writers: 0, prepare: 1, start: 1 });
+    const canvas = page.locator('#gameCanvas');
+    await expect(canvas).toHaveAttribute('data-game-id', fixture.release.id);
+    await expect(canvas).toHaveAttribute('data-game-version', fixture.release.version);
+    await expect(canvas).toHaveAttribute('data-game-revision', fixture.release.revision);
+    await expect(canvas).toHaveAttribute('data-game-asset-base', fixture.release.assetBase);
+    expect(await page.locator('link[data-game-stylesheet]').evaluateAll(nodes => nodes.map(node => new URL((node as HTMLLinkElement).href).pathname).sort())).toEqual([...fixture.release.styles].sort());
+    expect(resources).toContain(fixture.release.entry);
+    expect(resources).toContain(`${fixture.release.assetBase}required-input.dat`);
+    expect(failures).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('cg-last-game'))).toBe('gacha');
+    await exerciseLocalFileChooser(page);
+    await assertLocalInputInteractive(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertLocalInputInteractive(page);
+    await page.locator('#helpBtn').click();
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', 'awaiting-input');
+    await page.locator('#helpCloseBtn').click(); await assertLocalInputInteractive(page);
+    await choose(page, 'alpha'); await assertLocalInputInteractive(page);
+    expect((await instances(page))[1]).toMatchObject({ prepare: 1, start: 1, destroy: 0, vm: 0, writers: 0 });
+    await cleanErrors(page, fixture.errors);
+  });
+
+  for (const [index, declaration] of [undefined, null, { protocol: 'carrick-local-input-preparation', version: 2, kind: 'files' },
+    { protocol: 'carrick-local-input-preparation', version: 1, kind: 'other' },
+    { protocol: 'carrick-local-input-preparation', version: 1, kind: 'files', verified: true }].entries()) {
+    test(`invalid declaration ${index} fails preflight before old teardown`, async ({ page }) => {
+      const fixture = await preparationFixture(page, { declaration });
+      await page.goto('/#/gacha'); await ready(page, 'gacha');
+      await choose(page, 'alpha'); await expect(page.locator('#loadError')).toBeVisible();
+      expect((await instances(page)).map(item => item.id)).toEqual(['gacha']);
+      expect((await instances(page))[0]).toMatchObject({ destroy: 0, stop: 0, paused: true });
+      await expect(page.locator('#resumePreviousBtn')).toHaveText('Resume previous game');
+      await page.locator('#resumePreviousBtn').click(); await ready(page, 'gacha');
+      await expect(page.locator('link[data-game-stylesheet]')).toHaveCount(1);
+      await cleanErrors(page, fixture.errors);
+    });
+  }
+
+  test('undeclared loading games do not receive preparation or become ready from a lifecycle-v1 string', async ({ page }) => {
+    const fixture = await preparationFixture(page, { undeclared: true });
+    await page.goto('/#/alpha');
+    await expect.poll(async () => (await instances(page))[0]?.checked).toBe(true);
+    expect(await releaseInputDeclaration(page, fixture.release)).toBeUndefined();
+    expect((await instances(page))[0].capability).toBe(false);
+    await report(page, 0, 'awaiting-input');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'false');
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation-protocol', /.+/);
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    expect(await page.evaluate(() => localStorage.getItem('cg-last-game'))).toBeNull();
+    await cleanErrors(page, fixture.errors);
+  });
+
+  test('a held owned prerequisite remains loading until actual verified bytes arrive', async ({ page }) => {
+    const fixture = await preparationFixture(page);
+    let release!: () => void, requested = false;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`**${fixture.release.assetBase}required-input.dat`, async route => { requested = true; await held; await route.fulfill({ contentType: 'application/octet-stream', body: fixture.resourceBody }); });
+    try {
+      await page.goto('/#/alpha'); await expect.poll(() => requested).toBe(true);
+      expect((await instances(page))[0]).toMatchObject({ checked: false, vm: 0, writers: 0 });
+      expect(await attemptReport(page)).toBe(false);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', 'awaiting-input');
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'false');
+      release(); await waitForLocalInputPresentation(page, (await releaseInputDeclaration(page, fixture.release))!);
+      expect((await instances(page))[0].checked).toBe(true);
+      await cleanErrors(page, fixture.errors);
+    } finally { release(); }
+  });
+
+  test('game-authored preparation attributes cannot substitute for an accepted host receipt', async ({ page }) => {
+    const fixture = await preparationFixture(page);
+    let release!: () => void, requested = false;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`**${fixture.release.assetBase}required-input.dat`, async route => { requested = true; await held; await route.fulfill({ contentType: 'application/octet-stream', body: fixture.resourceBody }); });
+    try {
+      await page.goto('/#/alpha'); await expect.poll(() => requested).toBe(true);
+      await page.evaluate(() => {
+        const control = (window as any).__lifecycleProbe.controls[0];
+        (document.getElementById(control.inputId) as HTMLInputElement).disabled = false;
+        const canvas = document.getElementById('gameCanvas')!;
+        canvas.dataset.gamePreparation = 'awaiting-input'; canvas.dataset.gamePreparationInput = control.inputId;
+      });
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', 'awaiting-input');
+      expect((await instances(page))[0].checked).toBe(false);
+      release(); await waitForLocalInputPresentation(page, (await releaseInputDeclaration(page, fixture.release))!);
+      await cleanErrors(page, fixture.errors);
+    } finally { release(); }
+  });
+
+  for (const resource of ['404', 'bad-hash'] as const) {
+    test(`required resource ${resource} never becomes awaiting-input`, async ({ page }) => {
+      const fixture = await preparationFixture(page, { resource });
+      await page.goto('/#/alpha'); await expect(page.locator('#loadError')).toBeVisible();
+      expect((await instances(page))[0]).toMatchObject({ checked: false, vm: 0, writers: 0, destroy: 1 });
+      expect((await instances(page))[0].error).toMatch(/fixture-required-input-(http|integrity)/);
+      expect(await attemptReport(page)).toBe(false);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'false');
+      await cleanErrors(page, fixture.errors);
+    });
+  }
+
+  for (const input of ['missing', 'duplicate', 'not-file', 'outside-root', 'disabled', 'fieldset-disabled', 'hidden', 'inert', 'covered', 'pointer-none', 'visibility-hidden', 'opacity-zero', 'offscreen', 'pre-existing'] as const) {
+    test(`${input} input cannot claim preparation readiness`, async ({ page }) => {
+      const fixture = await preparationFixture(page, { input });
+      let index = 0;
+      if (input === 'pre-existing') {
+        await page.goto('/#/gacha'); await ready(page, 'gacha');
+        await page.evaluate(() => { const input = document.createElement('input'); input.id = 'preexisting-files'; input.type = 'file'; document.getElementById('gameApp')!.append(input); });
+        await choose(page, 'alpha'); index = 1;
+      } else await page.goto('/#/alpha');
+      await expect.poll(async () => (await instances(page))[index]?.checked).toBe(true);
+      expect((await instances(page))[index]).toMatchObject({ capability: true, vm: 0, writers: 0 });
+      expect(await page.evaluate(index => (window as any).__lifecycleProbe.controls[index].report(), index)).toBe(false);
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'false');
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', 'awaiting-input');
+      await cleanErrors(page, fixture.errors);
+    });
+  }
+
+  test('an input with pointer-events auto inside a pointer-none wrapper remains genuinely interactive', async ({ page }) => {
+    const fixture = await preparationFixture(page, { input: 'parent-pointer-none' });
+    await page.goto('/#/alpha');
+    await expect.poll(async () => (await instances(page))[0]?.checked).toBe(true);
+    const inputId = await page.evaluate(() => (window as any).__lifecycleProbe.controls[0].inputId);
+    const input = page.locator(`[id=${JSON.stringify(inputId)}]`);
+    await expect(input).toHaveCount(1); await expect(input).toBeVisible(); await expect(input).toBeEnabled();
+    expect(await input.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { self: getComputedStyle(element).pointerEvents, parent: getComputedStyle(element.parentElement!).pointerEvents,
+        hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === element };
+    })).toEqual({ self: 'auto', parent: 'none', hit: true });
+    const accepted = await attemptReport(page);
+    const choosing = page.waitForEvent('filechooser');
+    await input.click();
+    const chooser = await choosing;
+    expect(await chooser.element().evaluate(element => element.id)).toBe(inputId);
+    await chooser.setFiles([]);
+    expect(accepted, 'the actual native chooser opened; ancestor pointer-none must not veto the enabled input').toBe(true);
+    await assertLocalInputInteractive(page);
+    expect((await instances(page))[0]).toMatchObject({ vm: 0, writers: 0 });
+    expect(await page.evaluate(() => localStorage.getItem('cg-last-game'))).toBeNull();
+    await cleanErrors(page, fixture.errors);
+  });
+
+  test('an explicitly visible input inside a visibility-hidden wrapper remains genuinely interactive', async ({ page }) => {
+    const fixture = await preparationFixture(page, { input: 'parent-visibility-hidden' });
+    await page.goto('/#/alpha');
+    await expect.poll(async () => (await instances(page))[0]?.checked).toBe(true);
+    const inputId = await page.evaluate(() => (window as any).__lifecycleProbe.controls[0].inputId);
+    const input = page.locator(`[id=${JSON.stringify(inputId)}]`);
+    await expect(input).toHaveCount(1); await expect(input).toBeVisible(); await expect(input).toBeEnabled();
+    expect(await input.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { self: getComputedStyle(element).visibility, parent: getComputedStyle(element.parentElement!).visibility,
+        hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === element };
+    })).toEqual({ self: 'visible', parent: 'hidden', hit: true });
+    const accepted = await attemptReport(page);
+    const choosing = page.waitForEvent('filechooser');
+    await input.click(); const chooser = await choosing;
+    expect(await chooser.element().evaluate(element => element.id)).toBe(inputId);
+    await chooser.setFiles([]);
+    expect(accepted, 'native chooser opened from the visible descendant; ancestor visibility must not veto it').toBe(true);
+    await assertLocalInputInteractive(page);
+    expect((await instances(page))[0]).toMatchObject({ vm: 0, writers: 0 });
+    await cleanErrors(page, fixture.errors);
+  });
+
+  test('overlay and repaired input require an explicit report, never automatic readiness', async ({ page }) => {
+    const fixture = await openPrepared(page, { autoReportAfterOverlay: false });
+    const inputId = await page.locator('#gameCanvas').getAttribute('data-game-preparation-input');
+    await page.locator('#helpBtn').click(); expect(await attemptReport(page)).toBe(false);
+    await page.locator('#helpCloseBtn').click();
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    expect(await attemptReport(page)).toBe(true);
+    await page.locator(`[id=${JSON.stringify(inputId)}]`).evaluate((input: HTMLInputElement) => { input.disabled = true; });
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    await page.locator(`[id=${JSON.stringify(inputId)}]`).evaluate((input: HTMLInputElement) => { input.disabled = false; });
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    expect(await attemptReport(page)).toBe(true);
+    await cleanErrors(page, fixture.errors);
+  });
+
+  for (const mutation of ['replace', 'reinsert'] as const) {
+    test(`${mutation} with the same input ID cannot revive an old attempt`, async ({ page }) => {
+      const fixture = await openPrepared(page);
+      const accepted = await page.evaluate(mutation => { const control = (window as any).__lifecycleProbe.controls[0]; control[mutation](); return control.report(0); }, mutation);
+      expect(accepted).toBe(false);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+      expect(await freshReport(page)).toBe(true);
+      expect(await attemptReport(page, 0)).toBe(false);
+      await assertLocalInputInteractive(page);
+      await cleanErrors(page, fixture.errors);
+    });
+  }
+
+  test('a newer navigation fences old reports while retaining the same instance on Return', async ({ page }) => {
+    const fixture = await openPrepared(page);
+    let release!: () => void, requested = false;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`**${fixture.game('beta').entry}`, async route => { requested = true; await held; await route.fulfill({ contentType: 'text/javascript', body: fixture.sources.get(fixture.game('beta').entry)! }); });
+    try {
+      await choose(page, 'beta'); await expect.poll(() => requested).toBe(true);
+      expect(await attemptReport(page, 0)).toBe(false);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+      await choose(page, 'alpha'); await assertLocalInputInteractive(page);
+      expect(await attemptReport(page, 0)).toBe(false);
+      release();
+      await expect(page.locator('link[data-game-stylesheet]')).toHaveCount(1);
+      expect((await instances(page)).map(item => item.id)).toEqual(['alpha']);
+      expect((await instances(page))[0].destroy).toBe(0);
+      await cleanErrors(page, fixture.errors);
+    } finally { release(); }
+  });
+
+  test('lifecycle reports and restart invalidate receipts; failed stays latched', async ({ page }) => {
+    const fixture = await openPrepared(page);
+    for (const state of ['loading', 'stopped']) {
+      await report(page, 0, state);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+      expect(await attemptReport(page)).toBe(false);
+      expect(await freshReport(page)).toBe(true);
+    }
+    await report(page, 0, 'running');
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    expect(await attemptReport(page)).toBe(false);
+    await page.locator('#overflowBtn').click(); await page.locator('#restartBtn').click();
+    await assertLocalInputInteractive(page);
+    expect(await attemptReport(page, 0)).toBe(false);
+    await report(page, 0, 'failed'); await expect(page.locator('#loadError')).toBeVisible();
+    expect(await freshReport(page)).toBe(false);
+    await report(page, 0, 'running');
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'false');
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    await cleanErrors(page, fixture.errors);
+  });
+
+  for (const destroy of ['held', 'reject'] as const) {
+    test(`preparation cannot bypass ${destroy} destruction`, async ({ page }) => {
+      const fixture = await openPrepared(page, { destroy });
+      await choose(page, 'beta'); await expect.poll(async () => (await instances(page))[0]?.destroy).toBe(1);
+      expect(await freshReport(page)).toBe(false); expect(await attemptReport(page, 0)).toBe(false);
+      await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+      if (destroy === 'held') {
+        expect(await instances(page)).toHaveLength(1);
+        await settle(page); await ready(page, 'beta');
+      } else {
+        await expect(page.locator('#loadErrorMessage')).toContainText('could not close');
+        expect(await instances(page)).toHaveLength(1);
+        await choose(page, 'gacha'); await ready(page, 'gacha');
+      }
+      expect((await instances(page))[0].destroy).toBe(1);
+      await cleanErrors(page, fixture.errors);
+    });
+  }
+
+  test('a destroyed input attempt cannot set preparation state on a new instance', async ({ page }) => {
+    const fixture = await preparationFixture(page);
+    await page.goto('/#/alpha');
+    await waitForLocalInputPresentation(page, (await releaseInputDeclaration(page, fixture.release))!);
+    await choose(page, 'beta'); await ready(page, 'beta');
+    const accepted = await page.evaluate(() => (window as any).__lifecycleProbe.controls[0].report(0));
+    expect(accepted).toBe(false);
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation-protocol', /.+/);
+    await expect(page.locator('#gameCanvas')).not.toHaveAttribute('data-game-preparation', /.+/);
+    await ready(page, 'beta'); await cleanErrors(page, fixture.errors);
+  });
 });
 
 for (const destroy of ['held', 'foreign', 'foreign-promise'] as const) {

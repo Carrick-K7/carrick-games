@@ -25,7 +25,8 @@ describe('public lifecycle extension', () => {
     const filename = resolve(root, 'packages/lifecycle/tests/compile-contract.ts');
     const source = `
       import { BaseGame, type Game, type GameHost } from '@carrick/game-sdk/game';
-      import { hasGameLifecycle, type AwaitableDestroyGame, type LifecycleGameHost, type GameLifecycleState } from '@carrick/lifecycle';
+      import type { GameModule } from '@carrick/game-sdk/catalog';
+      import { hasGameLifecycle, hasLocalInputPreparation, readLocalInputPreparation, type LocalInputPreparationModule, type AwaitableDestroyGame, type LifecycleGameHost, type GameLifecycleState } from '@carrick/lifecycle';
       abstract class PersistentGame extends BaseGame implements AwaitableDestroyGame {
         override destroy(): Promise<void> { super.destroy(); return Promise.resolve(); }
       }
@@ -41,6 +42,19 @@ describe('public lifecycle extension', () => {
         host.lifecycle.report('stopped'); host.lifecycle.report('failed');
         // @ts-expect-error No game-specific state in the public contract.
         host.lifecycle.report('vm-ready');
+        // @ts-expect-error The original lifecycle protocol is NOT extended.
+        host.lifecycle.report('awaiting-input');
+      }
+      declare const gameModule: GameModule;
+      const optIn: LocalInputPreparationModule = { ...gameModule, localInputPreparation: { protocol: 'carrick-local-input-preparation', version: 1, kind: 'files' } };
+      const declaration = readLocalInputPreparation(optIn);
+      if (hasLocalInputPreparation(host)) {
+        const exact: true = host.lifecycle.awaitsDestroy;
+        const accepted: boolean = host.preparation.begin('owned-files').report('awaiting-input');
+        // @ts-expect-error No anonymous late binding to a future DOM element.
+        host.preparation.begin();
+        // @ts-expect-error Preparation is not gameplay running.
+        host.preparation.begin('owned-files').report('running');
       }
       // @ts-expect-error Optional capability must be checked by consumers.
       optional.lifecycle.report('running');
@@ -67,9 +81,9 @@ describe('public lifecycle extension', () => {
     const source = readFileSync(publicEntry, 'utf8');
     const ast = ts.createSourceFile(publicEntry, source, ts.ScriptTarget.Latest, true);
     const imports = ast.statements.filter(ts.isImportDeclaration);
-    expect(imports).toHaveLength(1);
-    expect(imports[0].importClause?.isTypeOnly).toBe(true);
-    expect((imports[0].moduleSpecifier as ts.StringLiteral).text).toBe('@carrick/game-sdk/game');
+    expect(imports).toHaveLength(2);
+    expect(imports.every(item => item.importClause?.isTypeOnly)).toBe(true);
+    expect(imports.map(item => (item.moduleSpecifier as ts.StringLiteral).text).sort()).toEqual(['@carrick/game-sdk/catalog', '@carrick/game-sdk/game']);
     const emitted = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText;
     expect(emitted).not.toMatch(/\b(import|class|window|document|globalThis|indexedDB|requestAnimationFrame)\b/);
     const pkg = JSON.parse(readFileSync(resolve(root, 'packages/lifecycle/package.json'), 'utf8'));

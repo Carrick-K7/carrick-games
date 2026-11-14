@@ -17,8 +17,9 @@ import {
   type GameMenuAction,
   type GameViewport,
 } from '@carrick/game-sdk/game';
-import type { GameLifecycleState, LifecycleGameHost } from '@carrick/lifecycle';
+import { LOCAL_INPUT_PREPARATION_PROTOCOL, type GameLifecycleState, type LocalInputPreparationDeclaration, type LocalInputPreparationGameHost } from '@carrick/lifecycle';
 import { GameCloseGate } from './lifecycle.js';
+import { LocalInputPreparationController, type LocalInputReceipt } from './local-input-preparation.js';
 import { saveStoredRecord } from '@carrick/game-sdk/storage';
 import { isPixelMode } from '@carrick/game-sdk/render';
 import { normalizeKey } from './ui/keyboard-input.js';
@@ -35,6 +36,8 @@ let currentActions: readonly GameMenuAction[] = [];
 let activeHostToken = 0;
 let hostSequence = 0;
 let currentLifecycle: { state?: GameLifecycleState; inCall: boolean; intent: number } | undefined;
+let currentPreparation: LocalInputPreparationController<HTMLInputElement> | undefined;
+let stopPreparationMonitoring: (() => void) | undefined;
 const closeGate = new GameCloseGate();
 let loadController: AbortController | undefined;
 let pendingGameName: string | null = null;
@@ -106,8 +109,12 @@ function syncShellOverlayState() {
   if (open !== gameOverlayOpen) {
     if (open) releaseHeldInputs(); else overlayCaptureOwner = null;
     gameOverlayOpen = open;
+    // Clear before callbacks; after dismissal the game explicitly re-reports
+    // only once its own input UI is interactive again. No queued ready claim.
+    currentPreparation?.setPresentationPaused(open);
     currentGameInstance?.setPresentationPaused?.(open);
     currentGameInstance?.onShellOverlayChange?.(open);
+    currentPreparation?.refresh();
     if (open && document.pointerLockElement === document.getElementById('gameCanvas')) document.exitPointerLock?.();
     // Flush game-owned DOM affordances (for example Villa's Use button) once
     // before suspending frames, without advancing the simulation.
@@ -430,14 +437,106 @@ function saveRecord(gameId: string, score: number) {
   saveStoredRecord(gameId, score);
 }
 
-function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement, token: number): LifecycleGameHost {
+function clearPreparationMarker(canvas: HTMLCanvasElement, negotiation = false) {
+  delete canvas.dataset.gamePreparation;
+  delete canvas.dataset.gamePreparationInput;
+  if (negotiation) {
+    delete canvas.dataset.gamePreparationProtocol;
+    delete canvas.dataset.gamePreparationVersion;
+    delete canvas.dataset.gamePreparationKind;
+  }
+}
+
+function fileInputInteractive(input: HTMLInputElement): boolean {
+  if (input.matches(':disabled') || input.closest('[hidden], [inert]')) return false;
+  for (let element: Element | null = input; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    // These two inherited properties can be explicitly overridden by a child.
+    // Use the input's effective values; keep every other ancestor barrier and
+    // the actual hit test below (a pointer-none HUD may contain live controls).
+    if (['none'].includes(style.display)
+      || (element === input && (['hidden', 'collapse'].includes(style.visibility) || style.pointerEvents === 'none'))
+      || Number(style.opacity) === 0 || style.contentVisibility === 'hidden'
+      || element.getAttribute('aria-hidden')?.toLowerCase() === 'true' || element.getAttribute('aria-disabled')?.toLowerCase() === 'true') return false;
+  }
+  const rect = input.getBoundingClientRect();
+  const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+  const right = Math.min(document.documentElement.clientWidth, rect.right), bottom = Math.min(document.documentElement.clientHeight, rect.bottom);
+  if (right <= left || bottom <= top || !input.getClientRects().length) return false;
+  const target = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+  return target === input || !!target && input.contains(target);
+}
+
+function createGameHost(meta: GameMeta, canvas: HTMLCanvasElement, token: number, requirement?: LocalInputPreparationDeclaration): LocalInputPreparationGameHost {
   const ownsHost = () => activeHostToken === token;
   const lifecycle = currentLifecycle!;
+  let preparation: LocalInputPreparationController<HTMLInputElement> | undefined;
+  let preparationCapability: LocalInputPreparationGameHost['preparation'];
+  if (requirement) {
+    const root = canvas.closest<HTMLElement>('#gameApp')!;
+    // A game cannot claim a pre-existing Shell/retired-instance input.
+    const priorInputs = new WeakSet(document.querySelectorAll('input'));
+    const resolveInput = (id: string): HTMLInputElement | null => {
+      const matches = Array.from(document.querySelectorAll('[id]')).filter(element => element.id === id);
+      const input = matches.length === 1 ? matches[0] : null;
+      return input instanceof HTMLInputElement && input.type === 'file' && input.isConnected
+        && root.isConnected && root.contains(input) && !priorInputs.has(input) ? input : null;
+    };
+    const syncReceipt = (receipt: LocalInputReceipt | undefined) => {
+      if (!ownsHost()) return;
+      const expected = {
+        'data-game-preparation-protocol': LOCAL_INPUT_PREPARATION_PROTOCOL,
+        'data-game-preparation-version': '1', 'data-game-preparation-kind': 'files',
+        'data-game-preparation': receipt?.state, 'data-game-preparation-input': receipt?.inputId,
+      };
+      for (const [name, value] of Object.entries(expected)) {
+        if (value === undefined) { if (canvas.hasAttribute(name)) canvas.removeAttribute(name); }
+        else if (canvas.getAttribute(name) !== value) canvas.setAttribute(name, value);
+      }
+    };
+    syncReceipt(undefined);
+    preparation = new LocalInputPreparationController({
+      ownsCurrentIntent: () => ownsHost() && !closeGate.isClosing && !(isLoadingGame && prepareGameToken !== lifecycle.intent),
+      intent: () => prepareGameToken, resolveInput, isInteractive: fileInputInteractive,
+      loading() {
+        if (!ownsHost()) return;
+        lifecycle.state = 'loading'; isRunning = false; setGameRunningFlag(false); stopScorePolling();
+        if (!lifecycle.inCall) { updateLifecyclePresentation(); updateActionButton(); }
+      },
+      changed: syncReceipt,
+    });
+    const controller = preparation;
+    controller.setPresentationPaused(gameOverlayOpen);
+    const changed = (records: MutationRecord[]) => {
+      const bound = controller.boundInput;
+      if (bound && records.some(record => Array.from(record.removedNodes).some(node => node === bound || node.contains(bound)))) controller.inputRemoved(bound);
+      controller.refresh();
+      // These are host-owned receipts, not a game-authored shortcut past the
+      // controller. Repair direct attribute writes without resetting other DOM.
+      syncReceipt(controller.acceptedReceipt);
+    };
+    const observer = new MutationObserver(changed);
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+    const refresh = () => changed(observer.takeRecords());
+    const lifetime = new AbortController();
+    for (const event of ['scroll', 'load', 'transitionend', 'animationend']) document.addEventListener(event, refresh, { capture: true, signal: lifetime.signal });
+    window.addEventListener('resize', refresh, { signal: lifetime.signal });
+    window.visualViewport?.addEventListener('resize', refresh, { signal: lifetime.signal });
+    preparationCapability = { ...requirement, begin(inputId) {
+      refresh();
+      const attempt = controller.begin(inputId);
+      return Object.freeze({ report(state: 'awaiting-input') { refresh(); return attempt.report(state); } });
+    } };
+    currentPreparation = controller;
+    stopPreparationMonitoring = () => { observer.disconnect(); lifetime.abort(); };
+  }
   return {
+    ...(preparationCapability ? { preparation: preparationCapability } : {}),
     lifecycle: {
       protocol: 'carrick-game-lifecycle', version: 1, awaitsDestroy: true,
       report(state) {
         if (!ownsHost() || lifecycle.state === 'failed' || !['loading', 'running', 'stopped', 'failed'].includes(state)) return;
+        preparation?.lifecycle(state);
         lifecycle.state = state;
         isRunning = state === 'running';
         setGameRunningFlag(isRunning);
@@ -545,6 +644,10 @@ function discardCurrentGame(): Promise<void> {
   // Revoke ownership synchronously, before calling any game code. Only the
   // captured instance/style lease may be touched by the eventual completion.
   activeHostToken = -1;
+  stopPreparationMonitoring?.(); stopPreparationMonitoring = undefined;
+  currentPreparation?.revoke(); currentPreparation = undefined;
+  const canvas = document.getElementById('gameCanvas');
+  if (canvas instanceof HTMLCanvasElement) clearPreparationMarker(canvas, true);
   currentLifecycle = undefined;
   currentGameInstance = null;
   currentGameName = null;
@@ -596,6 +699,7 @@ function rememberRunningGame() {
 
 function cancelPendingLoad() {
   ++prepareGameToken;
+  currentPreparation?.navigation();
   loadController?.abort();
   loadController = undefined;
   pendingGameName = null;
@@ -608,6 +712,7 @@ function cancelPendingLoad() {
 
 export async function prepareGame(name: string, preserveUi = false, closeSinceIntent = closeGate.checkpoint()): Promise<boolean> {
   const token = ++prepareGameToken;
+  currentPreparation?.navigation();
   loadController?.abort();
   const controller = new AbortController();
   loadController = controller;
@@ -652,14 +757,17 @@ export async function prepareGame(name: string, preserveUi = false, closeSinceIn
     canvas.dataset.gameVersion = meta.version;
     canvas.dataset.gameRevision = meta.revision;
     canvas.dataset.gameAssetBase = meta.assetBase;
+    const requirement = prepared.localInputPreparation;
     activeHostToken = mountedHostToken = ++hostSequence;
-    currentLifecycle = { inCall: true, intent: token };
+    // Opted-in modules never get legacy's unconditional synchronous autoplay
+    // receipt. They must report either actual running or valid local-input UI.
+    currentLifecycle = { state: requirement ? 'loading' : undefined, inCall: true, intent: token };
     currentRelease = meta;
     currentGameName = name;
     currentStyles = prepared.releaseStyles;
     const module = prepared.module;
     prepared = undefined; // Ownership transferred to this host, not the load intent.
-    const next = validateGame(module.create(createGameHost(meta, canvas, mountedHostToken)));
+    const next = validateGame(module.create(createGameHost(meta, canvas, mountedHostToken, requirement)));
     currentGameInstance = next;
     checkLifecycleReport();
     next.prepare();
@@ -793,6 +901,7 @@ async function failCurrentGame(error: unknown): Promise<void> {
 function startPreparedGame() {
   if (!currentGameInstance || isLoadingGame) return;
   try {
+    currentPreparation?.lifecycle('loading');
     if (currentLifecycle) currentLifecycle.inCall = true;
     if (isRunning) {
       currentGameInstance.restart();
@@ -813,6 +922,7 @@ function startDemoForCurrentGame() {
   const demoStarter = currentGameInstance.startDemo;
   if (typeof demoStarter !== 'function') return;
   try {
+    currentPreparation?.lifecycle('loading');
     if (currentLifecycle) currentLifecycle.inCall = true;
     demoStarter.call(currentGameInstance);
     finishGameCall();
@@ -1366,6 +1476,7 @@ const canvasFitObserver = new ResizeObserver(scheduleViewportFit);
     // Reserve intent before discovery, not after it: a slow refresh must never
     // undo a newer card, hash, retry, or explicit current-game resume.
     const token = ++prepareGameToken;
+    currentPreparation?.navigation();
     const closeSinceIntent = closeGate.checkpoint();
     loadController?.abort();
     loadController = undefined;
