@@ -20,6 +20,7 @@ import { createVillaStairAndGuards, createVillaPergola } from './villaCirculatio
 import { createVillaPoolside } from './villaPoolside.js';
 import { addVillaDistantRidges } from './villaDistantRidges.js';
 import { VillaStaticView } from './villaStaticView.js';
+import { indexVillaRigidSurfaces } from './villaIndexedSurface.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
@@ -328,6 +329,9 @@ export class VillaScene {
     this.suvObstacles = [...this.colliders.filter(c => !isVillaSuvCollider(c)), ...this.pets.drivingColliders];
     this.scooterObstacles = [...this.colliders.filter(c => !isVillaScooterCollider(c)), ...this.pets.drivingColliders];
     this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
+    // Rig setup is now complete: re-index only immutable, nondeforming source arrays.
+    // Bounding/range preparation must see the final uploaded attributes and triangle stream.
+    indexVillaRigidSurfaces(this.scene);
     this.staticView = new VillaStaticView(this.scene);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
@@ -557,6 +561,7 @@ export class VillaScene {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.staticView?.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
