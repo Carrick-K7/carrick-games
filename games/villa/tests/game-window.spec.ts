@@ -37,12 +37,17 @@ test('Villa: real viewport aspect, all screen shapes, and resize without reiniti
   const prepared = await page.locator('#gameCanvas').getAttribute('data-game-prepare-count');
   for (const size of sizes) {
     await page.setViewportSize(size);
-    await expect.poll(async () => {
-      const m = await metrics(page);
-      return Math.abs(m.canvas.width - size.width) < 1 && Math.abs(m.canvas.height - size.height) < 1
-        && Math.abs(m.canvas.x) < 1 && Math.abs(m.canvas.y) < 1
-        && Math.abs(m.info.cameraAspect - size.width / size.height) < .002;
-    }).toBe(true);
+    try {
+      await page.waitForFunction(({width,height}) => {
+        const c=document.querySelector<HTMLCanvasElement>('#gameCanvas')!.getBoundingClientRect();
+        const info=(window as any).__GAME_VIEWPORT_DEBUG__.info();
+        return Math.abs(c.width-width)<1 && Math.abs(c.height-height)<1 && Math.abs(c.x)<1 && Math.abs(c.y)<1
+          && Math.abs(info.cameraAspect-width/height)<.002;
+      },size,{timeout:5_000});
+    } catch(error) {
+      await testInfo.attach('viewport-observation',{contentType:'application/json',body:JSON.stringify({expected:size,observed:await metrics(page)})});
+      throw error;
+    }
     const m = await metrics(page);
     expect(m.overflow).toBe(false);
     expect(m.pixels).toBeLessThanOrEqual(8_294_400);

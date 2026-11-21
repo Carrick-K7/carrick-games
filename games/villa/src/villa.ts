@@ -180,6 +180,7 @@ export class VillaGame extends BaseGame {
   /** Responsive viewport: logical drawing units become CSS pixels. Game state
    * (position, activities, panels) is never reset by a resize. */
   setViewport(viewport: GameViewport) {
+    this.scene?.setPrimaryAspect(viewport.width,viewport.height);
     this.resizeLogicalViewport(viewport);
     this.syncUseButton();
     this.publishState();
@@ -275,6 +276,7 @@ export class VillaGame extends BaseGame {
       try { this.scene = new VillaScene(); this.unavailable = false; }
       catch { this.unavailable = true; }
     }
+    this.scene?.invalidateCameraFrame?.();
     this.scene?.updateActivities(0, this.state);
     this.publishState();
   }
@@ -972,6 +974,7 @@ export class VillaGame extends BaseGame {
         this.mouseLookEnabled = !this.mapOpen; if (this.mapOpen) this.unlock(); break;
       case 'time': cycleVillaTimeOfDay(this.state.home); this.audio.cue('setting'); break;
       case 'home':
+        this.scene?.invalidateCameraFrame?.();
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
         this.state.carDoorOpen = false; this.state.pickupDoorOpen = false; this.state.suvDoorOpen = false;
@@ -1535,7 +1538,12 @@ export class VillaGame extends BaseGame {
       if (this.shellOpen() || target?.closest('input, textarea, select, [contenteditable="true"], .header-actions')) { this.clearInput(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) {
-        e.preventDefault(); if (!this.mapOpen && !this.terminal?.visible && !this.helpOpen) this.keys.add(key); return;
+        e.preventDefault();
+        if (!this.mapOpen && !this.terminal?.visible && !this.helpOpen) {
+          if (!e.repeat && !this.keys.has(key) && key !== 'shift') this.scene?.beginMovementInput?.();
+          this.keys.add(key);
+        }
+        return;
       }
       if (key === ' ') {
         e.preventDefault();
@@ -1620,8 +1628,9 @@ export class VillaGame extends BaseGame {
             this.touchActions.set(touch.identifier, button.id); continue;
           }
           if (this.clickUi(point)) continue;
-          if (point.x < this.width * 0.44 && !this.joystick && (!this.state.seated || this.drivingSeat())) this.joystick = { id: touch.identifier, origin: point, point };
-          else if (!this.lookTouch) this.lookTouch = { id: touch.identifier, point };
+          if (point.x < this.width * 0.44 && !this.joystick && (!this.state.seated || this.drivingSeat())) {
+            this.scene?.beginMovementInput?.(); this.joystick = { id: touch.identifier, origin: point, point };
+          } else if (!this.lookTouch) this.lookTouch = { id: touch.identifier, point };
         } else if (e.type === 'touchmove') {
           if (this.joystick?.id === touch.identifier) this.joystick.point = point;
           if (this.lookTouch?.id === touch.identifier) {

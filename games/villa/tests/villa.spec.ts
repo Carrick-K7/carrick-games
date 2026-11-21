@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage, installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 import { VILLA_AQUARIUM } from '../src/villaLivingLayout';
@@ -23,26 +24,35 @@ test.describe('Warm Villa', () => {
       await expect(canvas).toHaveAttribute('data-game-running', 'true');
       // Entering plays immediately; the first canvas click grants mouse capture.
       await canvas.click();
-      const colors = await canvas.evaluate((c: HTMLCanvasElement) => {
+      const exterior = await canvas.evaluate((c: HTMLCanvasElement) => {
         const ctx = c.getContext('2d')!;
+        // Read the SAME pixels and positions in one snapshot. Thousands of separate GPU
+        // readbacks artificially stall the very canvas whose next native input is measured.
+        const pixels = ctx.getImageData(0, 0, c.width, c.height).data;
         const values = new Set<string>();
         for (let y = 100; y < c.height - 80; y += Math.max(1, Math.floor(c.height / 35))) {
           for (let x = 30; x < c.width - 30; x += Math.max(1, Math.floor(c.width / 45))) {
-            values.add(Array.from(ctx.getImageData(x, y, 1, 1).data).join(','));
+            const i = (y*c.width+x)*4;
+            values.add(`${pixels[i]},${pixels[i+1]},${pixels[i+2]},${pixels[i+3]}`);
           }
         }
-        return values.size;
+        return { colors: values.size, png: c.toDataURL('image/png').split(',')[1] };
       });
-      expect(colors).toBeGreaterThan(150);
-      // Release capture before a locator screenshot's scroll/stability action.
+      expect(exterior.colors).toBeGreaterThan(150);
+      // Retain the exact live canvas sampled above, not a second locator screenshot which
+      // scrolls and waits for layout stability independently of Villa's movement test.
+      await writeFile(test.info().outputPath('villa-exterior.png'),Buffer.from(exterior.png,'base64'));
       await page.keyboard.press('Escape');
       await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
-      await canvas.screenshot({ path: test.info().outputPath('villa-exterior.png') });
       await page.keyboard.press('h');
       await expect(canvas).toHaveAttribute('data-villa-position', '{"x":0,"y":0,"z":11.5}');
       await page.keyboard.down('w');
-      await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-villa-position'))!).z).toBeLessThan(11.25);
-      await page.keyboard.up('w');
+      try {
+        // Observe the same distance on real animation frames, without an external locator
+        // round trip/backoff on every sample. Failure still has the original five-second limit.
+        await page.waitForFunction(() => JSON.parse(document.querySelector<HTMLCanvasElement>('#gameCanvas')!.dataset.villaPosition!).z < 11.25,
+          null,{timeout:5_000});
+      } finally { await page.keyboard.up('w'); }
       await page.keyboard.press('m');
       await expect(canvas).toHaveAttribute('data-villa-map', 'true');
       const beforeMap = await canvas.getAttribute('data-villa-position');

@@ -114,10 +114,13 @@ describe('villaRendererSize', () => {
     expect(w / h).toBeCloseTo(2560 / 1080, 1);
   });
 
-  it('software GL stays cheap at any viewport', () => {
-    const { w, h } = villaRendererSize(2560, 1080, 2, true);
-    expect(w).toBe(Math.round(2560 * 0.55));
-    expect(h).toBe(Math.round(1080 * 0.55));
+  it('preserves the software 0.55 scale below budget and caps only the world raster on large displays', () => {
+    expect(villaRendererSize(960,600,1,true)).toEqual({w:528,h:330});
+    for(const [width,height] of [[1280,720],[1920,1080],[2560,1080],[3840,2160],[2160,3840]]) {
+      const {w,h}=villaRendererSize(width,height,2,true);
+      expect(w*h).toBeLessThanOrEqual(230_400);expect(w*h).toBeGreaterThan(228_000);
+      expect(Math.abs(w-(width/height)*h)).toBeLessThan(Math.max(1,width/height));
+    }
   });
 });
 

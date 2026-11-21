@@ -21,6 +21,7 @@ import { createVillaPoolside } from './villaPoolside.js';
 import { addVillaDistantRidges } from './villaDistantRidges.js';
 import { VillaStaticView } from './villaStaticView.js';
 import { indexVillaRigidSurfaces } from './villaIndexedSurface.js';
+import { VillaFrameReadback } from './villaFrameReadback.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
@@ -149,7 +150,10 @@ function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile')
 export function villaRendererSize(width: number, height: number, pixelRatio: number, lowSpec: boolean) {
   const scale = lowSpec ? 0.55 : Math.min(1.5, pixelRatio);
   let w = Math.round(width * scale), h = Math.round(height * scale);
-  const MAX_RENDER_PIXELS = 4_200_000;
+  // A fractional scale alone still rasterises millions of pixels at large desktop sizes.
+  // Budget only the offscreen world on positively identified software GL, not the HUD,
+  // camera, geometry or the hardware path. 640×360 is the 16:9 software ceiling.
+  const MAX_RENDER_PIXELS = lowSpec ? 230_400 : 4_200_000;
   if (w * h > MAX_RENDER_PIXELS) {
     const shrink = Math.sqrt(MAX_RENDER_PIXELS / (w * h));
     w = Math.max(2, Math.floor(w * shrink)); h = Math.max(2, Math.floor(h * shrink));
@@ -159,6 +163,22 @@ export function villaRendererSize(width: number, height: number, pixelRatio: num
 
 export class VillaScene {
   get cameraAspect(): number { return this.camera.aspect; }
+
+  /** Projection belongs to the host viewport, even during a terminal feed or cached-input
+   * frame. The next actual frame must use this aspect, even if rounding kept the raster size. */
+  setPrimaryAspect(width: number, height: number) {
+    if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) return;
+    const aspect = width / height;
+    if (this.camera.aspect !== aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
+    if (width === this.requestedWidth && height === this.requestedHeight) return;
+    this.requestedWidth=width; this.requestedHeight=height;
+    if (this.lowSpec && this.readback && this.cachedAspect>0 && this.lastStateKey) {
+      if(this.readback.pending) this.readback.cancel();
+      this.resizing=true; this.resizeLead=true; this.softwareInputFrames=0;
+    } else this.invalidateCameraFrame();
+  }
+  /** Teleport/restart is a discontinuity, unlike ordinary continuous movement. */
+  invalidateCameraFrame() { this.lastStateKey=''; this.softwareInputFrames=0; this.inputLeadSpent=false; this.resizing=this.resizeLead=false; }
 
   readonly renderer: THREE.WebGLRenderer;
   readonly colliders: VillaCollider[];
@@ -210,12 +230,36 @@ export class VillaScene {
   private securityLastAt = -Infinity;
   private securityLastTime = -Infinity;
   private readonly cachedFrame = document.createElement('canvas');
+  private readonly queuedCamera = new THREE.PerspectiveCamera();
+  private readback: VillaFrameReadback | null = null;
+  private requestedWidth=0; private requestedHeight=0; private cachedAspect=0;
+  private resizing=false; private resizeLead=false;
+  private queuedTime = -1;
+  private queuedWidth=0; private queuedHeight=0;
+  private lastInputTime = -1;
   private lastDrawAt = -Infinity;
   private cachedTime = -1;
   private softwareInputFrames = 0;
-  private readonly onContextLost = (event: Event) => { event.preventDefault(); this.contextLost = true; this.securityKey = ''; };
+  private inputLeadSpent = false;
+
+  /** A new movement gesture may arrive on the very RAF due to do a slow CPU draw.
+   * Give simulation/input at most three cached RAFs to respond first. Auto-repeat or
+   * changing direction cannot postpone the next picture indefinitely. Actions/resize
+   * still invalidate the cache unconditionally; never synthesize displacement or dt. */
+  beginMovementInput() {
+    if (!this.lowSpec || this.inputLeadSpent || !this.lastStateKey) return;
+    this.softwareInputFrames = Math.max(this.softwareInputFrames,3);
+    this.inputLeadSpent = true;
+  }
+  private readonly onContextLost = (event: Event) => {
+    event.preventDefault(); this.contextLost = true; this.securityKey = '';
+    this.readback?.dispose(); this.readback = null;
+  };
   private readonly onContextRestored = () => {
     this.contextLost = false; this.renderer.shadowMap.needsUpdate = true;
+    const gl = this.renderer.getContext();
+    this.readback = 'fenceSync' in gl ? new VillaFrameReadback(gl) : null;
+    this.queuedTime = this.lastInputTime = -1;
     this.securityTarget?.dispose(); this.securityTarget = null;
     this.securitySceneTarget?.dispose(); this.securitySceneTarget = null;
     this.securityOutput?.dispose(); this.securityOutput = null;
@@ -229,6 +273,7 @@ export class VillaScene {
     const debug = gl.getExtension('WEBGL_debug_renderer_info');
     const gpu = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
     this.lowSpec = /swiftshader|llvmpipe|software|subzero/i.test(gpu);
+    this.readback = 'fenceSync' in gl ? new VillaFrameReadback(gl) : null; // No buffer allocation on the hardware path.
     this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -282,6 +327,9 @@ export class VillaScene {
     });
     const estateX = (VILLA_ESTATE_BOUNDS.minX + VILLA_ESTATE_BOUNDS.maxX) / 2, estateZ = (VILLA_ESTATE_BOUNDS.minZ + VILLA_ESTATE_BOUNDS.maxZ) / 2;
     const skyDome = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 12), this.sky);
+    // Opaque depth is already known when shading the backdrop. Particularly on CPU GL,
+    // do not evaluate this sky shader behind every wall, then cover it again with the ground.
+    skyDome.renderOrder = 10_000;
     skyDome.position.set(estateX, 0, estateZ); this.scene.add(skyDome);
 
     const oak = texture('oak'), stone = texture('stone'), plaster = texture('plaster');
@@ -301,10 +349,10 @@ export class VillaScene {
     this.waterMap = texture('water');
     this.water = createVillaPoolside(this.scene, materials, texture('tile'), this.waterMap, glow('garden'));
     const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
-    const meadow = new THREE.Mesh(createVillaTerrainGeometry(), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
+    const meadow = new THREE.Mesh(createVillaTerrainGeometry('shared'), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
     const distantGround = new THREE.Mesh(new THREE.PlaneGeometry(680,680), grass);
     distantGround.geometry.getAttribute('uv').setXY(0,0,272).setXY(1,272,272).setXY(2,0,0).setXY(3,272,0);
-    distantGround.rotation.x = -Math.PI/2; distantGround.position.set(estateX,-1.14,estateZ); this.scene.add(distantGround);
+    distantGround.renderOrder=9_999; distantGround.rotation.x = -Math.PI/2; distantGround.position.set(estateX,-1.14,estateZ); this.scene.add(distantGround);
     const fence = createVillaEstateFence(this.scene, materials.oak); this.colliders.push(...fence.colliders);
     addVillaDistantRidges(this.scene, estateX, estateZ);
     this.furnishings = furnishVilla(this.scene);
@@ -526,6 +574,13 @@ export class VillaScene {
     }
   }
 
+  /** Re-present the last completed world at its true field of view, never stretching it
+   * across a new aspect. The HUD/background are redrawn at the current logical size. */
+  private showCached(ctx: CanvasRenderingContext2D,width:number,height:number) {
+    const w=this.resizing && this.cachedAspect>0 ? height*this.cachedAspect : width;
+    ctx.drawImage(this.cachedFrame,(width-w)/2,0,w,height);
+  }
+
   render(ctx: CanvasRenderingContext2D, width: number, height: number, pixelRatio: number, view: VillaView, time: number, state: VillaSceneState): boolean {
     if (this.disposed || this.contextLost) return false;
     const { w, h } = villaRendererSize(width, height, pixelRatio, this.lowSpec);
@@ -533,27 +588,68 @@ export class VillaScene {
     const stateKey = villaSceneInputKey(state);
     this.primaryView = { ...view };
     this.updateActivities(time, state, view, view.yaw);
+    const validState = this.lowSpec && this.lastStateKey===stateKey;
+    if (!validState) this.resizing=this.resizeLead=false;
+    const hasFrame = validState && this.cachedFrame.width===w && this.cachedFrame.height===h;
+    const validPrevious = hasFrame || (validState && this.resizing && this.cachedAspect>0);
+    if(this.resizeLead && validPrevious) {
+      // The viewport callback owns layout and projection, not a synchronous software raster.
+      // Give the browser one paint at the new size before submitting a fresh frame for it.
+      this.resizeLead=false; this.showCached(ctx,width,height); return true;
+    }
+    const uninterrupted = time>=this.lastInputTime && time-this.lastInputTime<.5;
+    this.lastInputTime = time;
+    if (this.readback?.pending) {
+      if (!validPrevious || this.queuedWidth!==w || this.queuedHeight!==h || this.lastDrawAt===-Infinity || !uninterrupted) {
+        // A resize, clock jump or actual logical action cannot show a stale response.
+        this.readback.cancel();
+      } else {
+        const frame = this.readback.poll();
+        if (frame === 'waiting') { this.showCached(ctx,width,height); return true; }
+        if (frame) {
+          if(this.cachedFrame.width!==w || this.cachedFrame.height!==h) {this.cachedFrame.width=w;this.cachedFrame.height=h;}
+          this.cachedFrame.getContext('2d')!.putImageData(frame,0,0);
+          this.cachedAspect=this.queuedCamera.aspect; this.resizing=false;
+          this.camera.copy(this.queuedCamera,false); // project hints from the displayed camera, not the queued one
+          this.cachedTime=this.queuedTime; this.lastDrawAt=now; this.softwareInputFrames=6; this.inputLeadSpent=false;
+          ctx.drawImage(this.cachedFrame,0,0,width,height); return true;
+        }
+        // Readback unavailable: finish this frame through the original synchronous bridge.
+        this.readback.dispose(); this.readback=null;
+      }
+    }
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
     // longer than the time budget. A wall-clock cap alone starves real key events
     // on SwiftShader. Long manual time jumps and activity changes still draw now.
-    if (this.lowSpec && this.cachedFrame.width === w && this.cachedFrame.height === h
+    if (!this.resizing && this.lowSpec && this.cachedFrame.width === w && this.cachedFrame.height === h
       && (this.softwareInputFrames > 0 || now - this.lastDrawAt < 1000 / 24)
       && time >= this.cachedTime && time - this.cachedTime < 0.5 && this.lastStateKey === stateKey) {
       this.softwareInputFrames = Math.max(0, this.softwareInputFrames - 1);
       ctx.drawImage(this.cachedFrame, 0, 0, width, height); return true;
     }
     if (this.renderer.domElement.width !== w || this.renderer.domElement.height !== h) this.renderer.setSize(w, h, false);
-    this.camera.aspect = width / height; this.camera.fov = view.fov ?? 64; this.camera.updateProjectionMatrix();
-    this.camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
-    this.camera.rotation.set(view.pitch, view.yaw, view.roll ?? 0, 'YXZ');
-    this.prepareVisuals(time, state, this.camera.position);
-    this.drawWorld(this.camera);
+    // Only defer an ordinary continuous refresh of a valid frame. Cold starts, explicit
+    // redraws, new actions, aspect/clock changes and recovery seed the correct picture now.
+    const defer = this.readback && validPrevious && uninterrupted && Number.isFinite(this.lastDrawAt);
+    const camera = defer ? this.queuedCamera.copy(this.camera,false) : this.camera;
+    camera.aspect = width / height; camera.fov = view.fov ?? 64; camera.updateProjectionMatrix();
+    camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
+    camera.rotation.set(view.pitch, view.yaw, view.roll ?? 0, 'YXZ');
+    this.prepareVisuals(time, state, camera.position);
+    this.drawWorld(camera);
+    if (defer) {
+      if (this.readback!.submit(w,h)) {
+        this.queuedTime=time; this.queuedWidth=w; this.queuedHeight=h; this.showCached(ctx,width,height); return true;
+      }
+      this.readback!.dispose(); this.readback=null; this.camera.copy(camera,false);
+    }
     this.lastStateKey = stateKey;
     if (this.lowSpec) {
       if (this.cachedFrame.width !== w || this.cachedFrame.height !== h) { this.cachedFrame.width = w; this.cachedFrame.height = h; }
       this.cachedFrame.getContext('2d')!.drawImage(this.renderer.domElement, 0, 0);
+      this.cachedAspect=this.camera.aspect; this.resizing=false;
       ctx.drawImage(this.cachedFrame, 0, 0, width, height);
-      this.lastDrawAt = performance.now(); this.cachedTime = time; this.softwareInputFrames = 6;
+      this.lastDrawAt = performance.now(); this.cachedTime = time; this.softwareInputFrames = 6; this.inputLeadSpent = false;
     } else ctx.drawImage(this.renderer.domElement, 0, 0, width, height);
     return true;
   }
@@ -561,6 +657,7 @@ export class VillaScene {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.readback?.dispose(); this.readback=null;
     this.staticView?.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);

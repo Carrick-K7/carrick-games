@@ -105,6 +105,61 @@ describe('Villa scene logical cache and live Home/Outdoor integration', () => {
     expect(h.furnishings.update.mock.lastCall[1]).toMatchObject({ roomLights: state.home!.roomLights, nightFactor: state.home!.darkness });
     state.home!.revision++; now += 20; api.render(ctx, 800, 500, 1, primaryView, 8 / 60, state); expect(renderer.render).toHaveBeenCalledTimes(3);
   });
+  it('keeps input and collision updates live with a GPU ticket outstanding, showing only a completed camera and discarding stale action frames',()=>{
+    const {api,h,renderer,state,primaryView}=fixture(),ctx=canvas().context as unknown as CanvasRenderingContext2D;
+    let now=1000;vi.spyOn(performance,'now').mockImplementation(()=>now);
+    const readback={pending:false,submit:vi.fn(function(this:any){this.pending=true;return true;}),poll:vi.fn(),cancel:vi.fn(function(this:any){this.pending=false;}),dispose:vi.fn()};
+    h.readback=readback;h.queuedCamera=new THREE.PerspectiveCamera();h.lastInputTime=-1;
+    api.render(ctx,800,500,1,primaryView,0,state);expect(readback.submit).not.toHaveBeenCalled();
+    const displayed=h.camera.position.clone();h.softwareInputFrames=0;now+=100;
+    api.render(ctx,800,500,1,{...primaryView,x:11},.05,state);expect(readback.pending).toBe(true);
+    expect(h.camera.position).toEqual(displayed);expect(h.queuedCamera.position.x).toBe(11);
+    readback.poll.mockReturnValue('waiting');now+=100;api.render(ctx,800,500,1,{...primaryView,x:12},.1,state);
+    expect(readback.submit).toHaveBeenCalledTimes(1);expect(renderer.render).toHaveBeenCalledTimes(2);expect(h.camera.position).toEqual(displayed);
+    const image={data:[127]};readback.poll.mockImplementation(()=>{readback.pending=false;return image;});now+=100;
+    api.render(ctx,800,500,1,{...primaryView,x:13},.15,state);expect(h.cachedFrame.context.putImageData).toHaveBeenCalledWith(image,0,0);expect(h.camera.position.x).toBe(11);
+    h.softwareInputFrames=0;now+=100;api.render(ctx,800,500,1,{...primaryView,x:14},.2,state);expect(readback.pending).toBe(true);
+    state.home!.revision++;now+=100;api.render(ctx,800,500,1,{...primaryView,x:15},.25,state);expect(readback.cancel).toHaveBeenCalledTimes(1);expect(h.camera.position.x).toBe(15);
+    expect(h.furnishings.update).toHaveBeenCalledTimes(6);
+  });
+  it('reserves a bounded lead for native movement after a cached draw, then shows the actual new eye even if input repeats', () => {
+    const { api,h,renderer,state,primaryView }=fixture(), ctx=canvas().context as unknown as CanvasRenderingContext2D;
+    let now=0;vi.spyOn(performance,'now').mockImplementation(()=>now);
+    api.render(ctx,800,500,1,primaryView,0,state);
+    // Stand at the cadence boundary, when a key down must not immediately block on a cold draw.
+    h.softwareInputFrames=0;api.beginMovementInput();
+    for(let i=1;i<=3;i++){now+=60;api.beginMovementInput();api.render(ctx,800,500,1,{...primaryView,z:4-i*.07},i*.03,state);}
+    expect(renderer.render).toHaveBeenCalledTimes(1);now+=60;
+    api.beginMovementInput();api.render(ctx,800,500,1,{...primaryView,z:3.72},.12,state);
+    expect(renderer.render).toHaveBeenCalledTimes(2);expect(h.camera.position.z).toBeCloseTo(3.72,6);
+    // Lighting/door changes are semantic input, not the six-frame movement-only cache.
+    api.beginMovementInput();state.home!.revision++;api.render(ctx,800,500,1,primaryView,.13,state);expect(renderer.render).toHaveBeenCalledTimes(3);
+  });
+  it('reframes the old bitmap at its original projection during resize, presents the new raster, and cannot accept a superseded size',()=>{
+    const {api,h,renderer,state,primaryView}=fixture(),dest=canvas().context,ctx=dest as unknown as CanvasRenderingContext2D;
+    let now=100;vi.spyOn(performance,'now').mockImplementation(()=>now);
+    const ticket={pending:false,submit:vi.fn(function(this:any){this.pending=true;return true;}),poll:vi.fn(),cancel:vi.fn(function(this:any){this.pending=false;}),dispose:vi.fn()};h.readback=ticket;h.queuedCamera=new THREE.PerspectiveCamera();
+    api.render(ctx,800,500,1,primaryView,0,state);const original=h.cachedFrame;
+    api.setPrimaryAspect(1100,500);now+=100;api.render(ctx,1100,500,1,primaryView,.01,state);
+    expect(api.cameraAspect).toBe(2.2);expect(dest.drawImage.mock.lastCall).toEqual([original,150,0,800,500]);expect(renderer.render).toHaveBeenCalledTimes(1);
+    now+=100;api.render(ctx,1100,500,1,primaryView,.02,state);expect(ticket.pending).toBe(true);
+    api.setPrimaryAspect(360,780);expect(ticket.cancel).toHaveBeenCalledTimes(1);now+=100;api.render(ctx,360,780,1,primaryView,.03,state);
+    expect(api.cameraAspect).toBeCloseTo(360/780,8);expect(h.cachedAspect).toBe(1.6);expect(dest.drawImage.mock.lastCall?.[3]).toBeCloseTo(780*1.6,5);
+    now+=100;api.render(ctx,360,780,1,primaryView,.04,state);expect(ticket.pending).toBe(true);ticket.poll.mockImplementation(()=>{ticket.pending=false;return {data:[0]};});
+    now+=100;api.render(ctx,360,780,1,primaryView,.05,state);expect(h.cachedAspect).toBeCloseTo(360/780,7);expect(h.cachedFrame.width).toBe(198);expect(h.cachedFrame.height).toBe(429);expect(h.resizing).toBe(false);
+  });
+  it('applies the real projection before a terminal or cached world can draw, including near-identical aspect changes at the software ceiling', () => {
+    const { api, h, renderer, state, primaryView } = fixture();
+    const ctx = canvas().context as unknown as CanvasRenderingContext2D;
+    api.render(ctx,1920,1080,1,primaryView,0,state);
+    const frame = renderer.render.mock.calls.length;
+    // The target may round to the same raster dimensions. It is never proof of the same FOV.
+    api.setPrimaryAspect(1919,1080);
+    expect(api.cameraAspect).toBe(1919/1080);expect(h.camera.projectionMatrix.elements[0]).toBeCloseTo(h.camera.projectionMatrix.elements[5]/api.cameraAspect,7);
+    expect(renderer.render.mock.calls.length).toBe(frame);
+    api.render(ctx,1919,1080,1,primaryView,.015,state);expect(renderer.render).toHaveBeenCalledTimes(frame+1);
+    api.setPrimaryAspect(NaN,1080);api.setPrimaryAspect(0,1080);expect(api.cameraAspect).toBe(1919/1080);
+  });
   it('updates carried-chair colliders using latest visitor feet, while passive swing creates no shadow invalidation', () => {
     const { api, h, state, renderer } = fixture();
     api.updateActivities(0, state); renderer.shadowMap.needsUpdate = false;

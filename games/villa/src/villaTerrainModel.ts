@@ -33,9 +33,12 @@ export function subtractVillaPolygon(points: readonly Point[], hole: readonly Po
 const rect = (r: { minX: number; maxX: number; minZ: number; maxZ: number }): Point[] => [
   { x: r.minX, z: r.minZ }, { x: r.maxX, z: r.minZ }, { x: r.maxX, z: r.maxZ }, { x: r.minX, z: r.maxZ },
 ];
-/** One sampled lawn mesh, with real pool/pond openings and no long flat triangles. */
-export function createVillaTerrainGeometry(): THREE.BufferGeometry {
-  const bounds = VILLA_ESTATE_BOUNDS, positions: number[] = [], normals: number[] = [], uvs: number[] = [];
+/** The CPU triangle stream and the shared render mesh use the same clipped cells and winding. */
+export function createVillaTerrainGeometry(storage: 'triangle-stream' | 'shared' = 'triangle-stream'): THREE.BufferGeometry {
+  const bounds = VILLA_ESTATE_BOUNDS, positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const columns = storage === 'shared' ? new Map<number, Map<number, number>>() : null;
+  // All authored coordinates are finite. A distinct key for -0 also preserves its float bits.
+  const coordinateKey = (v: number) => Object.is(v, -0) ? -Infinity : v;
   const pond = Array.from({ length: 128 }, (_, i) => {
     const angle = i * Math.PI * 2 / 128;
     // Circumscribe, rather than inscribe, the analytical water ellipse: every
@@ -58,11 +61,28 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   const xs = grid(bounds.minX, bounds.maxX, [POOL.minX, POOL.maxX, ...VILLA_BUILDING_GROUND_CUTS.flatMap(r => [r.minX,r.maxX])]);
   const zs = grid(bounds.minZ, bounds.maxZ, [POOL.minZ, POOL.maxZ, ...VILLA_BUILDING_GROUND_CUTS.flatMap(r => [r.minZ,r.maxZ])]);
   const append = (p: Point) => {
+    if (columns) {
+      // Height, normal and UV are pure functions of the exact authored x/z, including
+      // points introduced by the water cutouts. Never weld by rounded position.
+      const x = coordinateKey(p.x), z = coordinateKey(p.z);
+      let column = columns.get(x);
+      if (!column) { column = new Map(); columns.set(x, column); }
+      const previous = column.get(z);
+      if (previous !== undefined) { indices.push(previous); return; }
+      column.set(z, positions.length / 3);
+    }
+    indices.push(positions.length / 3);
     const normal = villaTerrainGroundNormal(p.x, p.z);
     positions.push(p.x, villaTerrainGroundHeight(p.x, p.z) - .022, p.z);
     normals.push(normal.x, normal.y, normal.z); uvs.push(p.x / 2.5, p.z / 2.5);
   };
   for (let x = 0; x + 1 < xs.length; x++) for (let z = 0; z + 1 < zs.length; z++) {
+    if (columns && z === 0) {
+      // Only the previous strip's right edge can recur in the next strip. Bound the
+      // temporary lookup to one strip rather than keeping a table of the whole lawn.
+      const edge = coordinateKey(xs[x]!), seam = columns.get(edge);
+      columns.clear(); if (seam) columns.set(edge, seam);
+    }
     const cell = { minX: xs[x]!, maxX: xs[x + 1]!, minZ: zs[z]!, maxZ: zs[z + 1]! };
     let polygons = [rect(cell)];
     // The overlap test and the subtracted polygon must be the SAME rectangle:
@@ -89,9 +109,10 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(Array.from({ length: positions.length / 3 }, (_, i) => i));
+  geometry.setIndex(indices);
   geometry.computeBoundingBox(); geometry.computeBoundingSphere();
   geometry.userData = { gridMetres: 1, openings: ['building', 'pool', 'pond', 'stream'], south: '+Z', north: '-Z' };
+  if (columns) geometry.userData.villaRigidBatch = true; // Eligible for the same conservative per-camera ranges as other opaque static meshes.
   return geometry;
 }
 export function createVillaEstateFence(parent: THREE.Object3D, wood: THREE.Material): { colliders: VillaCollider[] } {

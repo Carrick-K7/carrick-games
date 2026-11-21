@@ -98,7 +98,8 @@ function fixture(legacy = false) {
     isDarkTheme: () => false, isZhLang: () => false, isPixelMode: () => false, getRecord: () => null,
     reportScore: vi.fn(), requestShellRender: vi.fn(), presentation: legacy ? undefined : { setActions, isControlsOpen: () => false } };
   const game = new VillaGame(host) as unknown as TestVilla;
-  game.scene = { updateActivities: vi.fn(), render: vi.fn(() => true), renderSecurityFeed: vi.fn(() => null), dispose: vi.fn(), colliders: [] };
+  game.scene = { setPrimaryAspect: vi.fn(), beginMovementInput: vi.fn(), invalidateCameraFrame: vi.fn(), updateActivities: vi.fn(),
+    render: vi.fn(() => true), renderSecurityFeed: vi.fn(() => null), dispose: vi.fn(), colliders: [] };
   game.init(); game.running = true;
   game.setViewport({ width: 320, height: 568, dpr: 3, safeArea: zeroSafe });
   return { game, canvas, host, setActions, batches, action: (id: string) => batches.at(-1)!.find(action => action.id === id)! };
@@ -370,6 +371,7 @@ describe('Villa responsive input and contextual targets', () => {
       { width: 844, height: 390, dpr: 2, safeArea: { ...zeroSafe, left: 47, right: 47, bottom: 21 } },
     ] satisfies GameViewport[]) {
       game.setViewport(viewport);
+      expect(game.scene.setPrimaryAspect).toHaveBeenLastCalledWith(viewport.width, viewport.height);
       expect(JSON.parse(canvas.dataset.villaUtilities)).toEqual(game.utilityButtons());
       const map = game.utilityButtons()[0], terminal = game.utilityButtons()[1];
       game.handleInput(new MouseDouble(31 + map.x + map.w / 2, 19 + map.y + map.h / 2) as unknown as MouseEvent);
