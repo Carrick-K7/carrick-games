@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
+import { bentRail, ovalLoop, roundedLoop, sectionLoft, turnedSection } from './villaVehicleSections.js';
 
 export type CoachPoint = [number, number, number];
 export type CoachStation = readonly [z: number, halfWidth: number, belt: number];
@@ -45,7 +46,7 @@ export function coachPanel(builder: VillaModelBuilder, sample: (u: number, v: nu
 }
 
 export function coachLine(builder: VillaModelBuilder, sample: (t: number) => CoachPoint, material: THREE.Material, radius: number, count = 28) {
-  for (let i = 0; i < count; i++) builder.beam(sample(i / count), sample((i + 1) / count), radius, material, 6);
+  builder.geometry(bentRail(Array.from({ length: count + 1 }, (_, i) => sample(i / count)), radius, radius < .009 ? 6 : 8), material);
 }
 
 export function coachHull(stations: readonly CoachStation[], axles: readonly number[], hubY: number, archRadius: number, sill: number, crown = .045, rounding = { front: .20, rear: .13 }) {
@@ -187,28 +188,40 @@ export function coachCanopy(hull: ReturnType<typeof coachHull>, shape: CoachCano
 
 /** Original machined alloy wheels, model-specific spoke count/finish. Rounded
  * tyre shoulders remain at the original axle datums; no terrain/pose changes. */
-export function coachWheels(builder: VillaModelBuilder, options: { axles: readonly number[]; x: number; y: number; radius: number; width: number; spokes: number }, rubber: THREE.Material, dark: THREE.Material, metal: THREE.Material, accent: THREE.Material) {
+export function coachWheels(builder: VillaModelBuilder, options: { axles: readonly number[]; x: number; y: number; radius: number; width: number; spokes: number; design: 'aero' | 'utility' | 'split' }, rubber: THREE.Material, dark: THREE.Material, metal: THREE.Material, accent: THREE.Material) {
   const { axles, x, y, radius, width, spokes } = options, rim = radius * .70;
+  const touring = options.design === 'split', utility = options.design === 'utility';
   for (const side of [-1, 1]) for (const z of axles) {
-    builder.geometry(new THREE.TorusGeometry(radius - width / 2, width / 2, 12, 48), rubber, [side * x, y, z], [0, Math.PI / 2, 0]);
-    builder.cylinder(side * (x + width * .34), y, z, rim * .96, rim * .96, .025, dark, [0, 0, Math.PI / 2], 40);
-    builder.cylinder(side * (x + width * .38), y, z, rim * .75, rim * .75, .012, dark, [0, 0, Math.PI / 2], 32);
-    const face = x + width * .40;
-    builder.geometry(new THREE.TorusGeometry(rim, .010, 6, 40), metal, [side * face, y, z], [0, Math.PI / 2, 0]);
-    for (let i = 0; i < spokes; i++) {
-      const angle = i * Math.PI * 2 / spokes;
-      coachPanel(builder, (u, v) => {
-        const r = coachMix(.045, rim - .007, v), a = angle + .20 * v + (u - .5) * coachMix(.62, .23, v);
-        return [side * (face + .006), y + Math.cos(a) * r, z + Math.sin(a) * r];
-      }, accent, [side, 0, 0], [-side * .014, 0, 0], 1, 3);
+    const band = (section: [number, number][], mat: THREE.Material) => builder.geometry(
+      turnedSection(section.map(([a,r]) => [side * a,r]), 44), mat, [side*x,y,z]);
+    // Real section from inner bead over the sidewalls, shoulders and two sunk
+    // tread channels. The tyre and the rolled lip overlap at the bead only.
+    band([[-.38,.687],[-.48,.755],[-.50,.86],[-.46,.949],[-.33,.989],[-.17,1],[-.16,.985],[-.13,.985],[-.12,1],
+      [.15,1],[.16,.985],[.19,.985],[.20,1],[.33,.989],[.46,.949],[.50,.86],[.48,.755],[.38,.687]]
+      .map(([a,r]) => [a*width,r*radius]), rubber);
+    const face = width * .405;
+    band([[-width*.39,rim+.003],[face-.009,rim+.004],[face,rim+.006],[face+.003,rim],[face-.002,rim-.010],
+      [face-.027,rim-.014],[-width*.38,rim-.018]], metal);
+    // A sunk disc/hub behind open spokes, not a wheel-faced black cylinder.
+    band([[-width*.18,rim*.72],[-width*.09,rim*.72],[-width*.09,rim*.26],[-width*.18,rim*.26]], dark);
+    builder.cylinder(side*(x-width*.10),y,z,rim*.29,rim*.29,width*.84,dark,[0,0,Math.PI/2],24);
+    for (let i=0; i<spokes; i++) for (const branch of (touring ? [-1,1] : [0])) {
+      const angle = i*Math.PI*2/spokes;
+      coachPanel(builder,(u,v) => {
+        const r = coachMix(.039,rim-.006,v);
+        const sweep = touring ? .14*v+branch*(.025+.16*v*v) : utility ? -.11*Math.sin(v*Math.PI) : .37*v;
+        const half = touring ? .115-.057*v : utility ? .28-.16*v : .36-.15*v+.05*Math.sin(v*Math.PI);
+        const a=angle+sweep+(u*2-1)*half;
+        const dish=face-.009 - (1-v)**2 * (utility ? .012 : .025) + .006*Math.sin(u*Math.PI);
+        return [side*(x+dish),y+Math.cos(a)*r,z+Math.sin(a)*r];
+      },accent,[side,0,0],[-side*.012,0,0],2,5);
     }
-    builder.cylinder(side * (face + .009), y, z, .048, .048, .016, metal, [0, 0, Math.PI / 2], 20);
-    for (let bolt = 0; bolt < 5; bolt++) {
-      const angle = bolt * Math.PI * 2 / 5;
-      builder.cylinder(side * (face + .020), y + Math.cos(angle) * .033, z + Math.sin(angle) * .033, .005, .005, .005, dark, [0, 0, Math.PI / 2], 6);
+    builder.cylinder(side*(x+face-.019), y,z,.053,.061,.028,metal,[0,0,Math.PI/2],24);
+    for (let i=0;i<spokes;i++) {
+      const a=(i+.5)*Math.PI*2/spokes;
+      builder.cylinder(side*(x+face-.003),y+.040*Math.cos(a),z+.040*Math.sin(a),.0055,.007,.007,dark,[0,0,Math.PI/2],6);
     }
-    // Circumferential sidewall moulding gives the tyre a readable shoulder.
-    builder.geometry(new THREE.TorusGeometry(radius * .87, .0035, 5, 48), dark, [side * (x + width * .41), y, z], [0, Math.PI / 2, 0]);
+    band([[width*.493,radius*.827],[width*.504,radius*.833],[width*.504,radius*.847],[width*.493,radius*.852]],dark);
   }
 }
 
@@ -216,9 +229,14 @@ export function coachWheels(builder: VillaModelBuilder, options: { axles: readon
  * rounded bolster edges instead of intersecting rectangular seat blocks. */
 export function coachSeat(builder: VillaModelBuilder, x: number, cushionY: number, z: number, width: number, fabric: THREE.Material, insert: THREE.Material, dark: THREE.Material, stitch: THREE.Material, backHeight = .53) {
   builder.box(x, cushionY - .115, z, width * .79, .08, .48, dark, .022);
-  builder.ellipsoid(x, cushionY, z, width / 2, .105, .30, fabric);
-  builder.box(x, cushionY + .05, z + .02, width * .59, .085, .42, insert, .035);
-  for (const sign of [-1, 1]) builder.ellipsoid(x + sign * width * .405, cushionY + .065, z, width * .10, .105, .26, fabric);
+  // One upholstered skirt rolls up into both bolsters, then down into the
+  // squab. Padding and inset share a sewn edge instead of overlapping pillows.
+  const seatRing = (w: number, d: number, h: number, wings: number) => ovalLoop(1, 1, 28, .53).map(([u,v]): CoachPoint =>
+    [x+u*width*w*(1-.07*v), cushionY+h+wings*u**4*(1-.32*v*v)+.013*v, z+v*d]);
+  const join = seatRing(.365,.224,.071,.019);
+  builder.geometry(sectionLoft([seatRing(.44,.25,-.088,0),seatRing(.50,.285,-.035,.012),
+    seatRing(.50,.289,.028,.062),seatRing(.45,.266,.073,.069),join], true, false), fabric);
+  builder.geometry(sectionLoft([join,seatRing(.25,.18,.070,.005),seatRing(.11,.09,.066,0)],false,true,[0,1,0]),insert);
   const bottom = cushionY + .03, top = bottom + backHeight;
   coachPanel(builder, (u, v) => {
     const a = u * 2 - 1, w = width * coachMix(.50, .40, ease(v));
@@ -232,6 +250,9 @@ export function coachSeat(builder: VillaModelBuilder, x: number, cushionY: numbe
     builder.beam([x + sign * .068, top - .025, z - .34], [x + sign * .068, top + .055, z - .34], .009, stitch, 8);
     coachLine(builder, t => [x + sign * width * .295, coachMix(bottom + .09, top - .07, t), z - .202 - .075 * t], stitch, .0018, 12);
   }
-  builder.box(x, top + .10, z - .35, width * .51, .17, .125, fabric, .037);
-  for (let row = 0; row < 5; row++) builder.beam([x - width * .23, cushionY + .094, z - .13 + row * .062], [x + width * .23, cushionY + .094, z - .13 + row * .062], .0015, stitch, 5);
+  builder.geometry(sectionLoft([[-.078,.44,.139],[-.046,.52,.17],[.032,.51,.166],[.065,.43,.13]].map(([depth,w,h]) =>
+    roundedLoop(width*w,h,.045).map(([a,b]): CoachPoint => [x+a,top+.10+b,z-.35+depth-b*.13]))),fabric);
+  for (const v of [-.11,-.022,.066,.154]) coachLine(builder,t=>{
+    const a=t*2-1; return [x+a*width*.229,cushionY+.070+.006*a*a+.013*v/.25,z+v];
+  }, stitch,.0014,7);
 }

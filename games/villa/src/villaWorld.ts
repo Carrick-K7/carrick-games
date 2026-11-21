@@ -20,6 +20,8 @@ export type VillaMaterial = 'plaster' | 'oak' | 'stone' | 'glass' | 'bronze' | '
 export interface VillaBlock {
   x: number; y: number; z: number; w: number; h: number; d: number;
   material: VillaMaterial; solid: boolean;
+  /** The structural envelope remains the collision authority; the visible assembly has its own section. */
+  assembly?: 'opening' | 'fascia' | 'fin' | 'canopy' | 'storey-slab' | 'ground-slab' | 'balcony-slab';
 }
 export interface VillaPosition { x: number; y: number; z: number }
 export interface VillaRoom {
@@ -75,19 +77,26 @@ export const VILLA_ROOMS: VillaRoom[] = [
 ];
 
 const blocks: VillaBlock[] = [];
-function add(x: number, y: number, z: number, w: number, h: number, d: number, material: VillaMaterial = 'plaster', solid = true) {
-  blocks.push({ x, y, z, w, h, d, material, solid });
+function add(x: number, y: number, z: number, w: number, h: number, d: number, material: VillaMaterial = 'plaster', solid = true, assembly?: VillaBlock['assembly']) {
+  blocks.push({ x, y, z, w, h, d, material, solid, assembly });
 }
 interface Opening { from: number; to: number; door?: boolean }
+export interface VillaWallSpan extends Opening { axis: 'x' | 'z'; fixed: number; base: number }
+const openingsForFinish: VillaWallSpan[] = [], skirting: VillaWallSpan[] = [];
+export const VILLA_OPENING_SCHEDULE: readonly VillaWallSpan[] = openingsForFinish;
+export const VILLA_SKIRTING_SPANS: readonly VillaWallSpan[] = skirting;
 /** Window openings have real transparent glazing; door openings remain walkable. */
 function wall(axis: 'x' | 'z', fixed: number, from: number, to: number, base: number, openings: Opening[] = []) {
   const piece = (a: number, b: number, bottom: number, h: number, material: VillaMaterial = 'plaster', depth = 0.22) => {
     if (b - a < 0.001 || h < 0.001) return;
-    if (axis === 'x') add((a + b) / 2, base + bottom + h / 2, fixed, b - a, h, depth, material);
-    else add(fixed, base + bottom + h / 2, (a + b) / 2, depth, h, b - a, material);
+    const assembly = material === 'plaster' ? undefined : 'opening';
+    if (axis === 'x') add((a + b) / 2, base + bottom + h / 2, fixed, b - a, h, depth, material, true, assembly);
+    else add(fixed, base + bottom + h / 2, (a + b) / 2, depth, h, b - a, material, true, assembly);
+    if (material === 'plaster' && bottom === 0) skirting.push({ axis, fixed, from: a, to: b, base });
   };
   let cursor = from;
   for (const opening of [...openings].sort((a, b) => a.from - b.from)) {
+    openingsForFinish.push({ axis, fixed, base, ...opening });
     // Cut an actual rebate for each timber jamb. Previously plaster and oak
     // ended on the SAME exposed inner face, producing door-edge z-fighting.
     const trim = opening.door ? .05 : 0, lintelY = opening.door ? 3.04 : 3;
@@ -203,28 +212,28 @@ for (const y of [STOREY, STOREY * 2]) {
   // The west slab must meet the stair opening exactly: cutting it at x=-1.0
   // while STAIR_HOLE.minX is -0.85 left a 15 cm slit down the full depth of the
   // upper storeys, which read as a seam in the floor.
-  add(-12.6, cy, -4.6, 23.6, 0.2, 27.6, finish, false);
-  add(1.15, cy, -12.7, 3.9, 0.2, 11.4, finish, false);
-  add(1.15, cy, 4.85, 3.9, 0.2, 8.7, finish, false);
-  add(3.275, cy, -4.6, 0.35, 0.2, 27.6, finish, false);
-  add(4.55, cy, -12.7, 2.2, 0.2, 11.4, finish, false);
-  add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false);
-  add(17.025, cy, -4.6, 22.75, 0.2, 27.6, finish, false);
+  add(-12.6, cy, -4.6, 23.6, 0.2, 27.6, finish, false, 'storey-slab');
+  add(1.15, cy, -12.7, 3.9, 0.2, 11.4, finish, false, 'storey-slab');
+  add(1.15, cy, 4.85, 3.9, 0.2, 8.7, finish, false, 'storey-slab');
+  add(3.275, cy, -4.6, 0.35, 0.2, 27.6, finish, false, 'storey-slab');
+  add(4.55, cy, -12.7, 2.2, 0.2, 11.4, finish, false, 'storey-slab');
+  add(4.55, cy, 2.3, 2.2, 0.2, 13.8, finish, false, 'storey-slab');
+  add(17.025, cy, -4.6, 22.75, 0.2, 27.6, finish, false, 'storey-slab');
 }
-add(-10.475, -0.13, -4.6, 27.85, 0.26, 27.6, 'oak', false);
-add(17.025, -0.13, -4.6, 22.75, 0.26, 27.6, 'oak', false);
-add(4.55, -0.13, -12.7, 2.2, 0.26, 11.4, 'oak', false);
-add(4.55, -0.13, 2.3, 2.2, 0.26, 13.8, 'oak', false);
-add(-5, STOREY - 0.1, 10.25, 13, 0.2, 2.5, 'stone', false);
+add(-10.475, -0.13, -4.6, 27.85, 0.26, 27.6, 'oak', false, 'ground-slab');
+add(17.025, -0.13, -4.6, 22.75, 0.26, 27.6, 'oak', false, 'ground-slab');
+add(4.55, -0.13, -12.7, 2.2, 0.26, 11.4, 'oak', false, 'ground-slab');
+add(4.55, -0.13, 2.3, 2.2, 0.26, 13.8, 'oak', false, 'ground-slab');
+add(-5, STOREY - 0.1, 10.25, 13, 0.2, 2.5, 'stone', false, 'balcony-slab');
 // Layered fascia and timber accent fins make a composed modern exterior.
 for (const y of [3.42, 7.02]) {
-  add(2, y, SOUTH.outer, 52.8, 0.19, 0.48, 'stone', false);
-  add(2, y, NORTH.outer, 52.8, 0.19, 0.48, 'stone', false);
-  add(WEST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false);
-  add(EAST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false);
+  add(2, y, SOUTH.outer, 52.8, 0.19, 0.48, 'stone', false, 'fascia');
+  add(2, y, NORTH.outer, 52.8, 0.19, 0.48, 'stone', false, 'fascia');
+  add(WEST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false, 'fascia');
+  add(EAST.outer, y, -4.6, 0.48, 0.19, 27.6, 'stone', false, 'fascia');
 }
-for (let x = -2.65; x <= -1.65; x += 0.16) add(x, 3.5, 9.17, 0.07, 6.9, 0.14, 'oak', false);
-add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false);
+for (let x = -2.65; x <= -1.65; x += 0.16) add(x, 3.5, 9.17, 0.07, 6.9, 0.14, 'oak', false, 'fin');
+add(0, 2.94, 10, 3.8, 0.14, 2.2, 'oak', false, 'canopy');
 // Third-storey glazed stair pavilion; both stairs open onto the terrace at the front.
 wall('z', -1.15, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);
 wall('z', 3.27, -7.35, 1.25, 7.2, [{ from: -6.9, to: 0.9 }]);

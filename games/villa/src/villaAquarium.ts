@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { medakaTemplates } from './villaMedakaArt.js';
+import type { VillaModelBuilder } from './villaModel.js';
 import { VILLA_AQUARIUM } from './villaLivingLayout.js';
 
 /** Locally authored proportions informed by Miyuki medaka.
@@ -15,49 +16,17 @@ export const VILLA_AQUARIUM_LIFE = {
 /** All live animals are instanced per material/part: 10 fish, not 150 draw calls. */
 export function createVillaAquariumLife(parent: THREE.Object3D) {
   const root = new THREE.Group(); root.name = 'aquarium/life'; root.userData = { ...VILLA_AQUARIUM_LIFE }; parent.add(root);
-  const silver = villaMaterial('#9baeb1', 0.24, 0.42), stripe = villaMaterial('#b9e6f7', 0.13, 0.78);
-  const eyes = villaMaterial('#182325', 0.22), fins = villaMaterial('#b9d5d1', 0.34, 0.13);
-  fins.transparent = true; fins.opacity = 0.43; fins.depthWrite = false; fins.side = THREE.DoubleSide;
-  const template = new THREE.Group();
-  const triangle = (b: VillaModelBuilder, points: number[], material: THREE.Material) => {
-    const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3)); b.geometry(geometry, material);
-  };
-  const fish = new VillaModelBuilder(template, 'medaka-template');
-  // A tapered fusiform body, flattened slightly across the back. No round goldfish belly.
-  const rings = [[-0.057, 0.0028], [-0.041, 0.006], [-0.02, 0.009], [0.01, 0.01], [0.035, 0.0078], [0.049, 0.004], [0.056, 0.0015]];
-  const points: number[] = [], indices: number[] = [];
-  rings.forEach(([x, r], i) => {
-    for (let j = 0; j < 10; j++) { const a = j * Math.PI / 5; points.push(x, Math.sin(a) * r, Math.cos(a) * r * 0.76); }
-    if (i) for (let j = 0; j < 10; j++) { const a = (i - 1) * 10 + j, b = (i - 1) * 10 + (j + 1) % 10, c = i * 10 + j, d = i * 10 + (j + 1) % 10; indices.push(a, c, b, b, c, d); }
-  });
-  const body = new THREE.BufferGeometry(); body.setAttribute('position', new THREE.Float32BufferAttribute(points, 3)); body.setIndex(indices); body.computeVertexNormals(); fish.geometry(body, silver);
-  fish.ellipsoid(0.001, 0.0095, 0, 0.044, 0.0017, 0.0025, stripe);
-  for (const side of [-1, 1]) {
-    fish.ellipsoid(0.037, 0.0034, side * 0.0065, 0.0032, 0.0031, 0.0015, eyes);
-    fish.ellipsoid(0.038, 0.0041, side * 0.0075, 0.0008, 0.0008, 0.0004, stripe);
-    triangle(fish, [0.025, 0.001, side * 0.006, 0.01, -0.003, side * 0.019, 0.003, 0.001, side * 0.008], fins);
-    // Short pelvic fins below the midbody.
-    triangle(fish, [0, -0.007, side * 0.003, -0.018, -0.015, side * 0.008, -0.013, -0.005, side * 0.004], fins);
-  }
-  // Dorsal and long anal fins sit well behind the body midpoint, as in medaka.
-  triangle(fish, [-0.022, 0.008, 0, -0.031, 0.024, 0, -0.051, 0.006, 0], fins);
-  triangle(fish, [-0.01, -0.008, 0, -0.025, -0.023, 0, -0.052, -0.008, 0], fins);
-  fish.beam([0.052, 0.003, -0.0018], [0.057, 0.0055, 0.0018], 0.0007, eyes, 5); // tiny upturned mouth
-  fish.finish();
-  const tail = new VillaModelBuilder(template, 'medaka-tail');
-  triangle(tail, [0, 0, 0, -0.026, 0.017, 0.0006, -0.03, -0.015, 0.0006], fins);
-  for (const y of [-0.012, 0, 0.014]) tail.beam([0, 0, 0], [-0.027, y, 0], 0.00038, fins, 4);
-  tail.finish();
-
+  const template = new THREE.Group(), { fish, tail, fins } = medakaTemplates(template);
   function instances(builder: VillaModelBuilder, count: number) {
     return builder.root.children.filter((n): n is THREE.Mesh => n instanceof THREE.Mesh).map(part => {
       const batch = new THREE.InstancedMesh(part.geometry, part.material, count); batch.name = `aquarium/${builder.root.name}`;
       batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage); batch.frustumCulled = false; batch.castShadow = false; root.add(batch); return batch;
     });
   }
-  const fishBatches = instances(fish, 10), tailBatches = instances(tail, 10);
+  const count = VILLA_AQUARIUM_LIFE.fish.count;
+  const fishBatches = instances(fish, count), tailBatches = instances(tail, count), paired = fins.map(({ side, pivot, b }) => ({ side, pivot, batches: instances(b, count) }));
   template.clear(); // Geometry/materials now belong to the scene's instance meshes.
-  const fishMarkers = Array.from({ length: 10 }, (_, i) => {
+  const fishMarkers = Array.from({ length: count }, (_, i) => {
     const m = new THREE.Object3D(); m.name = `Aquarium fish ${i + 1}`; m.userData = { ...VILLA_AQUARIUM_LIFE.fish, index: i, bodyLength: 0.113, bodyHeight: 0.02, bodyWidth: 0.0152 }; root.add(m); return m;
   });
   const bubbleMat = new THREE.MeshBasicMaterial({ color: '#c7f8f1', transparent: true, opacity: 0.38, depthWrite: false });
@@ -65,7 +34,7 @@ export function createVillaAquariumLife(parent: THREE.Object3D) {
   bubbles.name = 'aquarium/bubbles'; bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled = false; root.add(bubbles);
   const dummy = new THREE.Object3D(), joint = new THREE.Object3D(), jointMatrix = new THREE.Matrix4();
   let foodBlend = 0;
-  const allBatches = [...fishBatches, ...tailBatches, bubbles];
+  const allBatches = [...fishBatches, ...tailBatches, ...paired.flatMap(f => f.batches), bubbles];
   function update(time: number, dt: number, feeding: boolean) {
     const t = Number.isFinite(time) ? Math.max(0, time) % 3600 : 0;
     const step = Number.isFinite(dt) ? Math.max(0, dt) : 0;
@@ -78,8 +47,13 @@ export function createVillaAquariumLife(parent: THREE.Object3D) {
       marker.rotation.set(0, Math.atan2(-Math.cos(a) * depth, -Math.sin(a) * radius), Math.sin(t * 2 + i) * 0.035);
       marker.scale.setScalar(0.86 + (i % 4) * 0.07); marker.updateMatrix();
       fishBatches.forEach(batch => batch.setMatrixAt(i, marker.matrix));
-      joint.position.set(-0.057, 0, 0); joint.rotation.y = Math.sin(t * 8 + i) * 0.29; joint.updateMatrix();
+      joint.position.set(-0.057, 0, 0); joint.rotation.set(0, Math.sin(t * 8 + i) * 0.29, 0); joint.updateMatrix();
       jointMatrix.multiplyMatrices(marker.matrix, joint.matrix); tailBatches.forEach(batch => batch.setMatrixAt(i, jointMatrix));
+      for (const f of paired) {
+        const paddle = Math.sin(t * (5.1 + .08 * i) + i + f.side * .45);
+        joint.position.set(...f.pivot); joint.rotation.set(f.side * (.10 + .16 * paddle), f.side * .22 * paddle, 0); joint.updateMatrix();
+        jointMatrix.multiplyMatrices(marker.matrix, joint.matrix); f.batches.forEach(batch => batch.setMatrixAt(i, jointMatrix));
+      }
     });
     for (let i = 0; i < bubbles.count; i++) {
       const phase = (t * 0.21 + i / 18) % 1;

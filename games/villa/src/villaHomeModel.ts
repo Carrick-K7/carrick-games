@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { makeCeilingFixture, makePathLantern } from './villaLightFixtures.js';
 import { VILLA_HOME_LIGHTS, villaAtmosphere, type VillaHomeState } from './villaHome.js';
 import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH, VILLA_ESTATE_BUILDINGS, villaTerrainHeight } from './villaEstateLayout.js';
 import type { VillaPosition } from './villaWorld.js';
@@ -44,15 +45,10 @@ export function createVillaHomeModel(parent: THREE.Object3D): VillaHomeModel {
     marker.name = `home-light/${room.id}/${index}`; marker.position.set(p.x, p.y, p.z);
     marker.userData = { room: room.id, floor: room.floor }; root.add(marker);
     if (room.id === 'garden') {
-      b.box(p.x, .6, p.z, .1, 1.2, .1, metal, .01);
-      b.box(p.x, 1.17, p.z, .15, .08, .15, light, .012);
+      makePathLantern(b,p.x,p.z,1.2,metal,light);
     } else if (room.id !== 'terrace') {
       const ceiling = room.id === 'gallery-2' ? 10.48 : room.id === 'garage' ? 3.38 : room.floor * 3.6 + 3.39;
-      b.beam([p.x, p.y + .03, p.z], [p.x, ceiling, p.z], .007, metal, 6);
-      const width = room.id === 'garage' ? 2.45 : room.id === 'snooker' ? 1.9 : room.id.startsWith('gallery') ? .44 : .85;
-      b.box(p.x, p.y + .026, p.z, width + .08, .055, .24, metal, .02);
-      b.box(p.x, p.y - .012, p.z, width, .02, .18, light, .006);
-      b.box(p.x, ceiling - .012, p.z, .2, .035, .12, pale, .01);
+      makeCeilingFixture(b,room.id,p,ceiling,metal,pale,light);
     }
   }
   for (const floor of [0, 1]) {

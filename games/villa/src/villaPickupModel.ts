@@ -6,6 +6,9 @@ import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaPickup, registerVillaPickupColliders, VILLA_PICKUP, VILLA_PICKUP_LIMITS, type VillaPickupState } from './villaPickup.js';
 import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
 
+import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+import { sectionLoft, type P2, type P3 } from './villaVehicleSections.js';
+
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** Original short-cab utility pickup. A softly folded cab and a genuinely
  * separate open cargo box sit on one ladder chassis; fixed details are batched. */
@@ -41,18 +44,31 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   }
   hull.deckPanel(body, paint, 1.21, 2.78); hull.endPanel(body, paint, 2.78);
   hull.arches(body, dark, .024); bedHull.arches(bed, dark, .024);
-  coachWheels(body, { axles: [-1.725, 1.725], x: .967, y: .41, radius: .397, width: .19, spokes: 6 }, rubber, dark, metal, metal);
+  coachWheels(body, { axles: [-1.725, 1.725], x: .967, y: .41, radius: .397, width: .19, spokes: 6, design: 'utility' }, rubber, dark, metal, metal);
   // A pressed tailgate, capped load rails, ribbed liner and enclosed wheel tubs.
   // The 40mm cab/bed joint is deliberate; it is not a hole into the cab.
-  bed.box(0, .735, -1.785, 1.95, .075, 2.0, dark, .013);
-  for (let i = 0; i < 12; i++) bed.box(-.858 + i * .156, .780, -1.78, .029, .018, 1.86, dark, .004);
+  // One pressed liner: its corrugations ease into flat flanges at either end.
+  const loadFloor=(z:number,rise:number):P3[]=>{
+    const top:P2[]=[[-.975,.770]];
+    for(let i=0;i<12;i++) {
+      const x=-.858+i*.156;
+      top.push([x-.028,.770],[x-.016,.770+rise*.84],[x-.010,.770+rise],[x+.010,.770+rise],[x+.016,.770+rise*.84],[x+.028,.770]);
+    }
+    return [...top,[.975,.770],[.975,.706],[-.975,.706]].map(([x,y])=>[x,y,z]);
+  };
+  bed.geometry(sectionLoft([[-2.780,0],[-2.723,0],[-2.681,.013],[-2.639,.018],[-.922,.018],[-.875,.013],[-.831,0],[-.789,0]]
+    .map(([z,r])=>loadFloor(z,r))),dark);
   for (const side of [-1, 1]) {
     coachPanel(bed, (u, v) => {
       const z = coachMix(-2.77, -.79, u), s = bedHull.section(z);
       return [side * (s.width - .047), coachMix(.765, s.belt - .012, v), z];
     }, dark, [-side, 0, 0], [side * .020, 0, 0], 32, 8);
     coachLine(bed, t => { const z = coachMix(-2.8, -.77, t), s = bedHull.section(z); return [side * (s.width - .015), s.belt, z]; }, dark, .027);
-    bed.ellipsoid(side * .865, .755, -1.725, .175, .245, .47, dark);
+    bed.geometry(sectionLoft([[-.488,.018,.018],[-.424,.100,.084],[-.296,.180,.171],[-.130,.229,.228],[.079,.231,.235],
+      [.263,.193,.189],[.404,.124,.104],[.493,.019,.020]].map(([dz,w,h])=>{
+      const profile:P2[]=[[0,0],[w,0],[w,.030*h],[w*.88,h*.15],[w*.78,h*.71],[w*.63,h*.92],[w*.44,h],[0,h]];
+      return profile.map(([inset,up]):P3=>[side*(.993-inset),.773+up,-1.725+dz]);
+    })),dark);
     for (const z of [-2.5, -.94]) bed.geometry(new THREE.TorusGeometry(.034, .006, 6, 18), metal, [side * .965, 1.135, z], [0, Math.PI / 2, 0]);
     bed.box(side * .81, 1.004, -2.811, .13, .28, .018, tail, .022);
     bed.box(side * .81, 1.013, -2.823, .09, .038, .004, headlight, .006);
@@ -116,19 +132,15 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   }
   cabin.box(0, 1.324, .941, .34, .232, .035, dark, .018);
   cabin.box(0, 1.337, .919, .291, .161, .005, screen, .004);
-  for (let i = 0; i < 3; i++) { cabin.box(0, 1.291 + i * .045, .916, .258, .003, .003, graphic, 0); cabin.box(-.09 + i * .085, 1.337, .914, .003, .136, .002, graphic, 0); }
+  cabinMap(cabin,0,1.337,.915,.291,.161,graphic,headlight,'utility');
   for (const x of [-.112, 0, .112]) cabin.cylinder(x, 1.188, .918, .021, .021, .022, metal, [Math.PI / 2, 0, 0], 16);
   for (const x of [-.80, -.29, .29, .80]) {
     cabin.box(x, 1.282, .944, .154, .076, .015, rubber, .010);
     for (let i = 0; i < 4; i++) cabin.box(x, 1.255 + i * .017, .933, .12, .003, .005, metal, .001);
   }
-  cabin.box(0, .905, .19, .29, .44, .79, dark, .033);
-  cabin.box(0, 1.154, -.06, .29, .084, .29, fabric, .022);
-  cabin.box(0, 1.131, .412, .20, .023, .218, rubber, .012);
-  for (const z of [.13, .275]) {
-    cabin.cylinder(0, 1.134, z, .049, .045, .022, rubber, [0, 0, 0], 24);
-    cabin.geometry(new THREE.TorusGeometry(.051, .0035, 6, 24), metal, [0, 1.15, z], [Math.PI / 2, 0, 0]);
-  }
+  cupConsole(cabin,.19,.80,.29,.59,1.138,[.13,.275],dark,insert,rubber,metal);
+  cabin.box(0, 1.161, -.069, .29, .077, .26, fabric, .022);
+  cabin.box(0, 1.149, .442, .20, .019, .197, rubber, .012);
   for (const [x, w] of [[.44, .11], [.61, .085]] as const) cabin.box(x, .75, 1.137, w, .135, .026, metal, .005);
   cabin.beam([0, 1.922, .63], [0, 1.79, .885], .011, dark);
   cabin.box(0, 1.765, .895, .25, .075, .034, dark, .012); cabin.box(0, 1.765, .875, .22, .058, .004, metal, .003);
@@ -136,7 +148,10 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   const mount = new THREE.Group(); mount.name = 'pickup-steering-mount'; mount.position.set(.52, 1.33, .80); mount.rotation.x = .24; root.add(mount);
   const wheel = new VillaModelBuilder(mount, 'pickup-steering-wheel');
   wheel.geometry(new THREE.TorusGeometry(.183, .022, 10, 40), rubber); wheel.box(0, 0, 0, .115, .083, .045, dark, .015);
-  for (const x of [-.15, .15]) { wheel.beam([0, 0, 0], [x, .015, 0], .019, dark); wheel.box(x * .63, .008, -.028, .04, .025, .011, metal, .004); }
+  for (const side of [-1, 1]) {
+    wheel.beam([0,0,0],[side*.15,.015,0],.019,dark);
+    wheelThumbPod(wheel,side,.095,.009,-.022,true,dark,metal,metal);
+  }
   wheel.beam([0, -.03, 0], [0, -.17, 0], .019, dark);
   const marker = new THREE.Object3D(); marker.name = 'pickup-wheel-top-marker'; marker.position.set(0, .183, 0); wheel.root.add(marker); wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
@@ -147,14 +162,9 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
       hull.sides(door, paint, side, -.56, 1.21); canopy.pane(door, glass, side, -.56, 1.21);
       coachLine(door, t => canopy.window(side, coachMix(-.56, 1.21, t), 0), dark, .011);
       for (const z of [-.56, 1.21]) coachLine(door, t => hull.side(side, z, t), dark, .003, 12);
-      door.box(side * .963, .92, .29, .05, .53, 1.56, fabric, .019);
-      door.box(side * .924, 1.059, .22, .105, .083, .67, insert, .020);
-      door.box(side * .929, 1.191, .63, .025, .035, .172, metal, .008);
-      door.cylinder(side * .925, .84, .78, .075, .075, .019, dark, [0, 0, Math.PI / 2], 24);
+      trimDoor(door,hull,side,'utility',-.54,1.19,.655,1.245,fabric,insert,dark,metal,insert);
       door.box(side * 1.036, 1.177, -.36, .017, .029, .184, dark, .008);
-      door.beam([side * .981, 1.35, .95], [side * 1.10, 1.407, 1.0], .018, dark);
-      door.box(side * 1.13, 1.442, 1.016, .124, .137, .171, paint, .031);
-      door.box(side * 1.13, 1.442, .925, .101, .105, .007, metal, .014);
+      doorMirror(door,side,[.981,1.35,.95],[1.13,1.442,1.016],.124,.137,.174,'utility',paint,dark,metal);
     });
     door.finish();
     doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.16 : -.18, .43, -1.79), new THREE.Vector3(side === 1 ? .18 : .16, 1.94, .04)) });

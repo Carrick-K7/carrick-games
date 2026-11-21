@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
+import { addVillaFencePost, addVillaFenceRail } from './villaEstateCraft.js';
 import { POOL, type VillaCollider } from './villaWorld.js';
-import { VILLA_BUILDING_FOOTPRINT, VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, VILLA_POND_BOUNDS, villaTerrainHeight, villaTerrainGroundHeight, villaTerrainGroundNormal } from './villaEstateLayout.js';
+import { VILLA_BUILDING_GROUND_CUTS, VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, VILLA_POND_BOUNDS, villaTerrainHeight, villaTerrainGroundHeight, villaTerrainGroundNormal } from './villaEstateLayout.js';
 import { VILLA_STREAM_BOUNDS, VILLA_STREAM_CUTOUTS, villaStreamContains } from './villaStream.js';
 
 type Point = { x: number; z: number };
@@ -19,7 +20,7 @@ function halfPlane(points: readonly Point[], a: Point, b: Point, inside: boolean
   return out;
 }
 /** Carve a convex hole from a convex cell into non-overlapping convex pieces. */
-function subtract(points: readonly Point[], hole: readonly Point[]): Point[][] {
+export function subtractVillaPolygon(points: readonly Point[], hole: readonly Point[]): Point[][] {
   const pieces: Point[][] = []; let remainder = [...points];
   for (let i = 0; i < hole.length && remainder.length >= 3; i++) {
     const a = hole[i]!, b = hole[(i + 1) % hole.length]!;
@@ -52,10 +53,10 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
   // The lawn must not run under the house or garage: its flat interior surface
   // is exactly coplanar with the interior slabs and the lift car floor, which
   // z-fights (a flickering threshold and a grass-looking lift floor).
-  const buildings = rect(VILLA_BUILDING_FOOTPRINT);
+  const holes = [...VILLA_BUILDING_GROUND_CUTS.map(r => [rect(r),r] as const), [pool,poolRect] as const, [pond,VILLA_POND_BOUNDS] as const];
   const grid = (min: number, max: number, extra: number[]) => [...new Set([min, max, ...Array.from({ length: Math.ceil(max - min) }, (_, i) => min + i), ...extra])].filter(v => v >= min && v <= max).sort((a, b) => a - b);
-  const xs = grid(bounds.minX, bounds.maxX, [POOL.minX, POOL.maxX, VILLA_BUILDING_FOOTPRINT.minX, VILLA_BUILDING_FOOTPRINT.maxX]);
-  const zs = grid(bounds.minZ, bounds.maxZ, [POOL.minZ, POOL.maxZ, VILLA_BUILDING_FOOTPRINT.minZ, VILLA_BUILDING_FOOTPRINT.maxZ]);
+  const xs = grid(bounds.minX, bounds.maxX, [POOL.minX, POOL.maxX, ...VILLA_BUILDING_GROUND_CUTS.flatMap(r => [r.minX,r.maxX])]);
+  const zs = grid(bounds.minZ, bounds.maxZ, [POOL.minZ, POOL.maxZ, ...VILLA_BUILDING_GROUND_CUTS.flatMap(r => [r.minZ,r.maxZ])]);
   const append = (p: Point) => {
     const normal = villaTerrainGroundNormal(p.x, p.z);
     positions.push(p.x, villaTerrainGroundHeight(p.x, p.z) - .022, p.z);
@@ -67,14 +68,14 @@ export function createVillaTerrainGeometry(): THREE.BufferGeometry {
     // The overlap test and the subtracted polygon must be the SAME rectangle:
     // testing against the unexpanded POOL skipped every cell whose edge lay on
     // it, so the hole was never cut there.
-    for (const [hole, r] of [[buildings, VILLA_BUILDING_FOOTPRINT], [pool, poolRect], [pond, VILLA_POND_BOUNDS]] as const) {
+    for (const [hole, r] of holes) {
       if (cell.maxX <= r.minX || cell.minX >= r.maxX || cell.maxZ <= r.minZ || cell.minZ >= r.maxZ) continue;
-      polygons = polygons.flatMap(polygon => subtract(polygon, hole));
+      polygons = polygons.flatMap(polygon => subtractVillaPolygon(polygon, hole));
     }
     if (cell.maxZ > VILLA_STREAM_BOUNDS.minZ && cell.minZ < VILLA_STREAM_BOUNDS.maxZ) {
       for (const { polygon: hole, bounds: r } of VILLA_STREAM_CUTOUTS) {
         if (cell.maxX <= r.minX || cell.minX >= r.maxX || cell.maxZ <= r.minZ || cell.minZ >= r.maxZ) continue;
-        polygons = polygons.flatMap(polygon => subtract(polygon, hole));
+        polygons = polygons.flatMap(polygon => subtractVillaPolygon(polygon, hole));
       }
     }
     for (const polygon of polygons) for (let i = 1; i + 1 < polygon.length; i++) {
@@ -101,13 +102,13 @@ export function createVillaEstateFence(parent: THREE.Object3D, wood: THREE.Mater
     const point = (i: number) => ({ x: segment.from.x + dx * i / count, z: segment.from.z + dz * i / count });
     for (let i = 0; i <= count; i++) {
       const p = point(i), y = villaTerrainHeight(p.x, p.z);
-      if (!villaStreamContains(p.x, p.z, .12, true)) b.box(p.x, y + .6, p.z, .12, 1.2, .12, wood, .008);
+      if (!villaStreamContains(p.x, p.z, .12, true)) addVillaFencePost(b,p.x,y,p.z,Math.abs(dx)>Math.abs(dz),wood);
       if (i === count) continue;
       const q = point(i + 1), qy = villaTerrainHeight(q.x, q.z);
       // Water continues beyond the property, not through a timber dam.
       if (villaStreamContains(p.x, p.z, .12, true) || villaStreamContains(q.x, q.z, .12, true)
         || villaStreamContains((p.x + q.x) / 2, (p.z + q.z) / 2, .12, true)) continue;
-      for (const h of [.35, .9]) b.beam([p.x, y + h, p.z], [q.x, qy + h, q.z], .044, wood, 6);
+      for (const h of [.35, .9]) addVillaFenceRail(b,[p.x,y+h,p.z],[q.x,qy+h,q.z],wood);
     }
     // Broad-phase chunks remain short enough to follow the rolling ground.
     for (let i = 0; i < count; i += 4) {

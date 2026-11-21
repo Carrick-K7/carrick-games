@@ -41,10 +41,6 @@ export const VILLA_ESTATE_BUILDINGS = [
   { id: 'house', minX: -24.2, maxX: 28.2, minZ: -18.2, maxZ: 9 },
   { id: 'garage', ...VILLA_GARAGE_EXTENT },
 ] as const;
-/** One convex rectangle covering the house and the garage plus the 0.2 m slab
- * overhang. The lawn mesh is cut away here so the interior floor slabs and the
- * lift car floor never share a plane with the terrain (z-fighting). */
-export const VILLA_BUILDING_FOOTPRINT = { minX: -24.4, maxX: 51, minZ: -18.4, maxZ: 9.2 } as const;
 /** House envelope as wall centre lines, with the slab and fascia overhang 0.2 m
  * outside. The interior doubled west, east and north in 1.3.0 while the stair
  * and lift core stayed exactly where it was, so the core now sits near the
@@ -54,6 +50,12 @@ export const VILLA_WEST_WALL = { inner: -24.2, outer: -24.4 } as const;
 export const VILLA_EAST_WALL = { inner: 28.2, outer: 28.4 } as const;
 export const VILLA_NORTH_WALL = { inner: -18.2, outer: -18.4 } as const;
 export const VILLA_SOUTH_WALL = { inner: 9, outer: 9.2 } as const;
+/** Subtract the actual union, not its bounding rectangle: the mango behind the garage
+ * and the grass in front of its east bays sit outside both slabs. The shaft stays cut. */
+export const VILLA_BUILDING_GROUND_CUTS = [
+  { minX: VILLA_WEST_WALL.outer, maxX: VILLA_EAST_WALL.outer, minZ: VILLA_NORTH_WALL.outer, maxZ: VILLA_SOUTH_WALL.outer },
+  VILLA_GARAGE_EXTENT,
+] as const;
 /** The pool rectangle. It lives with the layout datums because the seating and
  *  garden modules need it and villaWorld already imports them. */
 export const POOL = { minX: -36.4, maxX: -27.7, minZ: -7.5, maxZ: 6.5 } as const;

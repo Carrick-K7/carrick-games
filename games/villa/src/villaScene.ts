@@ -14,7 +14,12 @@ import { isVillaPickupCollider, type VillaPickupState } from './villaPickup.js';
 import { isVillaSuvCollider, type VillaSuvState } from './villaSuv.js';
 import { createVillaEstateModel } from './villaEstateModel.js';
 import { createVillaStreamModel, createVillaPeripheralLandscape } from './villaStreamModel.js';
-import { VILLA_WEST_WALL as WEST, VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from './villaEstateLayout.js';
+import { VILLA_ESTATE_BOUNDS } from './villaEstateLayout.js';
+import { createVillaEnvelope } from './villaEnvelope.js';
+import { createVillaStairAndGuards, createVillaPergola } from './villaCirculationModel.js';
+import { createVillaPoolside } from './villaPoolside.js';
+import { addVillaDistantRidges } from './villaDistantRidges.js';
+import { VillaStaticView } from './villaStaticView.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
@@ -30,7 +35,7 @@ import { createVillaHomeModel } from './villaHomeModel.js';
 import { createVillaOutdoor, type VillaOutdoorState } from './villaOutdoor.js';
 import { createVillaOutdoorModel } from './villaOutdoorModel.js';
 import {
-  EYE_HEIGHT, POOL, VILLA_SPAWN, villaTreadLayers, VILLA_BLOCKS, VILLA_RAMPS, VILLA_RAILS, VILLA_WALL_COLLIDERS,
+  EYE_HEIGHT, VILLA_SPAWN, VILLA_RAILS, VILLA_WALL_COLLIDERS,
   type VillaCollider, type VillaMaterial, type VillaPosition,
 } from './villaWorld.js';
 
@@ -99,10 +104,19 @@ function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile')
       ctx.beginPath(); ctx.moveTo(0, y);
       ctx.bezierCurveTo(80, y - 7 * random(), 160, y + 7 * random(), 256, y); ctx.stroke();
     }
-    ctx.strokeStyle = '#a7815d'; ctx.lineWidth = 0.7;
-    for (let y = 0; y < 256; y += 32) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y);
-      ctx.moveTo((y * 7) % 256, y); ctx.lineTo((y * 7) % 256, y + 32); ctx.stroke();
+    // Board ends and V-joints are now physical. Keep only the medullary rays on the wood
+    // itself, or a frame member/board would carry a second, unrelated set of plank outlines.
+    for (let i = 0; i < 110; i++) {
+      const x = random()*256, y = random()*256, span = 1.4+random()*9;
+      ctx.strokeStyle = 'rgba(241,215,161,.16)'; ctx.lineWidth = .48+random()*.64;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+span*.45,y+.42,x+span,y-.24); ctx.stroke();
+    }
+  } else if (kind === 'stone') {
+    // Sparse travertine pores follow the bedding direction; no painted stone joints.
+    for (let i=0;i<500;i++) {
+      const x=random()*256,y=random()*256;
+      ctx.fillStyle=`rgba(118,99,73,${.05+random()*.12})`;ctx.beginPath();
+      ctx.ellipse(x,y,.4+random()*2.2,.23+random()*.45,-.16,0,2*Math.PI);ctx.fill();
     }
   }
   if (kind === 'tile') {
@@ -124,7 +138,7 @@ function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile')
     }
   }
   const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
+  t.colorSpace = kind === 'water' ? THREE.NoColorSpace : THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
   return t;
@@ -156,6 +170,7 @@ export class VillaScene {
   private readonly homeModel: ReturnType<typeof createVillaHomeModel>;
   private readonly outdoorModel: ReturnType<typeof createVillaOutdoorModel>;
   private readonly stream: ReturnType<typeof createVillaStreamModel>;
+  private readonly staticView: VillaStaticView;
   private readonly fallbackHome = createVillaHome();
   private readonly fallbackOutdoor = createVillaOutdoor();
   private primaryView: VillaView = { ...VILLA_SPAWN, yaw: 0, pitch: 0, eyeHeight: EYE_HEIGHT };
@@ -277,167 +292,20 @@ export class VillaScene {
       bronze: new THREE.MeshStandardMaterial({ color: 0x554a3c, roughness: 0.42, metalness: 0.42 }),
       roof: new THREE.MeshStandardMaterial({ color: 0xa99b83, roughness: 0.8 }),
     };
-    const stairNosing = materials.oak.clone(); stairNosing.color.set('#dac5a7'); stairNosing.name = 'Oak tread end grain';
     this.homeModel = createVillaHomeModel(this.scene);
-    const batches = new Map<THREE.Material, THREE.BufferGeometry[]>();
-    const batch = (geo: THREE.BufferGeometry, material: THREE.Material) => {
-      const list = batches.get(material) ?? []; list.push(geo); batches.set(material, list);
-    };
-    const box = (x: number, y: number, z: number, w: number, h: number, d: number, material: THREE.Material) => {
-      const geo = new THREE.BoxGeometry(w, h, d);
-      geo.translate(x, y, z);
-      // World-space grain scale on every face avoids stretched plank textures.
-      const pos = geo.getAttribute('position'), normal = geo.getAttribute('normal'), uv = geo.getAttribute('uv');
-      for (let i = 0; i < pos.count; i++) {
-        const a = Math.abs(normal.getY(i)) > 0.5 ? pos.getX(i) : Math.abs(normal.getX(i)) > 0.5 ? pos.getZ(i) : pos.getX(i);
-        const b = Math.abs(normal.getY(i)) > 0.5 ? pos.getZ(i) : pos.getY(i);
-        uv.setXY(i, a / 2.5, b / 2.5);
-      }
-      batch(geo, material);
-    };
-    const beam = (a: THREE.Vector3, b: THREE.Vector3, radius: number, material: THREE.Material) => {
-      const delta = b.clone().sub(a);
-      const geo = new THREE.CylinderGeometry(radius, radius, delta.length(), 8);
-      geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize()));
-      geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-      batch(geo, material);
-    };
-    for (const b of VILLA_BLOCKS) box(b.x, b.y, b.z, b.w, b.h, b.d, materials[b.material]);
-    // Thin floating oak treads, not columns filling down to the floor. This leaves
-    // full headroom between stacked flights and matches villaSupportAt's soffits.
-    for (const r of VILLA_RAMPS) {
-      for (let i = 0; i < 12; i++) {
-        const z = r.startZ + (r.endZ - r.startZ) * (i + 0.5) / 12;
-        const top = r.bottom + (r.top - r.bottom) * (i + 1) / 12;
-        const layer = villaTreadLayers(top), x = (r.minX + r.maxX) / 2, w = r.maxX - r.minX;
-        box(x, (layer.bodyBottom + layer.bodyTop) / 2, z, w, layer.bodyTop - layer.bodyBottom, 0.5, materials.plaster);
-        const front = Math.sign(r.startZ - r.endZ), finishY = (layer.finishBottom + layer.finishTop) / 2;
-        // The 2cm end-grain lip meets (never overlays) the main cap, making each
-        // descending step legible without reintroducing coplanar z-fighting.
-        box(x, finishY, z - front * 0.01, w + 0.055, layer.finishTop - layer.finishBottom, 0.48, materials.oak);
-        box(x, finishY, z + front * 0.24, w + 0.055, layer.finishTop - layer.finishBottom, 0.02, stairNosing);
-        // Recessed warm strip below the nosing, never a glowing patch on the walking face.
-        if (i % 3 === 0) box(x, top - 0.065, z + Math.sign(r.startZ - r.endZ) * 0.251, w * 0.66, 0.012, 0.009, this.homeModel.glow(`gallery-${Math.round(r.base / 3.6)}`));
-      }
-      for (const x of [r.minX - 0.045, r.maxX + 0.045]) {
-        beam(new THREE.Vector3(x, r.bottom + 1.06, r.startZ), new THREE.Vector3(x, r.top + 1.06, r.endZ), 0.033, materials.oak);
-        for (let i = 0; i <= 12; i += 2) {
-          const y = r.bottom + (r.top - r.bottom) * i / 12, z = r.startZ + (r.endZ - r.startZ) * i / 12;
-          box(x, y + 0.54, z, 0.028, 1.04, 0.028, materials.bronze);
-        }
-      }
-    }
-    for (const base of [0, 3.6]) box(1.2, base + 1.7, -6.2, 3.8, 0.2, 1.4, materials.oak);
-    // Only non-stair-step rails need an additional visible horizontal balustrade.
-    for (const r of VILLA_RAILS.filter(r => r.maxZ - r.minZ > 1 || r.maxX - r.minX > 1)) {
-      const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
-      const w = r.maxX - r.minX, d = r.maxZ - r.minZ, h = r.maxY - r.minY;
-      box(x, r.minY + h / 2, z, w, h, d, materials.glass);
-      box(x, r.maxY, z, Math.max(w, 0.045), 0.045, Math.max(d, 0.045), materials.bronze);
-      const length = Math.max(w, d), count = Math.ceil(length / 2);
-      for (let i = 0; i <= count; i++) box(w > d ? r.minX + w * i / count : x, r.minY + h / 2, d > w ? r.minZ + d * i / count : z, 0.035, h, 0.035, materials.bronze);
-    }
-    this.colliders = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS];
-
-    // Garden lawn surrounds a genuinely recessed tiled pool (no lawn under the water).
-    const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
-    box(estateX, -1.2, estateZ, 680, .12, 680, grass);
-    // One shared, metre-sampled lawn with real pool and pond holes; no duplicate
-    // flat south slab hides the rolling support or bridges the water opening.
-    batch(createVillaTerrainGeometry(), grass);
-    // Concrete spans all four garage bays; its shell belongs to World.
-    const garage = VILLA_GARAGE_EXTENT;
-    box((garage.minX + garage.maxX) / 2, -.025, (garage.minZ + garage.maxZ) / 2, garage.maxX - garage.minX, .08, garage.maxZ - garage.minZ, materials.stone);
-    // Upstairs bathroom floor follows the room it belongs to.
-    box(12.5, 3.61, -4, 9, 0.025, 10, materials.stone);
-    box(0, -0.015, 15.9, 3.8, 0.055, 13.5, materials.stone);
-    box(8, -0.015, 11, 13, 0.055, 2.2, materials.stone);
-    // The side path runs outside the west wall, between the house and the pool.
-    box(WEST.outer - 1.5, -0.01, 0, 2.2, 0.06, 20, materials.stone);
-    for (let i = 0; i < 11; i++) box(-2.5 - i * 1.16, 0.008, 11.5, 0.92, 0.07, 1.2, materials.stone);
-    for (let i = 0; i < 7; i++) box(0, 0.018, 10.5 + i * 1.7, 3.55, 0.02, 0.018, materials.bronze);
-    const poolTile = new THREE.MeshStandardMaterial({ map: texture('tile'), roughness: 0.42 });
-    const cx = (POOL.minX + POOL.maxX) / 2, cz = (POOL.minZ + POOL.maxZ) / 2;
-    const poolWidth = POOL.maxX - POOL.minX, poolLength = POOL.maxZ - POOL.minZ;
-    const wall = .15, coping = .36;
-    // POOL describes the water opening. Walls and coping sit OUTSIDE it, so no
-    // lawn or stone top spans the unsupported swimming area as dimensions grow.
-    box(cx, -1.04, cz, poolWidth + wall * 2, .14, poolLength + wall * 2, poolTile);
-    for (const side of [-1, 1]) {
-      const edgeX = side < 0 ? POOL.minX : POOL.maxX, edgeZ = side < 0 ? POOL.minZ : POOL.maxZ;
-      box(edgeX + side * wall / 2, -.51, cz, wall, 1.1, poolLength + wall * 2, poolTile);
-      box(edgeX + side * coping / 2, .015, cz, coping, .09, poolLength, materials.stone);
-      box(cx, -.51, edgeZ + side * wall / 2, poolWidth, 1.1, wall, poolTile);
-      box(cx, .015, edgeZ + side * coping / 2, poolWidth + coping * 2, .09, coping, materials.stone);
-    }
-    // Thin ground finish under the relocated loungers, not a raised obstacle.
-    // Top remains 2cm above ground support; no plank enters the water opening.
-    const deckMinX = POOL.minX - .3, deckMaxX = POOL.maxX + .5;
-    const deckMinZ = POOL.maxZ + .2, deckMaxZ = POOL.maxZ + 4;
-    const deck = materials.oak.clone(); deck.color.set('#ba9570'); deck.roughness = .82; deck.name = 'Poolside cedar deck';
-    const deckWidth = deckMaxX - deckMinX, deckLength = deckMaxZ - deckMinZ;
-    const deckX = (deckMinX + deckMaxX) / 2, deckZ = (deckMinZ + deckMaxZ) / 2;
-    box(deckX, -.02, deckZ, deckWidth, .04, deckLength, deck);
-    const plankCount = Math.ceil(deckLength / .19), pitch = deckLength / plankCount;
-    for (let i = 0; i < plankCount; i++) box(deckX, .008, deckMinZ + (i + .5) * pitch, deckWidth - .08, .024, pitch - .008, deck);
-    for (const x of [deckMinX + .018, deckMaxX - .018]) box(x, .008, deckZ, .036, .024, deckLength, deck);
+    const glow = (id: string) => this.homeModel.glow(id);
+    createVillaEnvelope(this.scene, materials);
+    createVillaStairAndGuards(this.scene, materials, glow);
+    this.colliders = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS, ...createVillaPergola(this.scene, materials, glow('terrace'))];
     this.waterMap = texture('water');
-    this.waterMap.repeat.set(poolWidth / 2.5, poolLength / 2.75);
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(poolWidth, poolLength), new THREE.MeshPhongMaterial({
-      color: 0x5aaeb6, specular: 0xffecc8, shininess: 110, transparent: true, opacity: 0.64,
-      bumpMap: this.waterMap, bumpScale: 0.065, side: THREE.DoubleSide, depthWrite: false,
-    }));
-    this.water.name = 'villa-pool-water';
-    this.water.rotation.x = -Math.PI / 2; this.water.position.set(cx, -0.035, cz); this.scene.add(this.water);
-    // Stainless ladder follows the near pool edge and lands between the loungers.
-    const ladderInsideZ = POOL.maxZ - .5, ladderDeckZ = POOL.maxZ + .35;
-    for (const x of [cx - .4, cx + .4]) {
-      beam(new THREE.Vector3(x, -.75, ladderInsideZ), new THREE.Vector3(x, .55, ladderInsideZ), .035, materials.bronze);
-      beam(new THREE.Vector3(x, .55, ladderInsideZ), new THREE.Vector3(x, .55, ladderDeckZ), .035, materials.bronze);
-      beam(new THREE.Vector3(x, .55, ladderDeckZ), new THREE.Vector3(x, .03, ladderDeckZ), .035, materials.bronze);
-    }
-    for (let y = -.65; y <= .1; y += .25) box(cx, y, ladderInsideZ, .85, .03, .13, materials.bronze);
-
-    // Rooftop pergola, warm festoon lights and perimeter garden fence.
-    for (const x of [-10.3, -3.1]) for (const z of [1.3, 7]) {
-      box(x, 8.55, z, 0.16, 2.7, 0.16, materials.oak);
-      this.colliders.push({ minX: x - 0.08, maxX: x + 0.08, minZ: z - 0.08, maxZ: z + 0.08, minY: 7.2, maxY: 9.9 });
-    }
-    for (const x of [-10.3, -3.1]) box(x, 9.95, 4.15, 0.2, 0.22, 6.2, materials.oak);
-    for (let z = 1.1; z <= 7.2; z += 0.4) box(-6.7, 10.05, z, 7.8, 0.15, 0.12, materials.oak);
-    for (const z of [1.4, 6.9]) {
-      for (let i = 0; i < 18; i++) {
-        const x = -10.25 + i * 7.1 / 17, nextX = -10.25 + (i + 1) * 7.1 / 17;
-        const y = 9.8 - Math.sin(i / 17 * Math.PI) * 0.42;
-        if (i < 17) beam(new THREE.Vector3(x, y, z), new THREE.Vector3(nextX, 9.8 - Math.sin((i + 1) / 17 * Math.PI) * 0.42, z), 0.009, materials.bronze);
-        if (i % 2 === 0) { const g = new THREE.SphereGeometry(0.045, 8, 6); g.translate(x, y - 0.085, z); batch(g, this.homeModel.glow('terrace')); }
-      }
-    }
-    // One continuous terrain-following estate perimeter; no internal x24.8 or
-    // z57 fence remains across the expanded garage and south scenic road.
-    const fence = createVillaEstateFence(this.scene, materials.oak);
-    this.colliders.push(...fence.colliders);
-    for (const z of [11, 15, 19]) for (const x of [-2.3, 2.3]) {
-      box(x, 0.3, z, 0.11, 0.6, 0.11, materials.bronze);
-      box(x, 0.56, z, 0.115, 0.08, 0.115, this.homeModel.glow('garden'));
-    }
-    // HomeModel supplies all room fixtures/gallery strips and its six shared
-    // point-light slots. No duplicate fixed lamps or global always-on grid.
-    for (const [material, geometries] of batches) {
-      const merged = mergeGeometries(geometries);
-      if (merged) {
-        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = !material.transparent && !material.name.startsWith('villa-lamp/'); mesh.receiveShadow = true; this.scene.add(mesh);
-      }
-      geometries.forEach(g => g.dispose());
-    }
-    // A quiet distant landscape beyond the property, not an empty void.
-    const hillMat = new THREE.MeshStandardMaterial({ color: 0x728b7e, roughness: 1 });
-    for (let i = 0; i < 16; i++) {
-      const a = i / 16 * Math.PI * 2;
-      const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), hillMat);
-      hill.position.set(estateX + Math.cos(a) * 145, -6, estateZ + Math.sin(a) * 195);
-      hill.scale.set(24 + i % 3 * 8, 13 + i % 4 * 4, 25); this.scene.add(hill);
-    }
+    this.water = createVillaPoolside(this.scene, materials, texture('tile'), this.waterMap, glow('garden'));
+    const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
+    const meadow = new THREE.Mesh(createVillaTerrainGeometry(), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
+    const distantGround = new THREE.Mesh(new THREE.PlaneGeometry(680,680), grass);
+    distantGround.geometry.getAttribute('uv').setXY(0,0,272).setXY(1,272,272).setXY(2,0,0).setXY(3,272,0);
+    distantGround.rotation.x = -Math.PI/2; distantGround.position.set(estateX,-1.14,estateZ); this.scene.add(distantGround);
+    const fence = createVillaEstateFence(this.scene, materials.oak); this.colliders.push(...fence.colliders);
+    addVillaDistantRidges(this.scene, estateX, estateZ);
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
     this.pickup = createVillaPickupModel(this.scene);
@@ -460,7 +328,13 @@ export class VillaScene {
     this.suvObstacles = [...this.colliders.filter(c => !isVillaSuvCollider(c)), ...this.pets.drivingColliders];
     this.scooterObstacles = [...this.colliders.filter(c => !isVillaScooterCollider(c)), ...this.pets.drivingColliders];
     this.addContactShadows([...this.furnishings.colliders, ...this.gaming.colliders, ...garden.colliders]);
+    this.staticView = new VillaStaticView(this.scene);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
+  }
+
+  private drawWorld(camera: THREE.PerspectiveCamera) {
+    if (this.staticView) this.staticView.draw(this.renderer,this.scene,camera);
+    else this.renderer.render(this.scene,camera); // Renderer-only fixtures do not construct a world.
   }
 
   /** Cheap baked contact occlusion keeps furniture grounded even on software GL. */
@@ -620,7 +494,7 @@ export class VillaScene {
       this.securityCamera.position.set(selected.position.x, selected.position.y, selected.position.z);
       this.securityCamera.up.set(0, 1, 0); this.securityCamera.lookAt(selected.target.x, selected.target.y, selected.target.z); this.securityCamera.updateMatrixWorld(true);
       renderer.setRenderTarget(this.securitySceneTarget); renderer.setScissorTest(false); renderer.clear(true, true, true);
-      renderer.render(this.scene, this.securityCamera);
+      this.drawWorld(this.securityCamera);
       this.securityOutput!.render(renderer, this.securityTarget, this.securitySceneTarget!, 0, false);
       renderer.readRenderTargetPixels(this.securityTarget, 0, 0, width, height, this.securityPixels!);
       if (this.contextLost || renderer.getContext().isContextLost()) { this.securityKey = ''; return null; }
@@ -669,7 +543,7 @@ export class VillaScene {
     this.camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
     this.camera.rotation.set(view.pitch, view.yaw, view.roll ?? 0, 'YXZ');
     this.prepareVisuals(time, state, this.camera.position);
-    this.renderer.render(this.scene, this.camera);
+    this.drawWorld(this.camera);
     this.lastStateKey = stateKey;
     if (this.lowSpec) {
       if (this.cachedFrame.width !== w || this.cachedFrame.height !== h) { this.cachedFrame.width = w; this.cachedFrame.height = h; }

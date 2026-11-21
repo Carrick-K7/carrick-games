@@ -2,9 +2,20 @@ import * as THREE from 'three';
 import { VILLA_SCENIC_ROAD, type VillaDrivingState } from './villaDriving.js';
 import { villaTerrainHeight } from './villaEstateLayout.js';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { addVillaIslandTree } from './villaEstateCraft.js';
 import type { VillaCollider } from './villaWorld.js';
 
-type RoadPoint = { x: number; z: number };
+export type RoadPoint = { x: number; z: number };
+/** Negative and positive edges of a rendered road station. Neighbouring
+ * forecourt paving uses the same bisector, including on the end stations. */
+export function villaRoadCrossSection(points: readonly RoadPoint[], i: number, width: number): [RoadPoint, RoadPoint] {
+  const p = points[i], a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
+  const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1, half = width / 2;
+  return [
+    { x: p.x - dz / length * half, z: p.z + dx / length * half },
+    { x: p.x + dz / length * half, z: p.z - dx / length * half },
+  ];
+}
 /** The original garden oval is retained. A long flowing branch shares its east
  * and west tangents, so either short or long scenic drive is continuous. */
 const VILLA_SOUTH_ROAD_KNOTS: readonly RoadPoint[] = [
@@ -37,7 +48,7 @@ export const VILLA_GARAGE_DRIVE: readonly RoadPoint[] = [
 /** A through-road across the front of the house, joining both ends of the long
  *  southern branch. With it the estate has two independent loops instead of one
  *  out-and-back line, which is the point of the added roads. */
-const VILLA_FRONT_LINK: readonly RoadPoint[] = [
+export const VILLA_FRONT_LINK: readonly RoadPoint[] = [
   // The west approach swings north of the vegetable patch: the old line ran
   // through the beds, its centreline 0.19 m from their corner, which left the
   // asphalt growing crops and no car able to pass.
@@ -50,7 +61,7 @@ const VILLA_EAST_LINK: readonly RoadPoint[] = [
   // of 7 m west of it: the old x=40 line left no road outside bay 4 at all.
   { x: 46.9, z: 4 }, { x: 44.5, z: 13 }, { x: 40.5, z: 26 }, { x: 35, z: 45 }, { x: 31.4, z: 60 }];
 /** Short spur from the front link to the entrance forecourt. */
-const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
+export const VILLA_ENTRY_SPUR: readonly RoadPoint[] = [{ x: 3.4, z: 17.4 }, { x: 1.6, z: 12.6 }];
 export const VILLA_ESTATE_ROAD_PATHS: readonly (readonly RoadPoint[])[] = [
   VILLA_SCENIC_ROAD_SAMPLES, VILLA_SOUTH_ROAD_SAMPLES,
   VILLA_GARAGE_DRIVE, VILLA_FRONT_LINK, VILLA_EAST_LINK, VILLA_ENTRY_SPUR];
@@ -62,6 +73,19 @@ export function villaDistanceToRoad(x: number, z: number): number {
   }
   return best;
 }
+/** One sealed-aggregate sample in metre UVs for the drive and the exposed gravel verge.
+ * Fine chips stay in the finish, not millions of tiny stones or an image download. */
+function mineralAggregate() {
+  const size=128, bytes=new Uint8Array(size*size*4); let seed=72631;
+  for(let z=0;z<size;z++) for(let x=0;x<size;x++) {
+    seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+    const chip=(seed>>>24)/255, band=Math.cos(x*2*Math.PI/size+Math.sin(z*4*Math.PI/size));
+    const value=Math.round(212+band*4+chip*25+(chip>.93?13:chip<.08?-19:0)), i=4*(z*size+x);
+    bytes[i]=value;bytes[i+1]=value;bytes[i+2]=value-(chip>.86?7:1);bytes[i+3]=255;
+  }
+  const t=new THREE.DataTexture(bytes,size,size);t.name='private-drive/mineral-aggregate';t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.colorSpace=THREE.SRGBColorSpace;t.generateMipmaps=true;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.anisotropy=4;t.needsUpdate=true;return t;
+}
 /** Every road vertex samples authoritative terrain, including cross-road slope.
  * Broad ribbons are subdivided across width to avoid bridging the gentle hills. */
 export function createVillaDrivingCourse(parent: THREE.Object3D): { colliders: VillaCollider[]; update(state: VillaDrivingState): void } {
@@ -71,13 +95,14 @@ export function createVillaDrivingCourse(parent: THREE.Object3D): { colliders: V
   const asphalt = villaMaterial(0x59605b, .98), shoulder = villaMaterial(0xa3997e, .99);
   const paint = villaMaterial(0xd8d4be, .95), bark = villaMaterial(0x7c634a, .94), leaf = villaMaterial(0x526d49, .97);
   asphalt.name = 'estate-road-asphalt'; shoulder.name = 'estate-road-shoulder';
+  asphalt.map = shoulder.map = mineralAggregate();
   const ribbon = (points: readonly RoadPoint[], width: number, lift: number, material: THREE.Material) => {
     const vertices: number[] = [], indices: number[] = [], uv: number[] = [], across = Math.max(2, Math.ceil(width / 1.2));
     for (let i = 0; i < points.length; i++) {
-      const p = points[i], a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1;
+      const [left,right] = villaRoadCrossSection(points,i,width);
       for (let j = 0; j <= across; j++) {
-        const offset = (j / across - .5) * width, x = p.x + dz / length * offset, z = p.z - dx / length * offset;
-        vertices.push(x, villaTerrainHeight(x, z) + lift, z); uv.push(j / across, i / 6);
+        const t = j / across, x = j === across ? right.x : left.x + t * (right.x-left.x), z = j === across ? right.z : left.z + t * (right.z-left.z);
+        vertices.push(x, villaTerrainHeight(x, z) + lift, z); uv.push(x / 2.4, z / 2.4);
       }
       if (i) for (let j = 0; j < across; j++) { const n = (i - 1) * (across + 1) + j; indices.push(n, n + across + 1, n + 1, n + 1, n + across + 1, n + across + 2); }
     }
@@ -109,8 +134,8 @@ export function createVillaDrivingCourse(parent: THREE.Object3D): { colliders: V
   // Preserve the three familiar island trees and their collider identities/API.
   for (const [x, z, height] of [[1, 39, 3.8], [6, 40, 4.2], [10, 38, 3.4]]) {
     const y = villaTerrainHeight(x, z);
-    model.cylinder(x, y + height * .4, z, .10, .14, height * .8, bark);
-    model.ellipsoid(x, y + height * .82, z, 1.3, 1.5, 1.25, leaf); model.collide(x, y, z, .3, height, .3);
+    addVillaIslandTree(model,x,y,z,height,bark,leaf);
+    model.collide(x, y, z, .3, height, .3);
   }
   model.finish();
   return { colliders: model.colliders, update(state) { root.userData.contact = state.contact; root.userData.distance = state.distance; } };

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { villaMaterial } from './villaModel.js';
+import { IndexedFittingBuilder, cabinetPull, foldedLinen, formedTube, panel, surround, vessel } from './villaFittingGeometry.js';
+import { TEA_SPOUT_TIP, teaCupShell, teaFreeSurface, teaPotBody, teaPotHandle, teaPotLid, teaPourStream } from './villaTeaWare.js';
 import type { VillaCollider } from './villaWorld.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
 import { createVillaTea, villaTeaCupPose, type VillaTeaState } from './villaTea.js';
@@ -12,7 +14,7 @@ export interface VillaTeaBar {
 
 /** Static material batches + one subtle steam instance batch; all scene-owned. */
 export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
-  const b = new VillaModelBuilder(parent, 'villa-tea-bar');
+  const b = new IndexedFittingBuilder(parent, 'villa-tea-bar');
   const oak = villaMaterial(0xba9166, 0.76), walnut = villaMaterial(0x735037, 0.79);
   const stone = villaMaterial(0xe3e0d5, 0.64), ceramic = villaMaterial(0xd2dfce, 0.32);
   const clay = villaMaterial(0x9e6546, 0.82), bronze = villaMaterial(0xbca16c, 0.36, 0.55);
@@ -22,23 +24,24 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
     marker.position.set(VILLA_TEA_BAR.x - x, y, VILLA_TEA_BAR.z - z);
     marker.userData = { component: name, ...details }; b.root.add(marker);
   };
-  const ring = (x: number, y: number, z: number, radius: number, tube: number, material: THREE.Material, flat = false) => {
-    b.geometry(new THREE.TorusGeometry(radius, tube, 6, 18), material, [x, y, z], flat ? [Math.PI / 2, 0, 0] : [0, 0, 0]);
-  };
   b.at(VILLA_TEA_BAR.x, 0, VILLA_TEA_BAR.z, VILLA_TEA_BAR.yaw, () => {
     // Slightly recessed plinth and fronts keep pulls inside the stone footprint.
     b.box(0, 0.06, 0, 1.98, 0.12, 0.62, walnut);
-    b.box(0, 0.5, 0, 2.12, 0.78, 0.7, oak);
+    b.box(0, .151, 0, 2.12, .062, .70, walnut, .006);
+    for (const x of [-1.033, -.345, .345, 1.033]) b.box(x, .498, .008, .054, .774, .684, oak, .005);
+    b.box(0, .500, .333, 2.08, .756, .034, oak, .005);
+    b.box(0, .592, .001, 2.08, .026, .682, walnut, .004);
     b.box(0, 0.915, 0, 2.2, 0.07, 0.8, stone, 0.022);
     b.box(0, 0.87, 0, 2.15, 0.018, 0.73, walnut, 0.004);
     // Three real drawer fronts and lower doors on the visitor-facing side.
     for (const x of [-0.69, 0, 0.69]) {
-      b.box(x, 0.715, -0.355, 0.66, 0.225, 0.033, oak, 0.009);
-      b.box(x, 0.363, -0.355, 0.66, 0.435, 0.033, oak, 0.009);
-      b.box(x, 0.61, -0.374, 0.61, 0.009, 0.003, walnut, 0);
-      for (const y of [0.745, 0.52]) {
-        for (const dx of [-0.087, 0.087]) b.beam([x + dx, y, -0.365], [x + dx, y, -0.383], 0.007, bronze);
-        b.beam([x - 0.095, y, -0.383], [x + 0.095, y, -0.383], 0.009, bronze);
+      b.geometry(panel(.661, .225, .012, .031, .004), oak, [x, .715, -.334]);
+      b.geometry(surround(.661, .435, .015, [[0, -.014], [0, .012], [.004, .016], [.031, .016],
+        [.044, .006], [.044, -.003], [.037, -.014], [0, -.014]], 3), oak, [x, .363, -.334], [0, Math.PI, 0]);
+      b.geometry(panel(.584, .357, .007, .016, .002), oak, [x, .363, -.334]);
+      for (const [y, front] of [[.745, -.3495], [.520, -.342]]) {
+        for (const dx of [-.09, .09]) b.cylinder(x + dx, y, front - .0015, .014, .014, .004, bronze, [Math.PI / 2, 0, 0], 12);
+        b.geometry(cabinetPull(.18, .037, .008), bronze, [x, y, front - .002], [0, Math.PI, 0]);
       }
     }
     // Subtle oak end grain/slats, not applied textures or extra draw calls.
@@ -53,101 +56,101 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
     for (const x of [-0.433, 0.693]) b.box(x, 0.987, -0.095, 0.018, 0.032, 0.47, walnut, 0.004);
     named('tea-tray', 0.13, 0.99, -0.095, { slats: 13 });
 
-    // Compact gooseneck kettle, low base, fitted lid and open loop handle.
-    b.cylinder(-0.74, 0.967, 0.03, 0.157, 0.16, 0.034, dark);
-    b.ellipsoid(-0.74, 1.119, 0.03, 0.14, 0.15, 0.137, bronze);
-    b.cylinder(-0.74, 1.256, 0.03, 0.09, 0.104, 0.023, bronze);
-    b.ellipsoid(-0.74, 1.283, 0.03, 0.027, 0.018, 0.025, walnut);
-    ring(-0.9, 1.155, 0.03, 0.09, 0.017, walnut);
-    const neck = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.63, 1.12, 0.03), new THREE.Vector3(-0.52, 1.19, 0.03),
-      new THREE.Vector3(-0.48, 1.33, 0.03), new THREE.Vector3(-0.34, 1.35, 0.03),
-      new THREE.Vector3(-0.29, 1.292, 0.03),
-    ]);
-    b.geometry(new THREE.TubeGeometry(neck, 20, 0.014, 7, false), bronze);
-    b.cylinder(-0.29, 1.291, 0.03, 0.01, 0.01, 0.005, dark);
+    // The metal kettle is thrown taller, with a rolled dock and a long, open pouring neck.
+    b.geometry(vessel([[0, 0], [.148, 0], [.159, .005], [.160, .024], [.157, .030], [.137, .034], [0, .034]]), dark, [-.74, .95, .03]);
+    b.geometry(teaPotBody([[.135, .084, 0, .03], [.149, .088, 0, .023], [.166, .101, 0, .018],
+      [.186, .127, 0, .014], [.208, .170, 0, .012], [.231, .205, 0, .012], [.256, .227, 0, .011],
+      [.284, .238, 0, .010], [.320, .242, 0, .010], [.347, .239, 0, .010], [.370, .230, 0, .0105],
+      [.394, .210, 0, .0115], [.404, .200, 0, .0125]]).scale(1.08, 1.55, 1.16), bronze, [-.74, .984, .03]);
+    b.geometry(teaPotLid().scale(1.08, 1.55, 1.16), bronze, [-.74, .984, .03]);
+    b.geometry(teaPotHandle().scale(1.19, 1.55, 1.16), walnut, [-.74, .984, .03]);
+    b.geometry(vessel([[.0857, 0, .0763], [.0880, .0004, .0785], [.0883, .0016, .0788],
+      [.0862, .0022, .0769]], 32), dark, [-.74, 1.248, .03]);
     named('gooseneck-kettle', -0.74, 1.12, 0.03, { curvedSpout: true, handle: true });
 
-    // Yixing-style round teapot, fitted lid, finial, side handle and angled spout.
-    b.ellipsoid(-0.065, 1.088, -0.018, 0.132, 0.093, 0.105, clay);
-    b.cylinder(-0.065, 1.171, -0.018, 0.09, 0.098, 0.023, clay);
-    b.ellipsoid(-0.065, 1.196, -0.018, 0.025, 0.019, 0.025, walnut);
-    ring(-0.22, 1.107, -0.018, 0.067, 0.016, clay);
-    b.beam([0.04, 1.065, -0.018], [0.17, 1.157, -0.018], 0.026, clay);
-    b.cylinder(0.17, 1.16, -0.018, 0.018, 0.018, 0.008, dark);
-    named('teapot', -0.065, 1.09, -0.018, { lid: true, handle: true, spout: true });
-
     for (const [i, x] of [0.25, 0.5].entries()) {
-      b.cylinder(x, 1.006, -0.205, 0.071, 0.067, 0.014, ceramic);
-      const profile = [[0, 0], [0.033, 0], [0.047, 0.056], [0.041, 0.056], [0.028, 0.013], [0, 0.013]].map(([r, y]) => new THREE.Vector2(r, y));
-      // The first cup is animated below. The companion cup stays visibly empty.
-      if (i) b.geometry(new THREE.LatheGeometry(profile, 18), ceramic, [x, 1.013, -0.205]);
+      // The saucer's well (including its annular foot) bears the cup at y=1.013.
+      b.geometry(vessel([[0, .013], [.030, .013], [.032, 0], [.037, 0], [.038, .010], [.053, .016],
+        [.069, .022], [.071, .025], [.069, .027], [.064, .026], [.050, .022], [.033, .021], [0, .021]]), ceramic, [x, .992, -.205]);
+      if (i) b.geometry(teaCupShell(), ceramic, [x, 1.013, -0.205]);
       named(`cup-${i + 1}`, x, 1.069, -0.205, { openRim: true, teaSurface: i === 0, initiallyEmpty: true });
     }
     // Tea tins sit behind/right of the tray, never in the approach aisle.
     for (const [i, x] of [0.46, 0.77].entries()) {
       const h = i ? 0.245 : 0.195;
-      b.cylinder(x, 0.95 + h / 2, 0.235, 0.087, 0.087, h, i ? ceramic : clay);
-      b.cylinder(x, 0.952 + h, 0.235, 0.093, 0.093, 0.019, walnut);
-      b.cylinder(x, 0.971 + h, 0.235, 0.022, 0.025, 0.021, bronze);
+      b.geometry(vessel([[0, 0], [.072, 0], [.084, .005], [.087, .014], [.087, h - .025], [.084, h - .012],
+        [.077, h - .008], [.076, h + .006], [.072, h + .006], [.072, h - .012], [.081, h - .024], [.081, .015], [0, .008]]), i ? ceramic : bronze, [x, .95, .235]);
+      b.geometry(vessel([[0, -.002], [.071, -.002], [.072, -.011], [.074, -.011], [.075, .001], [.090, .001], [.093, .003],
+        [.093, .010], [.088, .016], [.040, .019], [0, .019]]), walnut, [x, .95 + h, .235]);
+      b.geometry(vessel([[.012, 0], [.016, .002], [.012, .006], [.020, .012], [.019, .017], [.012, .021], [0, .022]], 16), bronze, [x, .969 + h, .235]);
       b.box(x, 1.02, 0.146, 0.063, 0.048, 0.006, bronze, 0.005);
       named(`tea-canister-${i + 1}`, x, 1.06, 0.235, { fittedLid: true });
     }
     // Folded linen towel and bamboo tea scoop at the right end.
-    b.box(0.89, 0.967, -0.145, 0.25, 0.027, 0.23, ceramic, 0.008);
-    for (let i = 0; i < 4; i++) b.box(0.81 + i * 0.044, 0.982, -0.145, 0.005, 0.002, 0.2, stone, 0);
-    b.beam([0.86, 0.998, -0.23], [0.93, 0.998, -0.073], 0.01, oak);
-    b.ellipsoid(0.94, 0.998, -0.052, 0.023, 0.008, 0.035, oak);
+    b.geometry(foldedLinen(.25, .25, .035), stone, [.89, .95, -.145]);
+    b.at(.93, .981, -.074, .36, () => {
+      b.geometry(formedTube([[0, .008, -.159, .005, .009], [0, .010, -.151, .006, .010], [0, .012, -.072, .004, .007],
+        [0, .013, -.037, .0035, .005], [0, .011, -.020, .0035, .008]], 10, 0, [1, 0, 0]), oak);
+      b.geometry(vessel([[0, 0], [.009, .0008, .016], [.017, .003, .027], [.023, .009, .038], [.023, .011, .038],
+        [.021, .0115, .036], [.015, .006, .025], [.007, .0035, .012], [0, .003]], 22), oak);
+    });
+    // Bamboo tea tongs: sprung folded end, separated arms and inward-facing tips.
+    b.at(.816, .987, -.145, -.16, () => b.geometry(formedTube([[-.014, .002, .090, .002, .004], [-.020, .003, .083, .003, .0045],
+      [-.017, .002, .060, .0025, .005], [-.010, .002, -.068, .0025, .005], [-.007, .002, -.084, .003, .005],
+      [0, .002, -.088, .003, .005], [.007, .002, -.084, .003, .005], [.010, .002, -.068, .0025, .005],
+      [.017, .002, .060, .0025, .005], [.020, .003, .083, .003, .0045], [.014, .002, .090, .002, .004]], 8, 0, [0, 1, 0]), oak));
     named('tea-tools', 0.89, 0.99, -0.145, { scoop: true, foldedTowel: true });
     b.collide(0, 0, 0, VILLA_TEA_BAR.width, VILLA_TEA_BAR.height, VILLA_TEA_BAR.depth);
   });
   const root = b.finish();
   root.userData = { activity: 'tea-brewing', duration: VILLA_TEA_BAR.duration, approach: { ...VILLA_TEA_BAR.approach }, anchor: { ...VILLA_TEA_BAR.anchor }, stool: false };
 
+  const pot = new IndexedFittingBuilder(root, 'tea-bar/teapot');
+  pot.geometry(teaPotBody(), clay); pot.geometry(teaPotLid(), clay); pot.geometry(teaPotHandle(), clay);
+  pot.finish(); pot.root.userData = { lid: true, spout: true, handle: true };
+  const azimuth = Math.atan2(.205 - .018, .25 + .065), ux = -Math.cos(azimuth), uz = Math.sin(azimuth);
+  const tip = new THREE.Vector3();
   const cup = new THREE.Group(); cup.name = 'tea-bar/drinking-cup'; root.add(cup);
-  const profile = [[0, 0], [0.033, 0], [0.047, 0.056], [0.041, 0.056], [0.028, 0.013], [0, 0.013]].map(([r, y]) => new THREE.Vector2(r, y));
-  const shell = new THREE.Mesh(new THREE.LatheGeometry(profile, 18), ceramic); cup.add(shell);
-  const liquid = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.002, 18), tea);
-  liquid.name = 'tea-bar/liquid'; cup.add(liquid);
-  const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6), tea);
-  stream.name = 'tea-bar/pour'; root.add(stream);
-  const spout = new THREE.Vector3(VILLA_TEA_BAR.x - 0.17, 1.16, VILLA_TEA_BAR.z + 0.018);
-  stream.position.copy(spout); stream.scale.y = 0.01;
-  const pourEnd = new THREE.Vector3(), pourDelta = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const shell = new THREE.Mesh(teaCupShell(), ceramic); shell.castShadow = shell.receiveShadow = true; cup.add(shell);
+  const surface = teaFreeSurface(tea); cup.add(surface.mesh);
+  const stream = teaPourStream(tea); root.add(stream.mesh);
   const empty = createVillaTea();
 
   const steamMaterial = new THREE.MeshBasicMaterial({ color: 0xe9eee7, transparent: true, opacity: 0.14, depthWrite: false });
   const steam = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 7, 5), steamMaterial, 12);
-  steam.name = 'tea-bar/steam'; steam.userData = { effect: 'steam', sources: ['teapot', 'cup-1', 'cup-2'] };
+  steam.name = 'tea-bar/steam'; steam.userData = { effect: 'steam', sources: ['teapot', 'cup-1'] };
   steam.castShadow = false; steam.receiveShadow = false; steam.frustumCulled = false;
   steam.instanceMatrix.setUsage(THREE.DynamicDrawUsage); root.add(steam);
   const dummy = new THREE.Object3D();
-  const sources = [[-0.065, 1.21, -0.018], [0.25, 1.076, -0.205], [0.5, 1.076, -0.205]] as const;
+  const vent = new THREE.Vector3(), cupSteam = new THREE.Vector3();
   const update = (time: number, state: VillaTeaState | boolean): void => {
     const current = typeof state === 'boolean' ? empty : state;
     const brewing = typeof state === 'boolean' ? state : state.phase === 'brewing';
     const pose = villaTeaCupPose(current);
     cup.position.set(VILLA_TEA_BAR.x - 0.25, 1.013 + pose.lift, VILLA_TEA_BAR.z + 0.205 + pose.forward);
     cup.rotation.x = pose.tilt;
-    liquid.visible = pose.fill > 0.001;
-    const radius = 0.028 + pose.fill * 0.011;
-    liquid.scale.set(radius, 1, radius); liquid.position.y = 0.015 + pose.fill * 0.029;
-    stream.visible = brewing && current.fill > 0;
-    if (stream.visible) {
-      pourEnd.set(cup.position.x, 1.013 + liquid.position.y, cup.position.z);
-      pourDelta.subVectors(pourEnd, spout);
-      stream.position.copy(spout).add(pourEnd).multiplyScalar(0.5);
-      stream.scale.y = pourDelta.length(); stream.quaternion.setFromUnitVectors(up, pourDelta.normalize());
-    }
+    surface.update(pose.fill, pose.tilt);
+    // Lift off the slats, incline the pot, and bring the functional mouth over its cup.
+    // Everything remains a single clay batch; pitch the vessel, never the saucer or tray.
+    const p = brewing ? THREE.MathUtils.smoothstep(Math.min(pose.fill, 1 - pose.fill), 0, .08) : 0;
+    const pitch = p * .50;
+    pot.root.position.set(VILLA_TEA_BAR.x + .065 + ux * p * .043, .992 + p * .114, VILLA_TEA_BAR.z + .018 + uz * p * .043);
+    pot.root.rotation.set(0, Math.PI + azimuth, -pitch, 'YXZ');
+    tip.set(TEA_SPOUT_TIP.x, TEA_SPOUT_TIP.y, 0).applyQuaternion(pot.root.quaternion).add(pot.root.position);
+    stream.mesh.visible = p > .12;
+    if (stream.mesh.visible) stream.update(tip, cup.position.x, 1.013 + surface.uprightLevel(), cup.position.z, pitch);
+    else stream.mesh.position.copy(tip);
     cup.userData.phase = current.phase; cup.userData.fill = pose.fill;
     steam.visible = brewing;
     if (!brewing) return;
     const t = Number.isFinite(time) ? ((time % 6.6) + 6.6) % 6.6 : 0;
+    vent.set(0, .214, 0).applyQuaternion(pot.root.quaternion).add(pot.root.position);
+    cupSteam.set(cup.position.x, 1.076, cup.position.z);
     for (let i = 0; i < steam.count; i++) {
-      const source = sources[i % sources.length], phase = (t / 2.2 + Math.floor(i / 3) / 4) % 1;
+      const source = i % 3 && pose.fill > .001 ? cupSteam : vent, phase = (t / 2.2 + i / steam.count) % 1;
       const envelope = Math.sin(phase * Math.PI), scale = 0.012 + envelope * 0.026;
-      dummy.position.set(VILLA_TEA_BAR.x - source[0] + Math.sin(phase * 5 + i) * 0.027 * envelope,
-        source[1] + phase * 0.32, VILLA_TEA_BAR.z - source[2] + Math.cos(phase * 4 + i) * 0.018 * envelope);
+      dummy.position.set(source.x + Math.sin(phase * 5 + i) * 0.027 * envelope,
+        source.y + phase * 0.32, source.z + Math.cos(phase * 4 + i) * 0.018 * envelope);
       dummy.scale.set(scale * envelope, scale * 1.8 * envelope, scale * envelope); dummy.updateMatrix();
       steam.setMatrixAt(i, dummy.matrix);
     }

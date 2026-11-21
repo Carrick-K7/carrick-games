@@ -6,6 +6,8 @@ import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaSuv, registerVillaSuvColliders, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
 import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
 
+import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** Original grand-touring SUV: broad shoulders, substantial glazed cabin and a
  * gently falling tail. All panels are lofted skins, never a solid cabin block. */
@@ -38,7 +40,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   }
   hull.deckPanel(body, paint, .92, 2.44); hull.deckPanel(body, paint, -2.44, -2.08);
   hull.endPanel(body, paint, 2.44); hull.endPanel(body, paint, -2.44); hull.arches(body, dark, .026);
-  coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5 }, rubber, dark, metal, metal);
+  coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5, design: 'split' }, rubber, dark, metal, metal);
   // A compact shield grille, separated corner intakes and wraparound optical
   // housings articulate the nose. Every recess follows the sculpted bumper.
   const grille = coachFasciaPatch(body, hull, 2.44, -.53, .53, .32, .69, dark);
@@ -96,7 +98,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   }, dark, [0, 0, -1], [0, 0, .05], 32, 10);
   cabin.box(0, .945, .626, 1.62, .051, .021, wood, .010);
   cabin.box(0, 1.008, .647, 1.61, .019, .027, rubber, .004);
-  for (const x of [-.73, .73]) for (let i = 0; i < 4; i++) cabin.box(x, .98, .626 - i * .001, .20, .003, .005, metal, 0);
+  for (const x of [-.73, .73]) for (let i = 0; i < 4; i++) cabin.box(x, .977+i*.010, .627-i*.002, .20, .003, .008, metal, 0);
   cabin.box(.49, 1.166, .719, .374, .172, .039, dark, .023);
   cabin.box(.49, 1.161, .695, .333, .129, .006, screen, .006);
   for (const x of [.393, .585]) {
@@ -105,18 +107,12 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   }
   cabin.box(-.11, 1.164, .687, .56, .223, .028, dark, .013);
   cabin.box(-.11, 1.166, .669, .518, .18, .004, screen, .004);
-  for (let i = 0; i < 4; i++) {
-    cabin.beam([-.34 + i * .108, 1.095, .666], [-.28 + i * .108, 1.237, .666], .002, graphic, 5);
-    cabin.box(-.14, 1.112 + i * .038, .665, .39, .003, .002, graphic, 0);
-  }
-  cabin.box(-.11, 1.17, .662, .019, .036, .002, stitch, .004);
-  cabin.box(0, .70, -.04, .29, .54, .93, dark, .03);
-  cabin.box(0, .987, -.07, .28, .045, .87, wood, .019);
-  cabin.box(0, 1.018, -.38, .28, .075, .29, leather, .023);
-  for (const z of [-.07, .085]) {
-    cabin.cylinder(0, 1.012, z, .048, .048, .010, rubber, [0, 0, 0], 20);
-    cabin.geometry(new THREE.TorusGeometry(.05, .003, 5, 24), metal, [0, 1.018, z], [Math.PI / 2, 0, 0]);
-  }
+  cabinMap(cabin,-.11,1.166,.666,.518,.180,graphic,stitch,'touring');
+  // Copper edge-lit haptic strip under the wide glass, with a shallow locating ridge.
+  cabin.box(-.11,1.046,.676,.40,.013,.012,wood,.002);
+  for(const xx of [-.245,-.195,-.025,.025]) cabin.box(xx,1.046,.668,.018,.003,.003,graphic,0);
+  cupConsole(cabin,-.055,.95,.29,.40,1.011,[-.07,.085],dark,wood,rubber,metal);
+  cabin.box(0, 1.039, -.38, .28, .075, .29, leather, .023);
   cabin.box(0, 1.02, .29, .17, .018, .21, rubber, .015);
   for (const [x, w] of [[.44, .11], [.61, .08]] as const) cabin.box(x, .58, .827, w, .13, .024, metal, .006);
   cabin.beam([0, 1.674, .12], [0, 1.51, .37], .010, dark);
@@ -132,7 +128,10 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   const wheel = new VillaModelBuilder(steering.root, 'suv-steering-wheel');
   wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather);
   wheel.box(0, 0, 0, .11, .08, .05, dark, .02); wheel.box(0, 0, -.032, .05, .04, .012, metal, .004);
-  for (const side of [-1, 1]) { wheel.beam([side * .175, .015, 0], [side * .045, .012, 0], .016, metal); wheel.box(side * .092, .016, -.020, .046, .022, .013, dark, .004); }
+  for (const side of [-1, 1]) {
+    wheel.beam([side*.175,.015,0],[side*.045,.012,0],.016,metal);
+    wheelThumbPod(wheel,side,.092,.016,-.022,false,dark,leather,metal);
+  }
   wheel.beam([0, -.035, 0], [0, -.175, 0], .016, metal);
   for (const x of [-.12, .12]) wheel.box(x, .04, .04, .03, .06, .01, metal, .002);
   const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'suv-wheel-top-marker'; wheelMarker.position.set(0, .19, 0); wheel.root.add(wheelMarker);
@@ -145,23 +144,9 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
       hull.sides(door, paint, side, -.62, .92); canopy.pane(door, glass, side, -.62, .92);
       coachLine(door, t => canopy.window(side, coachMix(-.62, .92, t), 0), metal, .008);
       for (const z of [-.62, .92]) coachLine(door, t => hull.side(side, z, t), dark, .003, 12);
-      // Follow the tapered outer door rather than putting a rectangular trim
-      // slab at a fixed X: that slab protruded as an orange exterior stripe at
-      // y=.585..63. Both leather faces now remain inside the actual steel skin.
-      coachPanel(door, (u, v) => {
-        const z = coachMix(-.575, .775, u), y = coachMix(.578, 1.028, v);
-        const s = hull.section(z), bottom = hull.lower(z);
-        const p = hull.side(side, z, (y - bottom) / (s.belt - bottom));
-        p[0] -= side * .055; return p;
-      }, leather, [-side, 0, 0], [side * .015, 0, 0], 12, 6);
-      door.box(side * .852, .94, .10, .036, .075, 1.24, wood, .012);
-      door.box(side * .823, .851, -.03, .095, .075, .61, insert, .025);
-      door.box(side * .831, .959, .39, .031, .030, .153, metal, .007);
-      door.cylinder(side * .85, .68, .50, .074, .074, .016, dark, [0, 0, Math.PI / 2], 24);
+      trimDoor(door,hull,side,'touring',-.597,.893,.485,1.077,leather,insert,dark,metal,wood);
       door.box(side * .945, 1.005, -.43, .017, .025, .158, metal, .005);
-      door.beam([side * .887, 1.24, .70], [side * .947, 1.285, .76], .014, dark);
-      door.ellipsoid(side * .950, 1.30, .78, .038, .048, .093, paint);
-      door.box(side * .948, 1.30, .695, .06, .048, .005, metal, .010);
+      doorMirror(door,side,[.887,1.24,.70],[.950,1.30,.78],.076,.089,.170,'touring',paint,dark,metal);
     });
     door.finish();
     // Expanded upward with the refitted cabin. Same collider objects/hinges and

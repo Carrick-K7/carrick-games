@@ -7,6 +7,7 @@
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { atelierViews } from './atelier-views.mjs';
 const base = process.env.VILLA_AUDIT_BASE ?? 'http://127.0.0.1:8091';
 const out = process.env.VILLA_AUDIT_OUT ?? path.resolve('games/villa/test-results/map-audit');
 export const views = [
@@ -63,8 +64,10 @@ export const views = [
   ['south-fields', -17, 0, 49, -10, 60, -.1],
   ['pond', -2, 0, 69, -14, 80, -.08],
   ['scenic-hills', 29, 0, 114, 20, 131, .02],
+  ...atelierViews,
 ];
 const selected = process.argv.slice(2);
+for(const name of selected) if(!views.some(v=>v[0]===name)) throw new Error(`Unknown audit view: ${name}`);
 const poses = views.filter(v => !selected.length || selected.includes(v[0]));
 if (!poses.length) throw new Error('No matching audit views');
 await mkdir(out, { recursive: true });
@@ -76,6 +79,7 @@ try {
   await page.route('**/__villa-audit', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body style="margin:0"><main id="gameApp"><canvas id="gameCanvas"></canvas></main></body></html>' }));
   await page.goto(`${base}/__villa-audit`);
   const release = await page.evaluate(async () => (await (await fetch('/games/index.json')).json()).games.find(g => g.id === 'villa'));
+  if (process.env.VILLA_AUDIT_REVISION && release.revision !== process.env.VILLA_AUDIT_REVISION) throw new Error(`Unexpected Villa revision ${release.revision}`);
   await page.evaluate(async release => {
     const { VillaGame } = await import(release.entry);
     const canvas = document.querySelector('canvas');
@@ -93,13 +97,16 @@ try {
     g.state.evening = g.state.home.darkness > .2;
   }, process.env.VILLA_AUDIT_TIME ?? 'day');
   for (const pose of poses) {
-    const record = await page.evaluate(pose => {
+    const record = await page.evaluate(({pose, compare, closeView}) => {
       const [name, x, y, z, tx, tz, pitch, driver] = pose, g = window.__auditGame;
       g.state.seated = null; g.state.relaxSeatId = null; g.transition = null;
       // Pose fixtures reset transient feedback with controller state, so a
       // previous cockpit's entry toast cannot label a later bedroom image.
       g.toast = ''; g.toastUntil = 0; g.toastTarget = ''; g.hudHintShown = true;
-      g.motion.offset = 0; g.motion.velocity = 0;
+      const crouched = driver === 'crouch';
+      Object.assign(g.motion, { offset: 0, velocity: 0, crouched, stance: crouched ? 1 : 0 });
+      Object.assign(g.state.elevator,{phase:driver==='lift'?'open':'closed',door:driver==='lift'?1:0,y:0,floor:0,riding:false});
+      for (const road of ['car','pickup','suv']) g.state[`${road}DoorOpen`] = driver===`door-${road}`;
       g.position = { x, y, z }; g.eyeY = y;
       g.yaw = Math.atan2(x - tx, z - tz); g.pitch = pitch;
       // Terrain-sampled outdoor positions settle at the actual support height.
@@ -110,10 +117,24 @@ try {
         for (let h = -2; h < 15 && support === null; h += .2) support = g.supportAt(x, z, h, 1.75);
       }
       if (support !== null && y === 0) g.position.y = g.eyeY = support;
-      if (driver) {
-        g.takeSeat(driver); g.transition = null; g.pitch = pitch;
+      const riding = ['car','suv','pickup','scooter','racing'].includes(driver);
+      const sitting = driver?.startsWith('sofa-') || driver?.startsWith('stool-') || driver?.startsWith('chair-');
+      if (riding || sitting) {
+        if (riding) g.takeSeat(driver);
+        else {
+          g.takeRelaxSeat(driver);
+          if (g.state.relaxSeatId !== driver) throw new Error(`${name}: wrong seat`);
+          g.yaw = Math.atan2(g.position.x-tx,g.position.z-tz);
+        }
+        g.transition = null; g.pitch = pitch;
         support = g.supportAt(g.position.x, g.position.z, g.position.y, 1.75);
       }
+      for (const [id, hinge] of Object.entries(g.state.wardrobes.wardrobes)) Object.assign(hinge,{open:driver===id,progress:driver===id?1:0});
+      Object.assign(g.state.tea,driver==='brew'?{phase:'brewing',fill:.6,elapsed:6}:{phase:'empty',fill:0,elapsed:0});
+      g.state.grillLids.fill(driver==='grills');
+      const parrot=g.state.pets.pets.find(p=>p.id==='parrot');
+      if(parrot) Object.assign(parrot,driver==='airborne'?{y:.62,speed:.54,wingFold:.99,wingPhase:1.3,verticalSpeed:.08}:{y:0,speed:0,wingFold:0,wingPhase:3.4,verticalSpeed:0});
+      g.toast=''; g.toastUntil=0;
       const open = name === 'bath-open';
       Object.assign(g.state.bathDoors, { west: open, east: open, progressW: open ? 1 : 0, progressE: open ? 1 : 0 });
       g.time = name === 'robot' ? 0 : g.time + 1;
@@ -125,11 +146,27 @@ try {
       const eye = g.view();
       if (Math.abs(g.scene.camera.position.x - eye.x) > .001 || Math.abs(g.scene.camera.position.z - eye.z) > .001
         || Math.abs(g.scene.camera.position.y - eye.y - (eye.eyeHeight ?? 1.65)) > .001) throw new Error(`${name}: wrong camera`);
+      if (driver?.startsWith('door-') && g.scene[`${driver.slice(5)}DoorProgress`] < .99) throw new Error(`${name}: door not open`);
+      if (driver === 'grills' && [1,2,3].some(i => g.scene.scene.getObjectByName(`roof-grill-lid-${i}`)?.rotation.x > -1.20)) throw new Error(`${name}: lid not raised`);
+      if (crouched && Math.abs(eye.eyeHeight-.9)>.001) throw new Error(`${name}: wrong crouch height`);
+      const standable = riding || sitting ? null : g.canFit(1.75);
+      if(closeView && !riding && !sitting && (!g.canFit(crouched?1.05:1.75) || support===null)) throw new Error(`${name}: inspection is not reachable`);
+      const renderer=g.scene.renderer, drawCalls=renderer.info.render.calls, triangles=renderer.info.render.triangles;
+      let uncull=null;
+      if(compare){
+        const gl=renderer.getContext(), read=()=>{const bytes=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,bytes);return bytes;};
+        const actual=read();
+        // Same camera, transforms and lighting, NO second simulation update. Use Three's normal
+        // visibility rules for the reference: the optimization may not remove a single visible pixel.
+        renderer.render(g.scene.scene,g.scene.camera);
+        const ref=read();let changed=0;for(let i=0;i<ref.length;i++) if(actual[i]!==ref[i]) changed++;
+        uncull={drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,differentChannels:changed};
+        if(changed) throw new Error(`${name}: tight culling changed ${changed} output channels`);
+      }
       return { name, position: { ...g.position }, camera: g.scene.camera.position.toArray(), yaw: g.yaw,
-        floorSupport: support, occupancy: driver ?? 'standing', standable: driver ? null : g.canFit(1.75), frame: after,
-        drawCalls: g.scene.renderer.info.render.calls, triangles: g.scene.renderer.info.render.triangles,
-        png: g.canvas.toDataURL('image/png') };
-    }, pose);
+        floorSupport: support, occupancy: riding || sitting ? driver : crouched ? 'crouching' : 'standing', inspectedState: driver ?? null,
+        standable, frame: after, drawCalls, triangles, uncull, png: g.canvas.toDataURL('image/png') };
+    }, {pose,compare:process.env.VILLA_AUDIT_COMPARE_VISIBILITY==='1',closeView:atelierViews.some(v=>v[0]===pose[0])});
     const { png, ...info } = record;
     await writeFile(path.join(out, `${info.name}.png`), Buffer.from(png.split(',')[1], 'base64'));
     results.push(info); console.log(JSON.stringify(info));

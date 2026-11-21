@@ -1,0 +1,28 @@
+// Actual inspectable visitor positions; the wide existing map tour is not proof of the small fittings.
+// Optional eighth field selects an actual seat/door/pour pose in map-audit, not a substitute camera.
+export const atelierViews = [
+  ['porch-ray', -3.8,0,14.8, -.45,9.0,.19], ['porch-return', .42,0,8.08, -1.48,10.7,.31],
+  ['window-seat-view', -14.8,0,7.72, -16.6,9.0,.12], ['stair-craft', .43,0,2.34, .42,-2.58,.10],
+  ['sofa-front', -5.65,0,3.90, -8.3,5.65,-.30], ['hearth-seated', -7.85,0,4.6, -10,.20,-.04,'sofa-living'],
+  ['hearth-stone', -11.46,0,2.25, -10,.45,-.32], ['tea-pot', -7.47,0,1.20, -7.04,.13,-.43],
+  ['tea-pot-return', -6.20,0,1.03,-7.01,.13,-.49], ['tea-in-use', -7.47,0,1.20, -7.04,.13,-.43,'brew'],
+  ['tank-life', -3.96,0,1.51, -3.94,.32,-.12], ['tap-close', -5.63,0,-7.28, -5.67,-8.24,-.52],
+  ['fridge-inside', -3.72,0,-6.6, -3.15,-8.56,-.24,'fridge-freezer'],
+  ['wardrobe-inside', -9.34,3.6,2.34, -9.15,.45,-.04,'wardrobe-master'],
+  ['bed-linen', -15.37,3.6,4.26,-17.3,1.85,-.22], ['tea-table-low', -18.50,0,-13.0,-18.50,-15.8,-.24,'stool-tea-3'],
+  ['pool-ironwork', -32.03,0,7.68,-32.03,6.25,-.68], ['roof-joints', -4.31,7.2,3.91,-3.10,1.30,.44],
+  ['roof-grills-open',8.25,7.2,-5.1,11.2,-6.20,-.22,'grills'],
+  ['gallery-lift-open',4.63,0,-2.92,4.55,-5.72,-.08,'lift'], ['lift-operating-panel',4.64,0,-5.90,5.37,-4.70,-.25,'lift'],
+  ['pc-keys',7.25,0,5.2,6.98,4.04,-.38,'chair-pc'], ['figurine-case',3.35,0,6.49,2.32,6.44,-.07],
+  ['rally-driver',9.8,0,6.12,9.8,8.56,-.04,'racing'], ['snooker-joinery',7.31,0,-1.42,8.28,-2.15,-.38,'crouch'],
+  ['workshop',35.95,0,-9.77,34.65,-11.23,-.17], ['scooter-side',52.10,0,8.20,54.20,7,-.26],
+  ['sedan-interior-return',35.12,0,-3.85,32.83,-2.60,-.29,'door-car'], ['pickup-pocket',40.64,0,-4.05,38.45,-2.83,-.24,'door-pickup'],
+  ['suv-door-card',49.86,0,-3.99,47.73,-2.77,-.32,'door-suv'],
+  ['puppy-eye',-16.62,0,18.94,-16,18,-.49,'crouch'], ['cat-eye',-14.25,0,15.41,-15,15,-.50,'crouch'],
+  ['parrot-eye',-12.68,0,13.23,-13,14,-.53,'crouch'], ['blue-parrot-eye',-17.02,0,14.23,-16.50,13.5,-.53,'crouch'],
+  ['rabbit-eye',-18.71,0,15.34,-18,16,-.61,'crouch'], ['rabbit-female-eye',-18.02,0,14.42,-18.7,14,-.64,'crouch'],
+  ['orchard-branches',-7.1,0,14.0,-8,12.5,.53], ['vegetable-detail',-8.15,0,18.66,-9.28,18,-.30,'crouch'],
+  ['swing-joints',-22.12,0,22.83,-20.14,24.35,-.05], ['camping-chair-fabric',-17.65,0,25.73,-18.70,27,-.17,'crouch'],
+  ['garage-mango-foot',32.96,0,-17.27,34.4,-15.6,-.38], ['parrot-flight',-12.36,0,12.64,-13,14,-.52,'airborne'],
+  ['bed-foot',-15.79,3.6,4.62,-17.48,3.68,-.04,'crouch'],
+];

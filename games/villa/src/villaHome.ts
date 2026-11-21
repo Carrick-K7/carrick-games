@@ -35,7 +35,7 @@ export const VILLA_HOME_LIGHTS: readonly VillaHomeLight[] = [
   { id: 'gallery-1', name: 'Upstairs hall', zh: '二楼走廊', floor: 1, fixtures: [{ x: 0, y: 6.74, z: 5.8 }, { x: 0, y: 6.74, z: -8.0 }, { x: 6.8, y: 6.74, z: -14 }, { x: 8, y: 6.74, z: 6 }, { x: 14, y: 6.74, z: 6 }] },
   { id: 'gallery-2', name: 'Roof access', zh: '天台楼梯间', floor: 2, fixtures: [{ x: 1.06, y: 10.32, z: -2.4 }] },
   { id: 'terrace', name: 'Roof terrace', zh: '天台', floor: 2, fixtures: [{ x: -6.8, y: 9.5, z: 4.2 }] },
-  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.8, y: 1.2, z: 12.2 }, { x: 42, y: 1.2, z: 8.4 }, { x: -2.8, y: 1.2, z: -33 }, { x: 2.8, y: 1.2, z: -43 }] },
+  { id: 'garden', name: 'Garden path lights', zh: '庭院路灯', floor: 0, fixtures: [{ x: -14, y: 1.2, z: 11.3 }, { x: 1.97, y: 1.2, z: 11.35 }, { x: 51.32, y: 1.2, z: 8.4 }, { x: -2.8, y: 1.2, z: -33 }, { x: 2.8, y: 1.2, z: -43 }] },
 ];export interface VillaSecurityCamera {
   id: string; name: string; zh: string; position: VillaPosition; target: VillaPosition;
 }

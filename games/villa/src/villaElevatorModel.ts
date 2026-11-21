@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { IndexedFittingBuilder, cabinetPull, panel, piercedPanel, surround, vessel } from './villaFittingGeometry.js';
 import { VILLA_ELEVATOR, type VillaElevatorState } from './villaElevator.js';
 
 /** Scene-owned meshes/textures; the scene's normal disposal traversal owns cleanup.
@@ -15,7 +16,7 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   const originX = e.centerX, originZ = e.centerZ + 6.3;
   const localX = (worldX: number) => worldX - originX;
   const localZ = (worldZ: number) => worldZ - originZ;
-  const shaft = new VillaModelBuilder(parent, 'villa-elevator');
+  const shaft = new IndexedFittingBuilder(parent, 'villa-elevator');
   // Authored around the original shaft centre (0, -6.3); one translation moves
   // the whole tower to its swapped location without rewriting ~40 literals.
   shaft.root.position.set(originX, 0, originZ);
@@ -48,12 +49,12 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     width: number, height: number, yaw = 0) => {
     const g = new THREE.PlaneGeometry(width, height);
     const uv = g.getAttribute('uv');
-    const top = row === 0 ? 0 : 32 / 256 + (row - 1) * 32 / 256;
     const span = 32 / 256;
     for (let i = 0; i < uv.count; i++) {
-      // Crop each square atlas cell around its glyph, keeping natural proportions.
-      uv.setX(i, .5 + (uv.getX(i) - .5) * 12 / 256);
-      uv.setY(i, 1 - top - (1 - uv.getY(i)) * span);
+      // Sample the SAME row/column that receives the painted glyph. Match the
+      // physical lens aspect ratio, rather than stretching a narrow UV sliver.
+      uv.setX(i, .5 + (uv.getX(i) - .5) * span * width / height);
+      uv.setY(i, 1 - row * span - (1 - uv.getY(i)) * span);
     }
     b.geometry(g, labels, [x, y, z], [0, yaw, 0]);
   };
@@ -75,7 +76,11 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     for (const x of [-1.04, 1.04]) shaft.box(x, y, -6.3, .075, .075, 2.28, bronze, .004);
   }
   // Recessed vertical guide tracks read through the glass; no extra shaft floors.
-  for (const x of [-.995, .995]) shaft.box(x, top / 2, -6.85, .018, top, .045, dark, 0);
+  for (const sign of [-1, 1]) {
+    shaft.box(sign * 1.011, top / 2, -6.85, .012, top, .071, dark, 0);
+    shaft.box(sign * .996, top / 2, -6.85, .020, top, .012, brushed, .002);
+    for (const y of [.52, 3.88, 7.46]) shaft.box(sign * 1.023, y, -6.85, .034, .092, .121, bronze, .003);
+  }
 
   type Leaf = { root: THREE.Group; travel: number; amount: number };
   const makeDoors = (parentNode: THREE.Object3D, name: string, y: number, z: number): Leaf[] =>
@@ -85,16 +90,21 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
       const center = direction * (start + width / 2);
       const depth = z + track * .014;
       const side = direction < 0 ? 'left' : 'right';
-      const leaf = new VillaModelBuilder(parentNode, `${name}-${side}-${track === 0 ? 'inner' : 'outer'}`);
+      const leaf = new IndexedFittingBuilder(parentNode, `${name}-${side}-${track === 0 ? 'inner' : 'outer'}`);
       leaf.root.position.y = y;
       // Four rigid .325m leaves telescope on separate 10mm-deep tracks.
       // Inner leaves travel .66m; outer leaves travel .33m, stacking inside ±.985m.
-      leaf.box(center, .22, depth, width, .44, .01, brushed, 0);
-      leaf.box(center, 2.265, depth, width, .05, .01, brushed, 0);
-      for (const x of [start + .012, start + width - .012]) {
-        leaf.box(direction * x, 1.345, depth, .024, 1.79, .01, brushed, 0);
-      }
-      leaf.geometry(new THREE.PlaneGeometry(width - .048, 1.79), glass, [center, 1.345, depth]);
+      leaf.box(center, .22, depth, width, .44, .010, brushed, .001);
+      leaf.box(center, 2.265, depth, width, .05, .010, brushed, .001);
+      // An extruded sash and compression seals return onto BOTH faces of the single
+      // glass. Depth stays below the 14mm track pitch even at full telescope.
+      leaf.geometry(surround(width, 1.802, .005, [[0, -.004], [0, .004], [.002, .005], [.017, .005],
+        [.021, .003], [.024, .002], [.024, -.002], [.020, -.003], [.017, -.005], [.002, -.005], [0, -.004]], 2), brushed, [center, 1.34, depth]);
+      leaf.geometry(surround(width - .044, 1.758, .004, [[0, -.003], [0, .003], [.004, .002],
+        [.004, -.002], [0, -.003]], 2), dark, [center, 1.34, depth]);
+      leaf.geometry(new THREE.PlaneGeometry(width - .047, 1.755), glass, [center, 1.34, depth]);
+      for (const face of [-1, 1]) for (const y of [.085, .101])
+        leaf.box(center, y, depth + face * .0051, width - .043, .003, .001, dark, 0);
       leaf.box(direction * (start + .004), 1.145, depth, .008, 2.29, .012, dark, 0);
       return { root: leaf.finish(), travel: direction * (track === 0 ? .66 : .33), amount: -1 };
     }));
@@ -102,8 +112,11 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
   for (const [floor, y] of e.floors.entries()) {
     const headerHeight = Math.min(3.6, top - y) - 2.3;
     for (const x of [-.875, .875]) {
-      // Opaque pockets hide the retracted door ends, flush with the shaft facade.
-      shaft.box(x, y + 1.15, -5.1, .45, 2.3, .12, bronze, .006);
+      // Hollow pocket, not a solid block intersecting the parked leaves. The
+      // jamb lips hide their ends; between the skins both tracks remain free.
+      for (const z of [-5.151, -5.049]) shaft.box(x, y + 1.15, z, .45, 2.3, .018, bronze, .003);
+      shaft.box(x + Math.sign(x) * .216, y + 1.15, -5.1, .018, 2.3, .091, bronze, .002);
+      shaft.box(x, y + 2.294, -5.1, .45, .012, .091, bronze, .002);
     }
     shaft.geometry(new THREE.PlaneGeometry(2.08, headerHeight), glass,
       [0, y + 2.3 + headerHeight / 2, -5.1]);
@@ -112,40 +125,55 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     label(shaft, 0, 0, y + 2.41, -5.039, .23, .055);
     // Small natural call station: raised circular button and numeric landing label.
     shaft.box(.865, y + 1.13, -5.025, .115, .235, .03, brushed, .006);
-    shaft.cylinder(.865, y + 1.09, -5.002, .028, .028, .014, bronze, [Math.PI / 2, 0, 0], 12);
+    shaft.geometry(vessel([[.020, 0], [.030, .001], [.032, .004], [.031, .008], [.026, .010], [.024, .008], [.023, .011],
+      [.021, .013], [0, .013]], 20), bronze, [.865, y + 1.09, -5.008], [Math.PI / 2, 0, 0]);
     label(shaft, floor + 1, .865, y + 1.195, -5.008, .052, .038);
     label(shaft, 4, .865, y + 1.09, -4.994, .038, .025);
     landings.push(makeDoors(shaft.root, `elevator-landing-${floor}-door`, y, -5.076));
   }
   shaft.finish();
 
-  const car = new VillaModelBuilder(shaft.root, 'elevator-car');
+  const car = new IndexedFittingBuilder(shaft.root, 'elevator-car');
   // Floor top is exactly state.y; the entire thickness travels below the passenger.
   // The car lives under the translated shaft root, so its floor uses local Z.
   car.box(localX((e.carMinX + e.carMaxX) / 2), -.055, localZ((e.carMinZ + e.carMaxZ) / 2),
     e.carMaxX - e.carMinX, .11, e.carMaxZ - e.carMinZ, stone, .004);
   car.box(0, -.125, -6.24, 1.89, .03, 2.25, bronze, 0);
-  car.box(0, 2.395, -6.25, 1.96, .09, 2.3, stone, .005);
-  for (const x of [-.84, .84]) car.box(x, 2.345, -6.25, .035, .009, 1.9, warm, .002);
+  const vents: [number, number, number, number][] = [];
+  for (const x of [-.66, .66]) for (let i = 0; i < 6; i++) vents.push([x, .42 + i * .050, .105, .010]);
+  car.geometry(piercedPanel(1.96, 2.30, .09, vents), stone, [0, 2.395, -6.25], [-Math.PI / 2, 0, 0]);
+  for (const x of [-.66, .66]) car.box(x, 2.436, -6.792, .235, .005, .308, bronze, 0);
+  for (const x of [-.84, .84]) {
+    car.box(x, 2.347, -6.25, .048, .014, 1.92, brushed, .003);
+    car.box(x, 2.338, -6.25, .029, .007, 1.896, warm, .002);
+  }
   // No second full-height side glass: slim cabin edge posts preserve sightlines.
   for (const x of [-.966, .966]) {
     for (const z of [-7.35, -5.15]) car.box(x, 1.175, z, .028, 2.35, .028, bronze, .003);
     car.box(x, .055, -6.25, .028, .11, 2.22, bronze, .003);
   }
   // Oak liner is only 10mm thick: 1.904m between posts, 2.25m rear-to-door clear.
-  car.box(0, 1.175, -7.375, 1.93, 2.35, .01, oak, 0);
-  for (let i = -4; i <= 4; i++) car.box(i * .205, 1.175, -7.369, .004, 2.31, .001, grain, 0);
-  car.beam([-.83, 1.02, -7.285], [.83, 1.02, -7.285], .018, bronze, 10);
-  for (const x of [-.75, .75]) car.beam([x, 1.02, -7.365], [x, 1.02, -7.285], .012, bronze, 8);
+  car.box(0, 1.175, -7.377, 1.93, 2.35, .006, grain, 0);
+  for (let i = 0; i < 9; i++) car.box((i - 4) * .214, 1.204, -7.371, .210, 2.263, .008, oak, .0016);
+  car.box(0, .071, -7.363, 1.913, .127, .020, brushed, .003);
+  car.geometry(cabinetPull(1.648, .077, .0205), bronze, [0, 1.02, -7.367]);
+  for (const x of [-.824, .824]) car.geometry(vessel([[.024, 0], [.029, .002], [.030, .005], [.027, .009], [.021, .011]], 16), brushed,
+    [x, 1.02, -7.367], [Math.PI / 2, 0, 0]);
   car.box(0, 2.34, -5.12, 1.96, .08, .055, bronze, .003);
   // Rear-facing control station on the right front return, visible from inside.
-  car.box(.823, 1.26, -5.17, .17, .59, .027, brushed, .006);
-  label(car, 0, .823, 1.48, -5.184, .132, .063, Math.PI);
+  car.geometry(panel(.17, .59, .025, .027, .004), brushed, [.823, 1.26, -5.17]);
+  car.geometry(surround(.146, .079, .007, [[0, 0], [0, .003], [.003, .006], [.006, .004], [.007, .001]], 3), bronze,
+    [.823, 1.48, -5.183], [0, Math.PI, 0]);
+  label(car, 0, .823, 1.48, -5.185, .132, .063, Math.PI);
   // Manual call panel: the top floor sits at the top, and the door buttons sit
   // under the numbers, exactly like a real car operating panel.
   for (let row = 0; row < 3; row++) {
     const floor = 2 - row, y = 1.335 - row * .105;
-    car.cylinder(.823, y, -5.19, .034, .034, .018, bronze, [Math.PI / 2, 0, 0], 12);
+    car.geometry(vessel([[.023, 0], [.036, 0], [.038, .003], [.037, .006], [.031, .009], [.027, .008],
+      [.026, .011], [.025, .014], [.021, .015], [0, .015]], 20), bronze, [.823, y, -5.184], [-Math.PI / 2, 0, 0]);
+    // Raised tactile dots sit alongside, never in front of the numeric legend.
+    for (const [dx, dy] of (floor === 0 ? [[0, 0]] : floor === 1 ? [[0, .005], [0, -.005]] : [[0, 0], [.008, 0]]))
+      car.geometry(vessel([[.0028, 0], [.0028, .001], [.0020, .0023], [0, .003]], 8), bronze, [.767 + dx, y + dy, -5.184], [-Math.PI / 2, 0, 0]);
     label(car, floor + 1, .823, y, -5.2, .05, .038, Math.PI);
   }
   // Door buttons: open (left arrow) and close (right arrow) under the numbers.
@@ -166,7 +194,8 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     car.box(fieldX - fieldXSpan / 2 + tileW / 2 + col * (tileW + grout), tileY,
       fieldZc - fieldZ / 2 + tileD / 2 + row * (tileD + grout), tileW, .008, tileD, tile, .0015);
   }
-  car.box(0, .012, -5.155, 1.9, .006, .05, bronze, .002);
+  car.box(0, .010, -5.155, 1.9, .004, .05, grain, 0);
+  for (let rib = 0; rib < 4; rib++) car.box(0, .013, -5.176 + rib * .014, 1.9, .004, .007, bronze, .001);
   const carDoors = makeDoors(car.root, 'elevator-car-door', 0, -5.114);
   car.finish();
 
@@ -185,10 +214,10 @@ export function createVillaElevatorModel(parent: THREE.Object3D): {
     ctx.fillStyle = '#ffe9bc'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '600 24px Arial, sans-serif';
     const arrow = state.phase === 'moving' ? (state.target > state.floor ? '↑' : '↓') : '';
-    ctx.fillText(`${state.floor + 1}${arrow}`, 16, 17);
+    ctx.fillText(`${state.floor + 1}${arrow}`, 128, 16);
     // Static button legends: floors 1..3, the call dot, and the door arrows.
     ctx.font = '600 22px Arial, sans-serif';
-    const cell = (row: number, glyph: string) => ctx.fillText(glyph, 16 + (row % 8) * 32, 33 + Math.floor(row / 8) * 32 + 16);
+    const cell = (row: number, glyph: string) => ctx.fillText(glyph, 128, row * 32 + 16);
     for (let floor = 1; floor <= 3; floor++) cell(floor, String(floor));
     ctx.fillStyle = '#ffd08a'; cell(4, '●');
     ctx.fillStyle = '#9fdcb4'; cell(5, '◀'); cell(6, '▶');

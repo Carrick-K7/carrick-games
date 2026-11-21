@@ -60,6 +60,7 @@ export class VillaModelBuilder {
     for (const [material, parts] of this.batches) {
       const geometry = mergeGeometries(parts);
       if (geometry) {
+        geometry.userData.villaRigidBatch = true;
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = `${this.root.name}/surface`;
         mesh.castShadow = !material.transparent && !(material instanceof THREE.MeshBasicMaterial);

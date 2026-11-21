@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { VillaModelBuilder, villaMaterial } from './villaModel.js';
+import { villaMaterial } from './villaModel.js';
+import { IndexedFittingBuilder, piercedPanel, vessel } from './villaFittingGeometry.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider, type VillaPosition } from './villaWorld.js';
 
 export type VillaBathDoorId = 'west' | 'east';
@@ -150,12 +151,19 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
   const steel = villaMaterial('#9faaa6', .42, .62); steel.name = 'bath-door-frame';
   const brass = villaMaterial('#b69e72', .36, .68); brass.name = 'bath-door-handles';
   const seal = villaMaterial('#5e6b65', .88); seal.name = 'bath-door-gaskets';
-  const tracks = new VillaModelBuilder(root, 'bath-door-overhead-tracks');
+  const tracks = new IndexedFittingBuilder(root, 'bath-door-overhead-tracks');
   for (const which of IDS) {
     const o = VILLA_BATH_OPENINGS[which], pair = LEAVES.filter(leaf => leaf.which === which);
     const north = pair[0]!.parkedZ - pair[0]!.width / 2 - D.railOverhang;
     const south = pair[1]!.closedZ + pair[1]!.width / 2 + D.railOverhang;
-    for (const layout of pair) tracks.box(layout.x, D.floorY + D.railY, (north + south) / 2, .056, .036, south - north, steel, .003);
+    for (const { x } of pair) {
+      const mid = (north + south) / 2, length = south - north;
+      tracks.box(x, D.floorY + D.railY + .013, mid, .058, .010, length, steel, .002);
+      for (const side of [-1, 1]) {
+        tracks.box(x + side * .026, D.floorY + 3.042, mid, .006, .072, length, steel, .001);
+        tracks.box(x + side * .020, D.floorY + 3.006, mid, .016, .006, length, steel, .001);
+      }
+    }
     // Wall-mounted standoffs terminate on the actual bath-side plaster/casing;
     // all sit above head clearance and therefore need no extra gameplay boxes.
     const mounts = Math.ceil((south - north) / 1.0);
@@ -176,7 +184,7 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
     const { which, end, width, handleZ } = layout;
     const pivot = new THREE.Group(); pivot.name = `bath-door-${which}-${end ? 'far' : 'near'}`;
     pivot.position.set(layout.x, D.floorY, layout.closedZ); root.add(pivot);
-    const leaf = new VillaModelBuilder(pivot, `bath-door-leaf-${which}-${end}`);
+    const leaf = new IndexedFittingBuilder(pivot, `bath-door-leaf-${which}-${end}`);
     const centre = 0, top = D.bottom + D.height, stile = .064;
     // Full-height panels retain their 30mm undercut/30mm head reveal. Only the
     // slim roller hangers rise above the panel, outside the casing's depth.
@@ -189,19 +197,29 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
     for (const [bottom, height, material] of [
       [.15, .26, frosted], [.41, 1.65, privacy], [2.06, .22, frosted],
       [2.28, .055, privacy], [2.335, .51, frosted],
-    ] as const) leaf.box(0, bottom + height / 2, centre, .022, height, width - 2 * stile, material, 0);
+    ] as const) {
+      const y = bottom + height / 2;
+      if (material === privacy && height > 1) {
+        leaf.geometry(piercedPanel(width - 2 * stile, height, .022, [[-handleZ, 1.11 - y, .050, .151]]), material, [0, y, 0], [0, Math.PI / 2, 0]);
+      } else leaf.box(0, y, centre, .022, height, width - 2 * stile, material, 0);
+    }
+    for (const z of [-width / 2 + stile + .0025, width / 2 - stile - .0025])
+      leaf.box(0, 1.4975, z, .029, 2.695, .006, seal, .001);
     for (const y of [.41, 2.06, 2.28, 2.335]) leaf.box(0, y, centre, .028, .008, width - 2 * stile, seal, 0);
     for (const z of layout.rollers) {
       leaf.box(0, 2.953, z, .034, .126, .036, steel, .002);
-      leaf.cylinder(0, 3.02, z, .035, .035, .042, steel, [0, 0, Math.PI / 2], 12);
-      leaf.cylinder(0, 3.02, z, .015, .015, .043, brass, [0, 0, Math.PI / 2], 10);
+      leaf.geometry(vessel([[.006, -.021], [.011, -.021], [.011, -.013], [.017, -.011], [.027, -.008],
+        [.035, -.005], [.035, .005], [.027, .008], [.017, .011], [.011, .013], [.011, .021], [.006, .021]], 16),
+        steel, [0, 3.02, z], [0, 0, Math.PI / 2]);
+      leaf.cylinder(0, 3.02, z, .007, .007, .043, brass, [0, 0, Math.PI / 2], 10);
     }
     // Recessed finger cups on BOTH faces. A dark backing lies below an open
     // brass bezel; no protruding bar can clip the other leaf when stacking.
     for (const side of [-1, 1]) {
-      leaf.box(side * .015, 1.11, handleZ, .003, .29, .085, seal, .003);
-      for (const z of [handleZ - .05, handleZ + .05]) leaf.box(side * .029, 1.11, z, .006, .34, .015, brass, .002);
-      for (const y of [.95, 1.27]) leaf.box(side * .029, y, handleZ, .006, .02, .10, brass, .002);
+      const position: [number, number, number] = [0, 1.11, handleZ], rot: [number, number, number] = [0, 0, -side * Math.PI / 2];
+      leaf.geometry(vessel([[.154, .010, .052], [.165, .0112, .058], [.168, .014, .060], [.168, .028, .060],
+        [.164, .031, .058], [.144, .031, .049], [.138, .028, .045], [.132, .018, .042], [.121, .009, .035]], 28), brass, position, rot);
+      leaf.geometry(vessel([[.126, .012, .038], [.119, .008, .034], [.105, .005, .027], [.083, .0034, .020], [0, .003]], 28), seal, position, rot);
     }
     leaf.finish();
     const collider: VillaCollider = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };

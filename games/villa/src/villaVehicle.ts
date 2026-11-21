@@ -6,6 +6,9 @@ import { registerVillaVehicleColliders, type VillaDrivingState } from './villaDr
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
 
+import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+import { roundedLoop, sectionLoft, type P3 } from './villaVehicleSections.js';
+
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** Pearl electric fastback with a low prow, flowing shoulders and a fitted
  * dark canopy. Original local coachwork; no downloaded or branded assets. */
@@ -56,7 +59,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   }
   hull.deckPanel(body, paint, .9, 2.34); hull.deckPanel(body, paint, -2.34, -1.84);
   hull.endPanel(body, paint, 2.34); hull.endPanel(body, paint, -2.34); hull.arches(body, paint, .013);
-  coachWheels(body, { axles, x: .875, y: .355, radius: .347, width: .15, spokes: 5 }, rubber, dark, silver, paint);
+  coachWheels(body, { axles, x: .875, y: .355, radius: .347, width: .15, spokes: 5, design: 'aero' }, rubber, dark, silver, paint);
   // A wrapped, swept-back nose with actual front-facing lamp recesses. The
   // bonnet is clean; optics no longer read as black stickers laid on its top.
   const intake = coachFasciaPatch(body, hull, 2.34, -.82, .82, .20, .39, dark);
@@ -114,20 +117,17 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   coachLine(cabin, t => [coachMix(-.80, .80, t), .848, .690 + .020 * (t * 2 - 1) ** 2], wood, .019, 30);
   cabin.box(0, .888, .712, 1.54, .012, .019, rubber, .003);
   for (const x of [-.71, .71]) for (let i = 0; i < 4; i++) cabin.box(x, .842 + i * .009, .669, .18, .002, .003, silver, 0);
-  cabin.box(0, .47, .086, .265, .29, .96, dark, .035);
-  cabin.box(0, .631, -.254, .26, .078, .30, upholstery, .025);
-  cabin.box(0, .622, .28, .253, .025, .39, wood, .010);
-  for (const z of [-.005, .147]) {
-    cabin.cylinder(0, .627, z, .050, .046, .008, rubber, [0, 0, 0], 24);
-    cabin.geometry(new THREE.TorusGeometry(.052, .0035, 6, 24), silver, [0, .635, z], [Math.PI / 2, 0, 0]);
-  }
+  cupConsole(cabin,.086,.96,.265,.287,.628,[-.005,.147],dark,wood,rubber,silver);
+  cabin.box(0, .650, -.254, .26, .078, .30, upholstery, .025);
   const chargers = new VillaModelBuilder(car, 'vehicle-dual-phone-chargers');
   chargers.root.userData = { kind: 'inductive-phone-chargers', count: 2, consoleMounted: true };
-  chargers.geometry(new THREE.BoxGeometry(.269, .024, .222), dark, [0, .676, .442], [-.40, 0, 0]);
-  for (const x of [-.069, .069]) {
-    chargers.geometry(new THREE.BoxGeometry(.115, .008, .183), rubber, [x, .691, .436], [-.40, 0, 0]);
-    chargers.geometry(new THREE.BoxGeometry(.093, .004, .157), display, [x, .697, .434], [-.40, 0, 0]);
-    chargers.box(x, .662, .345, .104, .018, .019, silver, .004);
+  for (const x of [-.067, .067]) {
+    const pocket=(w:number,d:number,h:number)=>roundedLoop(w,d,.013).map(([a,c]):P3=>[x+a,.670+.40*c+h,.442+c]);
+    chargers.geometry(sectionLoft([pocket(.127,.208,0).map(([a,,c]):P3=>[a,.625,c]),pocket(.133,.216,.011),pocket(.131,.214,.017),
+      pocket(.112,.191,.016),pocket(.105,.185,.001)],true,false),dark);
+    chargers.geometry(sectionLoft([pocket(.105,.185,.001),pocket(.096,.174,-.004)],false,true,[0,1,0]),rubber);
+    coachLine(chargers,t=>[x+(t-.5)*.087,.652-.024*(t-.5)**2,.342],silver,.006,10);
+    for(const k of [-1,0,1]) coachLine(chargers,t=>[x+(t-.5)*.057,.664+k*.007+.0015*Math.sin(t*Math.PI),.433+k*.0175],display,.0018,6);
   }
   chargers.finish();
   const instruments = new VillaModelBuilder(car, 'vehicle-driver-instruments');
@@ -141,14 +141,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   instruments.box(.43, .987, .729, .013, .030, .003, upholstery, .003); instruments.finish();
   cabin.box(0, .927, .607, .407, .258, .024, dark, .012);
   cabin.box(0, .929, .592, .376, .225, .003, display, .002);
-  cabin.box(.074, .928, .589, .002, .197, .002, displayAccent, 0);
-  for (let i = 0; i < 4; i++) {
-    cabin.beam([-.172, .862 + i * .046, .588], [.054, .882 + i * .046, .588], .0015, displayAccent, 5);
-    cabin.beam([-.151 + i * .054, .834, .588], [-.125 + i * .054, 1.025, .588], .0015, displayAccent, 5);
-  }
-  cabin.box(-.06, .928, .584, .018, .033, .003, upholstery, .004);
-  cabin.box(.13, .952, .587, .043, .078, .003, upholstery, .008);
-  for (let i = 0; i < 3; i++) cabin.box(.13, .869 + i * .015, .587, .068, .004, .002, displayAccent, 0);
+  cabinMap(cabin,0,.929,.589,.376,.225,displayAccent,upholstery,'fastback');
   cabin.beam([0, 1.439, .19], [0, 1.304, .30], .010, dark);
   cabin.box(0, 1.286, .309, .235, .066, .03, dark, .011); cabin.box(0, 1.286, .291, .208, .047, .004, silver, .003);
   // Fixed tilted column; only the centred wheel rotor turns.
@@ -162,8 +155,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   wheel.box(0, -.008, -.008, .104, .076, .046, dark, .018);
   for (const side of [-1, 1]) {
     wheel.beam([side * .037, -.006, 0], [side * .157, .016, 0], .016, dark);
-    wheel.box(side * .085, .006, -.018, .037, .024, .008, silver, .005);
-    for (const y of [-.003, .009]) wheel.box(side * .085, y, -.024, .018, .002, .002, rubber, 0);
+    wheelThumbPod(wheel,side,.085,.006,-.02,false,rubber,silver,silver);
   }
   for (const x of [-.025, .025]) wheel.beam([x, -.029, 0], [x, -.157, 0], .011, dark);
   wheel.box(0, .175, -.005, .026, .025, .037, upholstery, .004);
@@ -181,16 +173,9 @@ export function createVillaVehicle(parent: THREE.Object3D): {
       hull.sides(door, paint, side, -.3, .9);
       coachLine(door, t => canopy.window(side, coachMix(-.3, .9, t), 0), silver, .007);
       for (const z of [-.3, .9]) coachLine(door, t => hull.side(side, z, t), seam, .0025, 12);
-      door.box(side * .839, .626, .27, .051, .41, 1.07, dark, .021);
-      door.box(side * .815, .742, .27, .034, .084, 1.015, upholstery, .015);
-      door.box(side * .789, .672, .18, .087, .07, .52, upholstery, .018);
-      door.box(side * .811, .809, .29, .016, .028, .97, wood, .005);
-      door.box(side * .799, .738, .58, .020, .029, .14, silver, .006);
-      door.cylinder(side * .809, .511, .62, .064, .064, .012, seam, [0, 0, Math.PI / 2], 24);
+      trimDoor(door,hull,side,'fastback',-.285,.884,.35,.898,upholstery,insert,dark,silver,wood);
       door.box(side * .931, .847, -.17, .011, .019, .143, dark, .005);
-      door.beam([side * .884, 1.001, .73], [side * .923, 1.018, .775], .012, dark);
-      door.ellipsoid(side * .927, 1.038, .791, .028, .040, .084, paint);
-      door.box(side * .925, 1.038, .713, .049, .043, .005, silver, .007);
+      doorMirror(door,side,[.884,1.001,.73],[.925,1.038,.791],.061,.071,.155,'fastback',paint,dark,silver);
     });
     door.finish(); windows.finish();
   }
