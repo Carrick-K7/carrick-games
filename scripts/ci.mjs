@@ -1,5 +1,5 @@
 import { appendFile, cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -14,6 +14,9 @@ const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CI_DIR = join(ROOT, '.ci');
 const PLAN = join(CI_DIR, 'plan.json');
 const FULL_STAMP = join(CI_DIR, 'full-verified.json');
+const SSH_TIMEOUT_ARGS = ['-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
+export const PUBLISH_TIMEOUT_MS = 600_000;
+const PUBLISH_STDERR_LINES = 20;
 const goodInteger = value => Number.isSafeInteger(value) && value >= 0;
 function assert(value, message) { if (!value) throw new Error(message); }
 function git(args) { return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
@@ -408,7 +411,7 @@ export function deploymentConnection(environment = process.env, { unlist = false
   if (unlist) assert(user === 'ubuntu' && port === '2222', 'Unlist requires the existing ubuntu/2222 restricted publisher');
   return { host, port, user };
 }
-async function withDeploymentSSH(operation, { environment = process.env, unlist = false } = {}) {
+export async function withDeploymentSSH(operation, { environment = process.env, unlist = false } = {}) {
   const { host, port, user } = deploymentConnection(environment, { unlist });
   const directory = await mkdtemp(join(environment.RUNNER_TEMP || tmpdir(), 'carrick-ssh-'));
   const key = join(directory, 'key');
@@ -416,10 +419,54 @@ async function withDeploymentSSH(operation, { environment = process.env, unlist 
   try {
     await writeFile(key, environment.SSH_KEY + '\n', { mode: 0o600 });
     await writeFile(known, environment.DEPLOY_KNOWN_HOSTS + '\n', { mode: 0o600 });
-    return await operation(['-p', port, '-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '--', `${user}@${host}`]);
+    return await operation(['-p', port, '-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, ...SSH_TIMEOUT_ARGS, '--', `${user}@${host}`]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+export function publishFailureDetail(stderrLines) {
+  if (!stderrLines.length) return '';
+  return `\nstderr:\n${stderrLines.join('\n')}`;
+}
+/**
+ * Run the restricted SSH publication. A stuck SSH process must fail in seconds,
+ * not hold the job for 90 minutes: the whole child gets one hard deadline.
+ */
+export function runRestrictedPublication({ sshArgs, command, archive, timeoutMs = PUBLISH_TIMEOUT_MS, spawnImpl = spawn }) {
+  return new Promise((resolvePromise, reject) => {
+    const input = createReadStream(archive);
+    const stderrLines = [];
+    let settled = false;
+    let timer;
+    const settle = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      input.destroy();
+      if (error) reject(error); else resolvePromise();
+    };
+    const child = spawnImpl('ssh', [...sshArgs, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'pipe'] });
+    child.stderr.on('data', chunk => {
+      process.stderr.write(chunk);
+      for (const line of String(chunk).split('\n')) {
+        const text = line.trim();
+        if (text && stderrLines.length < PUBLISH_STDERR_LINES) stderrLines.push(text);
+      }
+    });
+    timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      settle(new Error(`Restricted publication timed out after ${Math.round(timeoutMs / 1000)}s${publishFailureDetail(stderrLines)}`));
+    }, timeoutMs);
+    input.on('error', error => settle(error));
+    child.stdin.on('error', error => { if (error.code !== 'EPIPE') settle(error); });
+    child.on('error', error => settle(error));
+    child.on('exit', code => {
+      if (code === 0) settle();
+      else settle(new Error(`Restricted publication failed (${code})${publishFailureDetail(stderrLines)}`));
+    });
+    input.pipe(child.stdin);
+  });
 }
 export async function publish(plan, id) {
   const target = targetPlan(plan, id);
@@ -459,15 +506,7 @@ export async function publish(plan, id) {
     await withDeploymentSSH(async sshArgs => {
       await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
       const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
-      const input = await import('node:fs').then(module => module.createReadStream(archive));
-      await new Promise((resolvePromise, reject) => {
-        const child = spawn('ssh', [...sshArgs, command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
-        input.on('error', error => { child.kill(); reject(error); });
-        child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
-        child.on('error', error => { input.destroy(); reject(error); });
-        child.on('exit', code => { input.destroy(); code === 0 ? resolvePromise() : reject(new Error(`Restricted publication failed (${code})`)); });
-        input.pipe(child.stdin);
-      });
+      await runRestrictedPublication({ sshArgs, command, archive });
       const observed = componentState(await fetchProductionSnapshot(), id);
       assert(observed.revision === plan.revision && observed.version === target.version, 'Public state does not identify the published target');
       console.log(JSON.stringify({ status: 'deployed', id, revision: plan.revision, generation: observed.generation, sequence: observed.sequence }));
