@@ -109,7 +109,10 @@ export async function startCapture({release, recipe}) {
     const daylight=owner.surveyedSun?.room?.map;
     assert(daylight?.isData3DTexture && daylight.image.data?.length>1000,'Furnished room daylight field missing');
     const gl=renderer.getContext(), info=gl.getExtension('WEBGL_debug_renderer_info'), gpu=info && gl.getParameter(info.UNMASKED_RENDERER_WEBGL);
-    assert(gl instanceof WebGL2RenderingContext && /SwiftShader/i.test(gpu) && gl.getContextAttributes().alpha===false && renderer.outputColorSpace==='srgb',`Unexpected capture GL path: ${gpu}`);
+    // Three r185 requests an alpha CHANNEL even for an opaque Villa renderer;
+    // its opaque clear and actual per-pixel alpha, not that creation flag, matter.
+    assert(gl instanceof WebGL2RenderingContext && /SwiftShader/i.test(gpu) && renderer.getClearAlpha()===1 && renderer.outputColorSpace==='srgb'
+      && gl.getParameter(gl.RED_BITS)===8 && gl.getParameter(gl.DEPTH_BITS)>=16,`Unexpected capture GL path: ${gpu}, alpha=${renderer.getClearAlpha()}, output=${renderer.outputColorSpace}`);
     if(owner.roomMirrors) await owner.roomMirrors.ready; // ignored during capture; only the independently baked study needs them
     const panes=measureGlass(scene,recipe.sites,owner.camera), furnitureRoot=scene.getObjectByName(furniture);
     assert(furnitureRoot && capturePolicy.furniture.every(n=>furnitureRoot.children.some(o=>o.name===n)), 'Incomplete fitted furniture roots');
@@ -166,6 +169,23 @@ function draw(cap) {
   gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
   const error=gl.getError(); assert(!error&&!gl.isContextLost(),'Lost/failed mirror readback: '+error);
   return pixels;
+}
+/** The Villa canvas is cleared opaque, but e.g. material cutouts can write
+ * fractional coverage to the default framebuffer's alpha channel. Composite
+ * the actual premultiplied game surface over explicit zero incident radiance,
+ * exactly as a canvas blit does. Never turn the raw alpha into opaque RGB by
+ * ignoring it, unpremultiplying it yourself, or discarding the cutout meshes. */
+function matteFrame(cap,raw,w,h) {
+  assert(w*h*4===raw.length,'Wrong frame size');
+  let partial=0, min=255;for(let i=3;i<raw.length;i+=4) {const a=raw[i];if(a!==255)partial++;min=Math.min(min,a);}
+  assert(partial<w*h || min>0,'No opaque room coverage');
+  const c=cap.matte??=document.createElement('canvas'); if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  const ctx=c.getContext('2d',{alpha:false,willReadFrequently:true});assert(ctx,'Missing opaque authoring blit');
+  ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.drawImage(cap.renderer.domElement,0,0);
+  const top=ctx.getImageData(0,0,w,h).data;
+  assert(opaque(top,w*h*4),'Incomplete composited face');
+  const bottom=new Uint8Array(top.length);for(let y=0;y<h;y++)bottom.set(top.subarray(y*w*4,(y+1)*w*4),(h-y-1)*w*4);
+  return {bottom,canvas:c,partial,min};
 }
 function summary(bytes) {
   let s=0, ss=0; const hist=new Uint32Array(256);
@@ -233,10 +253,9 @@ export function eyeView(cap,room,mode) {
   // From the room camera look towards the actual bed/island, rather than a
   // detail-free patch of plaster straight across a very wide bedroom.
   const target=from?toWorld(room==='master'?[-.80,-.16,1]:[0,-.10,1],axis):eye.map((v,i)=>v-p[i]);
-  aim(cap,p,target,[0,1,0],from?80:51,768,480); const rgba=draw(cap);
-  assert(opaque(rgba,768*480*4), 'Incomplete study frame');
-  const png=urlOf(renderer.domElement,'png'); // save BEFORE the optional ID mask draw
-  return {png,eye:p,stats:summary(rgba),optics:from?null:auditPane(cap,room,rgba)};
+  aim(cap,p,target,[0,1,0],from?80:51,768,480); const matte=matteFrame(cap,draw(cap),768,480);
+  const png=urlOf(matte.canvas,'png'); // save BEFORE the optional ID mask draw
+  return {png,eye:p,stats:summary(matte.bottom),optics:from?null:auditPane(cap,room,matte.bottom)};
 }
 export async function captureRoom(cap,room) {
   const {recipe,renderer}=cap, {eye,axis}=recipe.sites[room], {core,border,size:n,quality}=recipe;
@@ -248,14 +267,15 @@ export async function captureRoom(cap,room) {
       lighting(cap,room,layer,{x:eye[0],y:eye[1],z:eye[2]});
       renderer.toneMapping=2; // Three.ReinhardToneMapping: E/(1+E). Keep actual lit geometry, not display-mapped ACES pixels.
       renderer.toneMappingExposure=1;
-      const raw=[], hashes=[];
+      const raw=[], hashes=[];let partial=0,minAlpha=255;
       for(const face of faces){
         aim(cap,eye,toWorld(face.look,axis),toWorld(face.up,axis),fov,side,side);
         const pixels=draw(cap); assert(cap.gl.drawingBufferWidth===side&&cap.gl.drawingBufferHeight===side,'Wrong capture resolution');
-        raw.push(pixels); hashes.push(await digest(pixels));
+        const matte=matteFrame(cap,pixels,side,side);partial+=matte.partial;minAlpha=Math.min(minAlpha,matte.min);
+        raw.push(matte.bottom); hashes.push(await digest(pixels)); // authenticate ORIGINAL pre-composite GL bytes too
       }
       const rgba=projectFaces(raw,core,border,n), data=new ImageData(rgba,n,n);
-      ctx.putImageData(data,0,layer*n); facesSHA256.push(hashes); projectedSHA256.push(await digest(rgba)); stats.push(summary(rgba));
+      ctx.putImageData(data,0,layer*n); facesSHA256.push(hashes); projectedSHA256.push(await digest(rgba)); stats.push({...summary(rgba),partial,minAlpha});
       assert(stats[layer].sd>4 && stats[layer].levels>35, `Blank/underexposed room ${room}/${layer}: ${JSON.stringify(stats[layer])}`);
     }
     assert(stats[2].mean<stats[0].mean && stats[2].mean<stats[3].mean, `Off/night optics did not get darker: ${room} ${JSON.stringify(stats)}`);

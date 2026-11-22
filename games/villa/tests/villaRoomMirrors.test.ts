@@ -167,6 +167,14 @@ describe('attested room photograph provenance',()=>{
       let n:number=VILLA_MIRROR_SIZE;for(;;){gpuBytes+=4*VILLA_MIRROR_LAYERS.length*n*n;if(n===1)break;n=Math.max(1,n>>1);}
     }
     expect(digests.size).toBe(5);expect(gpuBytes).toBeLessThanOrEqual(VILLA_MIRROR_BUDGET.gpuBytes);
+    // Chromium's sRGB ICC is retained, not silently stripped. Neither an alpha
+    // flag nor a tampered transfer profile can masquerade as the attested plate.
+    const transport=Buffer.from(data.VILLA_MIRROR_PLATES.master,'base64');
+    if(transport.toString('ascii',12,16)==='VP8X') {
+      const alpha=Buffer.from(transport);alpha[20]|=0x10;expect(()=>plateHeader(alpha)).toThrow(/ICC/);
+      const wrongICC=Buffer.from(transport);wrongICC[38]^=1;expect(()=>plateHeader(wrongICC)).toThrow(/ICC/);
+    }
+    expect(receipt.rooms.some((r:{stats:{partial:number;minAlpha:number}[]})=>r.stats.some(s=>s.partial>0&&s.minAlpha<255))).toBe(true);
     const change=structuredClone(records);change[0].facesSHA256[1][2]='01'.repeat(32);expect(roomSources(change).sourceSha256).not.toBe(result.sourceSha256);
   });
 });

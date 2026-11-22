@@ -21,7 +21,7 @@ const receiptFile=new URL('./bake-room-mirrors.provenance.json',import.meta.url)
 const helperFile=new URL('./bake-room-mirrors-render.mjs',import.meta.url);
 const studyDir=new URL('../test-results/room-mirrors/',import.meta.url);
 export const recipe={format:'villa-room-radiance-v1', projection:'hemioctahedral square, top-down straight RGBA, independent layers',
-  capture:'SwiftShader WebGL2; actual furnished renderer, room field, emissives, per-eye physical light slots, clear sky. Exposure-one Reinhard in sRGB. No HUD or animation.',
+  capture:'SwiftShader WebGL2; actual furnished renderer, room field, emissives, per-eye physical light slots, clear sky. Exposure-one Reinhard in sRGB. Browser composite over opaque zero radiance preserves cutout coverage. No HUD or animation.',
   core:512,border:2,size:VILLA_MIRROR_SIZE,quality:.91,faces,sites:VILLA_MIRROR_SITES,lights:VILLA_MIRROR_LIGHT,layers:VILLA_MIRROR_LAYERS,policy:capturePolicy};
 
 export function mirrorOptions(args, env) {
@@ -59,13 +59,24 @@ async function attest(opt) {
   return {release,body,auth:{version:d.version,revision:d.revision,entrySha256,descriptorSha256:sha(desc),catalogSha256:sha(catalog)}};
 }
 
-/** Strict transport: one still VP8 image, no alpha plane/animation or implicit
- * additional downloads. Runtime additionally verifies decoded extent and alpha. */
+/** Strict transport: one still VP8 image. Chromium may additionally write its
+ * sRGB canvas ICC profile; preserve it unchanged, and reject other metadata,
+ * alpha planes, animation, truncation or a mismatched extended canvas size. */
 export function plateHeader(bytes) {
   assert(bytes.length>=30&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.readUInt32LE(4)+8===bytes.length&&bytes.toString('ascii',8,12)==='WEBP','Incomplete WebP plate');
-  const size=bytes.readUInt32LE(16);
-  assert(bytes.toString('ascii',12,16)==='VP8 '&&20+size+(size%2)===bytes.length&&!(bytes[20]&1)&&bytes.readUIntLE(23,3)===0x2a019d,'Not one opaque still VP8 keyframe');
-  return [bytes.readUInt16LE(26)&0x3fff,bytes.readUInt16LE(28)&0x3fff];
+  let offset=12, canvas;
+  const chunk=tag=>{
+    assert(offset+8<=bytes.length&&bytes.toString('ascii',offset,offset+4)===tag,'Unexpected WebP chunk; expected '+tag);
+    const size=bytes.readUInt32LE(offset+4),end=offset+8+size;assert(end+(size%2)<=bytes.length,'Truncated WebP chunk');
+    const out=bytes.subarray(offset+8,end);offset=end+(size%2);return out;
+  };
+  if(bytes.toString('ascii',offset,offset+4)==='VP8X'){
+    const x=chunk('VP8X');assert(x.length===10&&x.readUInt32LE(0)===0x20,'Extended plate should carry ONLY an ICC profile');
+    canvas=[1+x.readUIntLE(4,3),1+x.readUIntLE(7,3)];
+    assert(sha(chunk('ICCP'))==='12afb4d9953adee0607d347daee5b78b18d6b3cab2d572b88970703f5edb37bc','Unexpected/non-sRGB encoder ICC profile');
+  }
+  const vp8=chunk('VP8 ');assert(offset===bytes.length&&vp8.length>=10&&!(vp8[0]&1)&&vp8.readUIntLE(3,3)===0x2a019d,'Not one opaque still VP8 keyframe');
+  const size=[vp8.readUInt16LE(6)&0x3fff,vp8.readUInt16LE(8)&0x3fff];assert(!canvas||size.every((n,i)=>n===canvas[i]),'Conflicting VP8 dimensions');return size;
 }
 export function roomSources(captures) {
   assert(captures.length===VILLA_MIRROR_ROOMS.length,'Need all five furnished room captures');
