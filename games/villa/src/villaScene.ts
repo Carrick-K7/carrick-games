@@ -167,8 +167,21 @@ export class VillaScene {
       this.resizing=true; this.resizeLead=true; this.softwareInputFrames=0;
     } else this.invalidateCameraFrame();
   }
-  /** Teleport/restart is a discontinuity, unlike ordinary continuous movement. */
-  invalidateCameraFrame() { this.lastStateKey=''; this.softwareInputFrames=0; this.inputLeadSpent=false; this.resizing=this.resizeLead=false; }
+  /** A restart, material change or superseding cut invalidates the actual pixels, not just their camera. */
+  invalidateCameraFrame() {
+    if (this.readback?.pending) this.readback.cancel();
+    this.homeCutKey = null;
+    this.lastStateKey=''; this.softwareInputFrames=0; this.inputLeadSpent=false; this.resizing=this.resizeLead=false;
+  }
+
+  /** Unlike a continuous refresh, Home must NEVER display the previous location while the GPU is busy. */
+  beginHomeCameraCut(destination: VillaSceneState) {
+    const hasPrevious = this.cachedAspect > 0 && Number.isFinite(this.lastDrawAt) && (this.lastStateKey || this.homeCutKey);
+    this.invalidateCameraFrame(); // Retire even a prior Home ticket with an identical state key.
+    if (hasPrevious && this.lowSpec && this.readback && !this.disposed && !this.contextLost) {
+      this.homeCutKey = villaSceneInputKey(destination);
+    }
+  }
 
   readonly renderer: THREE.WebGLRenderer;
   readonly colliders: VillaCollider[];
@@ -202,6 +215,8 @@ export class VillaScene {
   private readonly elevatorCollisions = createVillaElevatorColliders();
   private readonly environment = reflectionProbe();
   private lastStateKey = '';
+  // Non-null from an explicit Home cut until its first matching destination pixels are installed.
+  private homeCutKey: string | null = null;
   private readonly water: THREE.Mesh;
   private readonly waterMap: THREE.Texture;
   private readonly groundSwatches: ReturnType<typeof courtyardSwatches>;
@@ -246,6 +261,7 @@ export class VillaScene {
   private readonly onContextLost = (event: Event) => {
     event.preventDefault(); this.contextLost = true; this.securityKey = '';
     this.readback?.dispose(); this.readback = null;
+    this.invalidateCameraFrame();
   };
   private readonly onContextRestored = () => {
     this.contextLost = false; this.renderer.shadowMap.needsUpdate = true;
@@ -451,6 +467,7 @@ export class VillaScene {
 
   /** A small in-world interaction badge, never visible through walls or behind the camera. */
   projectInteraction(point: VillaPosition, width: number, height: number): { x: number; y: number } | null {
+    if (this.homeCutKey) return null; // No world is on screen to attach a badge to.
     const origin = this.camera.position, end = new THREE.Vector3(point.x, point.y, point.z);
     for (const c of this.colliders) {
       if (point.x >= c.minX && point.x <= c.maxX && point.y >= c.minY && point.y <= c.maxY && point.z >= c.minZ && point.z <= c.maxZ) continue;
@@ -581,9 +598,10 @@ export class VillaScene {
     }
   }
 
-  /** Re-present the last completed world at its true field of view, never stretching it
-   * across a new aspect. The HUD/background are redrawn at the current logical size. */
-  private showCached(ctx: CanvasRenderingContext2D,width:number,height:number) {
+  /** The game has already painted its theme-neutral background. Leave it under the live HUD
+   * during Home instead of showing the wrong location. A resize may reframe the old world. */
+  private showWaitingWorld(ctx: CanvasRenderingContext2D,width:number,height:number) {
+    if (this.homeCutKey) return;
     const w=this.resizing && this.cachedAspect>0 ? height*this.cachedAspect : width;
     ctx.drawImage(this.cachedFrame,(width-w)/2,0,w,height);
   }
@@ -602,27 +620,31 @@ export class VillaScene {
     if(this.resizeLead && validPrevious) {
       // The viewport callback owns layout and projection, not a synchronous software raster.
       // Give the browser one paint at the new size before submitting a fresh frame for it.
-      this.resizeLead=false; this.showCached(ctx,width,height); return true;
+      this.resizeLead=false; this.showWaitingWorld(ctx,width,height); return true;
     }
     const uninterrupted = time>=this.lastInputTime && time-this.lastInputTime<.5;
     this.lastInputTime = time;
+    const canQueue = this.lowSpec && uninterrupted && Number.isFinite(this.lastDrawAt);
+    if (this.homeCutKey && (!canQueue || this.homeCutKey !== stateKey)) this.invalidateCameraFrame();
     if (this.readback?.pending) {
-      if (!validPrevious || this.queuedWidth!==w || this.queuedHeight!==h || this.lastDrawAt===-Infinity || !uninterrupted) {
-        // A resize, clock jump or actual logical action cannot show a stale response.
-        this.readback.cancel();
+      if (!canQueue || (!validPrevious && !this.homeCutKey) || this.queuedWidth!==w || this.queuedHeight!==h
+        || this.queuedCamera.aspect !== width / height) {
+        // A resize (even with identical rounded raster), clock jump or semantic change supersedes the ticket.
+        this.readback.cancel(); this.homeCutKey=null;
       } else {
         const frame = this.readback.poll();
-        if (frame === 'waiting') { this.showCached(ctx,width,height); return true; }
+        if (frame === 'waiting') { this.showWaitingWorld(ctx,width,height); return true; }
         if (frame) {
           if(this.cachedFrame.width!==w || this.cachedFrame.height!==h) {this.cachedFrame.width=w;this.cachedFrame.height=h;}
           this.cachedFrame.getContext('2d')!.putImageData(frame,0,0);
           this.cachedAspect=this.queuedCamera.aspect; this.resizing=false;
           this.camera.copy(this.queuedCamera,false); // project hints from the displayed camera, not the queued one
+          this.lastStateKey=stateKey; this.homeCutKey=null;
           this.cachedTime=this.queuedTime; this.lastDrawAt=now; this.softwareInputFrames=6; this.inputLeadSpent=false;
           ctx.drawImage(this.cachedFrame,0,0,width,height); return true;
         }
         // Readback unavailable: finish this frame through the original synchronous bridge.
-        this.readback.dispose(); this.readback=null;
+        this.readback.dispose(); this.readback=null; this.homeCutKey=null;
       }
     }
     // Guarantee input-only RAFs even if browser compositing AFTER render() took
@@ -635,9 +657,9 @@ export class VillaScene {
       ctx.drawImage(this.cachedFrame, 0, 0, width, height); return true;
     }
     if (this.renderer.domElement.width !== w || this.renderer.domElement.height !== h) this.renderer.setSize(w, h, false);
-    // Only defer an ordinary continuous refresh of a valid frame. Cold starts, explicit
-    // redraws, new actions, aspect/clock changes and recovery seed the correct picture now.
-    const defer = this.readback && validPrevious && uninterrupted && Number.isFinite(this.lastDrawAt);
+    // Home may queue its destination WITHOUT a displayable old frame. Every other
+    // invalidation, cold start, forced snapshot or unsupported bridge seeds synchronously.
+    const defer = this.readback && canQueue && (validPrevious || !!this.homeCutKey);
     const camera = defer ? this.queuedCamera.copy(this.camera,false) : this.camera;
     camera.aspect = width / height; camera.fov = view.fov ?? 64; camera.updateProjectionMatrix();
     camera.position.set(view.x, view.y + (view.eyeHeight ?? EYE_HEIGHT), view.z);
@@ -646,11 +668,11 @@ export class VillaScene {
     this.drawWorld(camera);
     if (defer) {
       if (this.readback!.submit(w,h)) {
-        this.queuedTime=time; this.queuedWidth=w; this.queuedHeight=h; this.showCached(ctx,width,height); return true;
+        this.queuedTime=time; this.queuedWidth=w; this.queuedHeight=h; this.showWaitingWorld(ctx,width,height); return true;
       }
       this.readback!.dispose(); this.readback=null; this.camera.copy(camera,false);
     }
-    this.lastStateKey = stateKey;
+    this.lastStateKey = stateKey; this.homeCutKey = null;
     if (this.lowSpec) {
       if (this.cachedFrame.width !== w || this.cachedFrame.height !== h) { this.cachedFrame.width = w; this.cachedFrame.height = h; }
       this.cachedFrame.getContext('2d')!.drawImage(this.renderer.domElement, 0, 0);
@@ -664,7 +686,7 @@ export class VillaScene {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.readback?.dispose(); this.readback=null;
+    this.readback?.dispose(); this.readback=null; this.homeCutKey=null;
     this.staticView?.dispose();this.surveyedSun?.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);

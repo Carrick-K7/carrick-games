@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { VillaScene, VILLA_SECURITY_FEED_SIZE, villaFlipSecurityPixels, villaSceneInputKey, type VillaSceneState } from '../src/villaScene.js';
 import { createVillaHome, VILLA_SECURITY_CAMERAS } from '../src/villaHome.js';
+import { VILLA_ENTRANCE } from '../src/villaWorld.js';
 import { createVillaHomeModel } from '../src/villaHomeModel.js';
 import { createVillaOutdoor } from '../src/villaOutdoor.js';
 import { createVillaOutdoorModel } from '../src/villaOutdoorModel.js';
@@ -168,6 +169,85 @@ describe('Villa scene logical cache and live Home/Outdoor integration', () => {
     expect(renderer.shadowMap.needsUpdate).toBe(true);
     const chair = h.scene.getObjectByName('villa-portable-camping-chair'); expect(chair.position.x).toBeCloseTo(12 - Math.sin(.5) * .8); expect(chair.position.y).toBeCloseTo(4.2);
     expect(h.outdoorModel.colliders.at(-1).minY).toBe(1e6);
+  });
+});
+
+describe('Villa Home destination-only software camera cut', () => {
+  function setup() {
+    const { api, h, state, renderer, primaryView } = fixture(), dst = canvas().context;
+    const home = { ...primaryView, ...VILLA_ENTRANCE, yaw: 0, pitch: .04, roll: 0 };
+    const ticket = {
+      pending: false,
+      submit: vi.fn(function (this: {pending: boolean}) { expect(this.pending).toBe(false); return this.pending = true; }),
+      poll: vi.fn((): ImageData | 'waiting' | null => 'waiting'),
+      cancel: vi.fn(function (this: {pending: boolean}) { this.pending = false; }),
+      dispose: vi.fn(function (this: {pending: boolean}) { this.pending = false; }),
+    };
+    h.queuedCamera = new THREE.PerspectiveCamera(); h.lastInputTime = -1; h.colliders = []; h.readback = ticket;
+    const render = (t: number, view = home, w = 800, ht = 500) => api.render(dst as unknown as CanvasRenderingContext2D, w, ht, 1, view, t, state);
+    const seed = () => { render(0, primaryView); dst.drawImage.mockClear(); h.cachedFrame.context.drawImage.mockClear(); };
+    return { api, h, state, renderer, primaryView, dst, home, ticket, render, seed };
+  }
+
+  it('keeps input/collision updates live over a neutral base, then presents only matching destination pixels, eye and clock', () => {
+    const { api, h, state, renderer, dst, home, ticket, render, seed } = setup(); seed();
+    const previous = h.camera.position.clone(), walked = { ...home, x: .3 }, anchor = { x: 0, y: home.eyeHeight, z: 7 };
+    api.beginHomeCameraCut(state); expect(render(.01)).toBe(true); expect(render(.03, walked)).toBe(true);
+    expect(ticket.submit).toHaveBeenCalledTimes(1); expect(ticket.poll).toHaveBeenCalledTimes(1); expect(renderer.render).toHaveBeenCalledTimes(2);
+    expect(h.primaryView.x).toBe(walked.x); expect(h.furnishings.update).toHaveBeenCalledTimes(3);
+    expect(h.camera.position).toEqual(previous); expect(api.projectInteraction(anchor, 800, 500)).toBeNull();
+    expect(dst.drawImage).not.toHaveBeenCalled(); expect(h.cachedFrame.context.drawImage).not.toHaveBeenCalled();
+    const image = { data: Uint8ClampedArray.of(17, 63, 51, 255) } as ImageData;
+    ticket.poll.mockImplementationOnce(() => { ticket.pending = false; return image; });
+    render(.05, walked); expect(h.cachedFrame.context.putImageData).toHaveBeenCalledWith(image, 0, 0);
+    expect(dst.drawImage.mock.calls).toEqual([[h.cachedFrame, 0, 0, 800, 500]]); expect(h.cachedFrame.context.drawImage).not.toHaveBeenCalled();
+    expect(h.camera.position.toArray()).toEqual([home.x, home.eyeHeight, home.z]); expect(h.cachedTime).toBe(.01);
+    h.camera.updateMatrixWorld(); expect(api.projectInteraction(anchor, 800, 500)).not.toBeNull();
+    render(.07, walked); expect(renderer.render).toHaveBeenCalledTimes(2); // normal completed-frame cache resumes
+    h.softwareInputFrames = 0; h.lastDrawAt = performance.now() - 100; render(.09, walked);
+    expect(ticket.pending).toBe(true); expect(dst.drawImage).toHaveBeenCalledTimes(3); // ordinary refresh can show the *destination*
+  });
+
+  it('retires an ordinary ticket and a repeated same-key Home without polling or presenting either superseded frame', () => {
+    const { api, h, state, dst, home, ticket, render, seed } = setup(); seed();
+    h.softwareInputFrames = 0; h.lastDrawAt = performance.now() - 100; render(.02, { ...home, x: -12 });
+    expect(ticket.pending).toBe(true); dst.drawImage.mockClear();
+    api.beginHomeCameraCut(state); render(.04); api.beginHomeCameraCut(state); render(.06);
+    expect(ticket.cancel).toHaveBeenCalledTimes(2); expect(ticket.submit).toHaveBeenCalledTimes(3); expect(ticket.pending).toBe(true);
+    expect(ticket.poll).not.toHaveBeenCalled(); expect(dst.drawImage).not.toHaveBeenCalled();
+    api.dispose(); expect(ticket.pending).toBe(false); expect(ticket.dispose).toHaveBeenCalledTimes(1); expect(render(.08)).toBe(false);
+  });
+
+  it.each(['semantic action', 'forced snapshot', 'clock jump', 'viewport resize', 'same-raster aspect', 'restart/material invalidation'])('discards a pending destination on %s and draws the current world synchronously', mode => {
+    const { api, h, state, renderer, dst, home, ticket, render, seed } = setup(); seed(); api.beginHomeCameraCut(state); render(.02);
+    let t = .04, w = 800;
+    if (mode === 'semantic action') state.fireplace = !state.fireplace;
+    if (mode === 'forced snapshot') h.lastDrawAt = -Infinity;
+    if (mode === 'clock jump') t = 2;
+    if (mode === 'viewport resize') { w = 470; api.setPrimaryAspect(w, 500); }
+    if (mode === 'same-raster aspect') w += .1; // caller draws directly; rounded target is still 440×275
+    if (mode === 'restart/material invalidation') api.invalidateCameraFrame();
+    render(t, { ...home, x: 3 }, w);
+    expect(ticket.cancel).toHaveBeenCalledTimes(1); expect(ticket.poll).not.toHaveBeenCalled(); expect(ticket.pending).toBe(false);
+    expect(h.cachedFrame.context.putImageData).not.toHaveBeenCalled(); expect(h.cachedFrame.context.drawImage).toHaveBeenCalledWith(renderer.domElement, 0, 0);
+    expect(dst.drawImage).toHaveBeenCalledTimes(1); expect(h.camera.position.x).toBe(3); expect(h.camera.aspect).toBe(w / 500); expect(h.cachedTime).toBe(t);
+  });
+
+  it.each(['cold', 'hardware', 'no readback', 'forced before submit', 'submit rejected', 'poll failed'])('preserves a correct synchronous Home on %s', mode => {
+    const { api, h, state, renderer, dst, home, ticket, render, seed } = setup();
+    if (mode !== 'cold') seed();
+    if (mode === 'hardware') h.lowSpec = false;
+    if (mode === 'no readback') h.readback = null;
+    api.beginHomeCameraCut(state);
+    if (mode === 'forced before submit') h.lastDrawAt = -Infinity;
+    if (mode === 'submit rejected') ticket.submit.mockReturnValueOnce(false);
+    render(.02);
+    if (mode === 'poll failed') { expect(dst.drawImage).not.toHaveBeenCalled(); ticket.poll.mockReturnValueOnce(null); render(.04); }
+    if (mode === 'submit rejected' || mode === 'poll failed') expect(ticket.dispose).toHaveBeenCalledTimes(1);
+    else expect(ticket.submit).not.toHaveBeenCalled();
+    expect(h.camera.position.toArray()).toEqual([home.x, home.eyeHeight, home.z]); expect(ticket.pending).toBe(false);
+    if (mode === 'hardware') expect(dst.drawImage).toHaveBeenCalledWith(renderer.domElement, 0, 0, 800, 500);
+    else { expect(h.cachedFrame.context.drawImage).toHaveBeenCalledWith(renderer.domElement, 0, 0); expect(dst.drawImage.mock.calls).toEqual([[h.cachedFrame, 0, 0, 800, 500]]); }
   });
 });
 

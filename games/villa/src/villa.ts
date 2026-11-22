@@ -974,7 +974,6 @@ export class VillaGame extends BaseGame {
         this.mouseLookEnabled = !this.mapOpen; if (this.mapOpen) this.unlock(); break;
       case 'time': cycleVillaTimeOfDay(this.state.home); this.audio.cue('setting'); break;
       case 'home':
-        this.scene?.invalidateCameraFrame?.();
         this.position = { ...VILLA_ENTRANCE }; this.eyeY = 0; this.yaw = 0; this.pitch = 0.04;
         this.state.seated = null; this.state.relaxSeatId = null; this.state.relaxSeatPosition = this.state.relaxEntryPosition = null;
         this.state.carDoorOpen = false; this.state.pickupDoorOpen = false; this.state.suvDoorOpen = false;
@@ -986,6 +985,7 @@ export class VillaGame extends BaseGame {
         this.state.elevator = createVillaElevator(); this.elevatorAudioPhase = 'closed'; this.driveAudioDirection.clear(); this.scene?.updateActivities(this.time, this.state);
         this.audio.cue('home');
         this.mapOpen = false; this.clearInput();
+        this.scene?.beginHomeCameraCut?.(this.state);
         this.message(this.isZhLang() ? '回到家门口，欢迎回家。' : 'Back at the front door. Welcome home.'); break;
       case 'help':
         // Let the shell observe capture before it clears input/unlocks the mouse.
