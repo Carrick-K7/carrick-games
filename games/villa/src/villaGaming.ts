@@ -4,8 +4,10 @@ import { VILLA_RACING, type VillaActivityState, type VillaScreenSource } from '.
 import type { VillaCollider } from './villaWorld.js';
 import { createVillaRace, drawVillaRace, VILLA_RACE_WHEEL_TURN, type VillaRaceState } from './villaRacing.js';
 import { registerVillaSeatCollider } from './villaSeating.js';
-import { consoleShell, gamepad, gamingSeat, headsetAndMic, mediaDock, monitorArm, mouseShell, pcChassis, pcFan, pedalFace, rallyWheelTrim, rigRail, screenEnclosure, workstation } from './villaGamingEquipment.js';
+import { consoleShell, gamepad, gamingSeat, headsetAndMic, mediaDock, monitorArm, mouseShell, pcChassis, pcFan, pedalDeck, pedalFace, rallyWheelTrim, rigRail, screenEnclosure, telemetryPod, workstation } from './villaGamingEquipment.js';
 import { bentRail, keySections, ovalLoop, roundedLoop, sectionLoft, turnedSection, type P3 } from './villaVehicleSections.js';
+import { finishingVeneer } from './villaRecreationSurfaces.js';
+import { deskPad, inkKey, studioScreen, studioWiring } from './villaStudioDevices.js';
 import { coachPanel } from './villaCoachwork.js';
 import { figureBow, figureCrown, figureFeatures, figureLegAndBoot, figureSleeve, galleryLiner, galleryShelf } from './villaGamingCollection.js';
 
@@ -349,8 +351,9 @@ export function createVillaGaming(parent: THREE.Object3D): {
   };
 
   // Walnut desk: wall side -Z, user +Z. The northern doorway is untouched.
-  workstation(b,walnut,black,steel,rubber);
-  b.box(7.08, .808, 3.99, 1.14, .012, .43, rubber, .005);
+  const deskWood=villaMaterial('#a18567',.56);deskWood.map=finishingVeneer();
+  const alloy=villaMaterial('#a6aaa4',.39,.44), grip=villaMaterial('#414a49',.87);
+  workstation(b,deskWood,black,alloy,rubber);deskPad(b,grip,grey);studioWiring(b,black,rubber,alloy);
   b.collide(7.25, 0, 3.84, 2.7, .81, .85);
   mark('pcDesk', [7.25, 0, 3.84], { width: 2.7, depth: .85 });
 
@@ -367,23 +370,24 @@ export function createVillaGaming(parent: THREE.Object3D): {
     { z: .046, start: 0, keys: [['Shift', 2.25], ...'ZXCVBNM'.split('').map(k => [k, 1] as [string, number]), [',', 1], ['.', 1], ['/', 1], ['Shift', 2.75]] },
     { z: .077, start: 0, keys: [['Ctrl', 1.25], ['Win', 1.25], ['Alt', 1.25], [' ', 6.25], ['Alt', 1.25], ['Fn', 1.25], ['Menu', 1.25], ['Ctrl', 1.25]] },
   ];
-  const keyMat = new THREE.MeshBasicMaterial({ map: legend.map, transparent: true, depthWrite: false });
+  const keyMat = new THREE.MeshStandardMaterial({ map: legend.map, roughness:.78 });
   let keyCount = 0;
   const key = (label: string, x: number, z: number, width = .025) => {
     const y = .842 + (-z + .08) * .045;
     const cap = keySections(width,.027,label === ' ' ? -.0015 : .0023);
-    b.geometry(cap.skirt,label === 'Esc' ? turquoise : black,[x,y,z]);
-    // The legend follows the dish (or the space bar's convex thumb face),
-    // rather than a floating rectangular plane above its high edges.
-    const legendFace=cap.face.clone(); b.geometry(cap.face,label === 'Esc' ? turquoise : rubber,[x,y,z]);
+    b.geometry(cap.skirt,label==='Esc'?turquoise:label==='Enter'?deskWood:/^[A-Z0-9 ]$/.test(label)?grey:grip,[x,y,z]);
     const column = keyCount % 16, row = Math.floor(keyCount / 16);
-    legend.ctx.fillText(label, column * 64 + 32, row * 64 + 31, 61);
-    const uv = legendFace.getAttribute('uv');
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (column + uv.getX(i)) / 16, 1 - (row + 1 - uv.getY(i)) / 8);
-    b.geometry(legendFace,keyMat,[x,y+.00015,z]); keyCount++;
+    inkKey(legend.ctx,keyCount,label,width);
+    const uv = cap.face.getAttribute('uv');
+    // A two-pixel safe inset keeps adjacent atlas cells out of the die cut.
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (column+(2+60*uv.getX(i))/64)/16, 1-(row+(2+60*(1-uv.getY(i)))/64)/8);
+    b.geometry(cap.face,keyMat,[x,y,z]); keyCount++;
   };
   b.at(6.94, 0, 4.035, 0, () => {
-    b.box(.01, .826, 0, .59, .028, .207, steel, .006);
+    const tray=(w:number,d:number,y:number)=>roundedLoop(w,d,.011,3).map(([x,z]):P3=>[.010+x,y-z*.032,z]);
+    b.geometry(sectionLoft([tray(.566,.187,.8155),tray(.589,.207,.819),tray(.595,.212,.829),tray(.582,.203,.838)]),alloy);
+    b.box(.01,.837,0,.575,.005,.195,grip,.005);
+    for(let i=0;i<3;i++) b.box(.203+i*.016,.843,.001,.008,.003,.003,i===0?rgb:rubber,0);
     for (const row of rows) {
       let u = row.start;
       for (const [label, width] of row.keys) { if (label) key(label, -.255 + (u + width / 2) * .03, row.z, width * .03 - .004); u += width; }
@@ -399,9 +403,11 @@ export function createVillaGaming(parent: THREE.Object3D): {
   cable([[7.48,.834,3.953],[7.5,.813,3.82],[7.65,.808,3.66],[7.766,.808,3.521],[7.78,.785,3.502],[7.78,.738,3.503]],.003,black);
   cable([[6.96,.834,3.933],[6.98,.813,3.76],[7.07,.808,3.641],[7.123,.808,3.523],[7.13,.787,3.503],[7.13,.735,3.503]],.003,rubber);
   mark('ergonomicMouse', [7.48, .84, 4.02], { splitButtons: true, scrollWheel: true, sideButtons: 2, wired: true });
-  const pcCanvas = canvas(768, 432);
+  const pcCanvas = canvas(512,288), levels = canvas(320,180);
+  studioScreen(pcCanvas.ctx,false,512,288);studioScreen(levels.ctx,true,320,180);
+  pcCanvas.map.needsUpdate=true;levels.map.needsUpdate=true;
   const pcMonitorMat = screen('pcMonitor', 7.05, 1.17, 3.62, .77, .433, pcCanvas.map);
-  const sideMonitorMat = screen('secondaryMonitor', 6.25, 1.17, 3.69, .52, .33, pcCanvas.map, .18);
+  const sideMonitorMat = screen('secondaryMonitor', 6.25, 1.17, 3.69, .52, .33, levels.map, .18);
   monitorArm(b,6.25,3.69,black,steel); monitorArm(b,7.05,3.62,black,steel);
   // Headset on a simple desk stand, microphone on an articulated arm.
   headsetAndMic(b,black,rubber,steel,grey);
@@ -470,7 +476,7 @@ export function createVillaGaming(parent: THREE.Object3D): {
   mark('panoramicGamingPC', [8.12, .8, 3.84], { fanCount: 3, glassSides: 2, components: ['motherboard', 'GPU', 'RAM', 'AIO', 'PSU', 'cables'], size: [.32, .48, .4] });
 
   // Ergonomic chair, facing -Z towards the PC; cockpit seat reuses the bucket form facing +Z.
-  const bucket = (x:number,z:number,yaw:number,racing:boolean) => b.at(x,0,z,yaw,()=>gamingSeat(b,racing,rubber,black,turquoise,steel));
+  const bucket = (x:number,z:number,yaw:number,racing:boolean) => b.at(x,0,z,yaw,()=>gamingSeat(b,racing,grip,black,grey,alloy));
   bucket(7.25, 5.1, 0, false); b.collide(7.25, 0, 5.1, .7, 1.31, .75);
   registerVillaSeatCollider(b.colliders[b.colliders.length - 1], 'chair-pc');
   mark('ergonomicGamingChair', [7.25, 0, 5.1], { seatId: 'chair-pc', sitable: true, cushionHeight: .55, yaw: 0, wheels: 5, headrest: true, lumbar: true, armrests: 2 });
@@ -580,7 +586,7 @@ export function createVillaGaming(parent: THREE.Object3D): {
   const sx = VILLA_RACING.seat.x, sz = VILLA_RACING.seat.z;
   bucket(sx, sz, Math.PI, true);
   for (const x of [sx - .5, sx + .5]) {
-    rigRail(b,x,6.86,2.48,steel);
+    rigRail(b,x,6.86,2.48,alloy);
     for (const z of [5.7, 6.25, 7.85]) b.box(x, .055, z, .14, .06, .16, rubber);
     b.beam([x, .2, 6.83], [x, .94, 7.06], .029, steel);
     b.box(x, .52, 6.06, .035, .45, .2, black);
@@ -592,12 +598,17 @@ export function createVillaGaming(parent: THREE.Object3D): {
   for(let i=0;i<7;i++) b.geometry(bentRail([[sx-.109+i*.036,1.087,6.96],[sx-.109+i*.036,1.108,6.988],
     [sx-.109+i*.036,1.108,7.099],[sx-.109+i*.036,1.093,7.170]],.0038,6),steel);
   // The FFB base, shaft and dashboard stay fixed; only the circular rim spins.
-  const wheel = createVillaRallyWheel(b.root, rubber, steel);
-  b.box(sx, .24, 7.66, .67, .045, .64, black);
+  telemetryPod(b,sx,grip,alloy,blue);
+  const wheel = createVillaRallyWheel(b.root, grip, alloy);
+  pedalDeck(b,sx,alloy,rubber);
+  // Controller harness follows a steel upright, then the floor T rail. Both
+  // ends terminate on hardware rather than halfway down the centre aisle.
+  b.geometry(bentRail([[sx+.096,1.014,7.20],[sx+.154,.955,7.218],[sx+.432,.926,7.190],[sx+.5,.902,7.046],
+    [sx+.5,.594,6.959],[sx+.5,.248,6.856],[sx+.469,.198,6.861],[sx+.468,.192,7.63],[sx+.333,.229,7.702]],.005,7),rubber);
   for (let i = 0; i < 3; i++) {
     const x = sx - .22 + i * .22;
     b.beam([x, .27, 7.82], [x, .43, 7.59], .013, steel);
-    pedalFace(b,x,.404,7.593,i,steel,rubber);
+    pedalFace(b,x,.404,7.593,i,alloy,grip);
   }
   b.box(10.5, .68, 6.72, .32, .045, .3, steel);
   b.beam([10.46, .18, 6.72], [10.46, .68, 6.72], .025, steel);
@@ -673,11 +684,11 @@ export function createVillaGaming(parent: THREE.Object3D): {
     }
     ctx.restore();
   };
-  drawSource(pcCanvas.ctx, 'pc', 0, 768, 432); pcCanvas.map.needsUpdate = true;
   drawSource(tvCanvas.ctx, 'pc', 0, 960, 540); tvCanvas.map.needsUpdate = true;
   b.root.userData = { keyboardKeys: keyCount, fanCount: 3, replicaNames: ['AK47', 'MosinNagant', 'MP5K'], figureNames, originalDesigns: true, modestClothing: true, consoleSources: ['pc', 'ps', 'switch'], virtualInputs: true, playableRacing: true, dynamicTransforms: ['interactiveRacingWheel'] };
   b.finish();
-  let lastTick = -1, lastGaming: boolean | undefined, lastLights: boolean | undefined, lastSource: VillaScreenSource | undefined;
+  const raceFrame=(s:VillaRaceState)=>[s.distance,s.lane,s.speed,s.steer,s.crashes,s.crashTimer,s.checkpoint,s.laps,s.lapTime,s.bestLap].join('/');
+  let previousRace=raceFrame(fallbackRace), lastTick=-1, lastGaming:boolean|undefined, lastLights:boolean|undefined, lastSource:VillaScreenSource='pc';
   return {
     colliders: b.colliders,
     update(time, state) {
@@ -692,11 +703,15 @@ export function createVillaGaming(parent: THREE.Object3D): {
         warm.color.set(state.displayLights ? '#ffe4b2' : '#665b49');
         pcMonitorMat.color.set(state.gaming ? '#ffffff' : '#030607'); sideMonitorMat.color.copy(pcMonitorMat.color);
       }
-      if (tick !== lastTick || lastSource !== state.screenSource || lastGaming !== state.gaming) {
-        drawSource(tvCanvas.ctx, state.screenSource, time, 960, 540, state.race); tvCanvas.map.needsUpdate = true;
-        if (state.gaming) { drawSource(pcCanvas.ctx, 'pc', time, 768, 432, state.race); pcCanvas.map.needsUpdate = true; }
+      if (tick !== lastTick || lastSource !== state.screenSource) {
+        const race=state.race??fallbackRace, frame=raceFrame(race);
+        if(lastSource!==state.screenSource || (state.screenSource==='pc'? frame!==previousRace : state.seated==='racing')) {
+          drawSource(tvCanvas.ctx, state.screenSource, time, 960, 540, race);tvCanvas.map.needsUpdate=true;
+          previousRace=frame;
+        }
+        lastTick=tick;
       }
-      lastTick = tick; lastGaming = state.gaming; lastLights = state.displayLights; lastSource = state.screenSource;
+      lastGaming = state.gaming; lastLights = state.displayLights; lastSource = state.screenSource;
       return false;
     },
   };

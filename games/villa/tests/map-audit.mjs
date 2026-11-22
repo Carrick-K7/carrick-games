@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { atelierViews } from './atelier-views.mjs';
 import { exteriorViews } from './exterior-views.mjs';
+import { interiorViews } from './interior-inspection-views.mjs';
 import { renderExteriorStudy } from './exterior-study-render.mjs';
 const base = process.env.VILLA_AUDIT_BASE ?? 'http://127.0.0.1:8091';
 const out = process.env.VILLA_AUDIT_OUT ?? path.resolve('games/villa/test-results/map-audit');
@@ -66,7 +67,7 @@ export const views = [
   ['south-fields', -17, 0, 49, -10, 60, -.1],
   ['pond', -2, 0, 69, -14, 80, -.08],
   ['scenic-hills', 29, 0, 114, 20, 131, .02],
-  ...atelierViews, ...exteriorViews,
+  ...atelierViews, ...exteriorViews, ...interiorViews,
 ];
 const selected = process.argv.slice(2);
 for(const name of selected) if(!views.some(v=>v[0]===name)) throw new Error(`Unknown audit view: ${name}`);
@@ -101,16 +102,25 @@ try {
     window.__auditGame = g;
     const loaded=await g.scene.groundSwatches?.ready;
     if(g.scene.groundSwatches && (!loaded || ['turf','gravel','timber'].some(k=>loaded[k]!=='decoded')))throw Error('Study requires decoded ground swatches: '+JSON.stringify(loaded));
+    const rooms=await g.scene.roomSwatches?.ready;
+    if(g.scene.roomSwatches && (!rooms || ['oak','limestone','plaster'].some(k=>rooms[k]!=='decoded')))throw Error('Study requires the actual indoor finish samples: '+JSON.stringify(rooms));
   }, release);
-  await page.evaluate(({time,weather,liveSun}) => {
+  await page.evaluate(async ({time,weather,liveSun,lamps,requireMirrors}) => {
     const g = window.__auditGame;
+    if(requireMirrors){
+      const v=g.scene.roomMirrors;await v?.ready;
+      if(!v || ['master','dressing','ensuite','bath','gym'].some(k=>v.states[k]!=='decoded'))throw Error('Mirror study requires all five photographed room plates: '+JSON.stringify(v?.states));
+    }
+    if(lamps!==undefined){if(lamps!=='on'&&lamps!=='off')throw Error('Use on/off for the surveyed room switches');
+      for(const id of Object.keys(g.state.home.roomLights)){g.state.home.roomLights[id]=lamps==='on';g.state.home.lightLevels[id]=Number(lamps==='on');}g.state.home.revision++;
+    }
     // Exercise the production live+survey lighting branches on a software implementation;
     // this optional pass does not disguise the GPU and is not a hardware timing claim.
     if(liveSun){g.scene.renderer.shadowMap.enabled=true;g.scene.renderer.shadowMap.needsUpdate=true;g.scene.scene.environment=g.scene.environment;}
     g.state.home.timeOfDay = time; g.state.home.darkness = time === 'night' ? 1 : time === 'evening' ? .43 : 0;
     g.state.home.weather=weather;g.state.home.rain=weather==='rain'?1:0;
     g.state.evening = g.state.home.darkness > .2;
-  }, {time:process.env.VILLA_AUDIT_TIME ?? 'day',weather:process.env.VILLA_AUDIT_WEATHER ?? 'clear',liveSun:process.env.VILLA_AUDIT_SUN==='live'});
+  }, {time:process.env.VILLA_AUDIT_TIME ?? 'day',weather:process.env.VILLA_AUDIT_WEATHER ?? 'clear',liveSun:process.env.VILLA_AUDIT_SUN==='live',lamps:process.env.VILLA_AUDIT_LAMPS,requireMirrors:process.env.VILLA_AUDIT_MIRRORS==='1'});
   for (const pose of poses) {
     const record = await page.evaluate(({pose, compare, closeView}) => {
       const [name, x, y, z, tx, tz, pitch, driver] = pose, g = window.__auditGame;
@@ -183,8 +193,9 @@ try {
         pitch:g.scene.camera.rotation.x, fov:g.scene.camera.fov,aspect:g.scene.camera.aspect,time:g.time,light:g.state.home.timeOfDay,weather:g.state.home.weather,liveShadowPass:renderer.shadowMap.enabled,
         floorSupport: support, occupancy: riding || sitting ? driver : crouched ? 'crouching' : 'standing', inspectedState: driver ?? null,
         standable, frame: after, drawCalls, triangles, uncull, png: g.canvas.toDataURL('image/png') };
-    }, {pose,compare:process.env.VILLA_AUDIT_COMPARE_VISIBILITY==='1',closeView:[...atelierViews,...exteriorViews].some(v=>v[0]===pose[0])});
+    }, {pose,compare:process.env.VILLA_AUDIT_COMPARE_VISIBILITY==='1',closeView:[...atelierViews,...exteriorViews,...interiorViews].some(v=>v[0]===pose[0])});
     const { png, ...info } = record;
+    if(process.env.VILLA_AUDIT_LAMPS!==undefined)info.roomSwitches=process.env.VILLA_AUDIT_LAMPS;
     await writeFile(path.join(out, `${info.name}.png`), Buffer.from(png.split(',')[1], 'base64'));
     const study=process.env.VILLA_AUDIT_STUDY;
     if(study==='clay'||study==='finish'){

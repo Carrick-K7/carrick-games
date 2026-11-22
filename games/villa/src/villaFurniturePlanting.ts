@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { sheet, stock, turn, type FurnitureKit, type Point, type PutSurface } from './villaFurnitureForms.js';
 import { outdoorPlanter } from './villaHedgePlanters.js';
+import { plantSeed } from './villaHedgeShoots.js';
+import { HOUSE_PRINT, inkUV, printChart } from './villaDomesticArt.js';
+import { NatureMesh, polar, type P3 } from './villaNatureGeometry.js';
 
 /** Thin folded lamina; its reverse is the underside of the same leaf. */
 export function leafBlade(width: number, length: number, arch: number) {
@@ -120,5 +123,130 @@ export function planter(k: FurnitureKit, s: number, flowering: boolean, random: 
     if (flowering) floweringSpray(grow, !table);
     else if (s >= 1.32) compoundFronds(grow);
     else canePlant(grow, table);
+  });
+}
+
+export type RoomSpecimen='zamioculcas'|'rubber-fig'|'cast-iron'|'bowstring-hemp'|'basil'|'flowering-quince';
+/** A drawing in longitudinal stations and margin widths. Socket indents, a
+ * raised midrib and a turned drip tip survive even in the unlit clay study. */
+function figLeaf(size:number,half:number,basil=false){
+  // Each side of the raised midrib is one gently cupped leaf plane. Resolution
+  // belongs in the changing outline and rolled tip, not parallel cross strips.
+  return sheet([-1,0,1],[-1,-.76,-.38,.08,.47,.75,.91,1],(u,v)=>{
+    const t=(v+1)*.5, belly=(.012+.988*Math.sin(Math.PI*t)**.64)*(1.16-t*.31);
+    return [u*half*belly+.075*half*Math.sin(t*Math.PI*1.32),size*(.236*Math.sin(t*Math.PI)-.215*t*t)+half*belly*((1-Math.abs(u))*.16-u*u*.13+(basil?.06*Math.cos(t*23)*u*u:0)),t*size];
+  },true);
+}
+/** A coriaceous, blunt-shouldered Ficus elastica blade. The young upper rib
+ * sits proud of the waxy pelt, and the lower costa runs out from the petiole
+ * like a keel. Both optical faces follow the SAME directed vein chart. */
+function figBlade(put:PutSurface,press:THREE.Material,rib:THREE.Material,len:number,half:number,turn:number,lean:number,roll:number,y:number,z:number){
+  const stations=[0,.07,.18,.37,.57,.76,.89,.96,1];
+  const point=(u:number,t:number,under:boolean):Point=>{
+    const spread=Math.max(.002,Math.sin(Math.PI*t)**.67)*(1.14-t*.34)*(1+.046*u*Math.sin(4*t+turn));
+    const bow=Math.sin(Math.PI*t),ridge=(1-Math.abs(u))*.145*half*spread;
+    return [half*spread*u+half*.20*bow*Math.sin(3.7*t+turn),len*(.183*bow-.215*t*t)-half*spread*.17*u*u+ridge+half*.105*u*bow*Math.sin(4*t+turn)-(under?.0011*bow*(1-u*u):0),len*t+half*.045*u*bow];
+  };
+  for(const under of [false,true]){
+    const chart=sheet([-1,-.32,0,.38,1],stations.map(t=>2*t-1),(u,v)=>point(u,(v+1)/2,under),true);
+    if(under){const ix=chart.index!;for(let i=0;i<ix.count;i+=3){const b=ix.getX(i+1);ix.setX(i+1,ix.getX(i+2));ix.setX(i+2,b);}chart.computeVertexNormals();}
+    put(printChart(chart,under?HOUSE_PRINT.figLower:HOUSE_PRINT.figUpper),press,0,y,z,lean,0,roll);
+  }
+  const costa:Station[]=[0,.15,.39,.68,.91].map(t=>{const [x,yy,zz]=point(0,t,true),r=.0026*(1-.88*t);return [x,yy-r*.58,zz,r];});
+  put(stock(costa,4),rib,0,y,z,lean,0,roll);
+}
+function rubberFig({m,put,at,random}:Grow,press:THREE.Material){
+  at(0,0,0,random()*1.71,()=>{
+    const tall:Station[]=[[-.038,-.006,.009,.029],[-.034,.065,.013,.024],[-.050,.176,.022,.020],[-.033,.300,.051,.018],[.003,.438,.061,.015],[.016,.561,.044,.013],[.003,.683,.068,.010],[.046,.779,.101,.007],[.048,.821,.093,.004]];
+    const arm:Station[]=[[tall[2][0],tall[2][1],tall[2][2],.014],[-.097,.253,-.019,.012],[-.107,.358,-.038,.011],[-.154,.465,-.062,.009],[-.171,.555,-.047,.007],[-.157,.648,-.031,.0035]];
+    const bark=(p:Station[],sides:number)=>put(printChart(stock(p,sides),HOUSE_PRINT.figBark),press,0,0,0);
+    for(let root=0;root<4;root++){
+      const a=root*1.57+.16,foot=polar(a,.111+.016*random(),.002),knee=polar(a,.061,.012);
+      bark([[tall[0][0],.046,tall[0][2],.012],[knee[0]-.022,knee[1],knee[2],.008],[foot[0]-.011,foot[1],foot[2],.001]],6);
+    }
+    for(const [idx,nodes] of [tall,arm].entries()){
+      // The previous stipule leaves an annular scar at each internode. This is
+      // a slight swelling of the same cane, not a ring floating around it.
+      const p:Station[]=[];
+      nodes.forEach((v,j)=>{
+        if(j>0&&j<nodes.length-1){const prev=nodes[j-1],t=.956;
+          p.push([prev[0]+(v[0]-prev[0])*t,prev[1]+(v[1]-prev[1])*t,prev[2]+(v[2]-prev[2])*t,v[3]*1.08]);}
+        p.push(v);
+      });bark(p,7);
+      for(let j=idx?1:2;j<nodes.length-1;j++){
+        const [x,y,z]=nodes[j],az=j*2.41+idx*.93;
+        at(x,y,z,az,()=>{
+          const sy=.025+random()*.015,sz=.045+random()*.033;
+          const petiole:Station[]=[[0,0,0,.0052],[.004,sy*.38,sz*.38,.0044],[.002,sy*.91,sz*.79,.004],[0,sy,sz,.0031]];
+          put(printChart(stock(petiole,5),HOUSE_PRINT.figBark),press,0,0,0);
+          const young=j===nodes.length-2,len=(.238+.052*random())*(young?.86:1),angle=(young?-.64:-.13)+.20*(random()-.5);
+          figBlade(put,press,young?m.leafLight:m.leaf,len,(.066+.023*random())*(young?.9:1),idx+j,angle,(random()-.5)*.59,sy,sz);
+        });
+      }
+      const top=nodes[nodes.length-1];
+      put(stock([[0,0,0,.004],[.003,.026,.003,.008],[.012,.060,.006,.006],[.017,.086,.013,.0008]],6),m.terra,top[0],top[1],top[2]);
+    }
+  });
+}
+function swordPlant({m,put,at,twig,random}:Grow,aspidistra:boolean){
+  const n=aspidistra?9:11;
+  for(let i=0;i<n;i++)at(0,0,0,i*2.399+random()*.22,()=>{
+    const foot=.017+random()*.051, stalk=aspidistra?.112+random()*.18:.026, reach=aspidistra?.22+random()*.16:.059+random()*.11;
+    const h=(aspidistra?.37:.61)*(.65+random()*.56),w=aspidistra?.067:.046;
+    twig([[0,0,foot,.0062],[0,stalk*.71,foot+.030,.0046],[0,stalk,foot+.046,.0034]],m.leaf);
+    const blade=sheet([-1,0,1],[-1,-.74,-.28,.2,.60,.86,1],(u,v)=>{
+      const t=(v+1)*.5,belly=.018+.982*(aspidistra?Math.sin(t*Math.PI)**.78:Math.sin(t*Math.PI*.96+.02)**.52*(1-.4*t));
+      const roll=t*(i%2?.63:-.41),x=w*u*belly;
+      return [x*Math.cos(roll)+.027*t*t*Math.sin(i),stalk+h*(aspidistra?Math.sin(t*1.89):t)-.12*w*u*u,foot+.046+reach*t**1.5+x*Math.sin(roll)+w*belly*(aspidistra?.22:-.32)*(1-Math.abs(u))];
+    },true);
+    put(blade,i%4===1?m.leafLight:m.leaf,0,0,0);
+  });
+}
+function culinaryBasil({m,put,at,twig,random}:Grow){
+  for(let i=0;i<4;i++)at(0,0,0,i*2.36+.16*random(),()=>{
+    const h=.172+.128*random(),z=.064+.057*random();twig([[0,0,.019,.006],[0,h*.5,z*.64,.004],[0,h,z,.0018]],m.leaf);
+    for(let j=0;j<3;j++)for(const hand of [-1,1]){
+      const t=.36+j*.27;put(figLeaf(.107-j*.019,.041-j*.006,true),j===2?m.leafLight:m.leaf,0,t*h,.019+(z-.019)*t**.71,-.57+j*.08,j*Math.PI*.46+hand*Math.PI*.5,hand*.08);
+    }
+  });
+}
+function soilCrumbs(put:PutSurface,m:FurnitureKit['m'],random:()=>number,r:number,y:number){
+  // Low, irregular, broken pieces of bark and a few damp clods. The bottom
+  // corners enter the mounded surface; perlite is not a carpet of white triangles.
+  const bark=new NatureMesh(),humus=new NatureMesh();
+  for(let j=0;j<12;j++){
+    const a=j*2.39, p=polar(a,r*(.22+.69*Math.sqrt(random())),y+.001),len=.007+random()*.014,w=.0025+random()*.003;
+    const mesh=j%3?bark:humus,bx=Math.cos(a)*len,bz=Math.sin(a)*len,nx=-Math.sin(a)*w,nz=Math.cos(a)*w;
+    const foot=mesh.point([p[0]-bx+nx,p[1]-.002,p[2]-bz+nz]),a1=mesh.point([p[0]-bx*.7-nx,p[1]-.001,p[2]-bz*.7-nz]);
+    const end=mesh.point([p[0]+bx-nx,p[1],p[2]+bz-nz]),end1=mesh.point([p[0]+bx*.72+nx,p[1]-.002,p[2]+bz*.72+nz]),spine=mesh.point([p[0]+nx*.28,p[1]+w*.82,p[2]+nz*.28]);
+    mesh.tri(foot,spine,a1);mesh.tri(a1,spine,end);mesh.tri(end,spine,end1);mesh.tri(end1,spine,foot);
+  }
+  put(bark.geometry(),m.soil,0,0,0);put(humus.geometry(),m.dark,0,0,0);
+}
+/** Only called for explicitly indoor pots. Roof vases and lawn pots continue
+ * through the original planter(), with their original deterministic stream. */
+export function insidePlanter(k:FurnitureKit,s:number,species:RoomSpecimen,seed:number,press:THREE.Material){
+  const m=k.m,random=plantSeed(seed),put:PutSurface=(g,mat,x,y,z,rx,ry,rz)=>k.put(g.scale(s,s,s),mat,x*s,y*s,z*s,rx,ry,rz);
+  const at:FurnitureKit['at']=(x,y,z,a,make)=>k.at(x*s,y*s,z*s,a,make),grow:Grow={put,at,m,random,twig:(p,mat)=>put(stock(p,5),mat,0,0,0)};
+  const cut=species==='flowering-quince',chalk=species==='cast-iron'||species==='rubber-fig',h=cut?.324:species==='basil'?.273:species==='bowstring-hemp'?.311:.371;
+  const r=cut?.217:species==='basil'?.192:species==='bowstring-hemp'?.217:.245,inner=cut?r*.46:r*.885;
+  if(!cut){
+    const saucer=turn([[0,0],[r*.70,0],[r*.85,.008],[r*.88,.031],[r*.85,.036],[r*.79,.015],[0,.012]],14);
+    put(saucer,chalk?m.cream:m.terra,0,0,0);
+  }
+  const clay: [number,number][]=cut?[[0,0],[r*.46,0],[r*.56,.015],[r*.84,h*.21],[r,h*.48],[r*.93,h*.70],[r*.50,h*.91],[r*.48,h*.973],[r*.56,h],[inner,h+.002],[inner*.96,h*.943],[inner*.98,h*.85]]:
+    [[0,0],[r*.60,0],[r*.64,h*.038],[r*.67,h*.12],[r*.91,h*.80],[r*.94,h*.87],[r,h*.894],[r,h*.958],[r*.97,h],[inner,h],[inner*.98,h*.955],[inner*.967,h*.847]];
+  const lift=cut?0:.012;put(turn(clay,cut?16:14),cut?m.blue:chalk?m.cream:m.terra,0,lift,0);
+  const soilY=lift+h*(cut?.864:.881);
+  const soil=turn([[inner*.984,0],[inner*.75,.007],[inner*.39,.010],[0,.0085]],14);
+  if(!cut){const pos=soil.getAttribute('position'),uv=soil.getAttribute('uv');for(let i=0;i<pos.count;i++)uv.setXY(i,...inkUV(HOUSE_PRINT.loam,.5+pos.getX(i)/(inner*2),.5+pos.getZ(i)/(inner*2)));}
+  put(soil,cut?m.dark:press,0,soilY,0);
+  if(!cut)soilCrumbs(put,m,random,inner,soilY+.008);
+  at(0,soilY+.005,0,0,()=>{
+    if(cut)floweringSpray(grow,false);
+    else if(species==='zamioculcas')compoundFronds(grow);
+    else if(species==='rubber-fig')rubberFig(grow,press);
+    else if(species==='basil')culinaryBasil(grow);
+    else swordPlant(grow,species==='cast-iron');
   });
 }

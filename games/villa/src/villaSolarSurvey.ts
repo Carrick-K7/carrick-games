@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createIndoorContacts, VILLA_FLOOR_CONTACT_GLSL } from './villaInteriorContacts.js';
+import { createVillaInteriorDaylight,VILLA_INTERIOR_DAYLIGHT_GLSL } from './villaInteriorDaylight.js';
 import { VILLA_SUN_BYTES } from './villaSunSurveyData.js';
 
 /** The software bridge does not render a live shadow pass. Its outdoor sun uses a baked
@@ -18,6 +20,7 @@ export function addSurveyedSun(root:THREE.Scene){
   if(!VILLA_SUN_BYTES)return null;
   const f=VILLA_SUN_FIELD,bytes=Uint8Array.from(atob(VILLA_SUN_BYTES),c=>c.charCodeAt(0));
   const map=new THREE.DataTexture(unpackSurvey(bytes,f.rows*f.cols),f.cols,f.rows,THREE.RedFormat);map.name='estate/static-sun-heights';map.generateMipmaps=false;map.minFilter=map.magFilter=THREE.NearestFilter;map.needsUpdate=true;
+  const room=createVillaInteriorDaylight(), contact=createIndoorContacts(unpackSurvey);
   const strength={value:.90}, seen=new Set<THREE.Material>();
   const fn=`uniform sampler2D villaSunDepth; uniform float villaSunStrength; varying vec3 vEstateSun;
     float villaSunLit(vec2 p,float y){float h=texture2D(villaSunDepth,p).r;return 1.0-smoothstep(.02,.19,(h*${f.maxY-f.minY}.0+(${f.minY}.0))-y);}
@@ -29,28 +32,40 @@ export function addSurveyedSun(root:THREE.Scene){
       float sun=mix(mix(villaSunLit(q,plane),villaSunLit(q+vec2(stepUV.x,0.),plane),fractXY.x),mix(villaSunLit(q+vec2(0.,stepUV.y),plane),villaSunLit(q+stepUV,plane),fractXY.x),fractXY.y);
       return mix(1.,sun,villaSunStrength);
     }`;
-  const reference='getDirectionalLightInfo( directionalLight, directLight );';
-  const lights=THREE.ShaderChunk.lights_fragment_begin.replace(reference,reference+`\n{
-    #if defined(USE_SHADOWMAP) && NUM_DIR_LIGHT_SHADOWS > 0
-      vec3 sunWindow = vDirectionalShadowCoord[0].xyz / vDirectionalShadowCoord[0].w;
-      if (!all(greaterThanEqual(sunWindow,vec3(0.))) || !all(lessThanEqual(sunWindow,vec3(1.)))) directLight.color *= estateSolarVisibility();
-    #else
-      directLight.color *= estateSolarVisibility();
-    #endif
-  }`);
+  // Only replace the SUN term in the physical light loop. Point lights, local
+  // screens and fitted LEDs never pass through the room or outdoor shadow field.
+  const stockShadow = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+  const liveExpr=stockShadow.slice('directLight.color *= '.length,-1);
+  const lights='vec3 roomLight = villaRoomLight(vEstateSun);vec2 floorLight=villaFixedFloor(vEstateSun,roomLight.b);roomLight.r=min(roomLight.r,mix(1.,floorLight.g,villaRoomClimate.x));\n'+THREE.ShaderChunk.lights_fragment_begin.replace(stockShadow,`{
+    vec3 win=vDirectionalShadowCoord[ i ].xyz/vDirectionalShadowCoord[ i ].w;
+    bool liveWindow=all(greaterThanEqual(win,vec3(0.)))&&all(lessThanEqual(win,vec3(1.)));
+    float liveLight=${liveExpr};
+    if(roomLight.b>.5) directLight.color *= liveWindow ? min(liveLight,roomLight.r) : roomLight.r;
+    else directLight.color *= liveWindow ? liveLight : estateSolarVisibility();
+  }
+  #else
+    directLight.color *= roomLight.b>.5 ? roomLight.r : estateSolarVisibility();`);
   const wireReceiver=(mat:THREE.Material)=>{
       if(seen.has(mat)||(!(mat instanceof THREE.MeshStandardMaterial)&&!(mat instanceof THREE.MeshLambertMaterial)&&!(mat instanceof THREE.MeshPhongMaterial)))return;seen.add(mat);
       const prev=mat.onBeforeCompile.bind(mat),key=mat.customProgramCacheKey();
-      mat.onBeforeCompile=(shader,renderer)=>{prev(shader,renderer);shader.uniforms.villaSunDepth={value:map};shader.uniforms.villaSunStrength=strength;
+      mat.onBeforeCompile=(shader,renderer)=>{prev(shader,renderer);shader.uniforms.villaSunDepth={value:map};shader.uniforms.villaFloorContact={value:contact};shader.uniforms.villaSunStrength=strength;Object.assign(shader.uniforms,room.uniforms);
         shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vEstateSun;').replace('#include <project_vertex>',`#include <project_vertex>
           vec4 vSunLocal=vec4(transformed,1.0);
           #ifdef USE_INSTANCING
             vSunLocal=instanceMatrix*vSunLocal;
           #endif
           vEstateSun=(modelMatrix*vSunLocal).xyz;`);
-        shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\n'+fn).replace('#include <lights_fragment_begin>',lights);};
-      mat.customProgramCacheKey=()=>key+'|estate-survey-v1';mat.needsUpdate=true;
+        shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\n'+fn+VILLA_FLOOR_CONTACT_GLSL+VILLA_INTERIOR_DAYLIGHT_GLSL).replace('#include <lights_fragment_begin>',lights).replace('#include <lights_fragment_end>',`#if defined(RE_IndirectDiffuse)
+        if(roomLight.b>.5){float roomNY=dot(geometryNormal,viewMatrix[1].xyz);
+          vec3 roomTransfer=villaRoomIrradiance(roomLight,roomNY);irradiance=(irradiance*roomTransfer+PI*villaRoomReturn(roomLight,roomNY))*floorLight.r;iblIrradiance*=roomTransfer*floorLight.r;}
+        #endif
+        #if defined(RE_IndirectSpecular) && defined(STANDARD)
+        if(roomLight.b>.5){float roomReflectionY=dot(reflect(-geometryViewDir,geometryNormal),viewMatrix[1].xyz);
+          radiance+=villaRoomReflection(roomLight,roomReflectionY,material.roughness)*floorLight.r;}
+        #endif
+        #include <lights_fragment_end>`);};
+      mat.customProgramCacheKey=()=>key+'|estate-sun-and-room-field-v2';mat.needsUpdate=true;
   };
   root.traverse(object=>{if(object instanceof THREE.Mesh&&object.receiveShadow)for(const mat of Array.isArray(object.material)?object.material:[object.material])wireReceiver(mat);});
-  return{map,strength,wireReceiver,dispose(){seen.clear();map.dispose();}};
+  return{map,strength,room,wireReceiver,dispose(){seen.clear();map.dispose();contact.dispose();room.dispose();}};
 }

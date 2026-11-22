@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { PantryBuilder, coldLiner, doorProvisions, glassLedge, stockColdShelves, wrappedParcel } from './villaPantryCold.js';
 import { villaMaterial } from './villaModel.js';
 import { IndexedFittingBuilder, foldedLinen, formedTube, surround, vessel, panel } from './villaFittingGeometry.js';
-import { hanger, hangingGarment, shoe } from './villaCabinetDressings.js';
+import { FittedCaseBuilder, fittedVeneer, hanger, hangingGarment, shoe, wovenCloth } from './villaCabinetDressings.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider, type VillaPosition } from './villaWorld.js';
 
 export const VILLA_MASTER_WARDROBE = {
@@ -57,10 +58,11 @@ export const VILLA_WARDROBE_CONTENTS = Array.from({ length: 10 }, (_, i) => ({
 
 /** Hollow fitted joinery plus three instance batches for ten physically separate hinged doors. */
 export function createVillaWardrobe(parent: THREE.Object3D) {
-  const b = new IndexedFittingBuilder(parent, 'Bedroom/openable-wardrobe'), w = VILLA_MASTER_WARDROBE;
-  const oak = villaMaterial('#b69771', 0.78), back = villaMaterial('#786047', 0.88);
-  const linen = villaMaterial('#e4ddca', 0.93), brass = villaMaterial('#b99b65', 0.34, 0.72);
-  const fabrics = [linen, villaMaterial('#98a18a', 0.9), villaMaterial('#ac7f85', 0.9), villaMaterial('#788b9c', 0.9)];
+  const b = new FittedCaseBuilder(parent, 'Bedroom/openable-wardrobe'), w = VILLA_MASTER_WARDROBE;
+  const oak = fittedVeneer('#b69771', 0xfff2db), back = fittedVeneer('#8c7156', 0xa79079);
+  const brass = villaMaterial('#b99b65', .35, .68);
+  const fabrics = [wovenCloth('#e4ddca', 'oxford'), wovenCloth('#98a18a', 'herringbone'),
+    wovenCloth('#b99184', 'houndstooth'), wovenCloth('#8498a2', 'pinstripe')];
   const leather = villaMaterial('#554b3f', 0.71);
   const glow = villaMaterial('#eedec0', 0.8); glow.emissive.set('#eac789'); glow.emissiveIntensity = 0.22;
   const bayWidth = w.width / w.bays, compartmentWidth = bayWidth / 2;
@@ -68,10 +70,10 @@ export function createVillaWardrobe(parent: THREE.Object3D) {
   marker.userData = { id: w.id, bays: 5, doors: 10, wall: 'north', womenCompartments: 9, menCompartments: 1, approach: w.approach }; b.root.add(marker);
   b.at(w.x, w.y, w.z, 0, () => {
     const solid = (x: number, y: number, z: number, width: number, height: number, depth: number, material: THREE.Material) => {
-      b.box(x, y, z, width, height, depth, material, 0.008); b.collide(x, y - height / 2, z, width, height, depth);
+      b.box(x, y, z, width, height, depth, material, 0); b.collide(x, y - height / 2, z, width, height, depth);
     };
     solid(0, 0.07, -0.035, w.width - 0.12, 0.14, w.depth - 0.1, back);
-    solid(0, 1.36, -0.355, w.width, 2.56, 0.07, oak);
+    solid(0, 1.36, -0.355, w.width, 2.56, 0.07, back);
     for (const x of [-w.width / 2 + 0.035, w.width / 2 - 0.035]) solid(x, 1.37, 0, 0.07, 2.56, w.depth, oak);
     solid(0, 0.165, 0, w.width, 0.07, w.depth, oak);
     solid(0, 2.635, 0, w.width, 0.09, w.depth, oak);
@@ -87,31 +89,52 @@ export function createVillaWardrobe(parent: THREE.Object3D) {
       const hinge = x - (i % 2 ? -1 : 1) * (compartmentWidth - .024) / 2;
       for (const y of [.41, 1.37, 2.34]) {
         b.geometry(vessel([[0, 0], [.007, 0], [.009, .005], [.009, .023], [.006, .024], [.006, .028],
-          [.009, .029], [.009, .050], [.007, .053], [0, .053]], 8), brass, [hinge, y, .425]);
+          [.009, .029], [.009, .050], [.007, .053], [0, .053]], 6), brass, [hinge, y, .425]);
         b.box(hinge, y + .012, .394, .014, .021, .061, brass, 0);
       }
       const node = new THREE.Object3D(); node.name = `wardrobe/compartment-${i + 1}`; node.position.set(w.x + x, w.y + 1.3, w.z + 0.2); node.userData = data; b.root.add(node);
       solid(x, 2.12, 0, compartmentWidth - 0.04, 0.035, 0.68, oak);
       solid(x, 0.43, 0, compartmentWidth - 0.04, 0.035, 0.68, oak);
+      // The shallow accessory tray bears on side runners, not a floating lip.
+      for (const side of [-1,1]) {
+        b.box(x + side*(compartmentWidth/2-.027), .416, 0, .014, .027, .64, brass, 0);
+        b.box(x + side*(compartmentWidth/2-.041), .469, .005, .018, .047, .64, oak, 0);
+      }
+      b.box(x,.458,.323,compartmentWidth-.080,.024,.014,oak,0);
       b.box(x, 2.075, -0.24, compartmentWidth - 0.1, 0.013, 0.027, glow, 0.002);
       // Two staggered rods sit in real sockets. Each hanger hooks over its rod,
       // rather than floating ahead of or behind a single decorative crossbar.
       for (const side of [-1, 1]) {
         const gx = x + side * .043, z = side < 0 ? .157 : -.136, yaw = side * (.54 + (i % 3) * .075);
-        b.beam([x - .241, 1.98, z], [x + .241, 1.98, z], .012, brass, 10);
+        b.beam([x - .244, 1.98, z], [x + .244, 1.98, z], .012, brass, 10);
+        for(const end of [-1,1]) b.cylinder(x+end*.2415,1.98,z,.021,.021,.024,brass,[0,0,Math.PI/2],9);
         const style = side === 1 && i !== 9 ? 'coat' : i === 9 ? (side < 0 ? 'shirt' : 'trousers') : i % 3 === 0 ? 'dress' : i % 3 === 1 ? 'blouse' : 'cardigan';
         // Adult shoulders are 32–39cm wide. Hang front-to-back and turn the hangers
         // slightly, instead of squeezing two front-facing outfits into 52cm.
         b.at(gx, 0, z, yaw, () => {
-          hanger(b, 0, 1.98, 0, .151, oak, brass);
+          hanger(b, 0, 1.98, 0, .151, oak, brass, yaw);
           hangingGarment(b, 0, 1.905, 0, style, side < 0 ? fabric : fabrics[(i + 1) % 4], fabrics[(i + 2) % 4], brass, .32 + i * .61);
         });
       }
       // Hat on top shelf; bag/scarf and closed shoes below the hanging rail.
-      const hat = i === 9 ? leather : fabric;
+      // Folded heavier knitwear, interspersed with hat forms; not a row of ten identical cloches.
+      const stacked = i % 3 === 1;
+      if (stacked) {
+        for(let fold=0;fold<2;fold++) b.geometry(foldedLinen(.36-fold*.018,.31,.082),fabrics[(i+fold)%4],
+          [x-.009*fold,2.1375+.073*fold,.01+.012*fold],[0,.065*fold,0]);
+      }
+      const hat = i === 9 ? leather : fabric, hatY = stacked ? 2.288 : 2.138;
+      if (i===9) {
+        // Peaked cap: the stitched visor projects only in front of the crown.
+        b.geometry(vessel([[.086,.014,.076],[.091,.025,.079],[.085,.067,.069],[.061,.095,.052],
+          [.030,.105,.030],[0,.108]],14),fabric,[x,hatY,.068]);
+        b.geometry(vessel([[0,.006],[.085,.004,.063,0,.038],[.090,.012,.067,0,.039],
+          [.085,.017,.064,0,.038],[0,.019]],14),leather,[x,hatY,.089]);
+      } else {
       b.geometry(vessel([[0, .001], [.083, 0, .074], [.125, .003, .111], [.130, .008, .116], [.127, .012, .113],
-        [.084, .017, .076], [.082, .024, .074], [.073, .082, .068], [.067, .091, .062], [.039, .087, .053], [0, .082]], 16), hat, [x, 2.138, .08]);
-      b.geometry(vessel([[.082, 0, .074], [.083, .002, .075], [.080, .012, .072], [.078, .013, .070]], 16), leather, [x, 2.162, .08]);
+        [.084, .017, .076], [.082, .024, .074], [.073, .082, .068], [.067, .091, .062], [.039, .087, .053], [0, .082]], 12), hat, [x, hatY, .08]);
+      b.geometry(vessel([[.082, 0, .074], [.083, .002, .075], [.080, .012, .072], [.078, .013, .070]], 12), leather, [x, hatY + .024, .08]);
+      }
       if (i % 2 && i !== 9) {
         b.geometry(vessel([[0, 0], [.091, .002, .049], [.104, .018, .055], [.106, .096, .051], [.089, .177, .041],
           [.083, .192, .028], [.078, .193, .023], [.079, .170, .023]], 16, .57), leather, [x, .449, .1]);
@@ -130,23 +153,34 @@ export function createVillaWardrobe(parent: THREE.Object3D) {
   b.finish(); b.root.userData = { id: w.id, hollow: true, compartments: VILLA_WARDROBE_CONTENTS, womenFraction: 0.9, movingDoors: 10 };
 
   // One door template; all frame/panel/handle surfaces have positive separation.
-  const templateParent = new THREE.Group(), door = new IndexedFittingBuilder(templateParent, 'wardrobe-door-template');
+  const templateParent = new THREE.Group(), door = new FittedCaseBuilder(templateParent, 'wardrobe-door-template');
   const doorWidth = compartmentWidth - 0.024;
   // Real stiles, rails and a recessed floating panel. The reverse has a formed
   // retaining bead (not another solid oak slab), plus escutcheons behind the pull.
-  door.geometry(surround(doorWidth, 2.34, .012, [[0, -.024], [0, .025], [.004, .029], [.034, .029],
-    [.046, .018], [.049, .008], [.049, -.014], [.040, -.023], [.037, -.029], [.006, -.029], [0, -.024]], 3), oak);
-  door.geometry(panel(doorWidth - .086, 2.254, .008, .026, .003), linen);
+  const casing = surround(doorWidth, 2.34, .012, [[0, -.024], [0, .025], [.004, .029], [.034, .029],
+    [.046, .018], [.049, .008], [.049, -.014], [.040, -.023], [.037, -.029], [.006, -.029], [0, -.024]], 3);
+  casing.userData.railAndStile = true; door.geometry(casing, oak);
+  const field = panel(doorWidth - .086, 2.254, .008, .026, .003);
+  field.userData.veneerLayup = true; door.geometry(field, oak);
+  // A narrow valet strap hangs over a flush keeper inside each door. The whole
+  // assembly stays inside the retaining bead and follows the moving leaf.
+  door.geometry(formedTube([[-.143,.255,-.013,.003],[-.143,.255,-.023,.003],[-.138,.255,-.024,.003],
+    [-.063,.255,-.024,.003],[-.058,.255,-.023,.003],[-.058,.255,-.013,.003]],6,0,[0,1,0]),brass);
+  door.geometry(formedTube([[.002,.129,-.019,.0008,.016],[.001,.246,-.020,.0008,.017],
+    [0,.255,-.020,.0008,.017],[0,.259,-.023,.0008,.017],[0,.257,-.027,.0008,.017],
+    [0,.250,-.0277,.0008,.017],[-.001,.211,-.026,.0008,.019],[-.006,-.084,-.019,.0009,.021],
+    [-.007,-.115,-.019,.0009,.016],[-.004,-.145,-.020,.0008,.0018]],6,0,[1,0,0]),fabrics[0],[-.10,0,0]);
   for (const y of [-.32, .01]) {
     door.cylinder(0, y, .017, .023, .024, .010, brass, [Math.PI / 2, 0, 0], 12);
     door.cylinder(0, y, -.018, .012, .010, .010, brass, [Math.PI / 2, 0, 0], 8);
   }
   door.geometry(formedTube([[0, -.32, .020, .011], [0, -.32, .075, .011], [0, -.317, .091, .012],
     [0, -.308, .101, .013], [0, -.294, .105, .014], [0, -.015, .105, .014], [0, -.001, .101, .013],
-    [0, .007, .091, .012], [0, .01, .075, .011], [0, .01, .020, .011]], 12, 0, [1, 0, 0]), brass);
+    [0, .007, .091, .012], [0, .01, .075, .011], [0, .01, .020, .011]], 10, 0, [1, 0, 0]), brass);
   door.finish();
   const batches = door.root.children.filter((n): n is THREE.Mesh => n instanceof THREE.Mesh).map(part => {
     const batch = new THREE.InstancedMesh(part.geometry, part.material, 10); batch.name = 'wardrobe/hinged-doors';
+    if(part.material===fabrics[0]) for(let i=0;i<10;i++) batch.setColorAt(i,new THREE.Color([0x768389,0xb28368,0x83896c,0xaca18b][i%4]));
     batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage); batch.frustumCulled = false; batch.castShadow = batch.receiveShadow = true; b.root.add(batch); return batch;
   });
   templateParent.clear();
@@ -197,10 +231,12 @@ export function createVillaWardrobe(parent: THREE.Object3D) {
 /** Two-leaf fridge-freezer: a stainless carcass whose doors swing on their
  *  hinges, with lit shelves behind them once open. */
 export function createVillaFridge(parent: THREE.Object3D) {
-  const b = new IndexedFittingBuilder(parent, 'Kitchen/fridge-freezer'), f = VILLA_FRIDGE_FREEZER;
-  const steel = villaMaterial('#c3c7ca', 0.42, 0.62), shell = villaMaterial('#8f9599', 0.5, 0.35);
-  const inner = villaMaterial('#e8ebee', 0.7), glassShelf = villaMaterial('#dbe6ea', 0.25, 0.1);
-  const handle = villaMaterial('#6d7478', 0.34, 0.72), seal = villaMaterial('#3c4145', 0.85);
+  const b = new PantryBuilder(parent, 'Kitchen/fridge-freezer'), f = VILLA_FRIDGE_FREEZER;
+  const steel = villaMaterial('#bcbcb2', .43, .61), shell = villaMaterial('#a1a49b', .54, .32);
+  const inner = villaMaterial('#ecebe0', .59), glassShelf = villaMaterial('#bcd2ca', .23, .06);
+  glassShelf.transparent = true; glassShelf.opacity = .27; glassShelf.depthWrite = false;
+  const food = villaMaterial('#ffffff', .66), seal = villaMaterial('#494b44', .82);
+  food.vertexColors = inner.vertexColors = true; food.name = 'pantry/cold-provisions';
   const glow = villaMaterial('#eef4f6', 0.6); glow.emissive.set('#dff0f6'); glow.emissiveIntensity = 0;
   const doorWidth = f.width - 0.03, hingeX = f.width / 2 - 0.015;
   const leaves: THREE.Group[] = [];
@@ -218,37 +254,22 @@ export function createVillaFridge(parent: THREE.Object3D) {
     b.box(0, .071, .336, doorWidth, .136, .043, seal, .004);
     for (let i = 0; i < 4; i++) b.box(0, .032 + i * .022, .362, doorWidth - .082, .008, .006, shell, 0);
     b.box(0, 1.045, .326, doorWidth, .089, .073, shell, .004);
-    b.box(0, 1.52, -.337, f.width - .07, .66, .022, inner, .006);
-    for (let i = 0; i < 7; i++) b.box(-.21 + i * .067, 1.75, -.32, .038, .009, .005, seal, 0);
-    for (const y of [.32, .62, 1.38, 1.64]) {
-      b.box(0, y, -.077, .681, .012, .470, glassShelf, .002);
-      b.box(0, y - .002, .157, .684, .022, .012, inner, .003);
-      for (const x of [-.341, .341]) b.box(x, y - .012, -.066, .021, .023, .503, inner, .004);
-    }
-    b.box(0, 1.84, -.31, .47, .029, .039, glow, .006);
-    // Bottles have a heel, tapered shoulder, narrow neck and separate crimp cap.
-    for (const [x, y, z, r] of [[-.21, 1.386, -.18, .045], [-.10, 1.386, -.07, .039], [.03, 1.386, -.17, .047]]) {
-      b.geometry(vessel([[0, 0], [r * .88, 0], [r, .007], [r, .126], [r * .93, .144],
-        [r * .53, .165], [r * .43, .175], [r * .43, .194], [0, .194]], 14), glassShelf, [x, y, z]);
-      b.cylinder(x, y + .194, z, r * .47, r * .47, .014, handle, undefined, 12);
-      b.geometry(vessel([[r + .0007, 0], [r + .0007, .055]], 14), inner, [x, y + .046, z]);
-    }
-    for (const [x, z] of [[.18, -.11], [-.17, -.11], [0, .022]]) {
-      b.geometry(vessel([[0, 0], [.056, .003], [.058, .011], [.059, .085], [.063, .09], [.063, .098], [0, .098]], 14), inner, [x, 1.646, z]);
-      b.cylinder(x, 1.747, z, .063, .063, .006, steel, undefined, 14);
-    }
-    for (const y of [.066, .326, .626]) {
-      b.box(0, y + .008, -.07, .65, .014, .44, inner, .003);
-      for (const x of [-.315, .315]) b.box(x, y + .094, -.07, .021, .174, .44, inner, .004);
+    coldLiner(b, inner, seal);
+    for (const y of [.32, .62, 1.38, 1.64]) glassLedge(b, y, glassShelf, inner);
+    b.box(0, 1.846, -.262, .47, .023, .041, glow, .004);
+    stockColdShelves(b, food);
+    for (const [i, y] of [.066, .326, .626].entries()) {
+      b.box(0, y + .008, -.07, .65, .014, .44, inner, 0);
+      for (const x of [-.315, .315]) b.box(x, y + .094, -.07, .021, .174, .44, inner, 0);
       b.box(0, y + .090, -.283, .622, .17, .013, inner, 0);
       b.box(0, y + .075, .146, .64, .145, .014, glassShelf, .004);
       b.box(0, y + .150, .15, .63, .015, .019, steel, .003);
-      for (const x of [-.17, .15]) b.box(x, y + .056, -.11, .24, .087, .28, x < 0 ? glassShelf : shell, .009);
+      for (const [j, x] of [-.158, .145].entries()) wrappedParcel(b, food, x, y + .015, -.088 + .021 * j, i * 2 + j);
     }
     // The liner, compression gasket and bottle retainer travel with each leaf.
     // All metal/liner/seal parts for a given moving door are only three draws.
     for (const zone of [{ cY: 1.5, height: .82 }, { cY: .57, height: .86 }]) {
-      const door = new IndexedFittingBuilder(b.root, `Kitchen/fridge-door-${zone.cY > 1 ? 'chill' : 'freeze'}`), mid = -doorWidth / 2;
+      const door = new PantryBuilder(b.root, `Kitchen/fridge-door-${zone.cY > 1 ? 'chill' : 'freeze'}`), mid = -doorWidth / 2;
       const group = door.root; group.position.set(f.x + hingeX, f.y + zone.cY, f.z + f.depth / 2 + .012);
       door.geometry(panel(doorWidth, zone.height, .024, .049, .005), steel, [mid, 0, 0]);
       door.geometry(surround(doorWidth - .030, zone.height - .030, .028,
@@ -260,13 +281,12 @@ export function createVillaFridge(parent: THREE.Object3D) {
       const cy = zone.height * .27;
       door.box(mid + .15, cy, .025, .12, .031, .004, seal, .002);
       for (const y of [-.23, .10]) {
-        door.box(mid, y, -.093, doorWidth - .16, .014, .137, inner, .004);
-        for (const x of [mid - .282, mid + .282]) door.box(x, y + .042, -.096, .015, .089, .135, inner, .004);
+        door.box(mid, y, -.093, doorWidth - .16, .014, .137, inner, 0);
+        for (const x of [mid - .282, mid + .282]) door.box(x, y + .042, -.096, .015, .089, .135, inner, 0);
         door.beam([mid - .28, y + .067, -.157], [mid + .28, y + .067, -.157], .0055, steel, 8);
         door.box(mid, y + .022, -.158, .568, .047, .01, inner, .002);
       }
-      for (const y of [-.22, .11]) door.geometry(vessel([[0, 0], [.021, 0], [.023, .006], [.024, .068],
-        [.025, .070], [.025, .081], [0, .081]], 12), steel, [mid - .18, y, -.093]);
+      doorProvisions(door, inner, mid, zone.cY > 1);
       door.finish(); leaves.push(group);
       panels.push({ minX: f.x + hingeX - doorWidth, maxX: f.x + hingeX, minZ: f.z + f.depth / 2 - .01, maxZ: f.z + f.depth / 2 + .06,
         minY: f.y + zone.cY - zone.height / 2, maxY: f.y + zone.cY + zone.height / 2 });

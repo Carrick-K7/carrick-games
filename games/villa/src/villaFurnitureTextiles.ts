@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { bent, board, casting, loft, oval, rectRing, sheet, type FurnitureKit, type Point, type Ring } from './villaFurnitureForms.js';
+import { dress, measuredSheet, type ClothCut } from './villaUpholsteryFinish.js';
+import { bedLayer } from './villaBeddingDrape.js';
+import { casedPillow, chaiseThrow, tailoredPad } from './villaUpholsterySeats.js';
 
 /** Cut along the selvage. Top and underside are mapped in the same X/Z cloth
  * coordinates, while the narrow boxing strip is unwrapped along its own seam.
@@ -61,7 +64,10 @@ export function sofaBody(w: number, leather: boolean) {
   const rings = path.map(([x, z, high], i) => {
     const prev = path[Math.max(0, i - 1)], next = path[Math.min(path.length - 1, i + 1)];
     const dx = next[0] - prev[0], dz = next[1] - prev[1], inv = 1 / Math.hypot(dx, dz);
-    const ny = high - .27, halfWidth = (leather ? .13 : .12) * (i === 0 || i === path.length - 1 ? .70 : 1);
+    // The cinema shell stops below the shoulder blades. The individual hinged
+    // backs, their headrests and the spaces between them now show from the aisle.
+    const shellTop = leather ? Math.min(high, .875 + .045 * (1 - Math.abs(x) / half)) : high;
+    const ny = shellTop - .27, halfWidth = (leather ? .13 : .12) * (i === 0 || i === path.length - 1 ? .70 : 1);
     return [[.79, .0], [1, .14], [1, .76], [.92, .91], [.64, .99], [0, 1], [-.66, .97], [-.94, .88], [-1, .66], [-.87, .07], [-.62, .0]].map(([width, y]): Point =>
       [x + dz * inv * halfWidth * width, .27 + ny * y, z - dx * inv * halfWidth * width]);
   });
@@ -106,9 +112,14 @@ function timberSettee(k: FurnitureKit, w: number, outdoor: boolean) {
   }
   put(board(w - .114, .095, .064, .038), wood, 0, 1.164, .507);
 }
-export function sofaFrame(k: FurnitureKit, w: number, fabric: THREE.Material, chaise: boolean, n: number, style: SofaStyle) {
-  const { put, m } = k, cinema = style === 'cinema';
-  if (style === 'terrace' || style === 'reading') timberSettee(k, w, style === 'terrace');
+export function sofaFrame(k: FurnitureKit, w: number, fabric: THREE.Material, chaise: boolean, n: number, style: SofaStyle, sewn: THREE.Material, site: string) {
+  const { put, m } = k, cinema = style === 'cinema', outdoor = style === 'terrace';
+  const cut: ClothCut = cinema ? 'hide' : fabric === m.sage || fabric === m.terra ? 'velvet' : 'flax';
+  const dye = cinema ? '#926346' : fabric === m.sage ? '#788575' : fabric === m.terra ? '#a16b55' : site === 'sofa-living' ? '#ddd0b9' : '#cbcbc0';
+  function covered(g: THREE.BufferGeometry, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) {
+    put(dress(g, cut, dye), sewn, x, y, z, rx, ry, rz);
+  }
+  if (outdoor || style === 'reading') timberSettee(k, w, outdoor);
   else {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) bent(k, m.walnut, [
       [sx * (w / 2 - .16), 0, sz * .51, .044], [sx * (w / 2 - .16), .016, sz * .51, .046], [sx * (w / 2 - .17), .045, sz * .50, .050], [sx * (w / 2 - .22), .21, sz * .45, .067],
@@ -116,10 +127,10 @@ export function sofaFrame(k: FurnitureKit, w: number, fabric: THREE.Material, ch
     put(board(w - .13, 1.12, .079, .13, .042), m.walnut, 0, .205, 0);
     // Tailored deck below the loose cushions: a straight boxing strip and a
     // tucked base, not a second pillowed seat penetrating the first one.
-    put(sewnSkin([rectRing(w - .15, 1.10, .107, .238), rectRing(w - .093, 1.163, .119, .253),
+    covered(sewnSkin([rectRing(w - .15, 1.10, .107, .238), rectRing(w - .093, 1.163, .119, .253),
       rectRing(w - .061, 1.204, .135, .292), rectRing(w - .059, 1.207, .135, .418),
-      rectRing(w - .091, 1.184, .125, .446), rectRing(w - .145, 1.134, .115, .453)], 1, 4), fabric, 0, 0, -.014);
-    put(sofaBody(w, cinema), fabric, 0, 0, 0);
+      rectRing(w - .091, 1.184, .125, .446), rectRing(w - .145, 1.134, .115, .453)], 1, 4), 0, 0, -.014);
+    covered(sofaBody(w, cinema), 0, 0, 0);
   }
   const pitch = (w - .50) / n;
   for (let i = 0; i < n; i++) {
@@ -127,17 +138,36 @@ export function sofaFrame(k: FurnitureKit, w: number, fabric: THREE.Material, ch
     // The chaise cushion runs to the toe in one piece, not through another seat.
     const long = chaise && i === 0, length = long ? 2.06 : .98;
     if (long) {
-      put(board(pitch + .02, 1.25, .19, .10), style === 'terrace' ? m.oak : fabric, x, .357, -1.04);
+      const toe = board(pitch + .02, 1.25, .19, .10);
+      if (outdoor) put(toe, m.oak, x, .357, -1.04); else covered(toe, x, .357, -1.04);
       for (const dx of [-.29, .29]) bent(k, m.walnut, [[x + dx, 0, -1.55, .040], [x + dx, .014, -1.55, .040], [x + dx * .9, .28, -1.52, .058]]);
     }
-    put(seatPad(pitch - .014, length, .235, cinema ? .24 : .18), fabric, x, .559, long ? -.66 : -.12);
-    put(seatPad(pitch + .006, .65, cinema ? .25 : .21, .03), fabric, x, .924, .316, -1.36);
-    if (cinema) put(pillowForm(pitch * .84, .215, .145), fabric, x, 1.163, .332, -1.35);
+    if (outdoor) {
+      put(seatPad(pitch - .014, length, .235, .18), fabric, x, .559, long ? -.66 : -.12);
+      put(seatPad(pitch + .006, .65, .21, .03), fabric, x, .924, .316, -1.36);
+      continue;
+    }
+    const lean = [.65, -.90, .27, -.43][i % 4];
+    const wear = site === 'sofa-living' ? [.21, .16, .32, .29][i % 4] : cinema ? .26 : site.includes('guest') ? .18 : .28;
+    const pad = tailoredPad(pitch - .017, length, .235, long ? 'chaise' : 'seat', wear, lean);
+    const foldedWool = long ? chaiseThrow(pitch, pad) : null;
+    covered(pad, x, .559, long ? -.66 : -.12);
+    covered(tailoredPad(pitch - (cinema ? .041 : .013), cinema ? .68 : .647, cinema ? .251 : .219, cinema ? 'reclining' : 'back', wear, lean),
+      x + lean * .005, .930 + .009 * lean, (cinema ? .384 : .300) + .007 * lean, -1.31 + lean * .041, lean * .019, lean * .029);
+    if (cinema) {
+      // A small leather head roll follows the recline and projects above the
+      // aisle-side shell. No loose throw cushions in the theatre.
+      covered(casedPillow(pitch * .81, .207, .151, 'lumbar', i === 1), x, 1.168 + lean * .007, .306, -1.29 + lean * .032);
+    } else if (foldedWool) put(dress(foldedWool, 'throw', '#817963'), sewn, x, .559, -.66);
   }
-  if (!cinema) {
-    const offset = w > 1.65 ? w / 2 - .61 : .15;
+  const offset = w > 1.65 ? w / 2 - .61 : .15;
+  if (outdoor) {
     put(pillowForm(.51, .47, .22), m.terra, -offset, .864, .105, -1.22, -.13, .13);
     if (w > 1.65) put(pillowForm(.48, .48, .21), m.sage, offset, .875, .119, -1.26, .18, -.15);
+  } else if (!cinema && site !== 'sofa-library-east' && site !== 'sofa-east-suite') {
+    const green = site === 'sofa-living', lumbar = style === 'reading' || green;
+    put(dress(casedPillow(lumbar ? .65 : .54, lumbar ? .358 : .474, .218, 'lumbar', true), green || style === 'reading' ? 'twill' : 'velvet',
+      green ? '#71806e' : style === 'reading' ? '#a3775f' : '#9d746b'), sewn, green ? offset - .07 : -offset, lumbar ? .807 : .857, .101, -1.13, green ? .13 : -.10, green ? -.12 : .16);
   }
 }
 
@@ -149,74 +179,7 @@ export function mattress(w: number) {
   return sewnSkin([ring(.952, -.185), ring(.987, -.168), ring(.997, -.139), ring(1, -.124), ring(.994, -.110),
     ring(.993, .087), ring(1, .110), ring(.994, .123), ring(.989, .147), ring(.949, .169), ring(.70, .185)], 2, 8);
 }
-/** Evaluate the crown/shoulder of the same ticking the quilt is resting on.
- * Rounded corner signed distances interpolate between the mattress sections;
- * unlike a constant Y offset this also fits the curved mattress ends. */
-function tickingAt(x: number, z: number, w: number) {
-  const dist = (scale: number) => {
-    const dx = Math.abs(x) - w * scale / 2 + .18, dz = Math.abs(z) - 3.55 * scale / 2 + .18;
-    return Math.hypot(Math.max(0, dx), Math.max(0, dz)) + Math.min(0, Math.max(dx, dz)) - .18;
-  };
-  let d0 = dist(.70), y0 = .807;
-  for (const [scale, y] of [[.949, .791], [.989, .769], [.994, .745], [1, .732]]) {
-    if (d0 <= 0) return y0;
-    const d1 = dist(scale); if (d1 <= 0) return THREE.MathUtils.lerp(y0, y, d0 / (d0 - d1));
-    d0 = d1; y0 = y;
-  }
-  return y0;
-}
-function quiltNormal(u: number, v: number): Point {
-  const side = THREE.MathUtils.clamp((Math.abs(u) - .90) / .071, 0, 1) * Math.PI / 2;
-  const foot = THREE.MathUtils.clamp((-v - .88) / .092, 0, 1) * Math.PI / 2;
-  const nx = Math.sign(u) * Math.sin(side), ny = Math.cos(side) * Math.cos(foot), nz = -Math.sin(foot), length = Math.hypot(nx, ny, nz);
-  return [nx / length, ny / length, nz / length];
-}
-function quiltPoint(w: number, u: number, v: number, under: boolean): Point {
-  const mw = w - .075, e = Math.abs(u), halfW = mw / 2, halfD = 3.55 / 2;
-  const side = Math.max(0, (e - .948) / .052), foot = Math.max(0, (-v - .948) / .052);
-  // From the crown, over the sewn shoulder, then back IN against the ticking
-  // below the bead. Thickness follows the outward normal, not global Y.
-  let x = Math.sign(u) * halfW * (e <= .89 ? e / .89 * .94 : .94 + .054 * Math.min(1, (e - .89) / .058));
-  let z = v >= -.86 ? -.595 + 1.22 * v : -1.6442 - (halfD * .994 - 1.6442) * Math.min(1, (-v - .86) / .088);
-  const waves = .6 * Math.cos(3.6 * Math.PI * u + v * 1.4) + .4 * Math.sin(6 * Math.PI * u - v * 2);
-  const lift = .008 * Math.max(0, waves - .30) ** 2;
-  let base = tickingAt(x, z, mw) + .0012 + lift;
-  if (side || foot) {
-    base = Math.min(.746 - (.136 - .012 * Math.sin(v * 4.7)) * side, .746 - (.148 - .009 * Math.cos(u * 5)) * foot);
-    const scale = base >= .732 ? THREE.MathUtils.lerp(1, .994, (base - .732) / .014) :
-      THREE.MathUtils.lerp(1, .993, Math.min(1, (.732 - base) / .023));
-    const ease = .0012 + lift;
-    if (side) x = Math.sign(u) * (halfW * scale + ease);
-    if (foot) z = -(halfD * scale + ease);
-    // At the two foot corners the cloth turns on a diagonal; excess material
-    // gathers here rather than hanging over an imaginary square corner.
-    const dx = Math.max(0, Math.abs(x) - (halfW * scale - .18)), dz = Math.max(0, -z - (halfD * scale - .18)), radial = Math.hypot(dx, dz);
-    if (dx && dz && radial > .18 + ease) {
-      const ratio = (.18 + ease) / radial;
-      x -= Math.sign(u) * dx * (1 - ratio); z += dz * (1 - ratio);
-    }
-  }
-  const fold = .041 * Math.exp(-(((v - .84) * 9) ** 2)) - .010 * Math.exp(-(((v - .70) * 11) ** 2));
-  const thickness = .017 + (.025 + .017 * waves + fold) * (1 - .53 * Math.max(side, foot));
-  const normal = quiltNormal(u, v), t = under ? 0 : thickness;
-  return [x + normal[0] * t, base + normal[1] * t, z + normal[2] * t];
-}
-const quiltColumns = [-1, -.977, -.957, -.948, -.925, -.89, -.76, -.62, -.49, -.34, -.22, -.11, 0, .14, .27, .4, .54, .67, .8, .89, .925, .948, .957, .977, 1];
-const throwRows = [-.72, -.67, -.53, -.38, -.31, -.30];
-export function quilt(w: number, throwOnly = false) {
-  // The two pieces use identical triangles under the runner. Even between
-  // sampled stations the wool lies on the quilt instead of bridging its valleys.
-  const rows = throwOnly ? throwRows : [-1, -.977, -.957, -.948, -.92, -.86, ...throwRows, -.1, .18, .45, .64, .70, .78, .84, .9, .96, 1];
-  return sheet(quiltColumns, rows, (u, v, under) => {
-    const p = quiltPoint(w, u, v, !throwOnly && under);
-    if (throwOnly) {
-      const n = quiltNormal(u, v), t = under ? .0008 : .014 + .003 * Math.cos(u * 17 + v * 8);
-      for (let i = 0; i < 3; i++) p[i] += n[i] * t;
-    }
-    return p;
-  });
-}
-export function bedstead(k: FurnitureKit, w: number, pillowWidth: number) {
+export function bedstead(k: FurnitureKit, w: number, pillowWidth: number, guest: boolean, sewn: THREE.Material) {
   const { put, m, box } = k;
   for (const x of [-w / 2 + .13, w / 2 - .13]) for (const z of [-1.67, 1.67]) {
     bent(k, m.walnut, [[x, 0, z, .057], [x, .013, z, .057], [x, .045, z, .061], [x * .983, .25, z * .985, .085]]);
@@ -225,10 +188,11 @@ export function bedstead(k: FurnitureKit, w: number, pillowWidth: number) {
   for (const x of [-w / 2, w / 2]) put(board(.123, 3.72, .27, .046), m.oak, x, .334, 0);
   for (const z of [-1.8, 1.8]) put(board(w + .04, .13, .27, .045), m.oak, 0, .334, z);
   for (let i = 0; i < 8; i++) box(0, .413, -1.51 + .43 * i, w, .045, .17, m.walnut, 0);
-  put(mattress(w), m.linen, 0, .622, 0);
-  put(quilt(w + .075), m.cream, 0, 0, 0);
-  put(quilt(w + .075, true), m.terra, 0, 0, 0);
-  put(pillowForm(pillowWidth, .68, .245), m.linen, 0, .926, 1.25);
+  put(dress(mattress(w), 'ticking', '#e4decd'), sewn, 0, .622, 0);
+  put(dress(bedLayer(w, 'quilt', guest), 'quilt', guest ? '#c0c9b9' : '#e4d7bd'), sewn, 0, 0, 0);
+  put(dress(bedLayer(w, 'throw', guest), 'throw', guest ? '#7b8790' : '#a56f53'), sewn, 0, 0, 0);
+  put(dress(bedLayer(w, 'facing', guest), 'facing', guest ? '#e2deca' : '#c7bea1'), sewn, 0, 0, 0);
+  put(dress(casedPillow(pillowWidth, .73, .245, 'bed', !guest), 'flax', '#ece4d5'), sewn, 0, .926, 1.25);
   // Cabriole-shouldered timber headboard and seven integral fluted upholstery channels.
   const half = w / 2 + .15;
   const outline = [[-half, .14], [half, .14], [half, 1.48], [half - .028, 1.56], [half - .13, 1.6],
@@ -242,17 +206,28 @@ export function bedstead(k: FurnitureKit, w: number, pillowWidth: number) {
     const relief = (.035 + .045 * (1 - Math.cos((u + 1) * 7 * Math.PI))) * (1 - v ** 6);
     return [u * (half - .055), under ? -.005 : .012 + relief, h];
   });
-  put(panel, m.sage, 0, 0, 1.848, -Math.PI / 2);
+  put(dress(measuredSheet(panel, w, 1.24), 'velvet', guest ? '#8a8376' : '#80907e'), sewn, 0, 0, 1.848, -Math.PI / 2);
 }
 
-export function curtain(width: number, height: number, pleats: number) {
-  const cols = Array.from({ length: pleats * 5 + 1 }, (_, i) => 2 * i / (pleats * 5) - 1);
-  const cloth = sheet(cols, width > 3 ? [-1, -.94, -.35, .6, 1] : [-1, -.978, -.52, .52, .975, 1], (u, v, under) => {
-    const a = (u + 1) * pleats * Math.PI + .17 * (1 - v * v) * Math.sin(u * 5);
-    return [u * width * (.50 - .045 * (v + 1)), (.024 + .029 * (1 - v) / 2) * Math.cos(a) + (under ? -.004 : .004),
-      v * height / 2 + (1 - v) * .007 * Math.cos(a)];
+export function curtain(width: number, height: number, pleats: number, hand = 0) {
+  const full = width > 3, count = full ? Math.ceil(pleats * .70) : pleats, knots = [0];
+  for (let i = 0; i < count; i++) knots.push(knots[i] + 1 + .22 * Math.sin(i * 2.13 + hand) + .12 * Math.cos(i * 1.38 - hand));
+  const cols: number[] = [], phase = new Map<number, number>();
+  for (let i = 0; i < count; i++) for (const t of [0, .20, .44, .72]) {
+    const u = 2 * (knots[i] + t * (knots[i + 1] - knots[i])) / knots[count] - 1; cols.push(u); phase.set(u, i + t);
+  }
+  cols.push(1); phase.set(1, count);
+  const rows = full ? [-1, -.90, -.20, .48, .88, 1] : [-1, -.973, -.64, -.03, .47, .91, 1];
+  const cloth = sheet(cols, rows, (u, v, under) => {
+    const fall = (1 - v) / 2, p = phase.get(u)!, weight = .72 + .28 * Math.cos(Math.floor(p) * 1.72 + hand);
+    const wave = 2 * Math.PI * p + .84 * fall * Math.sin(p * 1.72 + hand) + .32 * fall * fall;
+    const fullness = full ? .98 : .64 + .35 * fall, pinch = full ? .010 : .048;
+    const hang = Math.cos(wave), swell = (.028 + fall * .045) * (.71 + .29 * weight);
+    const x = u * width * fullness * .5 + pinch * fall * Math.sin(p * 1.67 + hand) + (full ? .036 : .024) * fall * fall * Math.sin(hand);
+    const y = swell * hang + .028 * fall * Math.sin(2.8 * u + hand) + (under ? -.003 : .003);
+    return [x, y, v * height / 2 + fall ** 3 * (.028 * hang + .020 * Math.cos(2.7 * p - hand))];
   });
-  return cloth.rotateX(-Math.PI / 2);
+  return measuredSheet(cloth, full ? width * 1.56 : width * 2.8, height).rotateX(-Math.PI / 2);
 }
 
 /** Towel bolt, including the visible spiral return instead of a capped tube. */

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { villaMaterial } from './villaModel.js';
-import { IndexedFittingBuilder, cabinetPull, panel, surround, vessel } from './villaFittingGeometry.js';
+import { cabinetPull, panel, surround, vessel, type Section }  from './villaFittingGeometry.js';
+import { FittedCaseBuilder, fittedVeneer, wovenCloth } from './villaCabinetDressings.js';
+import { createVillaRoomMirror } from './villaInteriorMirror.js';
 import type { VillaCollider } from './villaWorld.js';
 
 import { createVillaWardrobe, VILLA_MASTER_WARDROBE, type VillaWardrobeState } from './villaWardrobe.js';
@@ -12,16 +14,24 @@ export const VILLA_VANITY_ACCESSORIES = ['brush-cup', 'lipstick', 'compact', 'pe
 
 /** Scene-owned joinery; controller owns pure wardrobe state, no DOM or render targets. */
 export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCollider[]; update(state?: VillaWardrobeState, lightOn?: boolean): boolean } {
-  const b = new IndexedFittingBuilder(parent, 'Villa master bedroom');
-  const oak = villaMaterial('#b69771', 0.78), shadowOak = villaMaterial('#786047', 0.88);
-  const linen = villaMaterial('#e4ddca', 0.93), sage = villaMaterial('#98a18a', 0.84);
+  const b = new FittedCaseBuilder(parent, 'Villa master bedroom');
+  const oak = fittedVeneer('#b69771', 0xfff1dd), shadowOak = fittedVeneer('#786047', 0x9b806a);
+  const linen = wovenCloth('#e4ddca', 'oxford'), sage = villaMaterial('#98a18a', .80);
   const brass = villaMaterial('#b99b65', 0.34, 0.72), stone = villaMaterial('#eee5d6', 0.43);
   // A restrained diffuse component keeps the mirror readable on software GL,
   // whose scene deliberately omits the expensive environment prefilter.
-  const mirror = villaMaterial('#d1dfe0', 0.075, .72); mirror.envMapIntensity = 1.1; mirror.name = 'Bedroom polished mirror';
+  const mirror = createVillaRoomMirror('master', '#d1dfe0'); mirror.name = 'Bedroom polished mirror';
   const glow = villaMaterial('#fff0d7', 0.55); glow.emissive.set('#ffddb0'); glow.emissiveIntensity = 0.65;
   const charcoal = villaMaterial('#484039', 0.75), rose = villaMaterial('#b66c75', 0.63);
-  const amber = villaMaterial('#b48858', 0.2, 0.12), porcelain = villaMaterial('#d8d5c8', 0.24);
+  const porcelain = villaMaterial('#e6e2d7', .22);
+  const crystal = new THREE.MeshStandardMaterial({color:0xffffff,roughness:.135,metalness:.08,flatShading:true,
+    vertexColors:true,transparent:true,depthWrite:false}); crystal.name = 'Vanity/cut crystal';
+  stone.userData.villaInteriorFinish='limestone'; stone.userData.villaInteriorSwatchTint=0xfff8ee;
+  const facets = (sections:Section[],tint:string,alpha:number,sides=10) => {
+    const g=vessel(sections,sides,.68), color=new THREE.Color(tint), count=g.getAttribute('position').count, rgba=new Float32Array(count*4);
+    for(let i=0;i<count;i++){rgba[i*4]=color.r;rgba[i*4+1]=color.g;rgba[i*4+2]=color.b;rgba[i*4+3]=alpha;}
+    g.setAttribute('color',new THREE.BufferAttribute(rgba,4)); return g;
+  };
   const marker = (kind: string, x: number, y: number, z: number, data: Record<string, unknown> = {}) => {
     const node = new THREE.Object3D(); node.name = `Bedroom/${kind}`; node.position.set(x, y, z);
     node.userData = { kind, ...data }; b.root.add(node); return node;
@@ -70,12 +80,15 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
       b.geometry(new THREE.TorusGeometry(size, .003, 7, 20), brass, [trayX + dx, .838, .07 + dz], [Math.PI / 2, 0, .12]);
     }
     marker('perfume-bottle', v.x + perfumeX, v.y + v.height, v.z + .035);
-    b.geometry(vessel([[0, 0], [.045, 0, .038], [.056, .009, .047], [.058, .024, .049], [.056, .139, .048],
-      [.053, .151, .045], [.041, .164, .035], [.020, .171, .020], [.018, .178], [0, .178]], 16, .65), amber, [perfumeX, .834, .035]);
-    b.box(perfumeX, .925, .084, .068, .055, .003, linen, .001);
-    b.geometry(vessel([[.021, 0], [.024, .002], [.024, .009], [.022, .011], [.022, .018], [.014, .019],
-      [.013, .023], [.017, .024], [.017, .043], [.015, .046], [0, .046]], 16), brass, [perfumeX, 1.008, .035]);
-    b.cylinder(perfumeX, 1.042, .052, .003, .003, .002, charcoal, [Math.PI / 2, 0, 0], 8);
+    // A double-wall decanter: thick heel, shoulder, neck and returned clear lip.
+    // The amber fill has its own level inside, not an opaque tan bottle painted gold.
+    b.geometry(facets([[0,0],[.060,0,.043],[.071,.011,.054],[.073,.03,.055],[.073,.136,.055],
+      [.061,.153,.046],[.026,.169,.022],[.025,.190,.022],[.019,.190,.016],[.019,.172,.016],[.059,.146,.044],
+      [.066,.132,.050],[.066,.025,.050],[.054,.018,.038],[0,.018]],'#e9f3f0',.34),crystal,[perfumeX,.834,.035]);
+    b.geometry(facets([[0,.019],[.053,.019,.037],[.065,.026,.049],[.065,.104,.049],[.063,.102,.047],[0,.102]],'#bd8149',.85),crystal,[perfumeX,.834,.035]);
+    b.geometry(facets([[.016,-.014,.014],[.017,.008,.015],[.022,.014,.019],[.039,.025,.027],[.045,.049,.030],
+      [.031,.066,.024],[.020,.076,.016],[0,.078]],'#e9e0ce',.69,8),crystal,[perfumeX,1.022,.035]);
+    b.geometry(vessel([[.023,0],[.028,.002],[.028,.011],[.024,.013],[.021,.011]],14),brass,[perfumeX,1.009,.035]);
     marker('lipstick', v.x + lipstickX, v.y + v.height, v.z + .11);
     b.geometry(vessel([[0, 0], [.022, 0], [.026, .003], [.026, .048], [.027, .050], [.027, .056], [.023, .058],
       [.022, .091], [.019, .092], [.018, .074]], 20), brass, [lipstickX, .834, .11]);
@@ -94,23 +107,32 @@ export function createVillaBedroom(parent: THREE.Object3D): { colliders: VillaCo
       [.076, .011], [.070, .008], [.067, .004], [0, .004]]), brass, [compactX, .922, .003], [lidAngle, 0, 0]);
     b.cylinder(compactX, .923, .008, .069, .069, .0035, mirror, [lidAngle, 0, 0], 28);
     b.beam([compactX - .036, .842, .016], [compactX + .036, .842, .016], .0065, brass, 10);
-    marker('brush-cup', v.x + cupX, v.y + v.height, v.z - .13, { brushes: 3 });
-    b.geometry(vessel([[0, .004], [.041, .004], [.045, 0], [.052, 0], [.057, .007], [.058, .014],
-      [.069, .147], [.071, .156], [.069, .161], [.064, .162], [.061, .157], [.059, .141], [.050, .021], [.045, .014], [0, .014]], 24), porcelain, [cupX, .82, -.13]);
-    for (let i = 0; i < 3; i++) {
-      const x = cupX - .035 + i * .035, top = 1.12 + i * .035;
-      const dx = (i - 1) * .017, tipZ = -.138 + i * .008;
-      b.beam([cupX + (i - 1) * .021, .835, -.13], [x + dx, top, tipZ], .008, shadowOak, 9);
-      b.geometry(vessel([[.010, -.030], [.012, -.029], [.012, -.022], [.011, -.020], [.014, .014, .011],
-        [.017, .019, .011], [.017, .023, .012]], 12), brass, [x + dx, top, tipZ]);
-      const w = [.016, .027, .024][i];
-      b.geometry(vessel([[.012, .018, .009], [w * .85, .030, .013], [w, .047, .016], [w * .85, .062, .014],
-        [w * .55, .071, .01, .003], [0, .078, 0, .005]], 14), charcoal, [x + dx, top, tipZ]);
+    marker('brush-cup', v.x + cupX, v.y + v.height, v.z - .13, { brushes: 5 });
+    b.geometry(vessel([[0,.004],[.047,.004],[.050,0],[.057,0],[.062,.006],[.061,.016],
+      [.069,.147],[.071,.156],[.069,.161],[.064,.162],[.061,.157],[.059,.141],[.050,.021],[.045,.014],[0,.014]],20),porcelain,[cupX,.82,-.13]);
+    // A fan, powder mop, shader, lip and angled brow brush. Each complete tool
+    // leans from the floor; ferrule, handle and tip have the same local axis.
+    for(const [dx,dz,length,tilt,twist,breadth,depth] of [
+      [-.017,-.013,.264,.205,-.16,.040,.012],[.014,-.021,.299,-.16,.07,.029,.025],
+      [-.009,.011,.211,.094,.15,.015,.009],[.021,-.002,.234,-.16,-.10,.011,.008],[-.018,.020,.188,.26,.19,.026,.008],
+    ]) {
+      const position:[number,number,number]=[cupX+dx,.834,-.13+dz],rotation:[number,number,number]=[twist,0,tilt];
+      b.geometry(vessel([[0,0],[.003,.001],[.005,.02],[.0075,length-.047],[.008,length-.021]],9),shadowOak,position,rotation);
+      b.geometry(vessel([[.008,length-.025],[.010,length-.024],[.009,length-.019],[breadth*.58,length+.005,depth*.76],
+        [breadth*.63,length+.010,depth*.81]],10),brass,position,rotation);
+      b.geometry(vessel([[breadth*.58,length+.009,depth*.75],[breadth*.77,length+.024,depth*.91],
+        [breadth,length+.043,depth],[breadth*.85,length+.055,depth*.77],[breadth*.42,length+.065,depth*.45,.004],
+        [0,length+.068,0,.006]],12),charcoal,position,rotation);
     }
+    // A horn comb lying on its spine, with open spaces between tapered teeth.
+    const combX = cupX-.30;
+    b.geometry(panel(.216,.029,.011,.008,.0015),shadowOak,[combX,.826,-.124],[-Math.PI/2,0,.12]);
+    for(let i=0;i<12;i++) b.geometry(new THREE.ConeGeometry(.0055,.045+(i%3)*.002,4).rotateX(Math.PI/2), shadowOak,
+      [combX-.073+.012*i,.825,-.093]);
   });
 
   const m = VILLA_MASTER_MIRROR;
-  marker('dressing-mirror', m.x, m.y, m.z, { reflection: 'environment-polished-metal', renderTarget: false, litTrim: true });
+  marker('dressing-mirror', m.x, m.y, m.z, { reflection: 'finite-room-reflection', renderTarget: false, litTrim: true });
   b.at(m.x, m.y, m.z, 0, () => {
     b.geometry(surround(m.width, m.height, .15, [[0, -.023], [0, .019], [.006, .028], [.015, .031],
       [.025, .027], [.030, .030], [.035, .042], [.045, .046], [.057, .037], [.064, .026], [.060, -.018], [0, -.023]]), oak);

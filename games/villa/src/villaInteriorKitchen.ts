@@ -1,33 +1,31 @@
 import * as THREE from 'three';
-import { bent, board, casting, circleXY, fieldFrame, loft, rail, rectRing, rectXY, stock, turn, type FurnitureKit } from './villaFurnitureForms.js';
+import { bent, board, casting, circleXY, fieldFrame, loft, rail, rectRing, rectXY, sheet, stock, turn, type FurnitureKit } from './villaFurnitureForms.js';
 import { cabinet, pull, vessel } from './villaFurnitureJoinery.js';
+import { foldedLinen, formedTube } from './villaFittingGeometry.js';
+import { pantryPart, registerPantryFinish } from './villaPantryFinish.js';
+import { breakfastSetting, orchardBowl } from './villaPantryTable.js';
+import { prepCounter, westLarder } from './villaPantryPrep.js';
+import { counterSlab, pantryFront, splashback, undermount } from './villaPantryJoinery.js';
+import { drumLoad, laundryDressings } from './villaPantryLaundry.js';
 import { towelRoll } from './villaFurnitureTextiles.js';
 
 export function teapot(k: FurnitureKit, material: THREE.Material, s = 1) {
-  const { put, m } = k;
-  put(turn([[0, .009], [.065, .009], [.070, 0], [.084, 0], [.087, .015], [.125, .033], [.151, .081], [.150, .137],
-    [.130, .183], [.097, .205], [.089, .218], [.093, .229], [.082, .231], [.078, .212], [.105, .181], [.123, .14], [.117, .06], [0, .033]]).scale(s, s, s), material, 0, 0, 0);
-  put(turn([[0, .209], [.087, .209], [.092, .223], [.084, .234], [.057, .244], [.022, .249], [.016, .257], [.024, .272], [.018, .280], [0, .282]]).scale(s, s, s), material, 0, 0, 0);
-  put(stock([[.108, .083, 0, .041], [.148, .095, 0, .045], [.191, .132, 0, .033], [.216, .179, 0, .020], [.247, .203, 0, .019], [.257, .205, 0, .021]], 12, .005).scale(s, s, s), material, 0, 0, 0);
-  put(stock([[-.097, .186, 0, .020], [-.150, .202, 0, .016], [-.191, .190, 0, .018], [-.215, .151, 0, .019], [-.202, .113, 0, .018], [-.163, .069, 0, .015], [-.117, .069, 0, .020]], 10).scale(s, s, s), material === m.steel ? m.black : material, 0, 0, 0);
+  const metal = material === k.m.steel, skin = metal ? 'nickel' : 'ochre';
+  const fire = (g: THREE.BufferGeometry) => pantryPart(k, g.scale(s, s, s), skin, 0, 0, 0, 0, 0, 0, 'turned');
+  // The functional bored teapot on the tea bar has its own complete inner
+  // shell. Here the fitted lid stays closed: only a short collar seats its lip.
+  fire(turn([[.070, 0], [.084, 0], [.087, .015], [.125, .033], [.151, .081], [.150, .137],
+    [.131, .182], [.097, .205], [.090, .218], [.093, .226], [.084, .228], [.079, .213]], 16));
+  fire(turn([[.085, .224], [.092, .227], [.084, .234], [.057, .244], [.022, .249], [.015, .258], [.024, .272], [.017, .279], [0, .282]], 14));
+  fire(stock([[.112, .083, 0, .039], [.150, .095, 0, .043], [.191, .132, 0, .032], [.216, .179, 0, .020], [.248, .203, 0, .018], [.257, .205, 0, .020]], 10, .0045));
+  const handle = stock([[-.097, .186, 0, .020], [-.150, .202, 0, .016], [-.191, .190, 0, .018], [-.211, .151, 0, .017], [-.202, .113, 0, .017], [-.163, .069, 0, .015], [-.117, .069, 0, .020]], 8);
+  if (metal) k.put(handle.scale(s, s, s), k.m.walnut, 0, 0, 0); else fire(handle);
 }
 
 function knob(k: FurnitureKit, x: number, y: number, z: number, r: number) {
   const { put, m } = k;
   put(turn([[0, 0], [r * .77, 0], [r, .005], [r, .023], [.86 * r, .028], [r * .74, .029], [0, .029]], 14), m.steel, x, y, z, Math.PI / 2);
   k.box(x, y + r * .43, z + .030, .005, r * .65, .002, m.black, 0);
-}
-/** Stone is cut around the pressed sink rather than filled under a painted bowl.
- * The floor at the rear stays just under the interactive faucet's impact datum. */
-function sink(k: FurnitureKit) {
-  const { put, m } = k;
-  put(casting(rectXY(1.22, 1.08, .014), .098, [rectXY(.789, .637, .085)]), m.white, 0, .941, 0, -Math.PI / 2);
-  put(loft([rectRing(.56, .39, .09, .897), rectRing(.724, .559, .083, .938), rectRing(.781, .633, .085, .984),
-    rectRing(.808, .659, .087, .989), rectRing(.81, .66, .087, .997), rectRing(.780, .631, .082, 1.001),
-    rectRing(.750, .603, .086, .991), rectRing(.711, .561, .089, .944), rectRing(.64, .474, .092, .934),
-    rectRing(.40, .314, .094, .925, 0, .028), rectRing(.096, .096, .043, .911, 0, .109)]), m.steel, 0, 0, 0);
-  put(turn([[0, 0], [.042, 0], [.044, .007], [.038, .010], [.030, .006], [.021, .002], [0, .002]], 18), m.dark, 0, .912, .109);
-  for (const dx of [-.014, 0, .014]) rail(k, [dx, .918, .088], [dx, .918, .130], .0028, m.steel, 5);
 }
 
 /** Pressed oven liner tapers away from a pierced door. Glass, wire runners and
@@ -37,10 +35,11 @@ function oven(k: FurnitureKit, glass: THREE.Material, led: THREE.Material, micro
   const w = microwave ? .79 : 1.065, h = microwave ? .42 : .715;
   const ww = w * (microwave ? .67 : .824), wh = h * .58, dx = microwave ? -.080 : 0, dy = microwave ? 0 : -.041;
   const frame = casting(rectXY(w, h, .026), .034, [rectXY(ww, wh, .035, dx, dy)]);
-  put(frame, m.steel, 0, 0, 0);
+  pantryPart(k, frame, 'nickel', 0, 0, 0, 0, 0, 0, 'face');
   put(loft([rectRing(ww, wh, .035, .013), rectRing(ww - .056, wh - .046, .034, -.021), rectRing(ww - .062, wh - .053, .034, -.066),
     rectRing(ww - .08, wh - .076, .032, -.082), rectRing(ww - .10, wh - .086, .033, -.286)], false, true).rotateX(Math.PI / 2), m.dark, dx, dy, 0);
-  put(casting(rectXY(ww - .034, wh - .026, .032), .005), glass, dx, dy, -.006);
+  put(loft([rectRing(ww - .038, wh - .031, .030, -.004, 0, 0, 2), rectRing(ww - .034, wh - .026, .032, -.002, 0, 0, 2),
+    rectRing(ww - .034, wh - .026, .032, .002, 0, 0, 2), rectRing(ww - .039, wh - .032, .030, .004, 0, 0, 2)]), glass, dx, dy, -.006, Math.PI / 2);
   if (microwave) {
     put(vessel(.134, .016, .60, 18), m.white, dx, -.115, -.168);
     pull(k, .224, -.015, .020, .235, .040, m.black, true);
@@ -59,13 +58,13 @@ function oven(k: FurnitureKit, glass: THREE.Material, led: THREE.Material, micro
 }
 function cookware(k: FurnitureKit) {
   const { put, m } = k;
-  k.at(-8.38, 1.021, -8.53, 0, () => {
+  k.at(-8.38, 1.016, -8.53, 0, () => {
     put(turn([[0, 0], [.102, 0], [.123, .006], [.134, .018], [.136, .156], [.141, .175], [.145, .183], [.139, .188], [.131, .181], [.126, .151], [.125, .026], [0, .018]]), m.steel, 0, 0, 0);
     put(turn([[0, .175], [.132, .175], [.144, .180], [.145, .189], [.120, .202], [.082, .218], [.030, .226], [0, .226]]), m.steel, 0, 0, 0);
     bent(k, m.black, [[-.037, .219, 0, .011], [-.033, .246, 0, .011], [-.023, .254, 0, .012], [.025, .254, 0, .012], [.036, .246, 0, .010], [.039, .22, 0, .010]]);
     for (const s of [-1, 1]) bent(k, m.black, [[s * .125, .139, -.045, .011], [s * .166, .157, -.045, .012], [s * .187, .159, -.029, .012], [s * .187, .159, .028, .012], [s * .166, .157, .044, .012], [s * .125, .139, .045, .011]]);
   });
-  k.at(-10.3, .99, -8.35, -.11, () => { put(turn([[0, 0], [.129, 0], [.148, .009], [.148, .025], [.125, .034], [0, .034]]), m.black, 0, 0, 0); k.at(0, .031, 0, 0, () => teapot(k, m.steel, 1.17)); });
+  k.at(-10.3, .99, -8.35, -.11, () => { put(turn([[0, 0], [.129, 0], [.148, .009], [.148, .025], [.125, .034], [0, .034]]), m.black, 0, 0, 0); k.at(0, .034, 0, 0, () => teapot(k, m.steel, 1.17)); });
   // A paddle board has a waisted grip and a real lanyard hole. Knives stay
   // sheathed in the leaning block; only the ferrules and scales are exposed.
   const paddle = [[-.31, -.142], [-.289, -.174], [.118, -.174], [.156, -.145], [.168, -.064], [.200, -.039], [.276, -.047], [.309, -.031], [.319, 0], [.309, .031], [.276, .047], [.200, .039], [.168, .064], [.156, .145], [.118, .174], [-.289, .174], [-.31, .142]];
@@ -82,29 +81,31 @@ function cookware(k: FurnitureKit) {
 
 export function kitchenRun(k: FurnitureKit, tile: THREE.Material, glass: THREE.Material, led: THREE.Material) {
   const { put, m, box, at, hit } = k;
+  registerPantryFinish(k, tile, glass);
   for (let i = 0; i < 6; i++) at(-10.55 + i * 1.22, 0, -8.35, 0, () => {
-    box(0, .067, -.033, 1.15, .134, .88, m.dark, 0);
-    for (const sx of [-1, 1]) box(sx * .576, .514, -.006, .035, .755, .98, m.sage, 0);
-    box(0, .519, -.481, 1.15, .750, .032, m.oak, 0); box(0, .15, 0, 1.17, .034, .96, m.oak, 0);
-    if (i === 4) sink(k); else put(board(1.219, 1.08, .10, .012, .012), m.white, 0, .94, 0);
-    if (i !== 2 && i !== 5) for (const x of [-.29, .29]) {
-      put(fieldFrame(.559, .712, .043, .075), m.sage, x, .510, .503);
-      pull(k, x + (x < 0 ? .176 : -.176), .72, .525, .132, .043, m.brass, true);
+    box(0, .067, -.040, 1.213, .134, .855, m.dark, 0);
+    for (const sx of [-1, 1]) box(sx * .586, .543, -.012, .041, .818, .984, m.sage, 0);
+    box(0, .539, -.480, 1.17, .804, .034, m.oak, 0); box(0, .147, 0, 1.18, .026, .960, m.oak, 0);
+    box(0, .922, .446, 1.176, .060, .089, m.walnut, 0);
+    if (i % 2 === 0) pantryPart(k, counterSlab(2.438, i === 4 ? -.61 : undefined), 'chalk', .610, 0, 0, 0, 0, 0, 'horizontal', i);
+    if (i === 4) undermount(k);
+    if (i === 0) {
+      for (const [y, h] of [[.310, .336], [.610, .251], [.832, .184]]) {
+        pantryPart(k, pantryFront(1.184, h, false), 'lacquer', 0, y, .502, 0, 0, 0, 'face');
+        pull(k, 0, y + .029, .512, .238, .029, m.brass);
+      }
+    } else if (i !== 2 && i !== 5) for (const side of [-1, 1]) {
+      const x = side * .297;
+      pantryPart(k, pantryFront(.590, .782), 'lacquer', x, .533, .502, 0, 0, 0, 'face', i);
+      pull(k, side * .067, .765, .512, .139, .028, m.brass, true);
+    } else {
+      const opening = i === 2 ? 1.073 : 1.113, edge = (1.18 - opening) / 2;
+      for (const side of [-1, 1]) box(side * (opening + edge) / 2, .538, .492, edge, .801, .041, m.sage, 0);
+      box(0, .905, .490, opening, .069, .042, m.sage, 0);
     }
     hit(0, 0, 0, 1.22, .99, 1.08);
   });
-  // Running-bond splashback, with half tiles cut at the jambs. Glazed faces
-  // dimple into the border; only the solid pier takes a full-height run.
-  const tileRow = (left: number, y: number, count: number, offset: boolean) => {
-    const width = .285;
-    for (let i = offset ? -1 : 0; i < count; i++) {
-      const a = Math.max(0, i + (offset ? .5 : 0)), b = Math.min(count, i + 1 + (offset ? .5 : 0)), w = width * (b - a) - .006;
-      const g = loft([rectRing(w - .005, .126, .006, -.009, 0, 0, 1), rectRing(w, .133, .008, .004, 0, 0, 1), rectRing(w - .013, .120, .006, .009, 0, 0, 1)]);
-      put(g, tile, left + width * (a + b) / 2, y, -8.89, Math.PI / 2);
-    }
-  };
-  for (let i = 0; i < 2; i++) tileRow(-11.1925, 1.06 + i * .14, 25, !!(i % 2));
-  for (let i = 0; i < 5; i++) tileRow(-8.9925, 1.34 + i * .14, 8, !!(i % 2));
+  splashback(k);
   at(-8.11, .51, -7.807, 0, () => oven(k, glass, led, false));
   put(board(1.045, .764, .026, .043, .008), m.black, -8.11, 1.003, -8.32);
   for (const [x, z, r] of [[-8.38, -8.53, .137], [-7.84, -8.53, .109], [-8.38, -8.18, .105], [-7.84, -8.18, .136]])
@@ -128,39 +129,31 @@ export function kitchenRun(k: FurnitureKit, tile: THREE.Material, glass: THREE.M
   });
   at(-4.45, 0, -7.81, 0, () => {
     const door = casting(rectXY(1.103, .733, .019), .045, [rectXY(.577, .099, .022, 0, .161)]);
-    put(door, m.steel, 0, .50, 0);
+    pantryPart(k, door, 'nickel', 0, .50, 0, 0, 0, 0, 'face');
     put(loft([rectRing(.581, .105, .022, .020), rectRing(.553, .094, .020, -.007), rectRing(.541, .068, .017, -.047, 0, .007)]).rotateX(Math.PI / 2), m.dark, 0, .661, -.012);
     put(board(.973, .066, .014, .01, .004), m.black, 0, .815, .026, Math.PI / 2);
     for (const x of [-.39, -.31, -.23]) knob(k, x, .815, .029, .014);
     box(.312, .815, .036, .078, .017, .006, led, 0);
   });
-  cookware(k);
+  cookware(k); prepCounter(k); westLarder(k);
 }
 
 export function island(k: FurnitureKit) {
   const { put, m, at } = k;
   at(0, 0, -.092, Math.PI, () => cabinet(k, 2.5, .99, .954, 3, m.oak, m.walnut));
   // End grain waterfall returns and a rebated counter overhang on the stool side.
-  put(board(2.7, 1.43, .103, .050, .029), m.white, 0, .974, 0);
-  for (const x of [-1.195, 1.195]) k.box(x, .505, .359, .044, .831, .451, m.walnut, 0);
-  put(vessel(.25, .13, .42), m.cream, .55, 1.025, 0);
-  for (let i = 0; i < 5; i++) {
-    const a = 2.4 * i, x = .55 + .121 * Math.cos(a), z = .107 * Math.sin(a), y = 1.092 + .012 * (i % 3);
-    const fruit = turn([[0, .011], [.032, 0], [.059, .012], [.078, .052], [.074, .095], [.057, .129], [.026, .14], [0, .124]], 12);
-    put(fruit, i % 2 ? m.coral : m.leafLight, x, y, z, 0, a, .12 * Math.sin(a));
-    bent(k, m.walnut, [[x, y + .121, z, .0035], [x + .008, y + .153, z, .0025]], 5);
-  }
+  put(board(2.568, 1.257, .028, .028, .005), m.walnut, 0, .968, -.013);
+  pantryPart(k, board(2.7, 1.43, .043, .030, .004), 'chalk', 0, 1.0035, 0);
+  for (const x of [-1.195, 1.195]) k.box(x, .524, .359, .044, .860, .451, m.walnut, 0);
+  // Face of the stool recess is a backed tambour, not the back of a hollow box.
+  const flutes = sheet(Array.from({ length: 65 }, (_, j) => j / 64), [0, .025, .975, 1], (u, v) =>
+    [(u - .5) * 2.35, .940 - .818 * v, .409 + .0048 * Math.cos(u * 32 * Math.PI)], true);
+  put(flutes, m.oak, 0, 0, 0);
+  orchardBowl(k, .55, 1.025);
   k.hit(0, 0, 0, 2.7, 1.03, 1.43);
 }
 export function placeSetting(k: FurnitureKit) {
-  const { m, put } = k;
-  put(board(.623, .473, .006, .023, .002), m.linen, 0, .004, 0);
-  put(vessel(.185, .030, .54), m.white, 0, .007, 0);
-  // Fork with four separated tines; one-piece spoon bowl with a hollowed back.
-  const fork = [[-.006, -.136], [.007, -.136], [.007, .024], [.020, .044], [.020, .119], [.015, .119], [.013, .069], [.009, .068], [.007, .122], [.003, .122], [.001, .067], [-.003, .067], [-.005, .122], [-.009, .122], [-.010, .068], [-.014, .069], [-.016, .119], [-.020, .119], [-.020, .044], [-.006, .024]];
-  put(casting(fork, .005), m.steel, -.244, .012, 0, -Math.PI / 2);
-  put(vessel(.030, .014, .18, 14).scale(.90, 1, 1.44), m.steel, .241, .008, -.078);
-  bent(k, m.steel, [[.241, .016, -.050, .005], [.241, .018, -.027, .006], [.241, .018, .066, .005], [.241, .014, .116, .009], [.241, .014, .128, .006]], 6);
+  breakfastSetting(k);
 }
 
 /** The circular opening continues all the way into the cabinet. The glass is a
@@ -182,11 +175,17 @@ export function frontLoader(k: FurnitureKit, w: number, d: number, h: number, gl
     const a = i * 2.094 + .38, x = Math.cos(a) * r * .86, y = cy + Math.sin(a) * r * .86;
     bent(k, m.dark, [[x, y, f - .1, .008], [x * .93, cy + (y - cy) * .93, f - .153, .019], [x * .92, cy + (y - cy) * .92, f - d * .56, .019]], 6);
   }
-  const fascia = casting([[ -w * .47, 0], [w * .47, 0], [w * .47, .105], [-w * .47, .105]], .022);
-  put(fascia, m.steel, 0, h - .157, f + .018, -.055);
+  drumLoad(k, r, cy, f, d, dryer);
+  // Drawer and encoder sit in two separate rolled fascia fields rather than a
+  // luminous sticker. The dark line is the recessed perimeter of the dosing tray.
+  const fascia = casting(rectXY(w * .944, .112, .009), .019);
+  pantryPart(k, fascia, 'nickel', 0, h - .107, f + .018, -.047, 0, 0, 'face');
+  box(-w * .310, h - .116, f + .029, w * .254, .071, .010, m.dark, 0);
+  pantryPart(k, pantryFront(w * .243, .062, false), 'oatmeal', -w * .310, h - .115, f + .026, 0, 0, 0, 'face');
   knob(k, w * .297, h - .102, f + .034, .037);
-  box(-w * .25, h - .104, f + .031, w * .245, .041, .012, m.dark, 0);
-  box(-w * .25, h - .102, f + .038, w * .14, .014, .003, display, 0);
+  box(-w * .014, h - .104, f + .031, w * .235, .047, .012, m.dark, 0);
+  box(-w * .032, h - .101, f + .038, w * .103, .010, .003, display, 0);
+  for (const xx of [.053, .077]) box(w * xx, h - .107, f + .038, .004, .011, .003, m.stone, 0);
   if (!dryer) pull(k, -w * .295, h * .731, f + .014, w * .21, .018, m.steel);
   else for (let i = 0; i < 4; i++) box(w * .2, .115 + i * .018, f + .019, w * .24, .005, .004, m.dark, 0);
 }
@@ -200,8 +199,9 @@ export function utilityLaundry(k: FurnitureKit, glass: THREE.Material) {
   for (let level = 0; level < 4; level++) {
     const y = .5 + level * .6; put(board(.36, 2.61, .043, .025), m.oak, -3.9, y, 1.6);
     for (const z of [.58, 2.62]) rail(k, [-4.025, y - .18, z], [-3.763, y - .029, z], .010, m.steel);
-    if (level > 0) for (let i = 0; i < 2; i++) put(towelRoll(.275, .061), i ? m.sage : m.linen, -3.91, y + .087, .77 + i * .17 + level * .15, 0, Math.PI / 2);
+    if (level > 1) for (let i = 0; i < level - 1; i++) put(towelRoll(.275, .061), i ? m.sage : m.linen, -3.91, y + .0815, .77 + i * .17 + level * .15, 0, Math.PI / 2);
   }
+  laundryDressings(k);
   // Slotted laundry hamper: actual perforations and a rolled rim around the open mouth.
   at(3.6, 0, 2.9, 0, () => {
     const ring = (w: number, d: number, y: number) => rectRing(w, d, .104, y, 0, 0, 3);

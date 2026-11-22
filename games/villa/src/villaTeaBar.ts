@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { villaMaterial } from './villaModel.js';
-import { IndexedFittingBuilder, cabinetPull, foldedLinen, formedTube, panel, surround, vessel } from './villaFittingGeometry.js';
+import { cabinetPull, foldedLinen, formedTube, panel, surround, vessel } from './villaFittingGeometry.js';
+import { barMaterial, drainingBoat, kilnFinish, TeaBench } from './villaKilnFinish.js';
+import { board } from './villaFurnitureForms.js';
 import { TEA_SPOUT_TIP, teaCupShell, teaFreeSurface, teaPotBody, teaPotHandle, teaPotLid, teaPourStream } from './villaTeaWare.js';
 import type { VillaCollider } from './villaWorld.js';
 import { VILLA_TEA_BAR } from './villaLivingLayout.js';
@@ -14,11 +15,11 @@ export interface VillaTeaBar {
 
 /** Static material batches + one subtle steam instance batch; all scene-owned. */
 export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
-  const b = new IndexedFittingBuilder(parent, 'villa-tea-bar');
-  const oak = villaMaterial(0xba9166, 0.76), walnut = villaMaterial(0x735037, 0.79);
-  const stone = villaMaterial(0xe3e0d5, 0.64), ceramic = villaMaterial(0xd2dfce, 0.32);
-  const clay = villaMaterial(0x9e6546, 0.82), bronze = villaMaterial(0xbca16c, 0.36, 0.55);
-  const dark = villaMaterial(0x393b35, 0.58), tea = villaMaterial(0x795325, 0.31);
+  const b = new TeaBench(parent, 'villa-tea-bar');
+  const oak = barMaterial(0xaf8c68, .74, 'elm'), walnut = barMaterial(0x715541, .78, 'walnut');
+  const stone = barMaterial(0xdfd9c9, .67, 'stone'), ceramic = barMaterial(0xb9caba, .40, 'ash');
+  const clay = barMaterial(0xa16a4d, .77, 'red-clay'), bronze = barMaterial(0xb6a384, .46, 'brass', .61);
+  const dark = barMaterial(0x474942, .66, 'charcoal'), tea = new THREE.MeshStandardMaterial({ color: 0x835b2b, roughness: .26 });
   const named = (name: string, x: number, y: number, z: number, details: Record<string, unknown> = {}) => {
     const marker = new THREE.Object3D(); marker.name = `tea-bar/${name}`;
     marker.position.set(VILLA_TEA_BAR.x - x, y, VILLA_TEA_BAR.z - z);
@@ -26,12 +27,13 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
   };
   b.at(VILLA_TEA_BAR.x, 0, VILLA_TEA_BAR.z, VILLA_TEA_BAR.yaw, () => {
     // Slightly recessed plinth and fronts keep pulls inside the stone footprint.
-    b.box(0, 0.06, 0, 1.98, 0.12, 0.62, walnut);
-    b.box(0, .151, 0, 2.12, .062, .70, walnut, .006);
-    for (const x of [-1.033, -.345, .345, 1.033]) b.box(x, .498, .008, .054, .774, .684, oak, .005);
-    b.box(0, .500, .333, 2.08, .756, .034, oak, .005);
-    b.box(0, .592, .001, 2.08, .026, .682, walnut, .004);
-    b.box(0, 0.915, 0, 2.2, 0.07, 0.8, stone, 0.022);
+    b.box(0, .06, 0, 1.98, .12, .62, walnut, 0);
+    b.box(0, .151, 0, 2.12, .062, .70, walnut, 0);
+    for (const x of [-1.033, -.345, .345, 1.033]) b.box(x, .498, .008, .054, .774, .684, oak, 0);
+    b.box(0, .500, .333, 2.08, .756, .034, oak, 0);
+    b.box(0, .592, .001, 2.08, .026, .682, walnut, 0);
+    b.geometry(board(2.2, .8, .052, .026, .006), stone, [0, .924, 0]);
+    b.geometry(board(2.157, .753, .023, .018, .005), walnut, [0, .888, 0]);
     b.box(0, 0.87, 0, 2.15, 0.018, 0.73, walnut, 0.004);
     // Three real drawer fronts and lower doors on the visitor-facing side.
     for (const x of [-0.69, 0, 0.69]) {
@@ -44,16 +46,22 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
         b.geometry(cabinetPull(.18, .037, .008), bronze, [x, y, front - .002], [0, Math.PI, 0]);
       }
     }
-    // Subtle oak end grain/slats, not applied textures or extra draw calls.
-    for (const side of [-1, 1]) for (let i = 0; i < 7; i++) b.box(side * 1.064, 0.48, -0.26 + i * 0.087, 0.007, 0.68, 0.012, walnut, 0.002);
+    // Reeded ends: one cut face per side, backed by the actual casing, not
+    // fourteen fully rounded bars with invisible backs embedded in that case.
+    for (const side of [-1, 1]) {
+      const points: number[] = [], ids: number[] = [];
+      for (let i = 0; i <= 32; i++) {
+        const z = -.311 + i * .622 / 32, x = side * (1.0625 + .002 * Math.cos(i * Math.PI / 2));
+        points.push(x, .146, z, x, .814, z);
+        if (i) { const a = i * 2 - 2; if (side > 0) ids.push(a, a + 1, a + 3, a, a + 3, a + 2); else ids.push(a, a + 3, a + 1, a, a + 2, a + 3); }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3)); g.setIndex(ids); g.computeVertexNormals(); b.geometry(g, walnut);
+    }
     named('cabinet', 0, 0.48, 0, { drawers: 3, doors: 3 });
     named('stone-counter', 0, 0.95, 0, { width: 2.2, depth: 0.8 });
 
     // Draining tea tray: dark recess beneath spaced bamboo/oak slats and rim.
-    b.box(0.13, 0.965, -0.095, 1.14, 0.026, 0.47, walnut, 0.01);
-    for (let i = 0; i < 13; i++) b.box(-0.37 + i * 0.083, 0.983, -0.095, 0.067, 0.018, 0.4, oak, 0.004);
-    for (const z of [-0.327, 0.137]) b.box(0.13, 0.987, z, 1.14, 0.032, 0.018, walnut, 0.004);
-    for (const x of [-0.433, 0.693]) b.box(x, 0.987, -0.095, 0.018, 0.032, 0.47, walnut, 0.004);
+    b.at(.13, .95, -.095, 0, () => drainingBoat((g, mat, x = 0, y = 0, z = 0) => b.geometry(g, mat, [x, y, z]), 1.14, .47, 13, oak, walnut));
     named('tea-tray', 0.13, 0.99, -0.095, { slats: 13 });
 
     // The metal kettle is thrown taller, with a rolled dock and a long, open pouring neck.
@@ -61,11 +69,15 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
     b.geometry(teaPotBody([[.135, .084, 0, .03], [.149, .088, 0, .023], [.166, .101, 0, .018],
       [.186, .127, 0, .014], [.208, .170, 0, .012], [.231, .205, 0, .012], [.256, .227, 0, .011],
       [.284, .238, 0, .010], [.320, .242, 0, .010], [.347, .239, 0, .010], [.370, .230, 0, .0105],
-      [.394, .210, 0, .0115], [.404, .200, 0, .0125]]).scale(1.08, 1.55, 1.16), bronze, [-.74, .984, .03]);
+      [.394, .210, 0, .0115], [.404, .200, 0, .0125]], true).scale(1.08, 1.55, 1.16), bronze, [-.74, .984, .03]);
     b.geometry(teaPotLid().scale(1.08, 1.55, 1.16), bronze, [-.74, .984, .03]);
     b.geometry(teaPotHandle().scale(1.19, 1.55, 1.16), walnut, [-.74, .984, .03]);
     b.geometry(vessel([[.0857, 0, .0763], [.0880, .0004, .0785], [.0883, .0016, .0788],
       [.0862, .0022, .0769]], 32), dark, [-.74, 1.248, .03]);
+    // Spun toe ring, a thumb switch on the corded base, and the dark, heat-safe grip.
+    b.geometry(vessel([[.129, 0, .115], [.133, .002, .118], [.133, .005, .118], [.129, .008, .115]], 24), bronze, [-.74, 1.009, .03]);
+    b.geometry(board(.049, .064, .016, .007, .002), walnut, [-.729, .975, -.112]);
+    b.geometry(formedTube([[0, 0, 0, .004], [-.045, -.003, .028, .004], [-.117, -.006, .030, .004], [-.164, -.006, .074, .004], [-.170, -.006, .152, .004]], 6), dark, [-.851, .960, .143]);
     named('gooseneck-kettle', -0.74, 1.12, 0.03, { curvedSpout: true, handle: true });
 
     for (const [i, x] of [0.25, 0.5].entries()) {
@@ -95,7 +107,7 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
         [.021, .0115, .036], [.015, .006, .025], [.007, .0035, .012], [0, .003]], 22), oak);
     });
     // Bamboo tea tongs: sprung folded end, separated arms and inward-facing tips.
-    b.at(.816, .987, -.145, -.16, () => b.geometry(formedTube([[-.014, .002, .090, .002, .004], [-.020, .003, .083, .003, .0045],
+    b.at(.816, .9805, -.145, -.16, () => b.geometry(formedTube([[-.014, .002, .090, .002, .004], [-.020, .003, .083, .003, .0045],
       [-.017, .002, .060, .0025, .005], [-.010, .002, -.068, .0025, .005], [-.007, .002, -.084, .003, .005],
       [0, .002, -.088, .003, .005], [.007, .002, -.084, .003, .005], [.010, .002, -.068, .0025, .005],
       [.017, .002, .060, .0025, .005], [.020, .003, .083, .003, .0045], [.014, .002, .090, .002, .004]], 8, 0, [0, 1, 0]), oak));
@@ -105,13 +117,13 @@ export function createVillaTeaBar(parent: THREE.Object3D): VillaTeaBar {
   const root = b.finish();
   root.userData = { activity: 'tea-brewing', duration: VILLA_TEA_BAR.duration, approach: { ...VILLA_TEA_BAR.approach }, anchor: { ...VILLA_TEA_BAR.anchor }, stool: false };
 
-  const pot = new IndexedFittingBuilder(root, 'tea-bar/teapot');
+  const pot = new TeaBench(root, 'tea-bar/teapot');
   pot.geometry(teaPotBody(), clay); pot.geometry(teaPotLid(), clay); pot.geometry(teaPotHandle(), clay);
   pot.finish(); pot.root.userData = { lid: true, spout: true, handle: true };
   const azimuth = Math.atan2(.205 - .018, .25 + .065), ux = -Math.cos(azimuth), uz = Math.sin(azimuth);
   const tip = new THREE.Vector3();
   const cup = new THREE.Group(); cup.name = 'tea-bar/drinking-cup'; root.add(cup);
-  const shell = new THREE.Mesh(teaCupShell(), ceramic); shell.castShadow = shell.receiveShadow = true; cup.add(shell);
+  const shell = new THREE.Mesh(kilnFinish(teaCupShell(), 'ash'), ceramic); shell.castShadow = shell.receiveShadow = true; cup.add(shell);
   const surface = teaFreeSurface(tea); cup.add(surface.mesh);
   const stream = teaPourStream(tea); root.add(stream.mesh);
   const empty = createVillaTea();

@@ -9,7 +9,7 @@ import { VILLA_AQUARIUM } from './villaLivingLayout.js';
  * as visual noise in the tank instead of animals.)
  */
 export const VILLA_AQUARIUM_LIFE = {
-  fish: { count: 10, species: 'Oryzias latipes', variety: 'Miyuki-style ornamental medaka', physicalLengthCm: [3.5, 4.5], displayLength: 0.13,
+  fish: { count: 10, species: 'Oryzias latipes', variety: 'Miyuki-style ornamental medaka', physicalLengthCm: [3.5, 4.5], displayLength: 0.04,
     features: ['slender top-view silhouette', 'blue-silver dorsal stripe', 'small upturned mouth', 'rear-set dorsal and anal fins', 'thin translucent fins'] },
 } as const;
 
@@ -27,10 +27,14 @@ export function createVillaAquariumLife(parent: THREE.Object3D) {
   const fishBatches = instances(fish, count), tailBatches = instances(tail, count), paired = fins.map(({ side, pivot, b }) => ({ side, pivot, batches: instances(b, count) }));
   template.clear(); // Geometry/materials now belong to the scene's instance meshes.
   const fishMarkers = Array.from({ length: count }, (_, i) => {
-    const m = new THREE.Object3D(); m.name = `Aquarium fish ${i + 1}`; m.userData = { ...VILLA_AQUARIUM_LIFE.fish, index: i, bodyLength: 0.113, bodyHeight: 0.02, bodyWidth: 0.0152 }; root.add(m); return m;
+    const m=new THREE.Object3D(), scale=.255+(i%4)*.0205; m.name=`Aquarium fish ${i+1}`;
+    // Scale the whole anatomical rig together: the neutral 141 mm drafting
+    // template becomes a 36–45 mm medaka, not a 13 cm fish in a 1 m tank.
+    m.scale.setScalar(scale);m.userData={...VILLA_AQUARIUM_LIFE.fish,index:i,bodyLength:.1136*scale,bodyHeight:.020*scale,bodyWidth:.0152*scale};
+    root.add(m);return m;
   });
-  const bubbleMat = new THREE.MeshBasicMaterial({ color: '#c7f8f1', transparent: true, opacity: 0.38, depthWrite: false });
-  const bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(0.018, 6, 5), bubbleMat, 18);
+  const bubbleMat=new THREE.MeshStandardMaterial({color:'#e2eeeb',roughness:.10,metalness:.22,transparent:true,opacity:.39,depthWrite:false});
+  const bubbles=new THREE.InstancedMesh(new THREE.SphereGeometry(.006,6,5),bubbleMat,18);
   bubbles.name = 'aquarium/bubbles'; bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled = false; root.add(bubbles);
   const dummy = new THREE.Object3D(), joint = new THREE.Object3D(), jointMatrix = new THREE.Matrix4();
   let foodBlend = 0;
@@ -45,7 +49,7 @@ export function createVillaAquariumLife(parent: THREE.Object3D) {
       const cruisingY = 1.42 + Math.sin(a * 1.37 + i) * 0.32, eatingY = 1.86 + Math.sin(a * 2 + i) * 0.06;
       marker.position.set(VILLA_AQUARIUM.x + Math.cos(a) * radius, THREE.MathUtils.lerp(cruisingY, eatingY, foodBlend), VILLA_AQUARIUM.z + Math.sin(a) * depth);
       marker.rotation.set(0, Math.atan2(-Math.cos(a) * depth, -Math.sin(a) * radius), Math.sin(t * 2 + i) * 0.035);
-      marker.scale.setScalar(0.86 + (i % 4) * 0.07); marker.updateMatrix();
+      marker.updateMatrix();
       fishBatches.forEach(batch => batch.setMatrixAt(i, marker.matrix));
       joint.position.set(-0.057, 0, 0); joint.rotation.set(0, Math.sin(t * 8 + i) * 0.29, 0); joint.updateMatrix();
       jointMatrix.multiplyMatrices(marker.matrix, joint.matrix); tailBatches.forEach(batch => batch.setMatrixAt(i, jointMatrix));

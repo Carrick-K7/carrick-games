@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { VILLA_SNOOKER } from './villaActivities.js';
 import { villaMaterial } from './villaModel.js';
 import { FittingSkin, IndexedFittingBuilder, formedTube, vessel } from './villaFittingGeometry.js';
+import { fieldFrame } from './villaFurnitureForms.js';
+import { baizeGrain, finishingVeneer } from './villaRecreationSurfaces.js';
+import { ballContacts, billiardResin, pocketSaddle, veneerCoordinates } from './villaRecreationBilliards.js';
 import {
   createVillaSnooker, getVillaSnookerTrajectory, VILLA_SNOOKER_APERTURE_RADIUS, VILLA_SNOOKER_BALL_RADIUS,
   VILLA_SNOOKER_POCKETS, type VillaSnookerSegment, type VillaSnookerState,
@@ -43,10 +46,12 @@ export function createVillaSnookerTable(parent: THREE.Object3D) {
   const { center, width, length, playingWidth, playingLength, height: h } = VILLA_SNOOKER;
   b.root.position.set(center.x, center.y, center.z);
   const walnut = villaMaterial('#483326', 0.46), endGrain = villaMaterial('#35271f', 0.58);
-  const grain = villaMaterial('#604734', 0.64), cloth = villaMaterial('#197047', 0.98);
-  const cushion = villaMaterial('#155b3c', 0.92), slate = villaMaterial('#45494a', 0.9);
-  const leather = villaMaterial('#33271f', 0.87), pocketDark = villaMaterial('#090c0a', 1);
-  const brass = villaMaterial('#968061', 0.38, 0.68), chalk = villaMaterial('#e5e3cd', 0.95);
+  const grain = villaMaterial('#8b6545', 0.48), cloth = villaMaterial('#317e58', 0.97);
+  const cushion = villaMaterial('#226647', 0.92), slate = villaMaterial('#45494a', 0.9);
+  const leather = villaMaterial('#976445', 0.72), pocketDark = villaMaterial('#30251e', .88);
+  const brass = villaMaterial('#bd9a61', 0.34, 0.48), chalk = villaMaterial('#e5e3cd', 0.95);
+  walnut.map = grain.map = endGrain.map = finishingVeneer();
+  cloth.map = cushion.map = baizeGrain();
   for (const [name, material] of Object.entries({ walnut, endGrain, grain, cloth, cushion, slate, leather, pocketDark, brass, chalk })) material.name = `snooker-${name}`;
   const px = playingWidth / 2, pz = playingLength / 2;
   const mark = (name: string, x: number, y: number, z: number, data: Record<string, unknown> = {}) => {
@@ -109,7 +114,9 @@ export function createVillaSnookerTable(parent: THREE.Object3D) {
       }
       previous = ring;
     }
-    b.geometry(skin.geometry(), cushion);
+    const g=skin.geometry(), pos=g.getAttribute('position'), uv=new Float32Array(pos.count*2);
+    for(let i=0;i<pos.count;i++) {uv[2*i]=nx?pos.getZ(i):pos.getX(i);uv[2*i+1]=2*((nx?pos.getX(i):pos.getZ(i))+pos.getY(i));}
+    g.setAttribute('uv',new THREE.BufferAttribute(uv,2));b.geometry(g,cushion);
   };
   // One continuous walnut rim with a scalloped inner opening: the union of the
   // rail opening and six jaw cutouts. Unlike overlapping boxes, it cannot cap a
@@ -140,16 +147,16 @@ export function createVillaSnookerTable(parent: THREE.Object3D) {
     cushionPlan([[-px + 0.073, pz + 0.073], [-px + 0.12, pz + 0.003], [px - 0.12, pz + 0.003], [px - 0.073, pz + 0.073], [px - 0.073, 1.895], [-px + 0.073, 1.895]].map(([x, z]) => [x, end * z]), 0, end);
   }
   for (const side of [-1, 1]) for (const z of [-1.35, -0.66, 0.66, 1.35]) b.cylinder(side * 1.02, 0.921, z, 0.007, 0.007, 0.002, chalk, [0, 0, 0], 10);
-  // Subtle authored growth lines follow the grain along rail tops and aprons.
-  for (const side of [-1, 1]) for (let i = 0; i < 4; i++) {
-    for (const end of [-1, 1]) {
-      const points = [0.17, 0.52, 0.95, 1.35, 1.67].map((z, k) => new THREE.Vector3(side * (0.972 + i * 0.023 + Math.sin(k * 1.6 + i) * 0.003), 0.9205, end * z));
-      b.geometry(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 14, 0.0012, 3, false), grain);
-    }
-    for (const end of [-1, 1]) {
-      const points = [0.15, 0.55, 0.95, 1.4, 1.7].map((z, k) => new THREE.Vector3(side * 1.0655, 0.576 + i * 0.052 + Math.sin(k + i) * 0.007, end * z));
-      b.geometry(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 16, 0.0018, 3, false), grain);
-    }
+  // Veneered apron panels sit behind a raised moulding. The pull-down bolts
+  // actually bear on the facing at the legs. No 'grain' made out of wire.
+  for(const side of [-1,1]) for(const end of [-1,1]) {
+    b.geometry(fieldFrame(1.70,.242,.026,.026,true),endGrain,[side*1.064,.666,end*1.015],[0,side*Math.PI/2,0]);
+    b.box(side*1.066,.666,end*1.015,.008,.194,1.646,grain,0);
+    for(const z of [.255,1.69]) b.cylinder(side*1.071,.667,end*z,.026,.021,.009,brass,[0,0,Math.PI/2],12);
+  }
+  for(const end of [-1,1]) {
+    b.geometry(fieldFrame(1.46,.237,.023,.026,true),endGrain,[0,.666,end*1.979],[0,end===1?0:Math.PI,0]);
+    b.box(0,.666,end*1.978,1.409,.19,.009,grain,0);
   }
   VILLA_SNOOKER_POCKETS.forEach((p, i) => {
     // Rolled hide is turned back on the INSIDE. At cloth height its opening is
@@ -172,6 +179,8 @@ export function createVillaSnookerTable(parent: THREE.Object3D) {
       if (j === 18) for (let k = 1; k < section.length - 1; k++) iron.face(section[0], section[k], section[k + 1]);
     }
     b.geometry(iron.geometry(), brass);
+    b.geometry(pocketSaddle(p.x,p.z,rx,rz),leather);
+    b.geometry(pocketSaddle(p.x,p.z,rx,rz,true),brass);
     // A knotted diamond bag, not struts inside an opaque cylinder. Adjacent
     // strands meet at each node and converge into a small leather ball cradle.
     for (let rib = 0; rib < 8; rib++) for (const hand of [-1, 1]) {
@@ -194,6 +203,7 @@ export function createVillaSnookerTable(parent: THREE.Object3D) {
   b.collide(0, 0, 0, width, 0.92, length);
   b.root.userData = { ...VILLA_SNOOKER, finish: 'walnut', pocketCount: 6, pocketRadius: VILLA_SNOOKER_APERTURE_RADIUS, connectedLegs: 6, clothHeight: h, ballCenterHeight: h + VILLA_SNOOKER_BALL_RADIUS, grain: 'batched original geometry' };
   b.finish();
+  for(const mesh of b.root.children) if(mesh instanceof THREE.Mesh && [walnut,endGrain,grain].includes(mesh.material)) veneerCoordinates(mesh.geometry);
   return { root: b.root, colliders: b.colliders.map(c => ({ minX: c.minX + center.x, maxX: c.maxX + center.x, minZ: c.minZ + center.z, maxZ: c.maxZ + center.z, minY: c.minY + center.y, maxY: c.maxY + center.y })) };
 }
 
@@ -206,10 +216,11 @@ export function createVillaSnookerModel(parent: THREE.Object3D): { update(state:
   const radius = VILLA_SNOOKER_BALL_RADIUS;
   const height = VILLA_SNOOKER.height + radius;
   const colors = { white: '#fff9e6', red: '#b51f24', yellow: '#e9bd26', green: '#208844', brown: '#714028', blue: '#255bbb', pink: '#e99aa9', black: '#101113' };
-  const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(radius, 20, 14), new THREE.MeshStandardMaterial({ roughness: 0.17, metalness: 0.02 }), 22);
+  const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(radius, 20, 14), billiardResin(), 22);
   balls.name = 'snooker-dynamic-balls';
   balls.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  balls.frustumCulled = false; balls.castShadow = true; root.add(balls);
+  balls.frustumCulled = false; balls.castShadow = true; balls.receiveShadow = true; root.add(balls);
+  const contacts=ballContacts(balls,radius); root.add(contacts);
   const transform = new THREE.Object3D(), color = new THREE.Color();
   const lineBatch = (name: string, capacity: number, tint: string, dashed = false) => {
     const geometry = new THREE.BufferGeometry();
@@ -245,7 +256,7 @@ export function createVillaSnookerModel(parent: THREE.Object3D): { update(state:
     const key = `${active}/${state.aimAssist}/${state.moving}/${state.phase}/${state.aim}/${state.power}/${state.balls.map(b => `${b.id},${b.x},${b.z},${b.vx},${b.vz},${b.potted}`).join(';')}`;
     if (key === previous) return false;
     previous = key;
-    balls.count = Math.min(22, state.balls.length);
+    contacts.count = balls.count = Math.min(22, state.balls.length);
     state.balls.slice(0, 22).forEach((b, i) => {
       const valid = Number.isFinite(b.x) && Number.isFinite(b.z);
       transform.position.set(valid ? b.x : 0, height, valid ? b.z : 0); transform.scale.setScalar(b.potted || !valid ? 0 : 1); transform.updateMatrix();

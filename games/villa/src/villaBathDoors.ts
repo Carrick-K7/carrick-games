@@ -136,6 +136,47 @@ export function advanceVillaBathDoors(state: VillaBathDoorState, dt: number, blo
   return changed;
 }
 
+/** Kiln-formed vertical reeds on the dry face; the shower-side return is
+ * smooth to clean. The thickness/closed edges and angular facet normals are
+ * real even without any environment map, target, transparency pass or bump map. */
+export function reededGlass(width:number,height:number,thickness:number, pitch=.044, depth=.0035, sealEnds=false) {
+  const n=Math.max(2,Math.round(width/pitch)), xyz:number[]=[], uv:number[]=[], index:number[]=[];
+  const pt=(x:number,y:number,z:number)=>{xyz.push(x,y,z);uv.push(x,y);return xyz.length/3-1;};
+  const quad=(a:number,b:number,c:number,d:number)=>{index.push(a,b,c,a,c,d);};
+  const bottom:number[]=[], top:number[]=[], h=height/2, w=width/2, t=thickness/2;
+  for(let i=0;i<=n*4;i++) {
+    const x=width*i/(n*4)-w, z=t + depth*[0,.78,1,.78][i%4];
+    bottom.push(pt(x,-h,z)); top.push(pt(x,h,z));
+    if(i) quad(bottom[i-1],bottom[i],top[i],top[i-1]);
+  }
+  const back=[pt(-w,-h,-t),pt(w,-h,-t),pt(w,h,-t),pt(-w,h,-t)];
+  quad(back[1],back[0],back[3],back[2]);
+  quad(pt(-w,-h,-t),pt(-w,-h,t),pt(-w,h,t),pt(-w,h,-t));
+  quad(pt(w,-h,t),pt(w,-h,-t),pt(w,h,-t),pt(w,h,t));
+  // Flush gaskets cover the horizontal cuts on a door. A free-standing
+  // shower pane has exposed polished edges instead (one continuous face fan).
+  if(!sealEnds) for(const edge of [-1,1]) {
+    const y=edge*h, a=pt(-w,y,-t), b=pt(w,y,-t);
+    let prev=pt(-w,y,t);for(let i=1;i<=n*4;i++){
+      const j=pt(width*i/(n*4)-w,y,t+depth*[0,.78,1,.78][i%4]);
+      if(edge>0) index.push(a,prev,j);else index.push(a,j,prev); prev=j;
+    }if(edge>0) index.push(a,prev,b);else index.push(a,b,prev);
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(xyz,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(index);g.computeVertexNormals();return g;
+}
+
+/** A sintered frit is pigmented *in* glass. A subdued strié in the opacity-
+ * preserving central band reads from either room. No alpha holes at eye height. */
+function sandblast(m:THREE.MeshStandardMaterial) {
+  const w=64,h=64,rgba=new Uint8Array(w*h*4);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++) {
+    const reed=(x%16)/16, satin=.5+.5*Math.cos(reed*2*Math.PI), grain=((x*31+y*17+x*y*3)%19)/19;
+    const v=231+Math.round(14*satin+7*grain);const i=(y*w+x)*4;rgba[i]=v-4;rgba[i+1]=v;rgba[i+2]=v-1;rgba[i+3]=255;
+  }
+  const tex=new THREE.DataTexture(rgba,w,h);tex.name='Door etched strié';tex.colorSpace=THREE.SRGBColorSpace;
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(4.8,3.2);tex.generateMipmaps=true;tex.minFilter=THREE.LinearMipmapLinearFilter;tex.magFilter=THREE.LinearFilter;tex.needsUpdate=true;m.map=tex;
+}
+
 /** Parent owns disposal and must append these LIVE collider objects (not copies)
  * to its collision list. update(undefined) resets to closed. The authored root
  * is upright/unscaled; rigid parent translation/yaw is reflected by update,
@@ -145,10 +186,10 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
   // Satin etched glass admits light, not a clear bathroom view. The central
   // opaque ceramic-frit band covers both standing and seated sightlines, and a
   // second thin band makes the privacy treatment intentional from either side.
-  const frosted = villaMaterial('#d5e2df', .94);
+  const frosted = villaMaterial('#c4d7d4', .93);
   frosted.transparent = true; frosted.opacity = .93; frosted.depthWrite = true; frosted.name = 'bath-door-frosted';
-  const privacy = villaMaterial('#d1dcd6', .98); privacy.name = 'bath-door-privacy-frit';
-  const steel = villaMaterial('#9faaa6', .42, .62); steel.name = 'bath-door-frame';
+  const privacy = villaMaterial('#b6cbc5', .78); privacy.name = 'bath-door-privacy-frit'; sandblast(privacy); frosted.map = privacy.map;
+  const steel = villaMaterial('#89958f', .36, .55); steel.name = 'bath-door-frame';
   const brass = villaMaterial('#b69e72', .36, .68); brass.name = 'bath-door-handles';
   const seal = villaMaterial('#5e6b65', .88); seal.name = 'bath-door-gaskets';
   const tracks = new IndexedFittingBuilder(root, 'bath-door-overhead-tracks');
@@ -158,10 +199,10 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
     const south = pair[1]!.closedZ + pair[1]!.width / 2 + D.railOverhang;
     for (const { x } of pair) {
       const mid = (north + south) / 2, length = south - north;
-      tracks.box(x, D.floorY + D.railY + .013, mid, .058, .010, length, steel, .002);
+      tracks.box(x, D.floorY + D.railY + .013, mid, .058, .010, length, steel, 0);
       for (const side of [-1, 1]) {
-        tracks.box(x + side * .026, D.floorY + 3.042, mid, .006, .072, length, steel, .001);
-        tracks.box(x + side * .020, D.floorY + 3.006, mid, .016, .006, length, steel, .001);
+        tracks.box(x + side * .026, D.floorY + 3.042, mid, .006, .072, length, steel, 0);
+        tracks.box(x + side * .020, D.floorY + 3.006, mid, .016, .006, length, steel, 0);
       }
     }
     // Wall-mounted standoffs terminate on the actual bath-side plaster/casing;
@@ -169,12 +210,12 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
     const mounts = Math.ceil((south - north) / 1.0);
     for (let i = 0; i <= mounts; i++) {
       const z = north + (south - north) * i / mounts;
-      tracks.box(o.x + o.swing * .120, D.floorY + 3.12, z, .034, .18, .09, steel, .004);
-      tracks.box(o.x + o.swing * .266, D.floorY + 3.14, z, .27, .045, .065, steel, .004);
+      tracks.box(o.x + o.swing * .120, D.floorY + 3.12, z, .034, .18, .09, steel, 0);
+      tracks.box(o.x + o.swing * .266, D.floorY + 3.14, z, .27, .045, .065, steel, 0);
     }
     // Slim paired-channel cover: visible horizontal hardware, not a wall-sized
     // pelmet. Both channels extend across the full parking + doorway strip.
-    tracks.box(o.x + o.swing * .2975, D.floorY + 3.155, (north + south) / 2, .26, .055, south - north, steel, .004);
+    tracks.box(o.x + o.swing * .2975, D.floorY + 3.155, (north + south) / 2, .26, .055, south - north, steel, 0);
     const marker = new THREE.Object3D(); marker.name = `bath-door-track-${which}`;
     marker.userData = { minZ: north, maxZ: south, trackOffsets: [D.nearTrackDepth, D.farTrackDepth], direction: 'north', wallMounted: true }; tracks.root.add(marker);
   }
@@ -199,9 +240,16 @@ export function createVillaBathDoorModel(parent: THREE.Object3D) {
       [2.28, .055, privacy], [2.335, .51, frosted],
     ] as const) {
       const y = bottom + height / 2;
+      const inner = width - 2*stile;
       if (material === privacy && height > 1) {
-        leaf.geometry(piercedPanel(width - 2 * stile, height, .022, [[-handleZ, 1.11 - y, .050, .151]]), material, [0, y, 0], [0, Math.PI / 2, 0]);
-      } else leaf.box(0, y, centre, .022, height, width - 2 * stile, material, 0);
+        // Flat milled mounting strip, milky frit all around the cut. Adjacent
+        // facets meet that strip without passing through the finger cups.
+        const half=.106, cx=-handleZ;
+        leaf.geometry(piercedPanel(2*half,height,.022,[[0,1.11-y,.050,.151]]),material,[0,y,handleZ],[0,Math.PI/2,0]);
+        for(const [l,r] of [[-inner/2,cx-half],[cx+half,inner/2]])
+          leaf.geometry(reededGlass(r-l,height,.022,.053,.004,true),material,[0,y,-(r+l)/2],[0,Math.PI/2,0]);
+      } else if(height>.1) leaf.geometry(reededGlass(inner,height,.022,.053,.004,true),material,[0,y,0],[0,Math.PI/2,0]);
+      else leaf.box(0,y,centre,.022,height,inner,material,0);
     }
     for (const z of [-width / 2 + stile + .0025, width / 2 - stile - .0025])
       leaf.box(0, 1.4975, z, .029, 2.695, .006, seal, .001);

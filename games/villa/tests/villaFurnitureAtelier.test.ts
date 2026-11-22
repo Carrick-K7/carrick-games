@@ -3,12 +3,23 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { furnishVilla } from '../src/villaFurnishings.js';
 import { VILLA_BEDS, villaRelaxSeat } from '../src/villaSeating.js';
 import { VILLA_FAUCET } from '../src/villaFaucet.js';
+import { clothCutAt, type ClothCut } from '../src/villaUpholsteryFinish.js';
 import { VILLA_WEST_WALL } from '../src/villaEstateLayout.js';
 import { plantRay, plantSection } from './villaHedgeProbes.js';
 
 type XYZ = [number, number, number];
 const scene = new THREE.Scene(), staticSurfaces: THREE.Mesh[] = [];
 let furniture: ReturnType<typeof furnishVilla>;
+const clothSections = new Map<ClothCut, THREE.Mesh[]>();
+function matchingCut(cut: ClothCut) {
+  if (clothSections.has(cut)) return clothSections.get(cut)!;
+  const meshes = staticSurfaces.filter(m => (m.material as THREE.Material).name === 'interior/sewn-textiles').map(m => {
+    const g = new THREE.BufferGeometry(), uv = m.geometry.getAttribute('uv'), p = m.geometry.getAttribute('position'), ids: number[] = [];
+    for (let i = 0; i < p.count; i += 3) if (clothCutAt(uv.getX(i), uv.getY(i)) === cut) ids.push(i, i + 1, i + 2);
+    g.setAttribute('position', p); g.setIndex(ids); return new THREE.Mesh(g, m.material);
+  });
+  clothSections.set(cut, meshes); return meshes;
+}
 beforeAll(() => {
   const context = new Proxy({}, { get: () => () => undefined, set: () => true });
   vi.stubGlobal('document', { createElement: () => ({ getContext: () => context }) });
@@ -20,7 +31,8 @@ afterAll(() => {
   const geo = new Set<THREE.BufferGeometry>(), mat = new Set<THREE.Material>(), maps = new Set<THREE.Texture>();
   scene.traverse(o => { if (o instanceof THREE.Mesh) { geo.add(o.geometry); for (const m of Array.isArray(o.material) ? o.material : [o.material]) mat.add(m); } });
   mat.forEach(m => { for (const v of Object.values(m)) if (v instanceof THREE.Texture) maps.add(v); m.dispose(); });
-  maps.forEach(t => t.dispose()); geo.forEach(g => g.dispose()); scene.clear();
+  maps.forEach(t => t.dispose()); geo.forEach(g => g.dispose());
+  for (const subset of clothSections.values()) subset.forEach(m => m.geometry.dispose()); scene.clear();
 });
 const caster = new THREE.Raycaster();
 function cast(p: XYZ, dir: XYZ, far: number, list: THREE.Object3D[] = staticSurfaces) {
@@ -39,6 +51,20 @@ describe('atelier furniture: completed, placed surfaces rather than semantic mar
     expect(tris).toBeLessThanOrEqual(321056);
     expect(staticSurfaces.every(mesh => mesh.geometry.userData.villaRigidBatch)).toBe(true);
   });
+  it('keeps the new textile batch off the roof and pool terrace, and does not split any rug triangle between designs', () => {
+    const sewn = staticSurfaces.filter(m => (m.material as THREE.Material).name === 'interior/sewn-textiles');
+    expect(sewn.length).toBe(1);
+    const p = sewn[0].geometry.getAttribute('position'), uv = sewn[0].geometry.getAttribute('uv');
+    let outside = 0, mixed = 0;
+    for (let i = 0; i < p.count; i += 3) {
+      const first = clothCutAt(uv.getX(i), uv.getY(i));
+      for (let j = i; j < i + 3; j++) {
+        if (p.getY(j) >= 7.20 || p.getZ(j) > 9) outside++;
+        if (clothCutAt(uv.getX(j), uv.getY(j)) !== first) mixed++;
+      }
+    }
+    expect(outside).toBe(0); expect(mixed).toBe(0);
+  });
   it.each(VILLA_BEDS)('$id actually has one centred, pinched pillow and exposed ticking', bed => {
     const y = bed.origin.y, c = Math.cos(bed.yaw), s = Math.sin(bed.yaw);
     const top = (x: number, z: number) => down(bed.origin.x + x * c + z * s, y + 1.40, bed.origin.z - x * s + z * c, 1.2)! - y;
@@ -54,9 +80,9 @@ describe('atelier furniture: completed, placed surfaces rather than semantic mar
     expect(top(.02, .73)).toBeCloseTo(.807, 2);
   });
   it.each(VILLA_BEDS)('$id bears on actual ticking, including a fully supported foot runner', bed => {
-    const color = (n: THREE.Mesh) => (n.material as THREE.MeshStandardMaterial).color.getHex();
-    const ticking = staticSurfaces.filter(n => color(n) === 0xffffff && (n.material as THREE.MeshStandardMaterial).roughness === .93);
-    const duvet = staticSurfaces.filter(n => color(n) === 0xede6d4), runner = staticSurfaces.filter(n => color(n) === 0xbb7358);
+    // Ray-test the actual triangles on each sewn cut. Selecting display RGB
+    // accidentally included cups/books and stopped working across dyed suites.
+    const ticking = matchingCut('ticking'), duvet = matchingCut('quilt'), runner = matchingCut('throw');
     const yc = bed.origin.y, c = Math.cos(bed.yaw), s = Math.sin(bed.yaw);
     const world = (u: number, v: number) => [bed.origin.x + u * c + v * s, bed.origin.z - u * s + v * c];
     for (const [u, v] of [[0, -.45], [-bed.width * .24, -.71], [bed.width * .28, .26]]) {
@@ -93,7 +119,11 @@ describe('atelier furniture: completed, placed surfaces rather than semantic mar
     expect(front(-8, 1.01, 6.64, .59)).toBeGreaterThan(6.38);
     expect(cast([-8, .102, 4.99], [0, 0, 1], 1.51)).toBeUndefined();
     const crown = cast([xc, .79, z], [0, -1, 0], .25)!, dx = cast([xc + .09, .79, z], [0, -1, 0], .25)!;
-    expect(dx.uv!.x - crown.uv!.x).toBeCloseTo(.09 * .80, 4); expect(dx.uv!.y).toBeCloseTo(crown.uv!.y, 5);
+    // Dye and grain are separate cuts now. A nine-centimetre shift along this
+    // seat must traverse the actual flax yarns, with no diagonal UV pinwheel.
+    expect(clothCutAt(crown.uv!.x, crown.uv!.y)).toBe('flax');
+    expect((dx.uv1!.x - crown.uv1!.x) * 256).toBeCloseTo(.09 * 185, 3);
+    expect(dx.uv1!.y).toBeCloseTo(crown.uv1!.y, 5);
   });
   it('bends the dining back around the sitter and preserves sightlines between its splats', () => {
     const x = -9.33, z = -1.72;

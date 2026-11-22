@@ -13,7 +13,9 @@ const intersects = (a: VillaCollider, b: VillaCollider) => a.minX < b.maxX && a.
 const dispose = (root: THREE.Object3D) => {
   const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
   root.traverse(n => { if (n instanceof THREE.Mesh) { geometries.add(n.geometry); for (const m of Array.isArray(n.material) ? n.material : [n.material]) materials.add(m); } });
-  geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); root.clear();
+  const textures = new Set<THREE.Texture>();
+  geometries.forEach(g => g.dispose()); materials.forEach(m => { for(const value of Object.values(m)) if(value instanceof THREE.Texture) textures.add(value); m.dispose(); });
+  textures.forEach(t=>t.dispose()); root.clear();
 };
 
 describe('north-wall master bedroom joinery', () => {
@@ -99,14 +101,15 @@ describe('north-wall master bedroom joinery', () => {
     const m = VILLA_MASTER_MIRROR;
     const node = root.getObjectByName('Bedroom/dressing-mirror')!;
     expect(node.position.toArray()).toEqual([m.x, m.y, m.z]);
-    expect(node.userData).toMatchObject({ renderTarget: false, litTrim: true, reflection: 'environment-polished-metal' });
+    expect(node.userData).toMatchObject({ renderTarget: false, litTrim: true, reflection: 'finite-room-reflection' });
     const material = meshes.map(mesh => mesh.material as THREE.MeshStandardMaterial).find(mat => mat.name === 'Bedroom polished mirror')!;
     expect(material.metalness).toBeGreaterThan(.6); expect(material.metalness).toBeLessThan(1);
     expect(material.roughness).toBeLessThan(0.1); // Reflective, with a visible fallback when software GL omits the environment.
-    expect(material.envMap).toBeNull(); // Uses existing scene environment, no separately owned render target.
+    expect(material.userData.villaMirrorRoom).toBe('master');
+    expect(material.envMap?.isRenderTargetTexture??false).toBe(false); // No mirror pass or live render target.
     expect(meshes.some(mesh => (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity === 0.65)).toBe(true);
     for (const kind of VILLA_VANITY_ACCESSORIES) expect(root.getObjectByName(`Bedroom/${kind}`)).toBeDefined();
-    expect(root.getObjectByName('Bedroom/brush-cup')?.userData.brushes).toBe(3);
+    expect(root.getObjectByName('Bedroom/brush-cup')?.userData.brushes).toBe(5);
     expect(root.getObjectByName('Bedroom/compact')?.userData.open).toBe(true);
     expect(root.children.some(n => n instanceof THREE.Light || n instanceof THREE.Sprite)).toBe(false);
   });
@@ -121,8 +124,12 @@ describe('north-wall master bedroom joinery', () => {
       const p = mesh.geometry.getAttribute('position'); vertices += p.count;
       expect(p.count).toBeGreaterThan(0); expect(p.array.every(Number.isFinite)).toBe(true);
       expect(mesh.geometry.getAttribute('normal').count).toBe(p.count);
-      expect((mesh.material as THREE.MeshStandardMaterial).map).toBeNull();
-      expect(mesh.castShadow && mesh.receiveShadow).toBe(true);
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (mat.userData.fittedCloth) { expect(mat.map instanceof THREE.DataTexture).toBe(true); expect(mat.map!.generateMipmaps).toBe(true); }
+      else expect(mat.map).toBeNull(); // Scene binds only explicitly commissioned stone and timber after assembly.
+      expect(mesh.receiveShadow).toBe(true);
+      // Alpha-sorted faceted perfume and its fill must not stamp an opaque silhouette onto the tray.
+      expect(mat.transparent).toBe(mat.name === 'Vanity/cut crystal'); expect(mesh.castShadow).toBe(!mat.transparent);
     }
     expect(vertices).toBeLessThan(100_000);
   });

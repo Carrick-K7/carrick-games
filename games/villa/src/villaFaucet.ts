@@ -1,18 +1,23 @@
 import * as THREE from 'three';
 import { formedTube, type PathStation } from './villaFittingGeometry.js';
+import type { FurnitureKit } from './villaFurnitureForms.js';
+import { pantryPart } from './villaPantryFinish.js';
 
 /** Deck escutcheon, swivel joint, swan neck and rolled aerator nose. The whole casting
  * has a bore, including the down-facing outlet at local (0,.275,.27). One steel draw. */
 export function villaKitchenSpoutGeometry() {
   const path: PathStation[] = [[0, 0, 0, .054], [0, .007, 0, .055], [0, .014, 0, .05],
     [0, .018, 0, .035], [0, .027, 0, .033], [0, .09, 0, .033], [0, .096, 0, .030],
-    [0, .105, 0, .031], [0, .113, 0, .0235], [0, .365, 0, .022]];
-  for (let i = 1; i <= 18; i++) {
-    const a = i * Math.PI / 18; path.push([0, .365 + .135 * Math.sin(a), .135 * (1 - Math.cos(a)), .022]);
+    [0, .105, 0, .031], [0, .109, 0, .030], [0, .113, 0, .0235], [0, .365, 0, .0215]];
+  for (let i = 1; i <= 16; i++) {
+    const a = i * Math.PI / 16; path.push([0, .365 + .135 * Math.sin(a), .135 * (1 - Math.cos(a)), .0215]);
   }
   path.push([0, .309, .27, .022], [0, .305, .27, .0245], [0, .299, .27, .025],
     [0, .296, .27, .024], [0, .292, .27, .025], [0, .278, .27, .025], [0, .275, .27, .023]);
-  return formedTube(path, 20, .004, [1, 0, 0]);
+  return formedTube(path, 18, .004, [1, 0, 0]);
+}
+export function putKitchenSpout(k: FurnitureKit) {
+  pantryPart(k, villaKitchenSpoutGeometry(), 'nickel', -5.67, .99, -8.77, 0, 0, 0, 'face');
 }
 
 /** Matches the existing recessed kitchen basin and swan-neck spout, in metres. */
@@ -33,7 +38,7 @@ export function createVillaFaucet(parent: THREE.Object3D): { update(time: number
   const lever = new THREE.Mesh(formedTube([[-.065, 0, 0, .019], [-.042, 0, 0, .024], [-.029, 0, 0, .026],
     [-.026, 0, 0, .021], [-.009, 0, 0, .021], [.002, .003, 0, .018], [.017, .011, 0, .011, .015],
     [.048, .024, 0, .008, .014], [.12, .033, 0, .008, .017], [.137, .034, 0, .007, .014], [.14, .034, 0, .004, .01]]),
-    new THREE.MeshStandardMaterial({ color: 0xadb5b4, roughness: .25, metalness: .78 }));
+    new THREE.MeshStandardMaterial({ color: 0xbdb9aa, roughness: .43, metalness: .66 }));
   handle.add(lever);
 
   const flow = new THREE.Group(); flow.name = 'kitchen-tap-water'; root.add(flow);

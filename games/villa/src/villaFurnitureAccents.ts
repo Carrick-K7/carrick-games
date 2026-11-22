@@ -1,11 +1,23 @@
 import * as THREE from 'three';
 import { bent, board, casting, circleXY, loft, oval, rectRing, rectXY, sheet, stock, turn, type FurnitureKit, type Point } from './villaFurnitureForms.js';
-import { vessel } from './villaFurnitureJoinery.js';
 import { prunedPrivet } from './villaHedgePrivet.js';
 import { teapot } from './villaInteriorKitchen.js';
+import { drainingBoat } from './villaKilnFinish.js';
+import { coupe, ironKettle, liddedCaddy, teaCloth, thrownCup } from './villaKilnTable.js';
+import { pantryPart } from './villaPantryFinish.js';
+import { NatureMesh, add3, collar, mix3, polar } from './villaNatureGeometry.js';
+import { HOUSE_PRINT, printChart } from './villaDomesticArt.js';
 
-export function woolRug(w: number, d: number, h: number) {
+export function woolRug(w: number, d: number, h: number, hand?: number) {
   const hem = .026, us = [-1, -1 + hem / w * 2, -.88, 0, .88, 1 - hem / w * 2, 1], vs = [-1, -1 + hem / d * 2, -.84, 0, .84, 1 - hem / d * 2, 1];
+  if (hand !== undefined) return sheet(us, vs, (u, v, under) => {
+    const a = Math.abs(u), b = Math.abs(v), corner = a ** 10 * b ** 10;
+    const roll = h * (.14 + .42 * Math.exp(-(((u + .78) / .21) ** 2 + ((v - .92) / .17) ** 2)));
+    const lifted = corner * .003 * (1 + Math.cos(hand + 2 * u - 3 * v));
+    const selvedge = .008 * Math.sin(4.1 * v + hand) + .004 * Math.cos(8.7 * v - hand);
+    return [u * (w / 2 - .021 * corner) + selvedge * a ** 6,
+      lifted + (under ? -h * .44 : a === 1 || b === 1 ? roll : h * (.41 - .052 * Math.exp(-((v * 2.3 + .21) ** 2)))), v * (d / 2 - .023 * corner)];
+  });
   return sheet(us, vs, (u, v, under) => {
     const edge = Math.abs(u) === 1 || Math.abs(v) === 1, tip = Math.abs(u * v) === 1 ? .016 : 0;
     const y = under ? -h * .46 : edge ? h * .14 : h * (.40 + .065 * Math.sin(u * 3.3 + v * 1.9));
@@ -15,11 +27,13 @@ export function woolRug(w: number, d: number, h: number) {
 
 /** Paired knotted warp ends. Baked into one small strip per short edge, not a
  * draw call or cylinder per thread. All tips end inside the inherited footprint. */
-export function rugFringe(w: number, d: number, h: number) {
+export function rugFringe(w: number, d: number, h: number, hand?: number) {
   const xyz: number[] = [], uv: number[] = [], ids: number[] = [], n = Math.min(42, Math.round(w / .135));
   for (const side of [-1, 1]) for (let i = 0; i < n; i++) {
     const x = w * ((i + .5) / n - .5), z = side * (d / 2 - .061), base = xyz.length / 3;
-    const reach = .050 + Math.sin(i * 2.41) * .006, tip = x + .008 * Math.sin(i * 1.4);
+    const drift = hand === undefined ? 0 : .010 * Math.sin(.73 * i + hand + side);
+    const reach = hand === undefined ? .050 + Math.sin(i * 2.41) * .006 : .047 + drift + .004 * Math.cos(i * 2.35);
+    const tip = x + .008 * Math.sin(i * 1.4) + drift;
     const path = [[x - .014, h * .13, z - side * .003], [x + .013, h * .13, z - side * .003],
       [x - .009, -h * .01, z + side * .017], [x + .008, -h * .01, z + side * .017],
       [tip - .012, -h * .26, z + side * reach], [tip + .002, -h * .23, z + side * reach * .94], [tip + .010, -h * .27, z + side * reach * .89]];
@@ -69,15 +83,23 @@ export function teaFurniture(k: FurnitureKit) {
     put(casting(foot, .114), m.walnut, s * .688, 0, 0, 0, Math.PI / 2);
   }
   put(board(1.902, 1.241, .065, .070, .031), m.walnut, 0, .401, 0);
-  put(loft([rectRing(1.492, .883, .046, .433), rectRing(1.55, .945, .054, .442), rectRing(1.552, .949, .054, .468),
-    rectRing(1.492, .888, .043, .470), rectRing(1.465, .862, .042, .453)]), m.dark, 0, 0, 0);
-  at(-.48, .453, -.18, .33, () => {
-    // Cast iron brazier, with a trivet around the removable lidded kettle.
-    put(turn([[0, 0], [.132, 0], [.152, .017], [.174, .083], [.163, .112], [.146, .117], [.13, .095], [.11, .045], [0, .033]], 16), m.black, 0, 0, 0);
-    at(0, .098, 0, 0, () => teapot(k, m.black, .92));
-  });
-  at(.115, .453, -.210, -.25, () => teapot(k, m.terra, .79));
-  for (const [x, z] of [[.34, .17], [.51, .27], [.57, .09], [.29, .33]]) put(vessel(.046, .056, .47, 12), m.cream, x, .454, z);
+  // Recessed end splines lock each trestle into the aprons. The tabletop is
+  // intentionally visible around two separate working zones: hot iron and tea.
+  for (const s of [-1, 1]) {
+    k.box(0, .345, s * .445, 1.38, .062, .030, m.walnut, 0);
+    for (const x of [-.752, .752]) k.box(x, .343, s * .444, .015, .017, .045, m.oak, 0);
+  }
+  const top = .4335, deck = top + .042;
+  at(-.563, top, -.085, -.52, () => ironKettle(k));
+  at(.264, top, -.032, 0, () => drainingBoat((g, mat, x = 0, y = 0, z = 0) => put(g, mat, x, y, z), 1.046, .595, 12, m.oak, m.dark));
+  at(.073, deck, -.095, -.34, () => teapot(k, m.terra, .75));
+  for (const [x, z] of [[.36, .125], [.53, .138], [.59, -.036]]) thrownCup(k, x, deck, z, .051, .052, 'celadon', 12);
+  at(-.414, top, .309, .06, () => { teaCloth(k, .274, .147, .024); put(stock([[0, .020, -.035, .006], [.095, .021, -.026, .008], [.158, .023, -.008, .011]], 6), m.oak, -.10, 0, 0); });
+  // The fairness pitcher has its own flared mouth and proud pour point.
+  const lip = turn([[0, .003], [.031, .003], [.033, 0], [.046, 0], [.048, .012], [.067, .044], [.070, .086], [.062, .107],
+    [.061, .118], [.065, .127], [.064, .132], [.059, .133], [.056, .126], [.055, .110], [.062, .085], [.058, .045], [.039, .022], [0, .018]], 16);
+  const p = lip.getAttribute('position'); for (let i = 0; i < p.count; i++) { const nose = Math.max(0, p.getX(i) / .065) ** 7 * Math.max(0, (p.getY(i) - .102) / .031); p.setX(i, p.getX(i) + .021 * nose); p.setY(i, p.getY(i) + .008 * nose); }
+  lip.computeVertexNormals(); pantryPart(k, lip, 'oatmeal', .59, deck, -.207, 0, .44, 0, 'turned');
 }
 export function teaShelf(k: FurnitureKit) {
   const { put, m } = k;
@@ -89,37 +111,77 @@ export function teaShelf(k: FurnitureKit) {
   for (let i = -1; i <= 1; i++) put(casting(rectXY(.953, 1.937, .021, 0, 1.095), .033, [circleXY(0, 1.32, .302, 16)]), m.walnut, -.15, 0, i * .966, 0, Math.PI / 2);
   for (let i = 0; i < 4; i++) {
     const y = .331 + i * .52; put(board(.339, 2.857, .048, .030, .014), m.oak, .026, y, 0);
-    for (let c = 0; c < 4; c++) put(vessel(.055 + .004 * ((c + i) % 3), i % 2 ? .079 : .099, .46, 12), i % 2 ? m.cream : m.sage, .072, y + .024, -1.10 + .724 * c);
+    const base = y + .024;
+    if (i === 0) {
+      // Lacquer boxes on plinths, and tea cloths ready to be taken down.
+      for (const [z, w] of [[-.83, .40], [-.20, .28]]) {
+        put(board(.235, w, .106, .018, .005), m.walnut, .035, base + .053, z);
+        put(board(.244, w + .012, .018, .018, .004), m.oak, .035, base + .115, z);
+      }
+      k.at(.050, base, .79, .05, () => teaCloth(k, .232, .352, .046));
+    } else if (i === 1) {
+      liddedCaddy(k, .04, base, -.95, .079, .186, 'ochre'); liddedCaddy(k, .04, base, -.68, .068, .151, 'tenmoku');
+      coupe(k, .06, base, .30, .115, .034, 'celadon', 14); thrownCup(k, .06, base, .81, .060, .087, 'celadon', 12);
+    } else if (i === 2) {
+      // The taller storage pieces flank the open moon window rather than
+      // marching in a row in front of it. Their shoulders and lids differ.
+      liddedCaddy(k, .027, base, -.86, .103, .223, 'celadon'); liddedCaddy(k, .047, base, .97, .083, .143, 'ochre');
+      coupe(k, .045, base, .60, .115, .062, 'oatmeal', 12);
+    } else {
+      liddedCaddy(k, .034, base, -.92, .084, .150, 'oatmeal');
+      for (const z of [.55, .80]) thrownCup(k, .044, base, z, .062, .078, 'oatmeal', 12);
+    }
   }
 }
 
-export function bonsai(k: FurnitureKit) {
-  const { m, put } = k;
-  put(turn([[0, 0], [.268, 0], [.290, .023], [.276, .043], [.179, .070], [.097, .134], [.081, .229], [.128, .301], [.219, .356], [.30, .382], [.308, .422], [.288, .44], [0, .44]], 16), m.walnut, 0, 0, 0);
-  put(loft([oval(.37, .249, .441, 16), oval(.436, .289, .455, 16), oval(.502, .334, .536, 16), oval(.518, .350, .552, 16), oval(.513, .348, .566, 16), oval(.464, .301, .566, 16), oval(.451, .293, .529, 16)]), m.sage, 0, 0, 0);
-  put(loft([oval(.444, .285, .536, 14), oval(.387, .249, .548, 14), oval(.150, .115, .550, 14)]), m.soil, 0, 0, 0);
-  bent(k, m.walnut, [[-.060, .541, -.005, .044], [-.037, .593, -.012, .040], [.048, .632, -.008, .034], [.086, .697, .014, .028], [.035, .769, .038, .023], [-.009, .834, .023, .019], [.016, .902, .008, .013], [.082, .965, -.006, .009]], 9);
-  for (const [x, y, z, w] of [[-.149, .738, -.027, .252], [.185, .796, -.016, .273], [-.102, .893, .057, .231], [.080, .983, -.016, .226]]) {
-    bent(k, m.walnut, [[.035, y - .093, .012, .015], [x * .64, y - .042, z, .011], [x, y, z, .006]], 7);
-    put(pebble(w, .076, w * .79, y * 13), m.leaf, x, y + .020, z);
-    put(pebble(w * .75, .049, w * .63, x * 6), m.leafLight, x + w * .12, y + .051, z - .012);
+/** Chinese elm on its root flare. Fine shoots carry alternate, pointed leaves;
+ * loose treetops are not solid green stones balanced on a trunk. */
+export function bonsai(k:FurnitureKit){
+  const {m,put}=k;
+  for(const sx of [-1,1])for(const sz of [-1,1])k.put(casting([[-.023,0],[.026,0],[.056,.077],[.043,.165],[.028,.270],[-.012,.270],[-.030,.214],[-.014,.088]],.038),m.walnut,sx*.154,0,sz*.112,0,sx>0?0:Math.PI);
+  for(const sx of [-1,1])k.box(sx*.154,.126,0,.021,.027,.220,m.walnut,0);
+  put(board(.414,.301,.034,.039,.014),m.walnut,0,.277,0);
+  const potBase=.294;
+  put(loft([oval(.292,.201,potBase,14),oval(.375,.267,potBase+.036,14),oval(.435,.310,potBase+.094,14),oval(.452,.320,potBase+.106,14),oval(.444,.309,potBase+.119,14),oval(.415,.285,potBase+.119,14),oval(.391,.266,potBase+.083,14)],true,false),m.blue,0,0,0);
+  const base=potBase+.106;
+  put(loft([oval(.406,.278,base-.009,14),oval(.362,.237,base-.001,14),oval(.139,.109,base+.007,14)],false,true),m.soil,0,0,0);
+  const wood=new NatureMesh(),old=new NatureMesh(),fresh=new NatureMesh();old.membrane=fresh.membrane=true;
+  const trunk:Point[]=[[-.070,base+.002,-.016],[-.045,base+.074,-.023],[.033,base+.125,-.005],[.076,base+.193,.016],[.037,base+.275,.030],[-.028,base+.344,.022],[-.058,base+.412,-.003],[-.013,base+.489,-.023],[.045,base+.545,-.016]];
+  wood.stem(trunk.map((v,i)=>collar(v,[.041,.035,.030,.026,.022,.018,.014,.010,.005][i])),8,.115,.2,true);
+  for(let j=0;j<5;j++){const tip=add3(trunk[0],polar(j*1.31,.071+.012*(j%2),-.003));wood.stem([collar(trunk[1],.015),collar(mix3(trunk[0],tip,.46),.011),collar(tip,0)],5,.09,.18,true);}
+  const leaders:[number,number,number][]=[[2,2.95,.193],[3,.04,.197],[4,1.49,.152],[5,3.56,.150],[6,-.53,.143],[7,2.17,.113],[8,.66,.102]];
+  for(const [i,a,reach] of leaders){
+    const socket=trunk[i], elbow=add3(socket,polar(a,reach*.52,.046)),tip=add3(socket,polar(a+.07,reach,.027));
+    wood.stem([collar(socket,.014-i*.0009),collar(elbow,.007),collar(tip,.003)],6,.06,a,true);
+    for(let j=0;j<4;j++){
+      const foot=mix3(elbow,tip,j*.25),az=a+(j%2?1:-1)*(.59+.12*j),end=add3(foot,polar(az,.061+.006*j,.035+.007*(j%2)));
+      wood.stem([collar(foot,.0027),collar(end,0)],4,0,0,true);
+      for(let t=0;t<6;t++){
+        const leaf=(j+t+i)%5>1?old:fresh, p=mix3(foot,end,.22+t*.146), dir=az+(t%2?.96:-1.21);
+        leaf.blade(p,polar(dir,.027+.005*((i+j)%3),.008+.012*(t/6)),.011,[[.19,.76],[.41,1],[.57,.88],[.68,.77]],.004,dir*.23,.17,.002);
+      }
+    }
   }
+  for(const [mesh,mat] of [[wood,m.walnut],[old,m.leaf],[fresh,m.leafLight]] as const)put(mesh.geometry(),mat,0,0,0);
 }
 
-export function writingSet(k: FurnitureKit, guest = false) {
-  const { put, m } = k;
-  const width = guest ? .53 : .402, depth = guest ? .351 : .277;
-  // Two sewn signatures curve back to the same gutter. A visible fore-edge
-  // separates them from the leather case from the side and underneath.
-  const panels = [-1, -.84, -.60, -.38, -.17, -.048, 0, .048, .17, .38, .60, .84, 1];
-  put(board(width + .025, depth + .025, .010, .018, .005), m.walnut, 0, .005, 0);
-  put(sheet(panels, [-1, -.7, .45, .88, 1], (u, v, under) => {
-    const a = Math.abs(u), y = .019 + .034 * Math.sin(Math.PI * Math.sqrt(a)) + .007 * a + .005 * v * a;
-    return [u * width / 2, under ? .011 : y, v * depth / 2 + .006 * (1 - a) * v];
-  }), m.cream, 0, 0, 0);
-  if (guest) return;
-  k.at(.78, 0, -.03, 0, () => {
-    put(turn([[0, .003], [.054, .003], [.064, .009], [.062, .031], [.052, .038], [.030, .042], [.027, .052], [.031, .057], [.023, .059], [.020, .046]], 14), m.brass, 0, 0, 0);
-    put(stock([[0, .041, 0, .006], [.017, .083, -.01, .006], [.060, .19, -.034, .004], [.067, .205, -.041, .002]], 7), m.black, 0, 0, 0);
+export function writingSet(k:FurnitureKit,guest=false,press?:THREE.Material){
+  const {put,m}=k,w=guest?.529:.449,d=guest?.339:.301, columns=[-1,-.83,-.57,-.31,-.10,-.025,0,.034,.13,.39,.69,.91,1], rows=[-1,.15,1];
+  put(board(w+.029,d+.021,.009,.015,.003),guest?m.sage:m.walnut,0,.0045,0);
+  const page=(u:number,v:number,under:boolean):Point=>{const a=Math.abs(u);return [u*w/2,under?.0095:.019+.029*Math.sin(Math.PI*Math.sqrt(a))+.007*a+.003*v*a,v*d/2+.005*(1-a)*v];};
+  const block=sheet(columns,rows,page),ids=Array.from(block.index!.array),topVertices=columns.length*rows.length;
+  const sides:number[]=[];for(let i=0;i<ids.length;i+=3)if(ids[i]>=topVertices||ids[i+1]>=topVertices||ids[i+2]>=topVertices)sides.push(ids[i],ids[i+1],ids[i+2]);
+  block.setIndex(sides);put(block,m.cream,0,0,0);
+  const surface=sheet(columns,rows,page,true);put(press?printChart(surface,guest?HOUSE_PRINT.letter:HOUSE_PRINT.notes,true):surface,press??m.cream,0,0,0);
+  // A ceramic reservoir with a clear throat and a pen with an actual nib. The
+  // pen lies in the groove of its rest instead of balancing upright in space.
+  k.at(w*.5+.145,0,-.022,guest?-.14:.08,()=>{
+    if(!guest){
+      put(turn([[0,0],[.037,0],[.046,.009],[.048,.050],[.036,.065],[.023,.069],[.021,.081],[.025,.085],[.019,.086],[.015,.074]],12),m.blue,0,0,-.091);
+      put(turn([[.016,.076],[0,.076]],10),m.dark,0,0,-.091);
+    }
+    for(const dz of [-.047,.036])put(casting([[-.025,0],[.025,0],[.025,.015],[.014,.027],[.007,.019],[0,.016],[-.008,.019],[-.016,.027],[-.025,.014]],.012),m.brass,0,0,dz);
+    put(turn([[0,0],[.0065,.005],[.0078,.040],[.0064,.115],[.005,.136]],8),m.dark,0,.022,.087,-Math.PI/2);
+    put(turn([[.005,.129],[.006,.136],[.002,.150],[0,.156]],7),m.brass,0,.022,.087,-Math.PI/2);
   });
 }

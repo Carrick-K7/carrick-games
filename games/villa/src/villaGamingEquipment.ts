@@ -165,8 +165,16 @@ export function pcChassis(b:VillaModelBuilder,frame:Mat,steel:Mat,glass:Mat,pad:
     b.geometry(sectionLoft([.024,.468].map(y=>cross.map(([a,c]):P3=>[x*(.156-a),y,z*(.196-c)]))),steel);
     b.geometry(sectionLoft([.002,-.010,-.015].map((h,i)=>horizontal(.035-i*.002,.041-i*.003,h))),pad,[x*.13,0,z*.166]);
   }
+  // Recessed service panel under the radiator and its accessible leads;
+  // standoffs secure both glass sheets without obscuring a front fan.
+  const ports=Array.from({length:4},(_,i)=>roundedLoop(.022,.012,.002,1).map(([x,y]):P2=>[x+(i-1.5)*.037,y]));
+  b.geometry(plate(roundedLoop(.190,.036,.004),ports,.004),steel,[0,.180,-.200]);
   b.box(-.153,.246,.001,.003,.428,.377,glass,0);
   b.box(.001,.246,.199,.303,.428,.003,glass,0);
+  for(const y of [.043,.447]){
+    for(const x of [-.134,.134])b.cylinder(x,y,.202,.0063,.0076,.005,steel,[Math.PI/2,0,0],8);
+    for(const z of [-.168,.168])b.cylinder(-.156,y,z,.0063,.0076,.005,steel,[0,0,Math.PI/2],8);
+  }
 }
 
 export function headsetAndMic(b:VillaModelBuilder,black:Mat,pad:Mat,steel:Mat,liner:Mat) {
@@ -269,12 +277,45 @@ export function rallyWheelTrim(b:VillaModelBuilder,grip:Mat,metal:Mat,index:Mat)
       (x,y,z)=>[x,y,z-.015+.011*(x/.165)**2]),metal,[0,0,0],[0,0,a]);
   }
   b.cylinder(0,0,-.009,.049,.046,.039,grip,[Math.PI/2,0,0],24);
+  b.geometry(turnedSection([[-.003,.033],[.001,.034],[.004,.031],[.003,.026],[-.003,.026]],24),metal,[0,0,-.029],[0,Math.PI/2,0]);
+  // Bolts sit outside the centre medallion, on the actual wheel face. A
+  // leather wrap changes its seam and thumb section away from ten and two.
+  for(let i=0;i<6;i++){
+    const a=(i+.5)*tau/6;
+    b.cylinder(.039*Math.cos(a),.039*Math.sin(a),-.029,.0033,.0039,.005,metal,[Math.PI/2,0,0],6);
+  }
+  for(const side of [-1,1]) for(let j=0;j<10;j++) {
+    const a=(side<0?Math.PI:0)+(j-4.5)*.113, end=a+.045;
+    b.geometry(bentRail([[.168*Math.cos(a),.168*Math.sin(a),-.0174],[.171*Math.cos(end),.171*Math.sin(end),-.0209]],.0013,4),index);
+  }
   for(const s of [-1,1]) {
     const paddle:P2[]=[[.072,-.025],[.106,-.040],[.134,-.032],[.143,.044],[.132,.073],[.107,.079],[.100,.031],[.073,.015]];
     b.geometry(plate(paddle.map(([x,y])=>[s*x,y]),[ovalLoop(.007,.016,12).map(([x,y])=>[s*(.121+x),.044+y])],.006,
       (x,y,z)=>[x,y,z+.025+.018*(Math.abs(x)/.145)**2]),metal);
     for(const x of [.066,.087]) b.cylinder(s*x,.009,-.019,.006,.007,.008,index,[Math.PI/2,0,0],12);
   }
+}
+
+export function pedalDeck(b:VillaModelBuilder,x:number,metal:Mat,pad:Mat){
+  const slots:P2[][]=[];
+  for(let i=0;i<5;i++)slots.push(roundedLoop(.049,.174,.016,3).map(([u,v])=>[u+(i-2)*.11,v+.128]));
+  b.geometry(plate(roundedLoop(.677,.643,.041),slots,.017),metal,[x,.231,7.66],[-Math.PI/2,0,0]);
+  for(const sx of [-.314,.314]) b.box(x+sx,.218,7.66,.027,.031,.585,pad,.004);
+  for(let i=0;i<5;i++) b.box(x,.251,7.764+i*.037,.579,.007,.008,pad,.002);
+  for(const sx of [-.22,0,.22]) {
+    b.cylinder(x+sx,.324,7.763,.015,.018,.092,pad,[.87,0,0],10);
+    b.beam([x+sx,.265,7.694],[x+sx,.347,7.795],.008,metal,7);
+  }
+}
+
+export function telemetryPod(b:VillaModelBuilder,x:number,dark:Mat,metal:Mat,lens:Mat) {
+  const panel=(w:number,h:number,z:number)=>roundedLoop(w,h,.014,3).map(([a,y]):P3=>[x+a,1.037+y,z]);
+  b.geometry(sectionLoft([panel(.359,.119,6.980),panel(.361,.123,6.959),panel(.354,.119,6.952)]),dark);
+  for(const s of [-1,1]){
+    b.geometry(plate(roundedLoop(.100,.065,.009),Array.from({length:4},(_,i)=>roundedLoop(.011,.045,.003,2).map(([u,v]):P2=>[u+(i-1.5)*.021,v])),.005),metal,[x+s*.113,1.041,6.946]);
+  }
+  b.box(x,1.075,6.948,.121,.018,.004,lens,.003);
+  for(let i=0;i<6;i++) b.box(x-.052+i*.0208,1.075,6.943,.014,.008,.006,i<2?metal:dark,0);
 }
 
 export function pedalFace(b:VillaModelBuilder,x:number,y:number,z:number,i:number,metal:Mat,pad:Mat){

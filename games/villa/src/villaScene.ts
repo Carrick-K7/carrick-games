@@ -35,6 +35,9 @@ import { createVillaGarden } from './villaGarden.js';
 import { createCultivatedGround, tintManagedLawn } from './villaGardenFloor.js';
 import { createVillaFenceBankGeometry } from './villaFenceBank.js';
 import { courtyardSwatches, dressSurveyedHardscape } from './villaSoilFinishes.js';
+import { installVillaRoomMirrors } from './villaInteriorMirror.js';
+import {insideOccupiedFabric} from './villaMillFinish.js';
+import { interiorSwatches, bindRoomSurfaces } from './villaInteriorSurfaces.js';
 import { addSurveyedSun } from './villaSolarSurvey.js';
 import { installVillaOrchardLight } from './villaOrchardSurface.js';
 import { createVillaShelterPlanting } from './villaShelterPlanting.js';
@@ -219,6 +222,8 @@ export class VillaScene {
   private homeCutKey: string | null = null;
   private readonly water: THREE.Mesh;
   private readonly waterMap: THREE.Texture;
+  private readonly roomMirrors: ReturnType<typeof installVillaRoomMirrors>;
+  private readonly roomSwatches: ReturnType<typeof interiorSwatches>;
   private readonly groundSwatches: ReturnType<typeof courtyardSwatches>;
   private readonly surveyedSun: ReturnType<typeof addSurveyedSun>;
   private readonly sky: THREE.ShaderMaterial;
@@ -340,7 +345,12 @@ export class VillaScene {
     skyDome.renderOrder = 10_000;
     skyDome.position.set(estateX, 0, estateZ); this.scene.add(skyDome);
 
-    this.groundSwatches=courtyardSwatches(()=>{this.invalidateCameraFrame();this.securityKey='';});
+    const finishReady=()=>{this.invalidateCameraFrame();this.securityKey='';};
+    this.groundSwatches=courtyardSwatches(finishReady);
+    // The pale fallback and each commissioned surface depict the SAME room and
+    // camera. Let the next ordinary refresh pick them up; five sequential mirror
+    // decodes must not each cancel Home or force a synchronous GL readback.
+    const indoorReady=()=>{this.securityKey='';};this.roomSwatches=interiorSwatches(indoorReady);
     const exteriorTimber=new THREE.MeshStandardMaterial({map:this.groundSwatches.maps.timber,roughness:.93,vertexColors:true});exteriorTimber.name='weathered-garden-joinery';
     const oak = texture('oak'), stone = texture('stone'), plaster = texture('plaster');
     const materials: Record<VillaMaterial, THREE.MeshStandardMaterial> & {exteriorTimber:THREE.MeshStandardMaterial} = {
@@ -401,8 +411,10 @@ export class VillaScene {
     this.staticView = new VillaStaticView(this.scene);
     // Fragment-only sunlight sampling is installed after conservative static range classification.
     // It never moves a vertex or changes the bounds used for primary and security views.
+    bindRoomSurfaces(this.scene,this.roomSwatches.maps);
     installVillaOrchardLight(this.scene);
     this.surveyedSun=addSurveyedSun(this.scene);
+    this.roomMirrors=installVillaRoomMirrors(this.scene,indoorReady);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 
@@ -423,7 +435,7 @@ export class VillaScene {
     const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace;
     const material = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
     // Contact shadows belong on floors, not beneath elevated drawers or mirrors.
-    const parts = fixedVillaContactColliders(this.scene, colliders).filter(collider => [0, 3.6, 7.2].some(y => Math.abs(collider.minY - y) < .08)).map(collider => {
+    const parts = fixedVillaContactColliders(this.scene, colliders).filter(collider => [0, 3.6, 7.2].some(y => Math.abs(collider.minY - y) < .08) && !insideOccupiedFabric((collider.minX+collider.maxX)*.5,Math.max(0,collider.minY),(collider.minZ+collider.maxZ)*.5)).map(collider => {
       const g = new THREE.PlaneGeometry((collider.maxX - collider.minX) * 1.42, (collider.maxZ - collider.minZ) * 1.42);
       g.rotateX(-Math.PI / 2);
       g.translate((collider.minX + collider.maxX) / 2, collider.minY + 0.039, (collider.minZ + collider.maxZ) / 2);
@@ -502,7 +514,7 @@ export class VillaScene {
   /** Read blended Home values on actual rendered frames, never a new cache
    * revision for each tiny lighting/rain transition. */
   private updateAtmosphere(home: VillaHomeState): void {
-    const a = villaAtmosphere(home);
+    const a = villaAtmosphere(home); this.roomMirrors?.update(home);
     const blend = (color: THREE.Color, day: string, evening: string, night: string, rain: string) => {
       if (a.darkness <= .43) color.set(day).lerp(this.atmosphereColor.set(evening), a.darkness / .43);
       else color.set(evening).lerp(this.atmosphereColor.set(night), a.night);
@@ -516,7 +528,7 @@ export class VillaScene {
     blend(this.ambient.color, '#ffe2bd', '#ffdec0', '#b3c7dd', '#c3ccd1');
     this.sky.uniforms.sunColor.value.copy(this.sun.color).multiplyScalar((1 - a.night * .82) * (1 - a.rain * .84));
     this.sun.intensity = a.sun; this.hemi.intensity = a.hemisphere; this.ambient.intensity = a.ambient;
-    if(this.surveyedSun)this.surveyedSun.strength.value=.87*(1-.83*a.rain)*(1-.70*a.night);
+    if(this.surveyedSun){this.surveyedSun.strength.value=.87*(1-.83*a.rain)*(1-.70*a.night);this.surveyedSun.room.setAtmosphere(a.sun,a.rain,a.night); }
     this.renderer.toneMappingExposure = a.exposure;
     this.scene.environmentIntensity = .32 * (1 - a.darkness * .72) * (1 - a.rain * .3);
     const fog = this.scene.fog as THREE.Fog;
@@ -687,7 +699,7 @@ export class VillaScene {
     if (this.disposed) return;
     this.disposed = true;
     this.readback?.dispose(); this.readback=null; this.homeCutKey=null;
-    this.staticView?.dispose();this.surveyedSun?.dispose();
+    this.roomMirrors?.dispose();this.staticView?.dispose();this.surveyedSun?.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
@@ -699,6 +711,7 @@ export class VillaScene {
     });
     materials.forEach(m => { Object.values(m).forEach(value => { if (value instanceof THREE.Texture) textures.add(value); }); m.dispose(); });
     if (this.groundSwatches){for(const t of Object.values(this.groundSwatches.maps))textures.delete(t);this.groundSwatches.dispose();}
+    if (this.roomSwatches){for(const t of Object.values(this.roomSwatches.maps))textures.delete(t);this.roomSwatches.dispose();}
     textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose());
     this.environment.dispose();
     this.securityTarget?.dispose(); this.securityTarget = null;

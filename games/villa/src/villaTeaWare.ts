@@ -3,16 +3,22 @@ import { FittingSkin, formedTube, vessel, type PathStation, type Section } from 
 
 // Local y=0 is the ground foot, +X points down the spout. A single turned wall is
 // branched at the belly: no solid pot wall or intersecting end cap inside the duct.
-const belly: readonly [r: number, y: number][] = [[.059, .013], [.079, .021], [.096, .032], [.109, .046],
-  [.121, .066], [.127, .086], [.127, .104], [.122, .122], [.111, .139], [.096, .151], [.082, .157], [.08, .163]];
+const teaBelly: readonly [r: number, y: number][] = [[.059, .013], [.075, .0185], [.078, .0205], [.077, .022],
+  [.087, .0255], [.089, .0275], [.088, .029], [.096, .032], [.109, .046], [.121, .066], [.127, .086], [.127, .104],
+  [.122, .122], [.114, .135], [.1115, .137], [.1085, .138], [.105, .142], [.097, .150], [.083, .157], [.080, .163]];
+// The electric kettle is spun sheet, not a scaled replica of the earthen teapot.
+// Its lower body is almost cylindrical, its shoulder folded in under the lid.
+const kettleBelly: readonly [r: number, y: number][] = [[.059, .013], [.116, .015], [.123, .019], [.123, .023], [.119, .025],
+  [.121, .046], [.122, .066], [.123, .086], [.123, .104], [.121, .122], [.117, .137], [.110, .144], [.088, .155], [.080, .163]];
 const duct: readonly PathStation[] = [[.133, .084, 0, .031, .034], [.144, .087, 0, .027, .028],
   [.158, .096, 0, .022, .022], [.175, .113, 0, .0175, .0185], [.193, .135, 0, .0145, .016],
   [.213, .155, 0, .0127, .0145], [.234, .166, 0, .0123, .0144], [.250, .1695, 0, .0128, .0155],
   [.259, .1705, 0, .0144, .017], [.262, .171, 0, .0145, .0173]];
 export const TEA_SPOUT_TIP = { x: .262, y: .171, z: 0 } as const;
 
-export function teaPotBody(path: readonly PathStation[] = duct) {
-  const s = new FittingSkin(), n = 32, lo = 3, hi = 7, half = 2;
+export function teaPotBody(path: readonly PathStation[] = duct, kettle = false) {
+  const belly = kettle ? kettleBelly : teaBelly;
+  const s = new FittingSkin(), n = 32, lo = belly.findIndex(row => row[1] === .046), hi = lo + 4, half = 2;
   const circle = (r: number, y: number, ratio = .83) => Array.from({ length: n }, (_, j) => {
     const a = j * Math.PI * 2 / n; return s.point(r * Math.cos(a), y, r * Math.sin(a) * ratio);
   });
@@ -84,8 +90,9 @@ const cupInner = [[0, .009], [.019, .009], [.024, .0105], [.0265, .013], [.029, 
 const CUP_SIDES = 28;
 export function teaCupShell() {
   return vessel([[0, .0035], [.019, .0035], [.020, 0], [.025, 0], [.026, .0015], [.0257, .005],
-    [.028, .007], [.031, .013], [.036, .025], [.0405, .039], [.044, .050], [.046, .054],
-    [.046, .056], [.044, .0572], ...[...cupInner].reverse()], CUP_SIDES);
+    [.0275, .0067], [.029, .0095], [.0287, .011], [.0315, .013], [.0321, .015], [.032, .0164],
+    [.0365, .025], [.0405, .039], [.043, .049], [.0457, .0518], [.0467, .0542],
+    [.0462, .0562], [.0447, .0575], [.0431, .0574], ...[...cupInner].reverse()], CUP_SIDES);
 }
 
 /** Intersect a convex polygonal bowl with a gravity-horizontal plane. A tilted cup

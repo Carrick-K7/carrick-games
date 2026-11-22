@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { millSection, slabFaces, type Section } from './villaArchitecturalStock.js';
 import { courseSurface } from './villaFloorFinish.js';
+import { faceInteriorWalls, fitRoomLining, putInteriorFloor, roomFinishes } from './villaRoomLining.js';
 import { dressedCourses, dressTimber, exteriorTimber, stoneTint, sample01 } from './villaWeatheredFinish.js';
 import { exteriorPane, fitExteriorGlass, flashedRoof } from './villaExteriorBuildEnvelope.js';
 import { VILLA_BLOCKS, VILLA_OPENING_SCHEDULE, VILLA_SKIRTING_SPANS, type VillaMaterial, type VillaWallSpan } from './villaWorld.js';
@@ -34,6 +35,7 @@ const coping: Section = [[-.225,-.094],[-.040,-.094],[.006,-.064],[.112,-.064],[
 export function createVillaEnvelope(parent: THREE.Object3D, m: VillaSurfaces) {
   const shell = new VillaModelBuilder(parent, 'villa-fabric-and-joinery');
   const agedBronze = villaMaterial('#52473f', .43, .58), gasket = villaMaterial('#343736', .87);
+  const interior = roomFinishes();
   const underside = villaMaterial('#ddd2bf', .94); underside.map = m.plaster.map;
   const oiledOak = m.oak.clone(); oiledOak.color.set('#b69472');
   const cutStone = m.stone.clone(); cutStone.color.set('#c4b5a1');
@@ -46,17 +48,25 @@ export function createVillaEnvelope(parent: THREE.Object3D, m: VillaSurfaces) {
       // Substrate stays just below the joints. Finished tops and soffits preserve exact support/clearance.
       const timber = v.material === 'oak', top = v.y+v.h/2, bed = timber ? .0035 : .008;
       shell.geometry(slabFaces(v.x,v.y-bed/2,v.z,v.w,v.h-bed,v.d,false,true),timber ? oiledOak : cutStone);
-      shell.geometry(slabFaces(v.x,v.y,v.z,v.w,v.h,v.d,true), underside);
-      const length=timber?2.6:1.48,pitch=timber?.23:.78;
-      const flags=courseSurface(v.x,top,v.z,v.w,v.d,length,pitch,timber?.002:.007,timber?.0014:.005);
-      if(!timber&&(v.assembly==='balcony-slab'||top>=7.19))shell.geometry(dressedCourses(flags,length,pitch,top),plinth);
-      else shell.geometry(flags,m[v.material]);
+      const soffit=slabFaces(v.x,v.y,v.z,v.w,v.h,v.d,true);
+      if(v.assembly==='storey-slab'){
+        const uv=soffit.getAttribute('uv');for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*2.5,uv.getY(i)*2.5);
+        shell.geometry(soffit,interior.ceiling);
+      }else shell.geometry(soffit,underside);
+      if(timber) putInteriorFloor(shell,v,top,interior);
+      else {
+        const length=1.48,pitch=.78;
+        const flags=courseSurface(v.x,top,v.z,v.w,v.d,length,pitch,.007,.005);
+        shell.geometry(dressedCourses(flags,length,pitch,top),plinth);
+      }
     } else if (v.assembly === 'fascia') {
       const alongX = v.w > v.d, outside = alongX ? v.z > 0 : v.x > 0;
       const yaw = alongX ? (outside ? 0 : Math.PI) : (outside ? Math.PI / 2 : -Math.PI / 2);
       shell.at(v.x,v.y,v.z,yaw,() => shell.geometry(millSection('x',Math.max(v.w,v.d),coping),cutStone));
     } else if(v.material==='roof') {
       flashedRoof(shell,v.x,v.y,v.z,v.w,v.h,v.d,m.roof,agedBronze);
+    } else if(v.material==='plaster' && v.y<7.16){
+      faceInteriorWalls(shell,v,interior,m.plaster);
     } else if (v.assembly !== 'canopy') {
       shell.geometry(slabFaces(v.x,v.y,v.z,v.w,v.h,v.d), m[v.material]);
     }
@@ -156,5 +166,6 @@ export function createVillaEnvelope(parent: THREE.Object3D, m: VillaSurfaces) {
     const x=19.40+i*.52;
     shell.geometry(millSection('z',6.55,[[-.031,0],[.031,0],[.031,-.065],[.022,-.078],[-.02,-.078],[-.031,-.066]]),ash,[x,6.993,-5.02]);
   }
+  fitRoomLining(shell,interior);
   shell.finish(); return shell.root;
 }

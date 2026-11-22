@@ -22,23 +22,30 @@ function surface(x: number, a: number): P3 {
 /** Each ray goes from its OWN basal attachment to a different perimeter point.
  * The connecting web bows in the third dimension, with intervening notches. */
 function rayedFin(b: VillaModelBuilder, base: P3[], tips: P3[], camber: P3, material: THREE.Material, rayRadius: number) {
-  const web = new NatureMesh(), ribs = new NatureMesh();
+  const web = new NatureMesh(), ribs = new NatureMesh(), density:number[]=[];
   let prior: { t: number; m: number; e: number; middle: P3 } | undefined;
   for (let i = 0; i < base.length; i++) {
     const middle = add3(mix3(base[i], tips[i], .55), camber), t = web.point(base[i]), m = web.point(middle), e = web.point(tips[i]);
+    density[t]=.82;density[m]=.54;density[e]=.27;
     ribs.stem([collar(base[i], rayRadius), collar(middle, rayRadius * .76), collar(tips[i], 0)], 4, 0, 0, true);
     if (prior) {
       web.tri(prior.t, prior.m, t); web.tri(t, prior.m, m);
       const nick = web.point(mix3(mix3(tips[i - 1], tips[i], .5), mix3(prior.middle, middle, .5), .16));
-      web.tri(prior.m, prior.e, nick); web.tri(prior.m, nick, m); web.tri(m, nick, e);
+      density[nick]=.32;web.tri(prior.m, prior.e, nick); web.tri(prior.m, nick, m); web.tri(m, nick, e);
     }
     prior = { t, m, e, middle };
   }
-  b.geometry(web.geometry(), material); b.geometry(ribs.geometry(), material);
+  // The rays are mineralised and stay legible through a nearly clear web.
+  // Density fades towards its scalloped perimeter without another part/draw.
+  const lamina=web.geometry(), bones=ribs.geometry();
+  lamina.setAttribute('color',new THREE.Float32BufferAttribute(density.flatMap(a=>[.76,.90,.91,a]),4));
+  bones.setAttribute('color',new THREE.Float32BufferAttribute(Array.from({length:bones.getAttribute('position').count},()=>[.72,.59,.38,.98]).flat(),4));
+  b.geometry(lamina,material);b.geometry(bones,material);
 }
 export function medakaTemplates(template: THREE.Group) {
   const silver = villaMaterial('#a9b8b4', .27, .36), stripe = villaMaterial('#c3e4f2', .15, .76), eye = villaMaterial('#233239', .24);
-  const fin = villaMaterial('#c2d9d0', .36, .12); fin.transparent = true; fin.opacity = .45; fin.depthWrite = false; fin.side = THREE.DoubleSide; fin.forceSinglePass = true;
+  silver.vertexColors=true; silver.name='medaka / blue flank and pearl belly';
+  const fin = villaMaterial('#dfdfc8', .36, .12); fin.vertexColors=true;fin.transparent = true; fin.opacity = .45; fin.depthWrite = false; fin.side = THREE.DoubleSide; fin.forceSinglePass = true;
   const fish = new VillaModelBuilder(template, 'medaka-template'), tail = new VillaModelBuilder(template, 'medaka-tail');
   const figure = new NatureMesh(), angles = [0, .25, .69, 1.16, 1.57, 2.07, 2.6, Math.PI, 3.69, 4.22, 4.71, 5.12, 5.59, Math.PI * 2 - .25];
   figure.skin([[[stations[0][0], .0003, 0]], ...stations.map(r => angles.map(a => flank(r, a))), [[.0566, .0047, 0]]]);
@@ -52,16 +59,29 @@ export function medakaTemplates(template: THREE.Group) {
     });
     (dorsal ? glint : opaque).push(...ids);
   }
-  const marking = body.clone(); marking.setIndex(glint); body.setIndex(opaque); fish.geometry(body, silver); fish.geometry(marking, stripe);
+  const marking=body.clone();marking.setIndex(glint);body.setIndex(opaque);
+  // Counter-shading and a shadow beneath the dorsal mirror define both
+  // flanks against a lit room. The blue-silver ridge is still actual skin.
+  const colors:number[]=[], p=body.getAttribute('position');
+  for(let i=0;i<p.count;i++) {
+    const slot=(i-1+angles.length)%angles.length, a=Math.cos(angles[slot]);
+    const dorsal=Math.max(0,a), band=Math.exp(-((a-.38)**2)/.044)*(p.getX(i)<.032?1:.3);
+    colors.push(1.12-.63*dorsal-.48*band,1.10-.47*dorsal-.32*band,.95-.19*dorsal-.14*band);
+  }
+  body.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));fish.geometry(body,silver);fish.geometry(marking,stripe);
   for (const side of [-1, 1]) {
     const iris = surface(.038, side * 1.22);
     const orb = (p: P3, size: P3, paint: THREE.Material) => { const g = new THREE.SphereGeometry(1, 10, 6); g.scale(...size); fish.geometry(g, paint, p); };
     orb(iris, [.00325, .00325, .0017], stripe);
     orb(add3(iris, [.00015, 0, side * .0008]), [.00240, .00243, .0013], eye);
     orb(add3(iris, [.0007, .0010, side * .0018]), [.00066, .00067, .00037], stripe);
-    // Opercular fold fits the sampled flank instead of a misplaced overlay.
-    const gill = new NatureMesh(); gill.stem([collar(surface(.029, side * .83), .00030), collar(surface(.025, side * 1.59), .00047),
-      collar(surface(.028, side * 2.30), .00032), collar(surface(.032, side * 2.61), 0)], 5, 0, 0, true); fish.geometry(gill.geometry(), stripe);
+    // The pearly operculum returns to a narrow pigmented opening behind the
+    // eye. Its cut follows the changing section instead of printing a decal.
+    const arc=[[.031,.62],[.027,.95],[.0247,1.43],[.024,1.83],[.027,2.22],[.032,2.55]];
+    for(const [lead,paint] of [[0,eye],[.00135,stripe]] as const) {
+      const gill=new NatureMesh();gill.stem(arc.map(([x,a],j)=>collar(add3(surface(x+lead,side*a),[0,0,side*.00018]),
+        j===arc.length-1?0:j===0?.00027:lead?.00040:.00063)),5,0,0,true);fish.geometry(gill.geometry(),paint);
+    }
     const mouth = new NatureMesh(); mouth.stem([collar(surface(.051, side * 1.88), .00028), collar(surface(.054, side * 1.56), .00035), collar([.0564, .0047, 0], .00026)], 5); fish.geometry(mouth.geometry(), eye);
     const base = [surface(.002, side * 2.57), surface(-.001, side * 2.59), surface(-.004, side * 2.59)];
     rayedFin(fish, base, [[-.011, -.014, side * .0085], [-.015, -.015, side * .0093], [-.018, -.013, side * .0083]], [0, -.0006, side * .0004], fin, .00022);
