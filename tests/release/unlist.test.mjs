@@ -578,16 +578,16 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     return end === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + end);
   };
   const budgets = { unlist: 10, plan: 10, common: 90, games: 70, shell: 50, 'bootstrap-shell': 50 };
-  const verifyBounds = { games: 3000, shell: 1800, 'bootstrap-shell': 1800 };
+  const verifyBounds = { games: 3060, shell: 1800, 'bootstrap-shell': 1800 };
   for (const [name, minutes] of Object.entries(budgets)) {
     assert.match(job(name), new RegExp(`^    timeout-minutes: ${minutes}$`, 'm'), `job ${name} budget`);
   }
   assert.match(job('common'), /run: timeout -k 10 4200 node scripts\/ci\.mjs verify all/);
-  // Villa full-cell baseline, measured 2026-11-22: run 45012800013 finished 58/62
-  // browser cases 29m44s into verify. Scaling the remaining four cases from the
-  // same 62-case suite in run 44994730934 by the 1.287x slower completed prefix
-  // projects 32m23s (1943s). Never re-size this from the retired 12–18m samples.
-  const villaMeasuredVerifySeconds = 1943;
+  // Villa full-cell baseline, measured 2026-11-22: attempts 1 and 2 of run
+  // 45023198147 both completed all 62 browser cases; their verify steps took
+  // 33m31s (2011s) and 32m54s. Keep the slower observation as the baseline and
+  // never re-size this from the retired 12–18m samples.
+  const villaMeasuredVerifySeconds = 2011;
   assert.ok(verifyBounds.games >= villaMeasuredVerifySeconds * 1.5,
     'game verify budget keeps at least 1.5x headroom over the measured Villa baseline');
   for (const name of ['games', 'shell', 'bootstrap-shell']) {

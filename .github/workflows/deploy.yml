@@ -140,8 +140,8 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-24.04
-    # Villa's current suite projects to 32m23s from run 45012800013; keep
-    # verify + publish + setup/cleanup inside the job so logs can upload.
+    # Villa's slowest complete verify is 33m31s (run 45023198147, attempt 1);
+    # keep verify + publish + setup/cleanup inside the job so logs can upload.
     timeout-minutes: 70
     strategy:
       fail-fast: false
@@ -169,8 +169,8 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - name: Verify candidate with pinned published counterparts
-        # 50m is 1.54x the measured 32m23s Villa baseline, not the retired 12–18m sample.
-        run: timeout -k 10 3000 node scripts/ci.mjs verify '${{ matrix.id }}'
+        # 51m is 1.52x the slowest complete 33m31s Villa measurement, not the retired 12–18m sample.
+        run: timeout -k 10 3060 node scripts/ci.mjs verify '${{ matrix.id }}'
       - name: Publish only this verified game
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.publish
         env:
