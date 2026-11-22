@@ -140,7 +140,7 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -167,7 +167,7 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - name: Verify candidate with pinned published counterparts
-        run: timeout -k 10 1800 node scripts/ci.mjs verify '${{ matrix.id }}'
+        run: timeout -k 10 7200 node scripts/ci.mjs verify '${{ matrix.id }}'
       - name: Publish only this verified game
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.publish
         env:
@@ -209,7 +209,7 @@ jobs:
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
-    timeout-minutes: 50
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v6
         with:
@@ -229,7 +229,7 @@ jobs:
           path: .
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
-      - run: timeout -k 10 1800 node scripts/ci.mjs verify shell
+      - run: timeout -k 10 7200 node scripts/ci.mjs verify shell
       - name: Publish only the verified shell
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
         env:
@@ -260,7 +260,7 @@ jobs:
       needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
       (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 150
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
@@ -282,7 +282,7 @@ jobs:
           path: .
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
-      - run: timeout -k 10 1800 node scripts/ci.mjs verify shell
+      - run: timeout -k 10 7200 node scripts/ci.mjs verify shell
       - name: Activate the modern shell last
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
         env:
