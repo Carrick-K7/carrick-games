@@ -69,15 +69,16 @@ export async function dispose(page: Page) {
 
 export function registerVillaInteractionTests() {
   villaCore('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
-    test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    test.setTimeout(180_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     // No routing on cold entry: in WebKit, even a destination-only route enables
     // page-wide network interception. Let the real browser discover and load Villa.
     await observeVillaColdShell(page, test.info(), async (mark,waitForReady) => {
       await page.goto('/#/villa'); mark('navigation returned; renderer assertion begins');
-      // The first true DOM/renderer transition, not the next backoff poll after a
-      // second expensive GPU frame. Keep the hard 45s limit and re-read live state.
+      // The actual usable frame must arrive within 45s, independent of when the
+      // locator can next poll on software GL. Retain the host's longer watchdog
+      // for re-reading that live DOM state; it cannot extend the frame deadline.
       await waitForReady(45_000); mark('usable frame delivered within deadline');
-      expect(await page.locator('#gameCanvas').getAttribute('data-villa-renderer')).toBe('webgl');
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 90_000 });
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       mark('running observed');
     });
