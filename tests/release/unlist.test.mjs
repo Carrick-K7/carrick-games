@@ -577,14 +577,22 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     const end = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
     return end === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + end);
   };
-  const budgets = { unlist: 10, plan: 10, common: 90, games: 50, shell: 50, 'bootstrap-shell': 50 };
+  const budgets = { unlist: 10, plan: 10, common: 90, games: 70, shell: 50, 'bootstrap-shell': 50 };
+  const verifyBounds = { games: 3000, shell: 1800, 'bootstrap-shell': 1800 };
   for (const [name, minutes] of Object.entries(budgets)) {
     assert.match(job(name), new RegExp(`^    timeout-minutes: ${minutes}$`, 'm'), `job ${name} budget`);
   }
   assert.match(job('common'), /run: timeout -k 10 4200 node scripts\/ci\.mjs verify all/);
+  // Villa full-cell baseline, measured 2026-11-22: run 45012800013 finished 58/62
+  // browser cases 29m44s into verify. Scaling the remaining four cases from the
+  // same 62-case suite in run 44994730934 by the 1.287x slower completed prefix
+  // projects 32m23s (1943s). Never re-size this from the retired 12–18m samples.
+  const villaMeasuredVerifySeconds = 1943;
+  assert.ok(verifyBounds.games >= villaMeasuredVerifySeconds * 1.5,
+    'game verify budget keeps at least 1.5x headroom over the measured Villa baseline');
   for (const name of ['games', 'shell', 'bootstrap-shell']) {
     const body = job(name);
-    assert.match(body, /run: timeout -k 10 1800 node scripts\/ci\.mjs verify/, `verify bound ${name}`);
+    assert.match(body, new RegExp(`run: timeout -k 10 ${verifyBounds[name]} node scripts\\/ci\\.mjs verify`), `verify bound ${name}`);
     const publish = body.match(/run: timeout -k 10 (\d+) node scripts\/ci\.mjs publish .*?2>&1 \| tee "([^"]+)"/);
     assert.ok(publish, `publish step ${name}`);
     assert.equal(publish[1], '900', `publish bound ${name}`);
@@ -596,9 +604,9 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     assert.ok(preserve.includes(`name: ${artifact}-attempt-\${{ github.run_attempt }}-publish-log`), `artifact name ${name}`);
     assert.ok(preserve.includes(`path: ${publish[2]}`), `upload path matches tee ${name}`);
     assert.match(preserve, /retention-days: 7\s+if-no-files-found: ignore/, name);
-    // Worst case verify 1800s + publish 900s + checkout/install ~120s must fit the job budget,
+    // Worst case verify + publish 900s + checkout/install ~120s must fit the job budget,
     // otherwise the job dies before this point and the log artifact is never uploaded.
-    assert.ok(1800 + 900 + 120 < budgets[name] * 60, `worst case fits job budget ${name}`);
+    assert.ok(verifyBounds[name] + 900 + 120 < budgets[name] * 60, `worst case fits job budget ${name}`);
   }
   assert.ok(4200 + 120 < budgets.common * 60, 'worst case fits common budget');
 });
