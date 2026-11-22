@@ -138,7 +138,7 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -207,7 +207,7 @@ jobs:
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v6
         with:
@@ -258,7 +258,7 @@ jobs:
       needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
       (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 50
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
