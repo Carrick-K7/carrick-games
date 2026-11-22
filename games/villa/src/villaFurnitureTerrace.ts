@@ -75,18 +75,41 @@ export function patioTable(k: FurnitureKit) {
 export function poolLounger(k: FurnitureKit) {
   const { m, put } = k;
   // Continuous steamed runners rise from the calf support to the headstay.
-  const side = [[-1.157, .335], [-1.103, .373], [-.910, .381], [-.463, .421], [-.25, .415], [.307, .345], [.487, .366], [.588, .411], [1.064, .846], [1.173, .885], [1.202, .84], [1.138, .762], [.634, .321], [.469, .271], [.361, .263], [-.250, .329], [-.464, .338], [-.905, .30], [-1.116, .292]];
+  const sections = [[-1.112,.382],[-1.077,.398],[-.90,.410],[-.465,.446],[-.30,.45],[.18,.394],[.384,.388],[.507,.411],[.602,.472],[.851,.688],[1.061,.874],[1.138,.901]];
+  const side = [[-1.157,.341],...sections.map(([z,y])=>[z,y-.011]),[1.173,.892],[1.202,.84],[1.138,.762],[.634,.321],[.469,.271],[.361,.263],[-.250,.329],[-.464,.338],[-.905,.30],[-1.116,.292]];
   for (const sx of [-1, 1]) {
-    put(casting(side, .061), m.oak, sx * .425, 0, 0, 0, -Math.PI / 2);
+    const runner=casting(side,.061), p=runner.getAttribute('position'), uv=runner.getAttribute('uv');
+    for(let i=0;i<p.count;i++)uv.setXY(i,(p.getX(i)+.31*p.getY(i))/.98,(p.getZ(i)+p.getY(i))/.37+sx*.17);
+    put(runner, m.oak, sx * .425, 0, 0, 0, -Math.PI / 2);
     bent(k, m.walnut, [[sx * .419, .306, -.927, .031], [sx * .419, .147, -.881, .030], [sx * .419, .033, -.789, .031], [sx * .419, .029, -.688, .030], [sx * .419, .276, -.492, .028]]);
     bent(k, m.walnut, [[sx * .419, .297, .472, .030], [sx * .419, .028, .814, .032], [sx * .419, .031, .93, .030], [sx * .419, .74, 1.106, .031]]);
   }
   for (const [z, y] of [[-1.066, .352], [-.41, .39], [.455, .324], [1.104, .848]]) rail(k, [-.421, y, z], [.421, y, z], .018, m.walnut);
-  const sections = [[-1.112, .382], [-1.077, .398], [-.90, .410], [-.465, .446], [-.30, .45], [.18, .394], [.384, .388], [.507, .411], [.602, .472], [.851, .688], [1.061, .874], [1.138, .901]];
-  put(sheet([-1, -.95, -.68, 0, .68, .95, 1], sections.map((_, i) => i), (u, i, under) => {
-    const [z, y] = sections[i], slack = (.028 + .014 * Math.cos(z * 3)) * (1 - u * u);
-    return [u * .417, y - slack - (under ? .015 : 0), z];
-  }), m.linen, 0, 0, 0);
+  const rows=sections.map((_,i)=>i), distance=[0];
+  for(let j=1;j<sections.length;j++)distance.push(distance[j-1]+Math.hypot(sections[j][0]-sections[j-1][0],sections[j][1]-sections[j-1][1]));
+  const surface=(u:number,i:number,under:boolean):Point=>{
+    const [z,y]=sections[i], load=1-u*u, slack=(.035+.014*Math.cos(z*3))*load;
+    const dart=Math.abs(u)-(.67+.085*z), pull=.007*Math.exp(-dart*dart/.023)*Math.sin(5*z+u)*load;
+    return [u*.417,y-slack+pull-(under?.011:0),z];
+  };
+  // Slice two narrow warp stripes from ONE continuous closed skin. Normals and
+  // metre UVs match across the yarn colour changes, with no buried sidewalls.
+  const cols=[-1,-.954,-.907,-.51,0,.51,.907,.954,1], g=sheet(cols,rows,surface), uv=g.getAttribute('uv');
+  for(let j=0;j<uv.count;j++){
+    const i=j%cols.length, row=Math.floor(j/cols.length)%rows.length;
+    uv.setXY(j,cols[i]*.417/.24,distance[row]/.24);
+  }
+  const bands:number[][]=[[],[]], indices=g.index!;
+  for(let j=0;j<indices.count;j+=3){
+    const a=indices.getX(j),b=indices.getX(j+1),c=indices.getX(j+2);
+    const u=Math.abs((cols[a%cols.length]+cols[b%cols.length]+cols[c%cols.length])/3);
+    bands[u>.907&&u<.954?1:0].push(a,b,c);
+  }
+  bands.forEach((tris,i)=>{
+    const piece=new THREE.BufferGeometry();
+    for(const [key,attribute] of Object.entries(g.attributes))piece.setAttribute(key,attribute);
+    piece.setIndex(tris);put(piece,i?m.sage:m.linen,0,0,0);
+  });g.dispose();
   put(pillowForm(.632, .270, .145), m.sage, 0, .848, 1.006, -.673);
 }
 
@@ -99,10 +122,23 @@ export function parasol(k: FurnitureKit) {
     const a = -2 * Math.PI * i / (n * 3), f = i % 3 ? .972 : 1, scallop = i % 3 ? hem : 0;
     return [Math.cos(a) * r * f, y - scallop, Math.sin(a) * r * f];
   });
-  put(loft([panel(.037, 2.875, 0), panel(.477, 2.785, .022), panel(1.07, 2.592, .037), panel(1.628, 2.365, .031),
-    panel(1.638, 2.293, .076), panel(1.651, 2.296, .076), panel(1.65, 2.373, .031), panel(1.082, 2.607, .037), panel(.482, 2.800, .022), panel(.041, 2.895, 0)]), m.linen, 0, 0, 0);
-  for (let i = 0; i < n; i++) k.at(0, 0, 0, i * 2 * Math.PI / n, () => {
-    bent(k, m.oak, [[0, 2.863, .033, .012], [0, 2.77, .47, .012], [0, 2.58, 1.07, .012], [0, 2.353, 1.622, .009]], 6);
+  const canopy=loft([panel(.037, 2.875, 0), panel(.477, 2.785, .022), panel(1.07, 2.592, .037), panel(1.628, 2.365, .031),
+    panel(1.638, 2.293, .076), panel(1.651, 2.296, .076), panel(1.65, 2.373, .031), panel(1.082, 2.607, .037), panel(.482, 2.800, .022), panel(.041, 2.895, 0)]);
+  // Each triangular gore is cut on its radial warp. Unroll the valance down
+  // from its seam; the last gore doesn't interpolate across an entire UV wrap.
+  const cloth=canopy.toNonIndexed();canopy.dispose();
+  const p=cloth.getAttribute('position'),uv=cloth.getAttribute('uv'),arc=2*Math.PI/n;
+  for(let i=0;i<p.count;i+=3){
+    const cx=p.getX(i)+p.getX(i+1)+p.getX(i+2),cz=p.getZ(i)+p.getZ(i+1)+p.getZ(i+2);
+    const a=(Math.floor(Math.atan2(cz,cx)/arc)+.5)*arc, co=Math.cos(a),si=Math.sin(a);
+    for(let j=i;j<i+3;j++){
+      const x=p.getX(j),z=p.getZ(j),y=p.getY(j),r=x*co+z*si;
+      uv.setXY(j,(z*co-x*si)/.24,(r*.95+(2.895-y)*.31+Math.max(0,2.365-y)*.68)/.24);
+    }
+  }
+  put(cloth,m.linen,0,0,0);
+  for (let i = 0; i < n; i++) k.at(0, 0, 0, Math.PI/2+i*arc, () => {
+    bent(k, m.oak, [[0, 2.863, .033, .012], [0, 2.774, .47, .012], [0, 2.58, 1.07, .012], [0, 2.357, 1.622, .009]], 6);
     rail(k, [0, 2.279, .040], [0, 2.65, .838], .010, m.brass, 6);
   });
 }

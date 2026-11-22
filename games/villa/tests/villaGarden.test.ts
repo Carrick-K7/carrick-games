@@ -7,6 +7,7 @@ import {
 import { STAIR_HOLE, VILLA_SPAWN, villaCollides, type VillaCollider } from '../src/villaWorld.js';
 import { VILLA_EAST_WALL, VILLA_NORTH_WALL, VILLA_SOUTH_WALL, VILLA_WEST_WALL } from '../src/villaEstateLayout';
 import { villaDistanceToRoad } from '../src/villaDrivingCourse';
+import { fruitOf, percentile, surfaceOf } from './villaOrchardSampling.js';
 const WEST = VILLA_WEST_WALL, EAST = VILLA_EAST_WALL, NORTH = VILLA_NORTH_WALL, SOUTH = VILLA_SOUTH_WALL;
 
 const rect = (minX: number, maxX: number, minZ: number, maxZ: number) => ({ minX, maxX, minZ, maxZ });
@@ -20,7 +21,9 @@ const dispose = (root: THREE.Object3D) => {
       for (const material of Array.isArray(node.material) ? node.material : [node.material]) materials.add(material);
     }
   });
-  materials.forEach(material => material.dispose()); root.clear();
+  const maps = new Set<THREE.Texture>();
+  materials.forEach(material => { for (const value of Object.values(material)) if (value instanceof THREE.Texture) maps.add(value); material.dispose(); });
+  maps.forEach(t => t.dispose()); root.clear();
 };
 
 describe('authored villa garden', () => {
@@ -58,7 +61,9 @@ describe('authored villa garden', () => {
     const trees = root.children.filter(n => n.userData.kind === 'fruit-tree');
     expect(trees).toHaveLength(VILLA_GARDEN_TREES.length);
     for (const tree of trees) {
-      expect(tree.userData.fruitClusters).toBe(12);
+      // A cluster counts a bearing spur, not one fixed pair per 30° sector.
+      expect(tree.userData.fruitClusters).toBeGreaterThanOrEqual(12);
+      expect(tree.userData.fruitClusters).toBeLessThanOrEqual(26);
       expect(tree.userData.fruitHeight[0]).toBeGreaterThan(1.6);
       expect(tree.userData.fruitHeight[1]).toBeLessThan(3.5);
       expect(tree.name).toContain(tree.userData.species);
@@ -67,77 +72,45 @@ describe('authored villa garden', () => {
     expect(root.getObjectByName('Garden/fruit-tree/mango')?.userData.shape).toBe('elongated-mango');
   });
 
-  it('actually renders each fruit color below the canopy, including elongated mango geometry', () => {
-    for (const [species, spec] of Object.entries(VILLA_FRUIT_SPECIES)) {
-      const mesh = meshes.find(m => (m.material as THREE.MeshStandardMaterial).color.getHexString() === spec.fruit.slice(1));
-      expect(mesh, `${species} fruit batch`).toBeDefined();
-      const tree = VILLA_GARDEN_TREES.find(t => t.species === species)!;
-      const positions = mesh!.geometry.getAttribute('position');
-      const visibleFruit = new THREE.Box3();
-      // Isolate the outer east fruit pair on the selected tree, excluding other trees/crops.
-      for (let i = 0; i < positions.count; i++) {
-        const p = new THREE.Vector3().fromBufferAttribute(positions, i);
-        if (p.x > tree.x + 0.65 * tree.scale && p.x < tree.x + 1.65 * tree.scale && Math.abs(p.z - tree.z) < 0.2 * tree.scale) visibleFruit.expandByPoint(p);
-      }
-      expect(visibleFruit.isEmpty()).toBe(false);
-      expect(visibleFruit.min.y).toBeGreaterThan(1.6);
-      expect(visibleFruit.max.y).toBeLessThan(3.7);
-      if (species === 'mango') expect(visibleFruit.max.y - visibleFruit.min.y).toBeGreaterThan(0.5 * tree.scale);
+  it('measures actual fruit inside the crown at different depths and heights, not pairs on an east-facing hoop', () => {
+    for (const tree of VILLA_GARDEN_TREES) {
+      const marker = root.children.find(n => n.userData.kind === 'fruit-tree' && n.position.x === tree.x && n.position.z === tree.z)!;
+      const parts = fruitOf(meshes, tree), centers = parts.map(p => p.box.getCenter(new THREE.Vector3()));
+      expect(parts.length).toBeGreaterThanOrEqual(marker.userData.fruitClusters); // some spurs carry more than one fruit
+      const depths = centers.map(c => Math.hypot(c.x - tree.x, c.z - tree.z) / tree.scale);
+      expect(percentile(depths, .9) - percentile(depths, .1), tree.species).toBeGreaterThan(.36);
+      expect(new Set(centers.map(p => Math.round(p.y / .095))).size, tree.species).toBeGreaterThanOrEqual(7);
+      expect(marker.userData.fruitHeight[0]).toBeCloseTo(Math.min(...parts.map(p => p.box.min.y)) - marker.position.y, 4);
+      expect(marker.userData.fruitHeight[1]).toBeCloseTo(Math.max(...parts.map(p => p.box.max.y)) - marker.position.y, 4);
     }
   });
 
-  it('keeps paired fruit surfaces separated and cherries smaller than the other orchard fruit', () => {
-    const sphere = new THREE.SphereGeometry(1, 8, 5), smooth = new THREE.SphereGeometry(1, 16, 12);
-    const lowCount = sphere.index!.count, mangoCount = smooth.index!.count;
-    sphere.dispose(); smooth.dispose();
-    for (const [species, spec] of Object.entries(VILLA_FRUIT_SPECIES)) {
-      const mesh = meshes.find(m => (m.material as THREE.MeshStandardMaterial).color.getHexString() === spec.fruit.slice(1))!;
-      const p = mesh.geometry.getAttribute('position');
-      const perFruit = species === 'mango' ? mangoCount : lowCount * (species === 'apple' ? 3 : species === 'pear' || species === 'lemon' ? 2 : 1);
-      const trees = VILLA_GARDEN_TREES.filter(t => t.species === species);
-      trees.forEach((tree, treeIndex) => {
-        for (let cluster = 0; cluster < 12; cluster++) {
-          const a = cluster * Math.PI / 6, spans: [number, number][] = [];
-          for (let fruit = 0; fruit < 2; fruit++) {
-            let min = Infinity, max = -Infinity;
-            const bounds = new THREE.Box3(), start = (treeIndex * 24 + cluster * 2 + fruit) * perFruit;
-            for (let i = start; i < start + perFruit; i++) {
-              const point = new THREE.Vector3().fromBufferAttribute(p, i); bounds.expandByPoint(point);
-              const radial = (point.x - tree.x) * Math.cos(a) + (point.z - tree.z) * Math.sin(a);
-              min = Math.min(min, radial); max = Math.max(max, radial);
-            }
-            spans.push([min, max]);
-            if (species === 'cherry') expect(bounds.max.y - bounds.min.y).toBeLessThan(0.17 * tree.scale);
-          }
-          expect(spans[1][0] - spans[0][1], `${species} cluster ${cluster}`).toBeGreaterThan(0.025 * tree.scale);
+  it('keeps bearing fruit separated, within ripe cultivar dimensions independent of trunk scale', () => {
+    // [minimum, maximum] height in metres, from blossom end to shoulder.
+    const heights = { cherry: [.018, .031], orange: [.063, .091], apple: [.058, .083], pear: [.084, .120], lemon: [.073, .104], mango: [.138, .190] };
+    for (const tree of VILLA_GARDEN_TREES) {
+      const fruit = fruitOf(meshes, tree), boxes = fruit.map(f => ({ c: f.box.getCenter(new THREE.Vector3()), d: f.box.getSize(new THREE.Vector3()) }));
+      for (const [i, { c, d }] of boxes.entries()) {
+        expect(d.y, tree.species).toBeGreaterThan(heights[tree.species][0]); expect(d.y).toBeLessThan(heights[tree.species][1]);
+        if (tree.species === 'cherry') expect(Math.max(d.x, d.z)).toBeLessThan(.032);
+        if (tree.species === 'mango') expect(d.y).toBeGreaterThan(1.48 * Math.max(d.x, d.z));
+        for (const prior of boxes.slice(0, i)) {
+          const clearance = Math.hypot(2 * (c.x - prior.c.x) / (d.x + prior.d.x), 2 * (c.y - prior.c.y) / (d.y + prior.d.y), 2 * (c.z - prior.c.z) / (d.z + prior.d.z));
+          expect(clearance, `${tree.species} fruit ellipsoids overlap`).toBeGreaterThan(1);
         }
-      });
+      }
+      if (tree.species === 'cherry') expect(boxes.filter(a => boxes.some(b => b !== a && a.c.distanceTo(b.c) < .063)).length).toBeGreaterThan(boxes.length * .86);
     }
   });
 
-  it('renders each mango as one continuous smooth skin with integrated subtle vertex-color blush', () => {
-    const mesh = meshes.find(m => (m.material as THREE.MeshStandardMaterial).color.getHexString() === VILLA_FRUIT_SPECIES.mango.fruit.slice(1))!;
-    const sphere = new THREE.SphereGeometry(1, 16, 12), perFruit = sphere.index!.count; sphere.dispose();
-    const p = mesh.geometry.getAttribute('position'), color = mesh.geometry.getAttribute('color');
-    expect(p.count).toBe(VILLA_GARDEN_TREES.filter(t => t.species === 'mango').length * 24 * perFruit);
-    expect((mesh.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
-    expect(color.count).toBe(p.count);
-    let minGreen = 1;
-    // Weld the seam/poles of the first fruit and verify one connected triangle skin.
-    const adjacent = new Map<string, Set<string>>();
-    for (let i = 0; i < perFruit; i += 3) {
-      const triangle: string[] = [];
-      for (let j = 0; j < 3; j++) {
-        const k = i + j, key = [p.getX(k), p.getY(k), p.getZ(k)].map(n => n.toFixed(5)).join('/');
-        triangle.push(key); if (!adjacent.has(key)) adjacent.set(key, new Set());
-        minGreen = Math.min(minGreen, color.getY(k));
-      }
-      for (const a of triangle) for (const b of triangle) adjacent.get(a)!.add(b);
+  it('renders every mango as one watertight curved skin with pigment variation across the cheek', () => {
+    const mesh = surfaceOf(meshes, VILLA_FRUIT_SPECIES.mango.fruit), p = mesh.geometry.getAttribute('position'), rgb = mesh.geometry.getAttribute('color');
+    expect((mesh.material as THREE.MeshStandardMaterial).vertexColors).toBe(true); expect(rgb.count).toBe(p.count);
+    const blush = new Set<number>(); for (let i = 0; i < rgb.count; i++) blush.add(Math.round(rgb.getX(i) / rgb.getY(i) * 100));
+    expect(blush.size).toBeGreaterThan(13); // hue across the same skin, not a second blush mesh or simply a brightness gradient
+    for (const t of VILLA_GARDEN_TREES.filter(t => t.species === 'mango')) {
+      for (const fruit of fruitOf(meshes, t)) { expect(fruit.manifold).toBe(true); expect(fruit.points.length).toBeGreaterThan(56); }
     }
-    const pending = [adjacent.keys().next().value!], seen = new Set<string>();
-    while (pending.length) { const key = pending.pop()!; if (seen.has(key)) continue; seen.add(key); pending.push(...adjacent.get(key)!); }
-    expect(seen.size).toBe(adjacent.size);
-    expect(minGreen).toBeGreaterThan(0.8); expect(minGreen).toBeLessThan(0.98);
   });
 
   it('gives the six tree species different geometric crown proportions, not only different colors', () => {
@@ -212,13 +185,23 @@ describe('authored villa garden', () => {
     expect(new Set(meshes.map(m => m.material)).size).toBe(meshes.length);
     expect(root.children.filter(n => !(n instanceof THREE.Mesh))).toHaveLength(VILLA_GARDEN_TREES.length + VILLA_ROOF_PLANTERS.length + VILLA_ROOF_POTS.length + VILLA_VEGETABLE_BEDS.length);
     let vertices = 0;
+    const charts = new Map<string, THREE.Texture>();
+    const sizes = new Map<string, [number, number]>([
+      ['orchard/bark', [768, 256]], ['kitchen-garden/leaf-lamina', [256, 256]], ['kitchen-garden/stock-and-loam', [512, 256]],
+      ...Object.keys(VILLA_FRUIT_SPECIES).map((s): [string, [number, number]] => [`orchard/${s}-sprigs`, [256, 256]]),
+      ...Object.keys(VILLA_FRUIT_SPECIES).map((s): [string, [number, number]] => [`orchard/${s}-lamina-normals`, [128, 128]]),
+    ]);
     for (const mesh of meshes) {
       const p = mesh.geometry.getAttribute('position'); vertices += p.count;
       expect(p.count).toBeGreaterThan(0); expect(mesh.geometry.getAttribute('normal').count).toBe(p.count);
       expect(mesh.geometry.getAttribute('uv').count).toBe(p.count);
       expect(Array.from(p.array).every(Number.isFinite)).toBe(true);
       expect(mesh.castShadow && mesh.receiveShadow).toBe(true);
-      expect((mesh.material as THREE.MeshStandardMaterial).map).toBeNull();
+      for (const map of Object.values(mesh.material).filter((v): v is THREE.Texture => v instanceof THREE.Texture)) {
+        expect(map).toBeInstanceOf(THREE.DataTexture); expect(sizes.get(map.name)).toEqual([map.image.width, map.image.height]);
+        expect(map.image.data.byteLength).toBeLessThanOrEqual(map.image.width * map.image.height * 4);
+        if (charts.has(map.name)) expect(map === charts.get(map.name)).toBe(true); else charts.set(map.name, map);
+      }
     }
     expect(vertices).toBeLessThan(600_000);
     expect(root.children.some(n => n instanceof THREE.Light || n instanceof THREE.Sprite)).toBe(false);
@@ -232,7 +215,15 @@ describe('authored villa garden', () => {
       expect(secondMeshes.length).toBe(meshes.length);
       meshes.forEach((mesh, index) => {
         const otherMesh = secondMeshes[index];
-        expect(otherMesh.material).not.toBe(mesh.material);
+        // Test identity directly: a deep equality diagnostic on several MiB of
+        // typed pixels costs far more than reconstructing the actual garden.
+        expect(otherMesh.material !== mesh.material).toBe(true);
+        for (const slot of ['map', 'normalMap'] as const) {
+          const map = (mesh.material as THREE.MeshStandardMaterial)[slot], otherMap = (otherMesh.material as THREE.MeshStandardMaterial)[slot];
+          if (!map) continue; expect(Boolean(otherMap && otherMap !== map)).toBe(true);
+          const pixels = map.image.data, otherPixels = otherMap!.image.data; expect(otherPixels !== pixels).toBe(true);
+          expect(otherPixels.length).toBe(pixels.length); expect(otherPixels.every((v: number, i: number) => v === pixels[i])).toBe(true);
+        }
         const a = mesh.geometry.getAttribute('position').array, b = otherMesh.geometry.getAttribute('position').array;
         expect(a.length).toBe(b.length);
         expect(a.every((value, i) => value === b[i])).toBe(true);

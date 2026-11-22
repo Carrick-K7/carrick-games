@@ -3,7 +3,8 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { registerVillaSeatCollider } from './villaSeating.js';
 import { registerVillaCampingCollider, VILLA_SWING, villaSwingSeat, villaCampingCarryPose, type VillaOutdoorState } from './villaOutdoor.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
-import { fabricPanel, sawnGrain, timberMember } from './villaOutdoorJoinery.js';
+import { canvasWeave, fabricPanel, sawnGrain, timberMember } from './villaOutdoorJoinery.js';
+import { millSection, turnSection, type Section } from './villaArchitecturalStock.js';
 import { NatureMesh, collar, type P3 } from './villaNatureGeometry.js';
 import type { VillaCollider, VillaPosition } from './villaWorld.js';
 
@@ -12,10 +13,10 @@ export function createVillaOutdoorModel(parent: THREE.Object3D): {
   update(state: VillaOutdoorState, visitor: VillaPosition, yaw: number): boolean;
 } {
   const root = new THREE.Group(); root.name = 'villa-outdoor-living'; parent.add(root);
-  const wood = villaMaterial('#826044', .86), dark = villaMaterial('#373d36', .68, .4);
+  const wood = villaMaterial('#a28a70', .90), dark = villaMaterial('#373d36', .75, .27);
   const rope = villaMaterial('#b8a585', .96), sage = villaMaterial('#81916e', .96), light = villaMaterial('#cbd0b7', .9);
   const brass = villaMaterial('#a38a63', .46, .48), canvasEdge = villaMaterial('#556854', .95);
-  sawnGrain(wood);
+  sawnGrain(wood); sage.map=canvasWeave(); sage.vertexColors=true;
   const frame = new VillaModelBuilder(root, 'villa-swing-frame'), s = VILLA_SWING;
   frame.at(s.x, s.y, s.z, 0, () => {
     for (const side of [-1, 1]) {
@@ -31,24 +32,37 @@ export function createVillaOutdoorModel(parent: THREE.Object3D): {
       for (const z of [-.496, .496]) frame.cylinder(side * 1.43, .86, z, .023, .023, .147, brass, [0, 0, Math.PI / 2], 8);
       timberMember(frame, [side * 1.27, 2.13, .090], [side * 1.27, 2.13, -.090], .161, .103, dark);
       frame.cylinder(side * 1.25, 2.37, 0, .037, .037, .184, brass, [0, 0, Math.PI / 2], 8);
-      frame.geometry(new THREE.TorusGeometry(.090, .013, 6, 16), dark, [side * .57, 2.39, 0], [0, Math.PI / 2, 0]);
-      frame.cylinder(side * .57, 2.375, 0, .06, .06, .045, dark, [0, 0, Math.PI / 2], 8);
+      const at=side*.57;
+      // Folded saddle bears on the rectangular timber. The pin is below the
+      // beam on the actual animation axis, not a torus buried inside the wood.
+      const strap:Section=[[-.071,-.055],[-.071,.046],[-.058,.064],[.058,.064],[.071,.046],[.071,-.055],
+        [.060,-.055],[.060,.041],[.050,.056],[-.050,.056],[-.060,.041],[-.060,-.055]];
+      frame.geometry(millSection('x',.065,strap),dark,[at,2.432,0]);
+      const cheek:Section=[[-.070,.038],[.070,.038],[.070,.027],[.033,-.016],[.018,-.026],[-.014,-.026],[-.030,-.015],[-.070,.025]];
+      for(const sign of [-1,1])frame.geometry(millSection('x',.009,cheek),dark,[at+sign*.029,s.pivotHeight,0]);
+      for(const sign of [-1,1])frame.cylinder(at+sign*.0275,s.pivotHeight,0,.013,.013,.023,brass,[0,0,Math.PI/2],10);
     }
-    timberMember(frame, [-1.46, 2.39, 0], [1.46, 2.39, 0], .119, .153, wood, .016);
+    timberMember(frame, [-1.46, 2.432, 0], [1.46, 2.432, 0], .119, .113, wood, .012);
   });
   frame.finish();
   const pivot = new THREE.Group(); pivot.name = 'villa-swing-pivot'; pivot.position.set(s.x, s.y + s.pivotHeight, s.z); root.add(pivot);
   const seat = new VillaModelBuilder(pivot, 'villa-swing-seat');
   const level = -s.chainLength;
   for (const x of [-.57, .57]) {
-    seat.beam([x, 0, 0], [x, level + .04, 0], .010, rope, 8);
+    // The swaged socket rotates on the original pivot. Its two trunnion
+    // pins leave the central bore clear: the load line reaches its blind end
+    // at the bearing centre, not the bottom of a decorative hoop.
+    const socket:Section=[[0,0],[.0106,0],[.0106,-.036],[.012,-.042],[.016,-.042],[.018,-.036],
+      [.019,-.019],[.023,-.012],[.023,.008],[.017,.016],[.009,.020],[0,.020]];
+    seat.geometry(turnSection(socket,14),brass,[x,0,0]);
+    seat.beam([x,0,0],[x,level+.04,0],.010,rope,8);
     // Lays of twisted hemp wrap the load line (neither end follows a
     // decorative sag); the short branch hitches physically gather the seat.
     const lay = new NatureMesh();
     for (let strand = 0; strand < 3; strand++) {
-      const path = Array.from({ length: 57 }, (_, i) => {
-        const t = i / 56, a = strand * Math.PI * 2 / 3 + t * Math.PI * 17;
-        return collar([x + .006 * Math.cos(a), (level + .04) * t, .006 * Math.sin(a)], .007);
+      const path = Array.from({ length: 38 }, (_, i) => {
+        const t = i / 37, a = strand * Math.PI * 2 / 3 + t * Math.PI * 15;
+        return collar([x + .006 * Math.cos(a), -.025+(level+.065)*t, .006 * Math.sin(a)], .007);
       });
       lay.stem(path, 4);
     }
@@ -72,7 +86,10 @@ export function createVillaOutdoorModel(parent: THREE.Object3D): {
   }
   const cushion = (u: number, v: number): P3 => {
     const x = 2 * u - 1, z = 2 * v - 1, corner = Math.abs(x * z) ** 5;
-    return [x * (.647 - .018 * corner), level + .122 + .034 * (1 - x * x) * (1 - z * z), z * (.251 - .021 * corner) - .009];
+    // A sewn box pad: lofty shoulders over a gently settled centre, with
+    // short compression pleats breaking towards (not across) the edge seam.
+    const belly=(1-x*x)*(1-z*z), folds=.009*Math.cos(14*x+2*z)*Math.abs(z)**3*belly;
+    return [x*(.647-.025*corner), level+.122+.046*belly-.010*Math.exp(-8*x*x-6*z*z)+folds, z*(.251-.025*corner)-.009];
   };
   seat.geometry(fabricPanel(cushion, [0, -.044, 0]), sage);
   for (const end of [0, 1]) for (const long of [false, true]) {
@@ -92,18 +109,20 @@ export function createVillaOutdoorModel(parent: THREE.Object3D): {
     chair.beam([x, .49, .25], [x, 1.015, .335], .016, dark, 8);
     chair.beam([x, .5, -.25], [x, .68, -.18], .013, dark, 8);
     chair.beam([x, .68, -.25], [x, .69, .3], .016, dark, 8);
-    chair.box(x, .698, .015, .065, .022, .56, wood, .018);
+    timberMember(chair,[x,.694,-.264],[x,.704,.294],.065,.025,wood,.007);
     for (const z of [-.36, .38]) chair.box(side * .43, .019, z, .065, .033, .063, dark, .012);
     chair.cylinder(side * .394, .285, 0, .03, .03, .038, dark, [0, 0, Math.PI / 2], 8);
   }
   const sling = (u: number, v: number): P3 => {
-    const x = 2 * u - 1, z = 2 * v - 1, fold = Math.sin(v * Math.PI * 5 + x) * .002 * x * x;
-    return [x * (.375 - .016 * (1 - z * z)), .509 - .067 * (1 - x * x) * (1 - z * z) + fold * (1 - z * z), -.284 + v * .562];
+    const x=2*u-1,z=2*v-1, tucked=Math.abs(x)-.79+.065*z;
+    const fold=.012*Math.exp(-tucked*tucked/.009)*Math.cos(3.7*z+1.3*x);
+    return [x*(.375-.016*(1-z*z)), .509-.072*(1-x*x)*(1-z*z)+fold*(1-z*z), -.284+v*.562];
   };
   const back = (u: number, v: number): P3 => {
-    const x = 2 * u - 1, sag = (1 - x * x) * (.027 + .024 * Math.sin(v * Math.PI));
-    return [x * (.375 - .013 * Math.sin(v * Math.PI)), .512 + v * .495 - (1 - x * x) * .037 * v,
-      .255 + v * .08 + sag + .007 * Math.sin(x * Math.PI * 3 + v) * (1 - x * x)];
+    const x=2*u-1, load=1-x*x, sag=load*(.025+.037*Math.sin(v*Math.PI));
+    const seam=Math.abs(x)-(.29+.54*v), cornerPull=.019*Math.exp(-seam*seam/.018)*Math.sin(v*Math.PI);
+    return [x*(.375-.017*Math.sin(v*Math.PI)),.512+v*.495-load*.041*v,
+      .255+v*.08+sag-cornerPull+.008*Math.sin(8*x+2.1*v)*load];
   };
   chair.geometry(fabricPanel(sling, [0, -.010, 0]), sage);
   chair.geometry(fabricPanel(back, [0, 0, .011]), sage);
@@ -127,6 +146,7 @@ export function createVillaOutdoorModel(parent: THREE.Object3D): {
   }
   // Reinforced webbing carry loop on the back, secured through the same panel.
   const p0 = back(.29, .77), p1 = back(.71, .77), web = new NatureMesh();
+  p0[2]+=.017;p1[2]+=.017; // Fasten on the rear layer; do not poke two dark studs through the sitter's face.
   web.stem([collar(p0, .009), collar([-.125, p0[1] - .075, p0[2] + .045], .011),
     collar([.122, p1[1] - .075, p1[2] + .045], .011), collar(p1, .009)], 6); chair.geometry(web.geometry(), canvasEdge);
   for (const z of [-.279, .274]) {

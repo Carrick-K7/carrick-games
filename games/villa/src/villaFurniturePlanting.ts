@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sheet, stock, turn, type FurnitureKit, type Point, type PutSurface } from './villaFurnitureForms.js';
+import { outdoorPlanter } from './villaHedgePlanters.js';
 
 /** Thin folded lamina; its reverse is the underside of the same leaf. */
 export function leafBlade(width: number, length: number, arch: number) {
@@ -102,7 +103,8 @@ function floweringSpray({ put, at, m, twig, random }: Grow, floor: boolean) {
     put(blossom(.043, 1), f % 2 ? m.coral : m.cream, ...tip, .18, .13, -.26);
   });
 }
-export function planter(k: FurnitureKit, s: number, flowering: boolean, random: () => number) {
+export function planter(k: FurnitureKit, s: number, flowering: boolean, random: () => number, outdoor = false) {
+  if (outdoor && flowering) { outdoorPlanter(k, s, random); return; }
   const put: PutSurface = (g, m, x, y, z, rx, ry, rz) => k.put(g.scale(s, s, s), m, x * s, y * s, z * s, rx, ry, rz);
   const at: FurnitureKit['at'] = (x, y, z, a, make) => k.at(x * s, y * s, z * s, a, make);
   const grow: Grow = { put, at, m: k.m, random, twig: (p, m) => put(stock(p, 5), m, 0, 0, 0) };

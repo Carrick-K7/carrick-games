@@ -10,6 +10,9 @@ test('software world presents the actual completed RGBA frame and its camera; an
     try {
       game.prepare();game.start();cancelAnimationFrame(game.animationId);game.audio?.setEnabled(false);
       const s=game.scene; s.lowSpec=true; s.renderer.shadowMap.enabled=false;
+      // A photo finishing its decode legitimately invalidates the old picture. Establish
+      // the settled scene before comparing a ticket against the exact same synchronous bytes.
+      const surfaces=await s.groundSwatches.ready;if(!['turf','gravel','timber'].every(k=>surfaces[k]==='decoded'))throw Error('Ground art did not decode');
       game.position={x:-7.46,y:0,z:1.2};game.eyeY=0;game.yaw=-.36;game.pitch=-.43;game.time=2;
       s.lastDrawAt=-Infinity;s.softwareInputFrames=0;game.renderFrame();const before=s.camera.position.toArray();
       game.position.x+=.41;game.time+=.03;s.softwareInputFrames=0;s.lastDrawAt=performance.now()-100;

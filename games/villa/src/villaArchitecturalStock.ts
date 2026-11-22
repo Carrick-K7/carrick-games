@@ -4,7 +4,7 @@ import * as THREE from 'three';
  * a vertical Y member [width X, depth Z]; a Z member [width X, height Y].
  * A measured profile is swept without rounding the arrises of a rebate or filling a drip groove. */
 export type Section = readonly (readonly [number, number])[];
-export function millSection(axis: 'x' | 'y' | 'z', length: number, section: Section): THREE.BufferGeometry {
+export function millSection(axis: 'x' | 'y' | 'z', length: number, section: Section, faces: 'closed'|'socketed'|'bedded' = 'closed'): THREE.BufferGeometry {
   const ring = section.map(([a, b]) => new THREE.Vector2(axis === 'x' ? -a : a, axis === 'y' ? -b : b));
   if (THREE.ShapeUtils.isClockWise(ring)) ring.reverse();
   const p: number[] = [], uv: number[] = [], half = length / 2;
@@ -18,11 +18,15 @@ export function millSection(axis: 'x' | 'y' | 'z', length: number, section: Sect
   let around = 0;
   for (let i = 0; i < ring.length; i++) {
     const j = (i + 1) % ring.length, next = around + ring[i]!.distanceTo(ring[j]!);
+    // A bedded, wall-backed X section starts at the (Z=0, Y=0) contact corner.
+    // The floor and wall already enclose these two faces, including at its ends.
+    if(faces==='bedded'&&axis==='x'&&((ring[i].x===0&&ring[j].x===0)||(ring[i].y===0&&ring[j].y===0))){around=next;continue;}
     vertex(i, -half, 0, around); vertex(j, -half, 0, next); vertex(j, half, length, next);
     vertex(i, -half, 0, around); vertex(j, half, length, next); vertex(i, half, length, around);
     around = next;
   }
-  for (const tri of THREE.ShapeUtils.triangulateShape(ring, [])) {
+  // Socketed members must terminate INSIDE an opaque bearing at both ends.
+  if(faces!=='socketed') for (const tri of THREE.ShapeUtils.triangulateShape(ring, [])) {
     for (const i of tri) vertex(i, half, ring[i]!.x, ring[i]!.y);
     for (const i of [...tri].reverse()) vertex(i, -half, ring[i]!.x, ring[i]!.y);
   }

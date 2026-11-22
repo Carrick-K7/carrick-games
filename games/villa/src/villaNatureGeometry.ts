@@ -33,10 +33,21 @@ export class NatureMesh {
   readonly positions: number[] = [];
   readonly indices: number[] = [];
   private readonly shades: number[] = [];
+  private uv?: number[];
+  private rgb?: number[];
   tone = 1;
   membrane = false; // faces on both sides of a thin leaf, using its material's DoubleSide
 
-  point(p: P3, tone = this.tone): number { this.shades.push(tone); return this.positions.push(...p) / 3 - 1; }
+  /** UVs are physical surface charts (e.g. petiole→tip), not world projections.
+   * Older uncharted parts retain neutral sampling and their original linear tone. */
+  point(p: P3, tone = this.tone, uv?: readonly [number,number], rgb?: readonly [number,number,number]): number {
+    const i=this.shades.length;
+    if (uv && !this.uv) this.uv=new Array(i*2).fill(0);
+    if (this.uv) this.uv.push(uv?.[0]??0,uv?.[1]??0);
+    if (rgb && !this.rgb) this.rgb=this.shades.flatMap(v=>[v,v,v]);
+    if (this.rgb) this.rgb.push(rgb?.[0]??tone,rgb?.[1]??tone,rgb?.[2]??tone);
+    this.shades.push(tone); this.positions.push(...p); return i;
+  }
   tri(a: number, b: number, c: number) { this.indices.push(a, b, c); }
   /** Rings counterclockwise looking back along the growth axis. A pole is one
    * vertex, not a ring of coincident vertices and zero-area triangles. */
@@ -104,7 +115,8 @@ export class NatureMesh {
   }
   geometry(shaded = false) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3)); g.setIndex(this.indices);
-    if (shaded) g.setAttribute('color', new THREE.Float32BufferAttribute(this.shades.flatMap(s => [s, s, s]), 3));
+    if (this.uv) g.setAttribute('uv',new THREE.Float32BufferAttribute(this.uv,2));
+    if (shaded) g.setAttribute('color', new THREE.Float32BufferAttribute(this.rgb ?? this.shades.flatMap(s => [s, s, s]), 3));
     g.computeVertexNormals(); return g;
   }
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
 import { bentRail, ovalLoop, roundedLoop, sectionLoft, turnedSection } from './villaVehicleSections.js';
+import { motorTyreStock, type MotorTyre } from './villaMotorFinish.js';
 
 export type CoachPoint = [number, number, number];
 export type CoachStation = readonly [z: number, halfWidth: number, belt: number];
@@ -127,6 +128,48 @@ export function coachFasciaPatch(builder: VillaModelBuilder, hull: ReturnType<ty
   return sample;
 }
 
+type OpticalFace = (u: number, v: number, lift?: number) => CoachPoint;
+/** Dark radiator fins behind the grille bars. Only their leading folds catch
+ * light; the backing stays recessed. No invented upper grille on the electric sedan. */
+export function coachCoolingFins(b: VillaModelBuilder, face: OpticalFace, vertical: boolean, count: number) {
+  const metal=new THREE.MeshStandardMaterial({color:0x505653,roughness:.57,metalness:.39});metal.name='grille/blackened-fins';
+  for(let i=0;i<count;i++) {
+    const t=(i+.6)/(count+.2);
+    b.geometry(coachSheet(vertical?1:14,vertical?5:1,(u,v)=>vertical
+      ?face(t+(u-.5)*.019,.065+.87*v,.001+u*.004)
+      :face(.045+.91*u,t+(v-.5)*.055,.001+v*.004),[0,0,1]),metal);
+  }
+}
+/** A spun reflector around a smaller proud, convex optic. Both sit inside the
+ * gasket on the local curved face, not world-Z facing dots glued to a bumper. */
+export function coachProjector(b: VillaModelBuilder, face: OpticalFace, center: number, halfWidth: number, metal: THREE.Material, lens: THREE.Material) {
+  const ring = (radius: number, lift: number) => Array.from({length:16},(_,i)=>{
+    const a=i*Math.PI/8;
+    return face(center+halfWidth*radius*Math.cos(a), .48+.324*radius*Math.sin(a),lift);
+  });
+  // The rolled reflector lip turns back into the silver bowl. Its raised pupil
+  // is a separate refracting shape with a flatter centre, without transmission.
+  b.geometry(sectionLoft([ring(1,.002),ring(.96,.011),ring(.86,.012),ring(.53,.004)],false,false,[0,0,1]),metal);
+  b.geometry(sectionLoft([ring(.59,.004),ring(.59,.010),ring(.43,.017),ring(.21,.020)],false,true,[0,0,1]),lens);
+}
+/** A pressure-moulded prismatic lamp in its own gasket. Each facet catches the
+ * existing light separately; the small clear reversing chamber and ledge aren't
+ * a white line painted across the whole red cover. */
+export function coachTailLens(b: VillaModelBuilder, face: OpticalFace, lens: THREE.Material, clear: THREE.Material, tall=false) {
+  const mould=(u0:number,u1:number,v0:number,v1:number,cells:number,material:THREE.Material) => {
+    const facelet=coachSheet(cells*2,4,(u,v)=>{
+      const prism=1-2*Math.abs((u*cells%1)-.5);
+      return face(coachMix(u0,u1,u),coachMix(v0,v1,v),.003+.009*Math.sin(Math.PI*v)+.0036*prism);
+    },[0,0,-1]);
+    const cut=facelet.toNonIndexed();facelet.dispose();cut.computeVertexNormals();b.geometry(cut,material);
+  };
+  if(tall){
+    mould(.095,.905,.57,.945,5,lens); mould(.095,.905,.38,.53,5,clear); mould(.095,.905,.055,.345,5,lens);
+  } else {
+    mould(.035,.965,.39,.935,9,lens); mould(.035,.245,.08,.34,3,clear); mould(.272,.965,.08,.34,7,lens);
+  }
+}
+
 /** Exterior smoke tint remains legible without an environment map, while the
  * back face transmits much more light for the actual seated view. No reflection
  * target, textures, per-frame mutation, or fake opaque cabin block is needed. */
@@ -191,19 +234,20 @@ export function coachCanopy(hull: ReturnType<typeof coachHull>, shape: CoachCano
 export function coachWheels(builder: VillaModelBuilder, options: { axles: readonly number[]; x: number; y: number; radius: number; width: number; spokes: number; design: 'aero' | 'utility' | 'split' }, rubber: THREE.Material, dark: THREE.Material, metal: THREE.Material, accent: THREE.Material) {
   const { axles, x, y, radius, width, spokes } = options, rim = radius * .70;
   const touring = options.design === 'split', utility = options.design === 'utility';
+  const stock = motorTyreStock(y,radius,width,options.design,(rubber as THREE.MeshStandardMaterial).color), tyres: MotorTyre[] = [];
+  const alloy = new THREE.MeshStandardMaterial({color:utility?0xb0afa3:0xb7bfc1,metalness:utility?.46:.59,roughness:utility?.42:.31});
+  alloy.name='wheel/turned-alloy';
   for (const side of [-1, 1]) for (const z of axles) {
     const band = (section: [number, number][], mat: THREE.Material) => builder.geometry(
       turnedSection(section.map(([a,r]) => [side * a,r]), 44), mat, [side*x,y,z]);
-    // Real section from inner bead over the sidewalls, shoulders and two sunk
-    // tread channels. The tyre and the rolled lip overlap at the bead only.
-    band([[-.38,.687],[-.48,.755],[-.50,.86],[-.46,.949],[-.33,.989],[-.17,1],[-.16,.985],[-.13,.985],[-.12,1],
-      [.15,1],[.16,.985],[.19,.985],[.20,1],[.33,.989],[.46,.949],[.50,.86],[.48,.755],[.38,.687]]
-      .map(([a,r]) => [a*width,r*radius]), rubber);
+    tyres.push(stock.mount(builder.root,[side*x,y,z]));
     const face = width * .405;
     band([[-width*.39,rim+.003],[face-.009,rim+.004],[face,rim+.006],[face+.003,rim],[face-.002,rim-.010],
-      [face-.027,rim-.014],[-width*.38,rim-.018]], metal);
-    // A sunk disc/hub behind open spokes, not a wheel-faced black cylinder.
-    band([[-width*.18,rim*.72],[-width*.09,rim*.72],[-width*.09,rim*.26],[-width*.18,rim*.26]], dark);
+      [face-.027,rim-.014],[-width*.38,rim-.018]], alloy);
+    // A recessed swept brake track and hat. Leave the model-specific spoke
+    // windows open; no bright disk across the whole inner barrel.
+    band([[-width*.24,rim*.77],[-width*.15,rim*.77],[-width*.15,rim*.48],[-width*.24,rim*.46]],alloy);
+    band([[-width*.20,rim*.48],[-width*.09,rim*.47],[-width*.09,rim*.26],[-width*.20,rim*.26]],dark);
     builder.cylinder(side*(x-width*.10),y,z,rim*.29,rim*.29,width*.84,dark,[0,0,Math.PI/2],24);
     for (let i=0; i<spokes; i++) for (const branch of (touring ? [-1,1] : [0])) {
       const angle = i*Math.PI*2/spokes;
@@ -214,15 +258,15 @@ export function coachWheels(builder: VillaModelBuilder, options: { axles: readon
         const a=angle+sweep+(u*2-1)*half;
         const dish=face-.009 - (1-v)**2 * (utility ? .012 : .025) + .006*Math.sin(u*Math.PI);
         return [side*(x+dish),y+Math.cos(a)*r,z+Math.sin(a)*r];
-      },accent,[side,0,0],[-side*.012,0,0],2,5);
+      },accent === metal ? alloy : accent,[side,0,0],[-side*.012,0,0],2,5);
     }
     builder.cylinder(side*(x+face-.019), y,z,.053,.061,.028,metal,[0,0,Math.PI/2],24);
     for (let i=0;i<spokes;i++) {
       const a=(i+.5)*Math.PI*2/spokes;
       builder.cylinder(side*(x+face-.003),y+.040*Math.cos(a),z+.040*Math.sin(a),.0055,.007,.007,dark,[0,0,Math.PI/2],6);
     }
-    band([[width*.493,radius*.827],[width*.504,radius*.833],[width*.504,radius*.847],[width*.493,radius*.852]],dark);
   }
+  return tyres;
 }
 
 /** Lofted upholstered cushions: shoulders taper above the lumbar region, with

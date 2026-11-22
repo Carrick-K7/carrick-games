@@ -4,7 +4,8 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaSuv, registerVillaSuvColliders, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
-import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
+import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachProjector, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
+import { finishCoachPaint, motorContact } from './villaMotorFinish.js';
 
 import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
 
@@ -17,12 +18,12 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   readonly doorProgress: number;
 } {
   const root = new THREE.Group(); root.name = 'villa-suv'; root.userData = { kind: 'vehicle', style: 'coupe-suv', forward: '+Z', driverSide: '+X', hollowCabin: true }; parent.add(root);
-  const paint = new THREE.MeshPhysicalMaterial({ color: 0x416780, metalness: .14, roughness: .35, clearcoat: .65, clearcoatRoughness: .27 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0x496f83, metalness: .25, roughness: .34, clearcoat: .81, clearcoatRoughness: .20 });
   const dark = villaMaterial(0x1d262a, .63), rubber = villaMaterial(0x191d20, .91), metal = villaMaterial(0xc7d0d3, .35, .30);
   const leather = villaMaterial(0x966746, .82), insert = villaMaterial(0xb0835c, .91), stitch = villaMaterial(0xceba99, .8), wood = villaMaterial(0x514131, .74);
   const glass = coachGlass(0x465e6c, .68);
-  const headlight = new THREE.MeshStandardMaterial({ color: 0xe7f4f9, emissive: 0xcfeaf6, emissiveIntensity: .5, roughness: .2 });
-  const taillight = new THREE.MeshStandardMaterial({ color: 0xa9222b, emissive: 0xc51e29, emissiveIntensity: .4, roughness: .3 });
+  const headlight = new THREE.MeshPhysicalMaterial({ color: 0xcfdfdf, emissive: 0xb1cbce, emissiveIntensity: .50, roughness: .22, clearcoat: .94, clearcoatRoughness: .10 });
+  const taillight = new THREE.MeshPhysicalMaterial({ color: 0x8e1c30, emissive: 0xa71e30, emissiveIntensity: .21, roughness: .28, clearcoat: .96, clearcoatRoughness: .11 });
   const screen = new THREE.MeshBasicMaterial({ color: 0x142a33 }), graphic = new THREE.MeshBasicMaterial({ color: 0x92c5cc });
   paint.name = 'gentian-clearcoat'; glass.name = 'coupe-suv-glazing'; leather.name = 'suv-saddle-leather';
   const body = new VillaModelBuilder(root, 'suv-body'), cabin = new VillaModelBuilder(root, 'suv-cabin'), glazing = new VillaModelBuilder(root, 'suv-glazing');
@@ -40,10 +41,12 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   }
   hull.deckPanel(body, paint, .92, 2.44); hull.deckPanel(body, paint, -2.44, -2.08);
   hull.endPanel(body, paint, 2.44); hull.endPanel(body, paint, -2.44); hull.arches(body, dark, .026);
-  coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5, design: 'split' }, rubber, dark, metal, metal);
+  const tyres = coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5, design: 'split' }, rubber, dark, metal, metal);
+  body.box(0,.296,-.10,1.60,.064,4.08,dark,.020);
   // A compact shield grille, separated corner intakes and wraparound optical
   // housings articulate the nose. Every recess follows the sculpted bumper.
   const grille = coachFasciaPatch(body, hull, 2.44, -.53, .53, .32, .69, dark);
+  coachCoolingFins(body,grille,false,4);
   for (let i = 0; i < 9; i++) coachLine(body, t => grille(.08 + i * .105, coachMix(.12, .88, t), .004), metal, .004, 5);
   coachLine(body, t => grille(t, .98, .003), metal, .005, 20);
   const skid = coachFasciaPatch(body, hull, 2.44, -.61, .61, .08, .17, metal, .006);
@@ -53,11 +56,10 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     const lamp = coachFasciaPatch(body, hull, 2.44, side * .52, side * .97, .72, .96, dark, .010);
     coachLine(body, t => lamp(coachMix(.04, .96, t), .85, .005), headlight, .007, 18);
     coachLine(body, t => lamp(.94, coachMix(.12, .85, t), .005), headlight, .006, 8);
-    for (const u of [.30, .64]) {
-      const p = lamp(u, .42, .003); body.ellipsoid(p[0], p[1], p[2], .028, .026, .011, headlight);
-    }
+    for (const u of [.28,.66]) coachProjector(body,lamp,u,.171,metal,headlight);
     coachLine(body, t => hull.deck(side * coachMix(.20, .48, t), coachMix(1.05, 2.08, t), .002), paint, .005);
-    coachFasciaPatch(body, hull, -2.44, side * .50, side * .97, .77, .89, taillight, .008);
+    const rearLamp=coachFasciaPatch(body,hull,-2.44,side*.48,side*.977,.749,.906,dark,.006);
+    coachTailLens(body,rearLamp,taillight,headlight);
   }
   coachLine(body, t => hull.fascia(-2.44, coachMix(-.66, .66, t), .835, .010), taillight, .005, 30);
   coachFasciaPatch(body, hull, -2.44, -.93, .93, .09, .27, dark, .007);
@@ -154,6 +156,8 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.23 : -.012, .28, -1.69), new THREE.Vector3(side === 1 ? .012 : .23, 1.70, .015)) });
   }
   for (const builder of [body, cabin, glazing, roofHeaders]) builder.finish();
+  finishCoachPaint(root,paint,axles,.42);
+  const updateContact=motorContact(root,tyres,.858,1.45,2.44);
   const localBody = new THREE.Box3(new THREE.Vector3(-VILLA_SUV_LIMITS.halfWidth, 0, -VILLA_SUV_LIMITS.halfLength), new THREE.Vector3(VILLA_SUV_LIMITS.halfWidth, VILLA_SUV_LIMITS.height, VILLA_SUV_LIMITS.halfLength));
   const nodes = [{ root, bounds: localBody }, ...doors], world = new THREE.Box3(), query = new THREE.Vector3();
   const colliders: VillaCollider[] = nodes.map(() => ({ ...VILLA_SUV.body })), inverses = nodes.map(() => new THREE.Matrix4());
@@ -186,6 +190,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
     }
     previousTime = time;
     if (!moved && before === progress) return false;
+    if (moved) updateContact();
     for (const door of doors) door.root.rotation.y = door.root.userData.side === 1 ? -1.13 * smooth(progress) : 0;
     updateColliders(); return true;
   };

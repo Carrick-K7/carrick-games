@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { companionBody, companionHead, companionTail, companionWing, companionFoot, companionLegs, companionDish, jointedGait } from './villaCompanionArt.js';
+import { companionBody, companionHead, companionTail, companionWing, companionFoot, companionLegs, companionDish, jointedGait, felineRest } from './villaCompanionArt.js';
+import { companionMaterial } from './villaCoatSurface.js';
 import { VillaModelBuilder } from './villaModel.js';
 import { createVillaPets, villaPetKind, VILLA_PET_FOOD, VILLA_PET_IDS, VILLA_PET_RADIUS, type VillaPetId, type VillaPetsState } from './villaPets.js';
 import type { VillaCollider } from './villaWorld.js';
@@ -17,7 +18,7 @@ export interface VillaPetModel {
 }
 /** Scene owns every geometry/material. One vertex-colour batch per animated part. */
 export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
+  const material = companionMaterial();
   const birdShadowRadius = .18;
   const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x25372b, transparent: true, opacity: .24, vertexColors: true, depthWrite: false });
   // A shrinking airborne bird contact has less density too. Read the physical
@@ -50,7 +51,9 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
   function part(parentPart: THREE.Object3D, name: string, position: Triple, build: (b: VillaModelBuilder) => void): THREE.Group {
     const builder = new VillaModelBuilder(parentPart, name); build(builder);
     const root = builder.finish(); root.position.set(...position);
-    root.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
+    // A walking pet passes in and out of existing tree/house shade. It receives that
+    // shadow but never becomes a frozen caster, nor dirties a sun map every gait tick.
+    root.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = true; } });
     return root;
   }
   for (const id of VILLA_PET_IDS) {
@@ -71,7 +74,7 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       wings.push(part(body, `${id}/wing-${side < 0 ? 'left' : 'right'}`, [side * .075, .28, 0], b => companionWing(b, material, id, side)));
     } else for (let pair = 0; pair < 2; pair++) {
       const limb = part(body, `${id}/legs-${pair}`, [0, 0, 0], b => companionLegs(b, material, id, pair));
-      legs.push(limb); strideMorphs.push(jointedGait(limb, pair, rabbit));
+      legs.push(limb); strideMorphs.push(jointedGait(limb, pair, rabbit, kind === 'cat'));
     }
     const foodPlate = part(parent, `${id}/food-plate`, [0, 0, 0], b => companionDish(b, material, id));
     foodPlate.visible = false;
@@ -98,8 +101,8 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
       }
       rig.foodPlate.visible = eating;
       const sitting = pet.kind === 'cat' && !moving && !eating;
-      rig.body.position.y = sitting ? -0.025 : 0;
-      rig.body.rotation.x = sitting ? -0.1 : 0;
+      rig.body.position.y = sitting ? felineRest.lower : 0;
+      rig.body.rotation.x = sitting ? felineRest.pitch : 0;
       rig.head.position.y = rig.headRestY - (eating ? pet.kind === 'parrot' ? 0.2 : pet.kind === 'rabbit' ? 0.1 : 0.15 : 0);
       rig.head.rotation.x = eating ? 0.55 + Math.sin(t * 10) * 0.09 : happy ? Math.sin(t * 4) * 0.08 : 0;
       rig.head.rotation.z = happy ? Math.sin(t * 3) * 0.09 : 0;
@@ -120,8 +123,9 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
           leg.rotation.x = airborne ? 1.05 : moving ? stride * .27 : 0;
           leg.position.y = .12 + (airborne ? .03 : moving ? Math.max(0, stride) * .028 : 0);
         } else {
-          const stroke = moving ? stride : sitting ? .34 : 0;
+          const stroke = moving ? stride : 0;
           rig.strideMorphs[i][0] = Math.max(0, -stroke); rig.strideMorphs[i][1] = Math.max(0, stroke);
+          if (pet.kind === 'cat') rig.strideMorphs[i][2] = sitting ? 1 : 0;
         }
       });
       rig.wings.forEach((wing, i) => {
@@ -129,7 +133,8 @@ export function createVillaPetModel(parent: THREE.Object3D): VillaPetModel {
         const flap = Math.sin(pet.wingPhase), spread = pet.wingFold;
         wing.rotation.z = (i === 0 ? -1 : 1) * spread * (0.95 + flap * (pet.verticalSpeed > 0.03 ? 0.6 : 0.42));
         wing.rotation.x = spread * (0.12 + Math.max(0, -flap) * 0.3);
-        wing.rotation.y = (i === 0 ? -1 : 1) * spread * Math.max(0, -flap) * 0.18;
+        // Primaries stow rearward against the back; unfold the wrist out from the flank.
+        wing.rotation.y = (i === 0 ? -1 : 1) * spread * (-.53 + Math.max(0, -flap) * .18);
       });
       rig.shadow.position.set(pet.x, 0.014, pet.z); rig.shadow.rotation.z = -pet.yaw;
       const c = drivingColliders[VILLA_PET_IDS.indexOf(pet.id)], r = VILLA_PET_RADIUS;

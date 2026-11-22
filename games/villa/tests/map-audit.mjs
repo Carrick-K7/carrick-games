@@ -8,6 +8,8 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { atelierViews } from './atelier-views.mjs';
+import { exteriorViews } from './exterior-views.mjs';
+import { renderExteriorStudy } from './exterior-study-render.mjs';
 const base = process.env.VILLA_AUDIT_BASE ?? 'http://127.0.0.1:8091';
 const out = process.env.VILLA_AUDIT_OUT ?? path.resolve('games/villa/test-results/map-audit');
 export const views = [
@@ -64,7 +66,7 @@ export const views = [
   ['south-fields', -17, 0, 49, -10, 60, -.1],
   ['pond', -2, 0, 69, -14, 80, -.08],
   ['scenic-hills', 29, 0, 114, 20, 131, .02],
-  ...atelierViews,
+  ...atelierViews, ...exteriorViews,
 ];
 const selected = process.argv.slice(2);
 for(const name of selected) if(!views.some(v=>v[0]===name)) throw new Error(`Unknown audit view: ${name}`);
@@ -76,9 +78,16 @@ const results = [], errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 960, height: 600 }, deviceScaleFactor: 1 });
   page.on('pageerror', e => errors.push(e.message));
+  page.on('console',e=>{if(e.type()==='error' && /THREE\.|WebGL|shader/i.test(e.text()))errors.push(e.text());});
   await page.route('**/__villa-audit', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body style="margin:0"><main id="gameApp"><canvas id="gameCanvas"></canvas></main></body></html>' }));
   await page.goto(`${base}/__villa-audit`);
-  const release = await page.evaluate(async () => (await (await fetch('/games/index.json')).json()).games.find(g => g.id === 'villa'));
+  const release = await page.evaluate(async () => {
+    const g=(await(await fetch('/games/index.json',{cache:'no-store'})).json()).games.find(g=>g.id==='villa');
+    const descriptor=await(await fetch(g.assetBase+'game.json',{cache:'no-store'})).json();
+    const sum=[...new Uint8Array(await crypto.subtle.digest('SHA-256',await(await fetch(g.entry,{cache:'no-store'})).arrayBuffer()))].map(v=>v.toString(16).padStart(2,'0')).join('');
+    if(g.revision!==descriptor.revision||g.version!==descriptor.version||descriptor.files[descriptor.entry]!==sum)throw Error('Mixed Villa study payload');
+    return {...g,entrySHA256:sum};
+  });
   if (process.env.VILLA_AUDIT_REVISION && release.revision !== process.env.VILLA_AUDIT_REVISION) throw new Error(`Unexpected Villa revision ${release.revision}`);
   await page.evaluate(async release => {
     const { VillaGame } = await import(release.entry);
@@ -90,12 +99,18 @@ try {
     g.audio?.setEnabled(false); g.keys.clear();
     g.state.home.timeOfDay = 'day'; g.state.home.darkness = 0;
     window.__auditGame = g;
+    const loaded=await g.scene.groundSwatches?.ready;
+    if(g.scene.groundSwatches && (!loaded || ['turf','gravel','timber'].some(k=>loaded[k]!=='decoded')))throw Error('Study requires decoded ground swatches: '+JSON.stringify(loaded));
   }, release);
-  await page.evaluate(time => {
+  await page.evaluate(({time,weather,liveSun}) => {
     const g = window.__auditGame;
+    // Exercise the production live+survey lighting branches on a software implementation;
+    // this optional pass does not disguise the GPU and is not a hardware timing claim.
+    if(liveSun){g.scene.renderer.shadowMap.enabled=true;g.scene.renderer.shadowMap.needsUpdate=true;g.scene.scene.environment=g.scene.environment;}
     g.state.home.timeOfDay = time; g.state.home.darkness = time === 'night' ? 1 : time === 'evening' ? .43 : 0;
+    g.state.home.weather=weather;g.state.home.rain=weather==='rain'?1:0;
     g.state.evening = g.state.home.darkness > .2;
-  }, process.env.VILLA_AUDIT_TIME ?? 'day');
+  }, {time:process.env.VILLA_AUDIT_TIME ?? 'day',weather:process.env.VILLA_AUDIT_WEATHER ?? 'clear',liveSun:process.env.VILLA_AUDIT_SUN==='live'});
   for (const pose of poses) {
     const record = await page.evaluate(({pose, compare, closeView}) => {
       const [name, x, y, z, tx, tz, pitch, driver] = pose, g = window.__auditGame;
@@ -137,7 +152,8 @@ try {
       g.toast=''; g.toastUntil=0;
       const open = name === 'bath-open';
       Object.assign(g.state.bathDoors, { west: open, east: open, progressW: open ? 1 : 0, progressE: open ? 1 : 0 });
-      g.time = name === 'robot' ? 0 : g.time + 1;
+      // Auditing the same pose alone or after another room must yield the same sun, water and limbs.
+      g.time = name === 'robot' ? 0 : 12;
       g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity;
       const before = g.scene.renderer.info.render.frame;
       g.renderFrame();
@@ -164,15 +180,23 @@ try {
         if(changed) throw new Error(`${name}: tight culling changed ${changed} output channels`);
       }
       return { name, position: { ...g.position }, camera: g.scene.camera.position.toArray(), yaw: g.yaw,
+        pitch:g.scene.camera.rotation.x, fov:g.scene.camera.fov,aspect:g.scene.camera.aspect,time:g.time,light:g.state.home.timeOfDay,weather:g.state.home.weather,liveShadowPass:renderer.shadowMap.enabled,
         floorSupport: support, occupancy: riding || sitting ? driver : crouched ? 'crouching' : 'standing', inspectedState: driver ?? null,
         standable, frame: after, drawCalls, triangles, uncull, png: g.canvas.toDataURL('image/png') };
-    }, {pose,compare:process.env.VILLA_AUDIT_COMPARE_VISIBILITY==='1',closeView:atelierViews.some(v=>v[0]===pose[0])});
+    }, {pose,compare:process.env.VILLA_AUDIT_COMPARE_VISIBILITY==='1',closeView:[...atelierViews,...exteriorViews].some(v=>v[0]===pose[0])});
     const { png, ...info } = record;
     await writeFile(path.join(out, `${info.name}.png`), Buffer.from(png.split(',')[1], 'base64'));
+    const study=process.env.VILLA_AUDIT_STUDY;
+    if(study==='clay'||study==='finish'){
+      const image=await page.evaluate(renderExteriorStudy,{mode:study,width:1024,height:640});
+      if(image.camera.some((v,i)=>Math.abs(v-info.camera[i])>.001))throw Error('Inspection eye changed');
+      await writeFile(path.join(out,`${info.name}-${study}.png`),Buffer.from(image.png.split(',')[1],'base64'));
+      info.study={mode:study,width:image.width,height:image.height};
+    }
     results.push(info); console.log(JSON.stringify(info));
   }
   await page.evaluate(() => window.__auditGame.destroy());
-  await writeFile(path.join(out, 'audit.json'), JSON.stringify({ release: { version: release.version, revision: release.revision }, results, errors }, null, 2));
+  await writeFile(path.join(out, 'audit.json'), JSON.stringify({ release: { version: release.version, revision: release.revision, entrySHA256:release.entrySHA256 }, results, errors }, null, 2));
   if (errors.length) throw new Error(errors.join('\n'));
 } finally { await browser.close(); }
 console.log(`Audit images: ${out}`);

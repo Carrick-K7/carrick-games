@@ -4,7 +4,8 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaPickup, registerVillaPickupColliders, VILLA_PICKUP, VILLA_PICKUP_LIMITS, type VillaPickupState } from './villaPickup.js';
-import { coachCanopy, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachWheels } from './villaCoachwork.js';
+import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachProjector, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
+import { finishCoachPaint, motorContact } from './villaMotorFinish.js';
 
 import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
 import { sectionLoft, type P2, type P3 } from './villaVehicleSections.js';
@@ -18,12 +19,12 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   readonly doorProgress: number;
 } {
   const root = new THREE.Group(); root.name = 'villa-pickup'; root.userData = { kind: 'vehicle', style: 'utility-pickup', forward: '+Z', driverSide: '+X', hollowCabin: true, openCargoBed: true }; parent.add(root);
-  const paint = new THREE.MeshPhysicalMaterial({ color: 0x829b88, metalness: .10, roughness: .40, clearcoat: .55, clearcoatRoughness: .30 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0x829b88, metalness: .07, roughness: .46, clearcoat: .48, clearcoatRoughness: .31 });
   const dark = villaMaterial(0x27302e, .65), rubber = villaMaterial(0x1d2221, .92), metal = villaMaterial(0xc2cac4, .38, .28);
   const fabric = villaMaterial(0x806e55, .9), insert = villaMaterial(0xbaa58a, .96), stitch = villaMaterial(0xd6c9b0, .84);
   const glass = coachGlass(0x597277, .62);
   const headlight = new THREE.MeshStandardMaterial({ color: 0xf2ecd2, emissive: 0xe7e4c4, emissiveIntensity: .44, roughness: .26 });
-  const tail = new THREE.MeshStandardMaterial({ color: 0xa52b26, emissive: 0xbb3427, emissiveIntensity: .33, roughness: .35 });
+  const tail = new THREE.MeshPhysicalMaterial({ color: 0xa6352d, emissive: 0xa02d24, emissiveIntensity: .20, roughness: .36, clearcoat: .86, clearcoatRoughness: .16 });
   const screen = new THREE.MeshBasicMaterial({ color: 0x172c30 }), graphic = new THREE.MeshBasicMaterial({ color: 0xb5cabc });
   paint.name = 'sage-utility-clearcoat'; glass.name = 'pickup-cabin-glazing';
   const body = new VillaModelBuilder(root, 'pickup-body'), cabin = new VillaModelBuilder(root, 'pickup-cabin'), glazing = new VillaModelBuilder(root, 'pickup-glazing');
@@ -44,7 +45,10 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   }
   hull.deckPanel(body, paint, 1.21, 2.78); hull.endPanel(body, paint, 2.78);
   hull.arches(body, dark, .024); bedHull.arches(bed, dark, .024);
-  coachWheels(body, { axles: [-1.725, 1.725], x: .967, y: .41, radius: .397, width: .19, spokes: 6, design: 'utility' }, rubber, dark, metal, metal);
+  const tyres = coachWheels(body, { axles: [-1.725, 1.725], x: .967, y: .41, radius: .397, width: .19, spokes: 6, design: 'utility' }, rubber, dark, metal, metal);
+  // The raised open bed exposes its transverse axle and central differential below the ladder rails.
+  body.cylinder(0,.402,-1.725,.055,.055,1.75,dark,[0,0,Math.PI/2],12);
+  body.ellipsoid(0,.398,-1.73,.151,.126,.103,dark);
   // A pressed tailgate, capped load rails, ribbed liner and enclosed wheel tubs.
   // The 40mm cab/bed joint is deliberate; it is not a hole into the cab.
   // One pressed liner: its corrugations ease into flat flanges at either end.
@@ -70,8 +74,8 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
       return profile.map(([inset,up]):P3=>[side*(.993-inset),.773+up,-1.725+dz]);
     })),dark);
     for (const z of [-2.5, -.94]) bed.geometry(new THREE.TorusGeometry(.034, .006, 6, 18), metal, [side * .965, 1.135, z], [0, Math.PI / 2, 0]);
-    bed.box(side * .81, 1.004, -2.811, .13, .28, .018, tail, .022);
-    bed.box(side * .81, 1.013, -2.823, .09, .038, .004, headlight, .006);
+    const rearLamp=coachFasciaPatch(bed,bedHull,-2.80,side*.79,side*.985,.55,.905,dark,.010);
+    coachTailLens(bed,rearLamp,tail,headlight,true);
   }
   bedHull.endPanel(bed, paint, -2.8);
   bed.box(0, 1.0, -.79, 1.96, .50, .034, dark, .009);
@@ -82,12 +86,13 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   // A softly wrapped utility face rather than a cab-width rectangular block.
   // The lamp housings, slats and textured lower bumper share its curved skin.
   const grille = coachFasciaPatch(body, hull, 2.78, -.58, .58, .46, .85, dark, .012);
+  coachCoolingFins(body,grille,true,12);
   for (const v of [.12, .36, .60, .84]) coachLine(body, t => grille(coachMix(.04, .96, t), v, .004), metal, .004, 20);
   for (const side of [-1, 1]) {
     const lamp = coachFasciaPatch(body, hull, 2.78, side * .63, side * .98, .51, .91, dark, .012);
     coachLine(body, t => lamp(.89, coachMix(.12, .88, t), .006), headlight, .010, 10);
     coachLine(body, t => lamp(coachMix(.08, .87, t), .84, .006), headlight, .008, 12);
-    const p = lamp(.40, .49, .004); body.ellipsoid(p[0], p[1], p[2], .040, .045, .015, headlight);
+    coachProjector(body,lamp,.42,.294,metal,headlight);
     coachLine(body, t => hull.deck(side * coachMix(.35, .50, t), coachMix(1.30, 2.38, t), .002), paint, .006);
   }
   coachFasciaPatch(body, hull, 2.78, -.98, .98, .045, .26, dark, .012);
@@ -170,6 +175,8 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     doors.push({ root: pivot, bounds: new THREE.Box3(new THREE.Vector3(side === 1 ? -.16 : -.18, .43, -1.79), new THREE.Vector3(side === 1 ? .18 : .16, 1.94, .04)) });
   }
   for (const builder of [body, cabin, glazing, bed]) builder.finish();
+  finishCoachPaint(root,paint,[-1.725,1.725],.41);
+  const updateContact=motorContact(root,tyres,.967,1.725,2.80);
   const localBody = new THREE.Box3(new THREE.Vector3(-VILLA_PICKUP_LIMITS.halfWidth, 0, -VILLA_PICKUP_LIMITS.halfLength), new THREE.Vector3(VILLA_PICKUP_LIMITS.halfWidth, VILLA_PICKUP_LIMITS.height, VILLA_PICKUP_LIMITS.halfLength));
   const nodes = [{ root, bounds: localBody }, ...doors], world = new THREE.Box3(), query = new THREE.Vector3();
   const colliders: VillaCollider[] = nodes.map(() => ({ ...VILLA_PICKUP.body })), inverses = nodes.map(() => new THREE.Matrix4());
@@ -202,6 +209,7 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     }
     previousTime = time;
     if (!moved && before === progress) return false;
+    if (moved) updateContact();
     for (const door of doors) door.root.rotation.y = door.root.userData.side === 1 ? -1.13 * smooth(progress) : 0;
     updateColliders(); return true;
   };

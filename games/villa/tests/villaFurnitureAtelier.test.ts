@@ -4,6 +4,7 @@ import { furnishVilla } from '../src/villaFurnishings.js';
 import { VILLA_BEDS, villaRelaxSeat } from '../src/villaSeating.js';
 import { VILLA_FAUCET } from '../src/villaFaucet.js';
 import { VILLA_WEST_WALL } from '../src/villaEstateLayout.js';
+import { plantRay, plantSection } from './villaHedgeProbes.js';
 
 type XYZ = [number, number, number];
 const scene = new THREE.Scene(), staticSurfaces: THREE.Mesh[] = [];
@@ -234,8 +235,16 @@ describe('atelier furniture: completed, placed surfaces rather than semantic mar
     const x = -10.8, z = 6.8;
     expect(down(x + .107, 1.89, z + .02, .60)).toBeUndefined();
     expect(down(x + .264, 1.89, z, .60)).toBeGreaterThan(1.45);
-    const hedgeX = VILLA_WEST_WALL.outer - .55;
-    expect(cast([hedgeX + .17, .15, -12.94], [0, 0, 1], 1.88)).toBeUndefined();
-    expect(down(hedgeX, 1.5, -12, .80)).toBeGreaterThan(.95);
+    const hedgeX = VILLA_WEST_WALL.outer - .55, z0 = -12;
+    const section = plantSection(staticSurfaces.filter(s => [0x73503b,0x41684b,0x7d9854].includes((s.material as THREE.MeshStandardMaterial).color.getHex())),hedgeX,z0);
+    try {
+      // Not a single stick below a solid cap: across the heel of the hedge
+      // some ankle-height rays see actual stems/shoots, others see daylight.
+      let lowHits = 0, crown = 0;
+      for (const y of [.097,.140,.203]) for (let j=-6;j<=6;j++) if (plantRay(section,[hedgeX-.70,y,z0+j*.12],[1,0,0],1.4)) lowHits++;
+      for (const dx of [-.27,-.13,.012,.16,.29]) for (const dz of [-.59,-.29,.013,.28,.59])
+        crown = Math.max(crown,plantRay(section,[hedgeX+dx,1.6,z0+dz],[0,-1,0],1.14)?.point.y ?? 0);
+      expect(lowHits).toBeGreaterThanOrEqual(5); expect(lowHits).toBeLessThan(20); expect(crown).toBeGreaterThan(.95);
+    } finally { section.forEach(mesh=>mesh.geometry.dispose()); }
   });
 });

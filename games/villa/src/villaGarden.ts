@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { addVillaOrchardTree } from './villaOrchardArt.js';
 import { addVillaBloom, addVillaKitchenCrop } from './villaCropArt.js';
-import { NatureMesh, NaturePalette } from './villaNatureGeometry.js';
+import { NaturePalette } from './villaNatureGeometry.js';
+import { createKitchenLeafMap, createKitchenStockMap } from './villaHorticultureAtlas.js';
+import { buildBedStock, buildClayVessel, buildTomatoTrellis, potCompost, stakeTomato } from './villaKitchenGardenJoinery.js';
+import { kitchenGround, kitchenSites, scatterKitchenLitter, turnKitchenSoil } from './villaKitchenGardenGround.js';
+import { sample01 } from './villaWeatheredFinish.js';
 import { villaTerrainGroundHeight } from './villaEstateLayout.js';
 import type { VillaCollider } from './villaWorld.js';
 
@@ -78,82 +82,74 @@ export const VILLA_VEGETABLE_BEDS = [
  * still come from the garden/estate layout, independently of the art detail. */
 export function createVillaGarden(parent: THREE.Object3D): { colliders: VillaCollider[] } {
   const b = new VillaModelBuilder(parent, 'Villa garden');
-  const bark = villaMaterial('#74604a', .98), wood = villaMaterial('#a08561', .93), soil = villaMaterial('#493a2b', 1), ridge = villaMaterial('#60503a', 1);
-  const terra = villaMaterial('#b88368', .91), green = villaMaterial('#486644', .9), light = villaMaterial('#819456', .92);
-  const crop = { green, light, white: villaMaterial('#f5e8cf', .84), pink: villaMaterial('#bf6578', .84), purple: villaMaterial('#9079a9', .86),
-    blue: villaMaterial('#a5b5d9', .85), gold: villaMaterial('#e6bd55', .84), plum: villaMaterial('#654267', .42), rust: villaMaterial('#cf6544', .5), dark: soil };
+  const bark = villaMaterial('#74604a', .98), wood = villaMaterial('#a08561', .93), green = villaMaterial('#486644', .9);
+  const stock = villaMaterial('#ffffff', .96), bits = villaMaterial('#ffffff', .94), light = villaMaterial('#ffffff', .87), produce = villaMaterial('#ffffff', .42);
+  stock.name = 'garden/boards-compost-and-terracotta'; bits.name = 'garden/aggregate-and-lashings'; produce.name = 'garden/fruit-skins'; light.name = 'garden/soft-leaves';
+  stock.map = createKitchenStockMap(); light.map = createKitchenLeafMap(); light.alphaTest = .40;
+  const crop = { green, light, produce, white: villaMaterial('#f5e8cf', .84), pink: villaMaterial('#bf6578', .81), purple: villaMaterial('#9079a9', .89),
+    blue: villaMaterial('#a5b5d9', .87), gold: villaMaterial('#e6bd55', .83), plum: produce, rust: villaMaterial('#cf6544', .77), dark: villaMaterial('#574633', .96) };
   const leaves = Object.fromEntries(Object.entries(VILLA_FRUIT_SPECIES).map(([key, s]) => [key, villaMaterial(s.leaf, .91)])) as Record<VillaFruitSpecies, THREE.MeshStandardMaterial>;
   const fruits = Object.fromEntries(Object.entries(VILLA_FRUIT_SPECIES).map(([key, s]) => [key, villaMaterial(s.fruit, .48)])) as Record<VillaFruitSpecies, THREE.MeshStandardMaterial>;
-  for (const paint of [...Object.values(leaves), ...Object.values(fruits), green, light, crop.pink]) paint.vertexColors = true;
-  for (const leaf of [...Object.values(leaves), green, light, crop.gold, crop.pink, crop.white, crop.blue, crop.purple]) leaf.side = THREE.DoubleSide;
+  for (const paint of [...Object.values(leaves), ...Object.values(fruits), ...Object.values(crop), stock, bits]) paint.vertexColors = true;
+  for (const leaf of [...Object.values(leaves), green, light, crop.gold, crop.pink, crop.white, crop.blue, crop.purple, crop.rust]) leaf.side = THREE.DoubleSide;
   const marker = (kind: string, species: string, x: number, y: number, z: number, data: Record<string, unknown>) => {
     const node = new THREE.Object3D(); node.name = `Garden/${kind}/${species}`;
     node.position.set(x, y, z); node.userData = { kind, species, ...data }; b.root.add(node);
   };
   VILLA_GARDEN_TREES.forEach(({ x, z, scale: s, species }, index) => {
     const floor = villaTerrainGroundHeight(x, z);
-    marker('fruit-tree', species, x, floor, z, { scale: s, ...VILLA_FRUIT_SPECIES[species], fruitClusters: 12, fruitHeight: [1.92 * s, 2.71 * s] });
     b.collide(x, 0, z, .5 * s, 2.9 * s, .5 * s);
-    b.at(x, floor, z, 0, () => addVillaOrchardTree(b, species, s, index * 2.399, { bark, wood, stalk: green, leaf: leaves[species], fruit: fruits[species] }));
+    b.at(x, floor, z, 0, () => {
+      const bearing = addVillaOrchardTree(b, species, s, index * 2.399, { bark, wood, stalk: green, leaf: leaves[species], fruit: fruits[species] });
+      marker('fruit-tree', species, x, floor, z, { scale: s, ...VILLA_FRUIT_SPECIES[species], ...bearing });
+    });
   });
-  const frameBed = (w: number, d: number, h: number, material: THREE.Material) => {
-    b.box(0, h * .49, 0, w - .12, h - .08, d - .12, soil, 0);
-    for (const sign of [-1, 1]) {
-      for (const level of [0, 1]) {
-        const y = (.25 + level * .50) * h;
-        b.box(sign * (w / 2 - .053), y, 0, .106, h * .50 - .004, d, material, 0);
-        b.box(0, y, sign * (d / 2 - .052), w - .208, h * .50 - .004, .105, material, 0);
-      }
-      for (const end of [-1, 1]) {
-        b.box(sign * (w / 2 - .073), h / 2, end * (d / 2 - .075), .14, h + .012, .14, material, 0);
-        for (const y of [h * .28, h * .71]) b.cylinder(sign * (w / 2 - .004), y, end * (d / 2 - .077), .016, .016, .011, ridge, [0, 0, Math.PI / 2], 7);
-      }
-    }
-    b.collide(0, 0, 0, w, h, d);
-  };
-  for (const { x, y, z, w, d, species } of VILLA_ROOF_PLANTERS) {
+  for (const [bed, { x, y, z, w, d, species }] of VILLA_ROOF_PLANTERS.entries()) {
     marker('flower-planter', species, x, y, z, { width: w, depth: d, plants: 7 });
     b.at(x, y, z, 0, () => {
-      frameBed(w, d, .43, terra);
-      for (let i = 0; i < 7; i++) {
-        const along = (i - 3) * .25, across = (i % 2 ? -1 : 1) * .12;
-        b.at(w > d ? along : across, .38, w > d ? across : along, 0, () => {
-          const art = new NaturePalette(); addVillaBloom(art, species, crop, (species === 'sunflower' ? .79 : species === 'lavender' ? .51 : .46) + i % 3 * .052, i * 2.399); art.finish(b);
-        });
-      }
+      b.collide(0, 0, 0, w, .43, d);
+      const seed = 781 + 137 * bed, ground = kitchenGround(w - .084, d - .084, seed, true), surfaces = new NaturePalette();
+      const sites = Array.from({ length: 7 }, (_, i) => {
+        const along = (i - 3) * .267 + (sample01(seed, i + 55) - .5) * .095;
+        const across = .095 * (i % 2 ? -1 : 1) + (sample01(seed, i + 423) - .5) * .095;
+        return { x: w > d ? along : across, z: w > d ? across : along };
+      });
+      buildClayVessel(surfaces.get(stock), w, d, false, seed); turnKitchenSoil(surfaces.get(stock), ground, sites);
+      scatterKitchenLitter(surfaces.get(bits), ground.width, ground.depth, ground.yAt, seed, 39); surfaces.finish(b);
+      sites.forEach((site, i) => b.at(site.x, ground.yAt(site.x, site.z), site.z, 0, () => {
+        const art = new NaturePalette(), age = sample01(i + 12, seed + 89), phase = sample01(i + 85, seed + 44) * 6.283;
+        const h = { sunflower: .70, tulip: .36, lavender: .39, rose: .43, hydrangea: .46, daisy: .36 }[species] * (.72 + .54 * age);
+        addVillaBloom(art, species, crop, h, phase, .18 + .80 * age, true); art.finish(b);
+      }));
     });
   }
   for (const [i, { x, y, z, species }] of VILLA_ROOF_POTS.entries()) {
     marker('flower-pot', species, x, y, z, { width: .5, depth: .5, plants: 1 });
     b.at(x, y, z, 0, () => {
-      const clay = new NatureMesh();
-      clay.round([[.003, 0], [.003, .156], [.013, .181], [.038, .181], [.046, .173], [.243, .222], [.251, .233], [.268, .234], [.275, .225],
-        [.296, .234], [.301, .249], [.328, .25], [.341, .24], [.341, .219], [.324, .214], [.283, .210]], 14);
-      b.geometry(clay.geometry(), terra); b.cylinder(0, .286, 0, .212, .205, .016, soil, [0, 0, 0], 14);
-      b.at(0, .292, 0, 0, () => { const art = new NaturePalette(); addVillaBloom(art, species, crop, species === 'sunflower' ? .68 : .36, i * 2.399); art.finish(b, .89); });
+      const pot = new NaturePalette(), soilY = .294;
+      buildClayVessel(pot.get(stock), .5, .5, true, 49 + i); potCompost(pot.get(stock), soilY);
+      scatterKitchenLitter(pot.get(bits), .408, .408, () => soilY + .001, 39 + i, 8, true); pot.finish(b);
+      b.at(0, soilY, 0, 0, () => {
+        const art = new NaturePalette(); addVillaBloom(art, species, crop, species === 'sunflower' ? .67 : .36, i * 2.399, .61 + .19 * sample01(i, 43)); art.finish(b, .89);
+      });
     });
   }
-  for (const { x, z, w, d, species } of VILLA_VEGETABLE_BEDS) {
+  for (const [bed, { x, z, w, d, species }] of VILLA_VEGETABLE_BEDS.entries()) {
     marker('vegetable-bed', species, x, 0, z, { width: w, depth: d, rows: 2, plants: 10, trellis: species === 'tomato' });
     b.at(x, 0, z, 0, () => {
-      frameBed(w, d, .28, wood);
-      for (const rz of [-.36, .36]) b.box(0, .252, rz, 2.29, .085, .28, ridge, .027);
-      if (species === 'tomato') {
-        for (const sx of [-1.06, 0, 1.06]) b.beam([sx, .19, 0], [sx, 1.62, 0], .027, wood, 8);
-        for (const h of [.65, 1.12, 1.55]) {
-          b.beam([-1.12, h, .032], [1.12, h, .032], .02, wood, 7);
-          for (const sx of [-1.06, 0, 1.06]) for (const sign of [-1, 1]) b.beam([sx + sign * .023, h - .025, -.009], [sx - sign * .023, h + .026, .047], .005, ridge, 5);
-        }
-        b.colliders[b.colliders.length - 1].maxY = 1.65;
-      }
-      for (const row of [-1, 1]) for (let i = 0; i < 5; i++) {
-        b.at((i - 2) * .43, .286, row * .36, row === 1 ? 0 : Math.PI, () => {
-          const art = new NaturePalette(); addVillaKitchenCrop(art, species, species === 'carrot' ? { ...crop, rust: fruits.orange } : crop, i * 2.399 + row); art.finish(b);
-          if (species === 'tomato') {
-            // Raked cane connects the tied vine to the horizontal espalier.
-            b.beam([.01, 0, .02], [.068, 1.27, -.36], .009, wood, 5);
-            b.beam([.012, .57, .04], [.04, .57, -.153], .006, ridge, 5);
-          }
+      b.collide(0, 0, 0, w, species === 'tomato' ? 1.65 : .28, d);
+      const seed = 311 + 157 * bed, ground = kitchenGround(w - .078, d - .078, seed), surfaces = new NaturePalette(), sites = kitchenSites(seed);
+      const frame = surfaces.get(stock), litter = surfaces.get(bits);
+      buildBedStock(frame, litter, w, d, seed); turnKitchenSoil(frame, ground, sites);
+      scatterKitchenLitter(litter, ground.width, ground.depth, ground.yAt, seed, 103);
+      if (species === 'tomato') buildTomatoTrellis(litter);
+      surfaces.finish(b);
+      for (const { x: px, z: pz, phase, stage } of sites) {
+        const y = ground.yAt(px, pz);
+        b.at(px, y, pz, 0, () => {
+          const art = new NaturePalette(), ties = addVillaKitchenCrop(art, species, crop, phase, stage, -pz);
+          if (ties.length) stakeTomato(art.get(bits), px, pz, y, ties);
+          art.finish(b);
         });
       }
     });

@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { fieldStone } from './villaNatureGeometry.js';
-import { addVillaWaterMargin, addVillaUnderstory, addVillaWoodlandTree } from './villaWoodlandArt.js';
+import { addVillaMeadowTuft, addVillaUnderstory, addVillaWoodlandTree } from './villaWoodlandArt.js';
+import { createVillaTreelineAtlas, SHOOT, shootU, shootV, woodRandom } from './villaTreelineAtlas.js';
+import { addVillaStandTree, villaTreelinePlots } from './villaTreelineStands.js';
+import { addRiparianStreamWater } from './villaRiparianWater.js';
+import { addStreamHabitat } from './villaRiparianBanks.js';
+import { RiparianTrail } from './villaRiparianTrail.js';
 import { sawnGrain, timberMember } from './villaOutdoorJoinery.js';
 import type { VillaCollider } from './villaWorld.js';
 import {
   VILLA_LANDSCAPE_CLUSTERS, VILLA_LANDSCAPE_TREES, VILLA_LANDSCAPE_RENDER_BUDGET,
   VILLA_STREAM, VILLA_STREAM_BRIDGE, VILLA_STREAM_PATH, VILLA_STREAM_RENDER_BUDGET,
-  VILLA_STREAM_SECTIONS, villaStreamBasinGeometry, villaStreamBridgeHeight, villaStreamSectionAt, villaStreamTerrainHeight,
+  villaStreamBridgeHeight,
 } from './villaStream.js';
 
 function geometry(positions: number[], indices: number[]) {
@@ -24,6 +29,13 @@ class LandscapeRegionBuilder extends VillaModelBuilder {
   override geometry(g: THREE.BufferGeometry, paint: THREE.Material, position: [number, number, number] = [0, 0, 0], rotation: [number, number, number] = [0, 0, 0]) {
     const color = (paint as THREE.MeshStandardMaterial).color, count = g.getAttribute('position').count, colors = new Float32Array(count * 3);
     const shade = g.getAttribute('color');
+    if (!g.hasAttribute('uv')) {
+      // Tubes/field stones sample solid white. They can therefore share the
+      // cutout material without either a fifth draw or an accidental bark hole.
+      const uv = new Float32Array(count * 2), u = shootU(SHOOT.solid,.5), v = shootV(SHOOT.solid,.5);
+      for (let i = 0; i < count; i++) { uv[i * 2] = u; uv[i * 2 + 1] = v; }
+      g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    }
     for (let i = 0; i < count; i++) { const k = shade?.getX(i) ?? 1; colors[i * 3] = color.r * k; colors[i * 3 + 1] = color.g * k; colors[i * 3 + 2] = color.b * k; }
     g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); super.geometry(g, this.surface, position, rotation);
   }
@@ -38,54 +50,19 @@ export function createVillaStreamModel(parent: THREE.Object3D): {
 } {
   const root = new THREE.Group(); root.name = 'villa-north-stream'; parent.add(root);
   root.userData = { waterY: VILLA_STREAM.waterY, flowing: true, waterUnsupportedExceptBridge: true, renderBudget: VILLA_STREAM_RENDER_BUDGET };
-  const data = villaStreamBasinGeometry(), basinGeometry = geometry(data.positions, data.indices);
-  const colors: number[] = [], dry = new THREE.Color('#a69c78'), wet = new THREE.Color('#79775d'), deep = new THREE.Color('#959077');
-  for (let i = 0; i < data.positions.length; i += 3) {
-    const x = data.positions[i]!, y = data.positions[i + 1]!, z = data.positions[i + 2]!;
-    const c = y >= VILLA_STREAM.waterY ? wet.clone().lerp(dry, (y - VILLA_STREAM.waterY) / -VILLA_STREAM.waterY) : wet.clone().lerp(deep, (VILLA_STREAM.waterY - y) / (VILLA_STREAM.waterY - VILLA_STREAM.bedY));
-    c.multiplyScalar(.97 + .03 * Math.sin(x * 1.7 + z * 3.1)); colors.push(c.r, c.g, c.b);
-  }
-  basinGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const silt = villaMaterial('#ffffff', .98); silt.vertexColors = true;
-  const basin = new THREE.Mesh(basinGeometry, silt); basin.name = 'villa-stream-basin-and-banks'; basin.receiveShadow = true; root.add(basin);
-
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
-  VILLA_STREAM_SECTIONS.forEach((p, i) => {
-    positions.push(p.x, VILLA_STREAM.waterY, p.z - p.halfWidth, p.x, VILLA_STREAM.waterY, p.z + p.halfWidth);
-    uvs.push(p.x, 0, p.x, 1);
-    if (i) { const n = (i - 1) * 2; indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
-  });
-  const waterGeometry = geometry(positions, indices); waterGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  const water = new THREE.MeshStandardMaterial({ color: '#658f88', roughness: .23, metalness: .05, transparent: true, opacity: .68, depthWrite: false });
-  water.name = 'villa-stream-flowing-water';
-  const time = { value: 0 };
-  // Animated longitudinal ripple shading, in metres, makes modest west→east
-  // flow visible without moving the water edge or simulating a whole ocean.
-  water.onBeforeCompile = shader => {
-    shader.uniforms.villaStreamTime = time;
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 villaStreamUV;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvillaStreamUV = uv;');
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float villaStreamTime;\nvarying vec2 villaStreamUV;')
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float flow = villaStreamUV.x - villaStreamTime * ${VILLA_STREAM.flowMetresPerSecond.toFixed(2)};
-        float ripple = sin(flow * 5.0 + sin(villaStreamUV.y * 13.0) * 1.6);
-        float smallRipple = sin(flow * 11.0 - villaStreamUV.y * 23.0);
-        float edgeFade = smoothstep(0.0, 0.16, villaStreamUV.y) * smoothstep(0.0, 0.16, 1.0 - villaStreamUV.y);
-        float glint = pow(max(0.0, ripple * 0.7 + smallRipple * 0.3), 10.0) * edgeFade;
-        diffuseColor.rgb *= 0.97 + ripple * 0.035 + smallRipple * 0.018;
-        diffuseColor.rgb += vec3(0.12, 0.14, 0.12) * glint;
-      `);
-  };
-  water.customProgramCacheKey = () => 'villa-stream-metres-flow-v1';
-  const surface = new THREE.Mesh(waterGeometry, water); surface.name = 'villa-stream-water'; surface.receiveShadow = true; root.add(surface);
+  const update = addRiparianStreamWater(root, geometry);
 
   const b = new VillaModelBuilder(root, 'villa-stream-bank-details');
   const timber = villaMaterial('#a18360', .9), edgeTimber = villaMaterial('#80674a', .95), darkWood = villaMaterial('#665640', .98);
-  const stone = villaMaterial('#9c9b8d', 1), paleStone = villaMaterial('#b0ab95', 1), leaf = villaMaterial('#697b48', 1);
-  const reedTip = villaMaterial('#9b8960', 1), grass = villaMaterial('#88905b', 1), gravel = villaMaterial('#b5ac8e', 1);
-  leaf.side = grass.side = THREE.DoubleSide;
+  const stone = villaMaterial('#9c9b8d', 1), paleStone = villaMaterial('#b0ab95', 1);
   timber.name = 'stream-bridge-timber'; edgeTimber.name = 'stream-bridge-framing';
-  sawnGrain(timber); sawnGrain(edgeTimber);
+  for (const wood of [timber, edgeTimber]) {
+    sawnGrain(wood); const fallback = wood.onBeforeCompile;
+    // The scene may bind a real cedar study to these metre-space faces. Do
+    // not draw simulated growth rings a second time over the photographed grain.
+    wood.onBeforeCompile = (shader, renderer) => { if (!wood.map) fallback.call(wood, shader, renderer); };
+    wood.customProgramCacheKey = () => wood.map ? 'villa-bridge-cedar' : 'villa-sawn-grain-v1';
+  }
   const bridge = VILLA_STREAM_BRIDGE, centreZ = (bridge.minZ + bridge.maxZ) / 2, width = bridge.maxX - bridge.minX, length = bridge.maxZ - bridge.minZ;
   // Continuous underdeck beneath tiny plank joints, two stout stringers and a
   // central beam on four dry-bank abutments: no floating timber landing.
@@ -149,86 +126,58 @@ export function createVillaStreamModel(parent: THREE.Object3D): {
 
   // Gravel approach is deliberately narrow through the two retained fruit
   // trees; it widens at the last two metres to meet the generous bridge deck.
+  const trail = new RiparianTrail('stream-walking-gravel', 12174, 2.6);
   for (const [za, zb, wideningEnd] of [[VILLA_STREAM_PATH.minZ, bridge.approachMinZ, true], [bridge.approachMaxZ, VILLA_STREAM_PATH.maxZ, false]] as const) {
-    const count = Math.ceil((zb - za) / .5), p: number[] = [], ids: number[] = [];
-    for (let i = 0; i <= count; i++) {
-      const z = za + (zb - za) * i / count, distance = wideningEnd ? zb - z : z - za;
-      const half = VILLA_STREAM_PATH.halfWidth + (width / 2 - VILLA_STREAM_PATH.halfWidth) * Math.max(0, 1 - distance / 2);
-      p.push(-half, .008, z, half, .008, z);
-      if (i) { const k = (i - 1) * 2; ids.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
-    }
-    b.geometry(geometry(p, ids), gravel);
+    trail.path([{ x: 0, z: za }, { x: 0, z: zb }], p => 2 * VILLA_STREAM_PATH.halfWidth
+      + (width - 2 * VILLA_STREAM_PATH.halfWidth) * Math.max(0, 1 - (wideningEnd ? zb - p.z : p.z - za) / 2), true);
   }
-  // Uneven groups rather than identical reeds on every transect. Leave the
-  // bridge sightline and approaches completely open. Only low pebbles enter
-  // walkable dry banks; larger stones sit IN already unsupported water.
-  for (let i = 0; i < 47; i++) {
-    const x = VILLA_STREAM.minX + 1.1 + i * 2.31;
-    if (Math.abs(x) < 5.2) continue;
-    const s = villaStreamSectionAt(x); if (!s) continue;
-    const side = i % 3 ? 1 : -1, z = s.z + side * (s.halfWidth + .24 + (i % 4) * .17), y = villaStreamTerrainHeight(x, z) ?? 0;
-    if (i % 5 !== 1) {
-      b.at(x, y, z, i * .73, () => addVillaWaterMargin(b, .9 + (i % 4) * .13, i * 2.399, leaf, grass, reedTip, i % 3 === 0));
-    }
-    if (i % 3 === 0) {
-      // 10cm-high bank pebbles do not require phantom shin-high colliders.
-      rock(b, x + .24, y + .025, z - side * .08, .21, .07, .15, i % 2 ? paleStone : stone, i);
-    }
-    if (i % 4 === 1) {
-      const rz = s.z + side * (s.halfWidth - .42), floor = villaStreamTerrainHeight(x, rz)!;
-      rock(b, x, floor + .11, rz, .33, .24, .27, stone, i * .8);
-    }
-  }
-  // A few submerged stones make the moving transparent surface visibly shallow.
-  for (let i = 0; i < 54; i++) {
-    const x = -42.5 + i * 1.99, s = villaStreamSectionAt(x); if (!s) continue;
-    const z = s.z + Math.sin(i * 2.399) * s.halfWidth * .5, y = villaStreamTerrainHeight(x, z)!;
-    rock(b, x, y + .035, z, .08 + i % 3 * .027, .06, .12, i % 3 ? stone : paleStone, i);
-  }
-  b.finish();
-  return { root, colliders: b.colliders, update(elapsedSeconds) { if (Number.isFinite(elapsedSeconds)) time.value = Math.max(0, elapsedSeconds); } };
+  trail.finish(b); addStreamHabitat(b); b.finish();
+  return { root, colliders: b.colliders, update };
 }
 
-/** Batched, low-poly mixed copses. These are outside the fence, so no new
- * gameplay obstacles or hidden walls are returned. Default ground is the TOP
- * of VillaScene's existing distant grass box (-1.2 + .12/2), not estate height.
- * A parent adding exterior terrain can provide its own exact ground sampler. */
+/** The open near meadow, wooded middle distance and planted uplands remain
+ * outside the playable fence. The exterior grass plane is at -1.14, NOT the
+ * in-fence terrain height; ridge sites additionally sample the actual folds. */
 export function createVillaPeripheralLandscape(parent: THREE.Object3D, groundHeight: (x: number, z: number) => number = () => -1.14): { root: THREE.Group; colliders: VillaCollider[] } {
   const root = new THREE.Group(); root.name = 'villa-peripheral-copses'; parent.add(root);
-  const material = villaMaterial('#ffffff', 1); material.vertexColors = true;
+  const material = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, map:createVillaTreelineAtlas(),
+    alphaTest:.45, side:THREE.DoubleSide }); material.name = 'villa/regional-woodland';
   const regions = { west: new LandscapeRegionBuilder(root, 'landscape-west', material), east: new LandscapeRegionBuilder(root, 'landscape-east', material),
     north: new LandscapeRegionBuilder(root, 'landscape-north', material), south: new LandscapeRegionBuilder(root, 'landscape-south', material) };
-  const bark = villaMaterial('#70604b', 1), birch = villaMaterial('#b9b6a4', 1), dark = villaMaterial('#4d6550', 1);
-  const oak = villaMaterial('#67794d', 1), lime = villaMaterial('#81935a', 1), pine = villaMaterial('#4b6a55', 1);
-  const shrub = villaMaterial('#73825c', 1), stone = villaMaterial('#9b9b8b', 1);
-  material.side = THREE.DoubleSide;
-  for (const p of [oak, lime, dark, pine, shrub]) { p.side = THREE.DoubleSide; p.vertexColors = true; }
+  const bark = villaMaterial('#716354',1), birch = villaMaterial('#cdc9ad',1), dark = villaMaterial('#536b53',1);
+  const oak = villaMaterial('#839865',1), lime = villaMaterial('#a5b77c',1), pine = villaMaterial('#6c8875',1);
+  const shrub = villaMaterial('#8a9a61',1), grass = villaMaterial('#99a66d',1), straw = villaMaterial('#bcb178',1), stone = villaMaterial('#a5a495',1);
+  const paint = {bark,birch,dark,oak,lime,pine}, palette = [...Object.values(paint),shrub,grass,straw,stone];
+  palette.forEach(p => { p.vertexColors = true; });
   VILLA_LANDSCAPE_TREES.forEach((tree, i) => {
     const b = regions[tree.side], { x, z, scale: s, kind } = tree, y = groundHeight(x, z);
     const marker = new THREE.Object3D(); marker.name = `landscape-${tree.side}-${kind}`; marker.position.set(x, y, z); marker.userData = { ...tree, sceneryOnly: true }; b.root.add(marker);
-    b.at(x, y - .03, z, tree.yaw, () => {
-      addVillaWoodlandTree(b, kind, s, i * 2.399, { bark, birch, dark, oak, lime, pine });
-    });
+    b.at(x, y, z, tree.yaw, () => addVillaWoodlandTree(b, kind, s, i * 2.399, paint));
   });
-  // Composed low foreground around each copse, interspersed with exposed stone.
-  // Gaps between clusters remain 15–35m of open meadow, not a hedge-wall band.
   VILLA_LANDSCAPE_CLUSTERS.forEach((cluster, i) => {
-    const b = regions[cluster.side];
-    for (let j = 0; j < 7; j++) {
-      const angle = j * 2.399 + i * .73, r = cluster.radius * (.33 + (j % 3) * .24);
-      const x = cluster.x + Math.cos(angle) * r, z = cluster.z + Math.sin(angle) * r, y = groundHeight(x, z);
-      const s = .55 + ((i + j) % 4) * .16;
-      if (j === 1 || j === 5) rock(b, x, y + .23 * s, z, .9 * s, .55 * s, .65 * s, stone, angle);
-      else {
-        b.at(x, y, z, angle, () => addVillaUnderstory(b, s, angle, bark, shrub, (i + j) % 3 ? lime : dark));
-      }
+    const b = regions[cluster.side], rand = woodRandom(41.6 + i);
+    for (let j = 0; j < 10; j++) {
+      const angle = j * 2.399 + i * .73 + rand() * .42, r = cluster.radius * (.22 + .76 * Math.sqrt(rand()));
+      const x = cluster.x + Math.cos(angle) * r, z = cluster.z + Math.sin(angle) * r, y = groundHeight(x,z);
+      if (j === 0 && i % 2 === 0) rock(b,x,y + .15,z,.56 + rand() * .7,.43,.62,stone,angle);
+      if (j < 4) b.at(x,y,z,angle,() => addVillaUnderstory(b,1.10 + rand() * 1.30,angle,bark,shrub,j % 2 ? lime : oak));
+      // Low grasses run around, not through, the exposed stems. The pocket
+      // itself ends; do not string identical bushes along the whole fence.
+      const gx = x + Math.cos(angle) * .80, gz = z + Math.sin(angle) * .80;
+      b.at(gx,groundHeight(gx,gz),gz,angle,() => addVillaMeadowTuft(b,.76 + rand() * .55,angle,grass,straw));
     }
   });
+  const {plots,floor} = villaTreelinePlots(groundHeight);
+  for (const p of plots) {
+    const b = regions[p.side]; b.at(p.x,p.y,p.z,0,() => addVillaStandTree(b,p,paint,floor));
+  }
   Object.values(regions).forEach(b => b.finish());
-  // Palette paints were baked to vertex attributes, not retained GPU resources.
-  [bark, birch, dark, oak, lime, pine, shrub, stone].forEach(paint => paint.dispose());
-  // Shadow maps need not rasterize distant copses beyond the property fence.
-  root.traverse(node => { if (node instanceof THREE.Mesh) node.castShadow = false; });
-  root.userData = { renderBudget: VILLA_LANDSCAPE_RENDER_BUDGET, sceneryOnly: true, outsideWalkableFence: true, trees: VILLA_LANDSCAPE_TREES.length, clusters: VILLA_LANDSCAPE_CLUSTERS.length, species: ['oak', 'birch', 'pine'] };
+  // These swatches never reach WebGL. The one retained surface exposes its
+  // atlas through .map for the scene's ordinary deduplicating disposal pass.
+  palette.forEach(p => p.dispose());
+  root.traverse(node => { if (node instanceof THREE.Mesh) { node.castShadow = false; node.receiveShadow = false; } });
+  root.userData = { renderBudget: VILLA_LANDSCAPE_RENDER_BUDGET, sceneryOnly:true, outsideWalkableFence:true,
+    trees:VILLA_LANDSCAPE_TREES.length, clusters:VILLA_LANDSCAPE_CLUSTERS.length, meadowWood:plots.filter(p => !p.fell).length,
+    ridgeWood:plots.filter(p => p.fell).length, species:['oak','birch','pine'] };
   return { root, colliders: [] };
 }

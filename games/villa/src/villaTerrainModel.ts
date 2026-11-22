@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder } from './villaModel.js';
 import { addVillaFencePost, addVillaFenceRail } from './villaEstateCraft.js';
+import { addVillaPales, shelteredBay } from './villaGardenFence.js';
 import { POOL, type VillaCollider } from './villaWorld.js';
 import { VILLA_BUILDING_GROUND_CUTS, VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FENCE_SEGMENTS, VILLA_POND, VILLA_POND_BOUNDS, villaTerrainHeight, villaTerrainGroundHeight, villaTerrainGroundNormal } from './villaEstateLayout.js';
 import { VILLA_STREAM_BOUNDS, VILLA_STREAM_CUTOUTS, villaStreamContains } from './villaStream.js';
@@ -130,6 +131,7 @@ export function createVillaEstateFence(parent: THREE.Object3D, wood: THREE.Mater
       if (villaStreamContains(p.x, p.z, .12, true) || villaStreamContains(q.x, q.z, .12, true)
         || villaStreamContains((p.x + q.x) / 2, (p.z + q.z) / 2, .12, true)) continue;
       for (const h of [.35, .9]) addVillaFenceRail(b,[p.x,y+h,p.z],[q.x,qy+h,q.z],wood);
+      if(shelteredBay((p.x+q.x)/2,(p.z+q.z)/2,Math.abs(dx)>Math.abs(dz)))addVillaPales(b,[p.x,y,p.z],[q.x,qy,q.z],wood);
     }
     // Broad-phase chunks remain short enough to follow the rolling ground.
     for (let i = 0; i < count; i += 4) {

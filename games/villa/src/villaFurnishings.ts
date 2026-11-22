@@ -162,8 +162,8 @@ export function furnishVilla(scene: THREE.Scene): {
     if (chaise) hit(-w / 2 + .63, 0, -1.05, 1.24, .7, 1.4, seatId);
     if (seatId) seatMarker(seatId, w, 1.3);
   }
-  function plant(x: number, y: number, z: number, s = 1, flowers = false) {
-    at(x, y, z, 0, () => planter(kit, s, flowers, random));
+  function plant(x: number, y: number, z: number, s = 1, flowers = false, outdoor = false) {
+    at(x, y, z, 0, () => planter(kit, s, flowers, random, outdoor));
   }
   function books(x: number, y: number, z: number, count = 6) {
     let edge = x - .035;
@@ -531,7 +531,7 @@ export function furnishVilla(scene: THREE.Scene): {
     parasol(kit);
     hit(0, 0, 0, 0.96, 0.13, 0.96); hit(0, 0.13, 0, 0.074, 2.5, 0.074);
   });
-  for (const x of [-3, 3]) { plant(x, 0, 10.3, 1.25, true); hit(x, 0, 10.3, 0.6, 0.48, 0.6); }
+  for (const x of [-3, 3]) { plant(x, 0, 10.3, 1.25, true, true); hit(x, 0, 10.3, 0.6, 0.48, 0.6); }
   // The same ten perimeter tree sites are now planted by villaGarden.
   // West pool hedge: a row fully outside the facade, never straddling the west
   // glazing, which used to leave green orbs growing through the window frames.
@@ -539,7 +539,7 @@ export function furnishVilla(scene: THREE.Scene): {
     const x = i < 14 ? VILLA_WEST_WALL.outer - .55 : VILLA_ESTATE_BOUNDS.maxX - 1.15;
     at(x, 0, -12 + i % 14 * 2.45, 0, () => topiary(kit, i < 14 ? .50 : .72, 1.03 + .19 * random(), i, i % 3 ? leaf : leafLight));
   }
-  for (const [x, z] of [[-9, 11], [-10.5, 16], [7, 11], [8.5, 18], [-22.6, 11.5]]) { plant(x, 0, z, 1, true); plant(x + 0.8, 0, z + 0.3, 0.65, true); }
+  for (const [x, z] of [[-9, 11], [-10.5, 16], [7, 11], [8.5, 18], [-22.6, 11.5]]) { plant(x, 0, z, 1, true, true); plant(x + 0.8, 0, z + 0.3, 0.65, true, true); }
   hit(-22.6, 0, 11.5, .5, .39, .5); hit(-21.8, 0, 11.8, .325, .2535, .325);
   // These two existing pots share the pets' lawn: preserve their solid footprints.
   hit(-10.5, 0, 16, .5, .39, .5); hit(-9.7, 0, 16.3, .325, .2535, .325);

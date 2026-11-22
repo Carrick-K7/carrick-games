@@ -18,10 +18,12 @@ import { VILLA_ESTATE_BOUNDS } from './villaEstateLayout.js';
 import { createVillaEnvelope } from './villaEnvelope.js';
 import { createVillaStairAndGuards, createVillaPergola } from './villaCirculationModel.js';
 import { createVillaPoolside } from './villaPoolside.js';
+import { createVillaPoolFinishMaps } from './villaWeatheredPool.js';
 import { addVillaDistantRidges } from './villaDistantRidges.js';
 import { VillaStaticView } from './villaStaticView.js';
 import { indexVillaRigidSurfaces } from './villaIndexedSurface.js';
 import { VillaFrameReadback } from './villaFrameReadback.js';
+import { fixedVillaContactColliders } from './villaBakedContact.js';
 import { createVillaEstateFence, createVillaTerrainGeometry } from './villaTerrainModel.js';
 import { createVillaScooterModel } from './villaScooterModel.js';
 import { isVillaScooterCollider, type VillaScooterState } from './villaScooter.js';
@@ -30,6 +32,12 @@ import type { VillaRaceState } from './villaRacing.js';
 import type { VillaSnookerState } from './villaSnooker.js';
 import { createVillaSnookerModel } from './villaSnookerModel.js';
 import { createVillaGarden } from './villaGarden.js';
+import { createCultivatedGround, tintManagedLawn } from './villaGardenFloor.js';
+import { createVillaFenceBankGeometry } from './villaFenceBank.js';
+import { courtyardSwatches, dressSurveyedHardscape } from './villaSoilFinishes.js';
+import { addSurveyedSun } from './villaSolarSurvey.js';
+import { installVillaOrchardLight } from './villaOrchardSurface.js';
+import { createVillaShelterPlanting } from './villaShelterPlanting.js';
 import { createVillaPetModel } from './villaPetModel.js';
 import type { VillaPetsState } from './villaPets.js';
 import { createVillaHome, villaAtmosphere, VILLA_SECURITY_CAMERAS, type VillaHomeState } from './villaHome.js';
@@ -86,18 +94,18 @@ function reflectionProbe(): THREE.CubeTexture {
   const map = new THREE.CubeTexture(images); map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true; return map;
 }
 
-function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile'): THREE.CanvasTexture {
+function texture(kind: 'oak' | 'stone' | 'plaster'): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const ctx = c.getContext('2d')!;
   let seed = 73;
   const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  ctx.fillStyle = { oak: '#bd9872', stone: '#d7cdbb', plaster: '#f0e6d5', grass: '#728554', water: '#a7d1d0', tile: '#8cbfc0' }[kind];
+  ctx.fillStyle = { oak: '#bd9872', stone: '#d7cdbb', plaster: '#f0e6d5' }[kind];
   ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 4200; i++) {
     const light = random() > 0.5;
     ctx.fillStyle = light ? 'rgba(255,249,224,.065)' : 'rgba(51,37,23,.065)';
-    ctx.fillRect(random() * 256, random() * 256, kind === 'grass' ? 2 : 1, kind === 'grass' ? 5 : 1);
+    ctx.fillRect(random() * 256, random() * 256, 1, 1);
   }
   if (kind === 'oak') {
     for (let i = 0; i < 240; i++) {
@@ -121,26 +129,8 @@ function texture(kind: 'oak' | 'stone' | 'plaster' | 'grass' | 'water' | 'tile')
       ctx.ellipse(x,y,.4+random()*2.2,.23+random()*.45,-.16,0,2*Math.PI);ctx.fill();
     }
   }
-  if (kind === 'tile') {
-    ctx.strokeStyle = 'rgba(230,244,231,.5)'; ctx.lineWidth = 1.5;
-    for (let p = 0; p <= 256; p += 16) {
-      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, 256); ctx.moveTo(0, p); ctx.lineTo(256, p); ctx.stroke();
-    }
-  }
-  if (kind === 'water' || kind === 'tile') {
-    for (let i = 0; i < 36; i++) {
-      ctx.strokeStyle = kind === 'water' ? 'rgba(255,255,255,.25)' : 'rgba(255,255,232,.12)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let x = 0; x <= 256; x += 4) {
-        const y = (i * 19 + Math.sin(x * 0.047 + i) * 9 + Math.sin(x * 0.016 + i * 2) * 12) % 256;
-        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-  }
   const t = new THREE.CanvasTexture(c);
-  t.colorSpace = kind === 'water' ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
   return t;
@@ -213,7 +203,9 @@ export class VillaScene {
   private readonly environment = reflectionProbe();
   private lastStateKey = '';
   private readonly water: THREE.Mesh;
-  private readonly waterMap: THREE.CanvasTexture;
+  private readonly waterMap: THREE.Texture;
+  private readonly groundSwatches: ReturnType<typeof courtyardSwatches>;
+  private readonly surveyedSun: ReturnType<typeof addSurveyedSun>;
   private readonly sky: THREE.ShaderMaterial;
   private disposed = false;
   private contextLost = false;
@@ -332,8 +324,11 @@ export class VillaScene {
     skyDome.renderOrder = 10_000;
     skyDome.position.set(estateX, 0, estateZ); this.scene.add(skyDome);
 
+    this.groundSwatches=courtyardSwatches(()=>{this.invalidateCameraFrame();this.securityKey='';});
+    const exteriorTimber=new THREE.MeshStandardMaterial({map:this.groundSwatches.maps.timber,roughness:.93,vertexColors:true});exteriorTimber.name='weathered-garden-joinery';
     const oak = texture('oak'), stone = texture('stone'), plaster = texture('plaster');
-    const materials: Record<VillaMaterial, THREE.MeshStandardMaterial> = {
+    const materials: Record<VillaMaterial, THREE.MeshStandardMaterial> & {exteriorTimber:THREE.MeshStandardMaterial} = {
+      exteriorTimber,
       oak: new THREE.MeshStandardMaterial({ map: oak, roughness: 0.67 }),
       stone: new THREE.MeshStandardMaterial({ map: stone, roughness: 0.88 }),
       plaster: new THREE.MeshStandardMaterial({ map: plaster, roughness: 0.95 }),
@@ -346,14 +341,20 @@ export class VillaScene {
     createVillaEnvelope(this.scene, materials);
     createVillaStairAndGuards(this.scene, materials, glow);
     this.colliders = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS, ...createVillaPergola(this.scene, materials, glow('terrace'))];
-    this.waterMap = texture('water');
-    this.water = createVillaPoolside(this.scene, materials, texture('tile'), this.waterMap, glow('garden'));
-    const grass = new THREE.MeshStandardMaterial({ map: texture('grass'), roughness: 1 });
-    const meadow = new THREE.Mesh(createVillaTerrainGeometry('shared'), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
-    const distantGround = new THREE.Mesh(new THREE.PlaneGeometry(680,680), grass);
+    const poolFinishes=createVillaPoolFinishMaps();this.waterMap=poolFinishes.ripple;
+    this.water = createVillaPoolside(this.scene, materials, poolFinishes.tile, this.waterMap, glow('garden'));
+    const grass = new THREE.MeshStandardMaterial({ map:this.groundSwatches.maps.turf,roughness:.99,vertexColors:true });grass.name='living-lawn';
+    const meadow = new THREE.Mesh(tintManagedLawn(createVillaTerrainGeometry('shared')), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
+    const bankMesh=new THREE.Mesh(tintManagedLawn(createVillaFenceBankGeometry()),grass);bankMesh.name='estate-turf-shoulder';bankMesh.receiveShadow=true;this.scene.add(bankMesh);
+    const distantTurf=grass.clone();distantTurf.vertexColors=false;distantTurf.color.set('#aaad8c');
+    const distantGround = new THREE.Mesh(new THREE.PlaneGeometry(680,680), distantTurf);
     distantGround.geometry.getAttribute('uv').setXY(0,0,272).setXY(1,272,272).setXY(2,0,0).setXY(3,272,0);
     distantGround.renderOrder=9_999; distantGround.rotation.x = -Math.PI/2; distantGround.position.set(estateX,-1.14,estateZ); this.scene.add(distantGround);
-    const fence = createVillaEstateFence(this.scene, materials.oak); this.colliders.push(...fence.colliders);
+    const fenceWood=new THREE.MeshStandardMaterial({map:this.groundSwatches.maps.timber,color:0xb7ab97,roughness:.96,vertexColors:true});fenceWood.name='garden-fence-seasoned-stock';
+    const fence = createVillaEstateFence(this.scene,fenceWood); this.colliders.push(...fence.colliders);
+    const gardenGravel=new THREE.MeshStandardMaterial({map:this.groundSwatches.maps.gravel,color:0xffffff,roughness:.99,vertexColors:true});gardenGravel.name='garden-workcourt-grit';
+    createCultivatedGround(this.scene,gardenGravel);
+    const shelterPlanting=createVillaShelterPlanting(this.scene);this.colliders.push(...shelterPlanting.colliders);
     addVillaDistantRidges(this.scene, estateX, estateZ);
     this.furnishings = furnishVilla(this.scene);
     this.vehicle = createVillaVehicle(this.scene);
@@ -366,6 +367,7 @@ export class VillaScene {
     this.snooker = createVillaSnookerModel(this.scene);
     const garden = createVillaGarden(this.scene), estate = createVillaEstateModel(this.scene);
     this.stream = createVillaStreamModel(this.scene); createVillaPeripheralLandscape(this.scene);
+    dressSurveyedHardscape(this.scene,this.groundSwatches.maps);
     this.outdoorModel = createVillaOutdoorModel(this.scene);
     this.outdoorModel.update(this.fallbackOutdoor, this.primaryView, this.primaryView.yaw);
     this.pets = createVillaPetModel(this.scene);
@@ -381,6 +383,10 @@ export class VillaScene {
     // Bounding/range preparation must see the final uploaded attributes and triangle stream.
     indexVillaRigidSurfaces(this.scene);
     this.staticView = new VillaStaticView(this.scene);
+    // Fragment-only sunlight sampling is installed after conservative static range classification.
+    // It never moves a vertex or changes the bounds used for primary and security views.
+    installVillaOrchardLight(this.scene);
+    this.surveyedSun=addSurveyedSun(this.scene);
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 
@@ -401,13 +407,13 @@ export class VillaScene {
     const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace;
     const material = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
     // Contact shadows belong on floors, not beneath elevated drawers or mirrors.
-    const parts = colliders.filter(collider => [0, 3.6, 7.2].some(y => Math.abs(collider.minY - y) < .08)).map(collider => {
+    const parts = fixedVillaContactColliders(this.scene, colliders).filter(collider => [0, 3.6, 7.2].some(y => Math.abs(collider.minY - y) < .08)).map(collider => {
       const g = new THREE.PlaneGeometry((collider.maxX - collider.minX) * 1.42, (collider.maxZ - collider.minZ) * 1.42);
       g.rotateX(-Math.PI / 2);
       g.translate((collider.minX + collider.maxX) / 2, collider.minY + 0.039, (collider.minZ + collider.maxZ) / 2);
       return g;
     });
-    const geometry = mergeGeometries(parts);
+    const geometry = parts.length ? mergeGeometries(parts) : null;
     parts.forEach(g => g.dispose());
     if (geometry) { const mesh = new THREE.Mesh(geometry, material); mesh.name = 'villa-contact-shadows'; this.scene.add(mesh); }
     else { material.dispose(); map.dispose(); }
@@ -493,6 +499,7 @@ export class VillaScene {
     blend(this.ambient.color, '#ffe2bd', '#ffdec0', '#b3c7dd', '#c3ccd1');
     this.sky.uniforms.sunColor.value.copy(this.sun.color).multiplyScalar((1 - a.night * .82) * (1 - a.rain * .84));
     this.sun.intensity = a.sun; this.hemi.intensity = a.hemisphere; this.ambient.intensity = a.ambient;
+    if(this.surveyedSun)this.surveyedSun.strength.value=.87*(1-.83*a.rain)*(1-.70*a.night);
     this.renderer.toneMappingExposure = a.exposure;
     this.scene.environmentIntensity = .32 * (1 - a.darkness * .72) * (1 - a.rain * .3);
     const fog = this.scene.fog as THREE.Fog;
@@ -658,7 +665,7 @@ export class VillaScene {
     if (this.disposed) return;
     this.disposed = true;
     this.readback?.dispose(); this.readback=null;
-    this.staticView?.dispose();
+    this.staticView?.dispose();this.surveyedSun?.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
@@ -669,6 +676,7 @@ export class VillaScene {
       }
     });
     materials.forEach(m => { Object.values(m).forEach(value => { if (value instanceof THREE.Texture) textures.add(value); }); m.dispose(); });
+    if (this.groundSwatches){for(const t of Object.values(this.groundSwatches.maps))textures.delete(t);this.groundSwatches.dispose();}
     textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose());
     this.environment.dispose();
     this.securityTarget?.dispose(); this.securityTarget = null;

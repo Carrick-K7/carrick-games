@@ -1,120 +1,139 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { VillaFruitSpecies } from './villaGarden.js';
 import type { VillaModelBuilder } from './villaModel.js';
-import { NatureMesh, NaturePalette, add3, collar, margin, mix3, polar, turn, type P3 } from './villaNatureGeometry.js';
+import { NaturePalette, add3, collar, mix3, polar, stemAtHeight, turn, type P3 } from './villaNatureGeometry.js';
+import { bearFruit, fruitRadius, fruitSeat, fruitTop } from './villaOrchardFruit.js';
+import { onBough, orchardBough, orchardSprig } from './villaOrchardGrowth.js';
+import { finishOrchardSurfaces, orchardRandom, orchardSpecies } from './villaOrchardSurface.js';
+export { orchardFruitSkin } from './villaOrchardFruit.js';
 
-// A spine/one continuous skin per fruit. Section radii run from blossom end
-// up to stalk: the shoulder of a pear is not a second fruit glued to the neck.
-const profiles = {
-  cherry: [[-.079, 0], [-.065, .045], [-.026, .075], [.031, .069], [.066, .048], [.060, 0]],
-  orange: [[-.166, 0], [-.143, .105], [-.062, .175], [.058, .178], [.145, .113], [.162, 0]],
-  apple: [[-.137, 0], [-.153, .063], [-.13, .098], [-.094, .129], [-.025, .15], [.040, .165], [.097, .152], [.138, .115], [.148, .063], [.102, 0]],
-  pear: [[-.193, 0], [-.177, .077], [-.142, .138], [-.083, .166], [-.010, .161], [.060, .133], [.133, .084], [.20, .052], [.243, .035], [.253, 0]],
-  lemon: [[-.209, 0], [-.20, .031], [-.17, .045], [-.133, .089], [-.067, .125], [.028, .133], [.108, .109], [.163, .067], [.19, .036], [.202, 0]],
-  mango: [[-.27, 0], [-.254, .045], [-.22, .080], [-.17, .102], [-.105, .12], [-.031, .132], [.045, .144], [.12, .142], [.179, .128], [.222, .10], [.25, .066], [.264, .035], [.27, 0]],
-} as const;
-function fruitAxis(kind: VillaFruitSpecies, h: number): number {
-  return kind === 'mango' ? .052 * (1 - (h / .27) ** 2) - .025 * h / .27 : kind === 'pear' ? -.020 * (h + .193) / .446
-    : kind === 'lemon' ? -.2 * h : kind === 'cherry' ? -.012 * h / .08 : .004 * h;
-}
-/** Cut surface has a recessed stem well, unequal shoulders or a nipple as
- * appropriate. Vertex blush follows those shoulders; no extra skin overlay. */
-export function orchardFruitSkin(kind: VillaFruitSpecies, azimuth: number) {
-  const profile = profiles[kind], skin = new NatureMesh();
-  const sides = kind === 'mango' ? 16 : kind === 'apple' ? 12 : 8;
-  skin.round(profile, sides, (x, y, z, a) => {
-    const lobe = kind === 'apple' ? 1 + (.027 + .055 * Math.min(1, Math.abs(y / .14))) * Math.cos(5 * a)
-      : kind === 'orange' ? 1 + .023 * Math.sin(3 * a + y * 6) : 1;
-    const cheek = (kind === 'cherry' || kind === 'mango') ? 1 - .115 * Math.max(0, Math.cos(a)) ** 9 : 1;
-    return [fruitAxis(kind, y) + x * lobe * cheek, y, z * lobe * (kind === 'mango' ? .84 : kind === 'pear' ? .94 : 1)];
-  });
-  const g = skin.geometry(), p = g.getAttribute('position'), rgb: number[] = [];
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i), z = p.getZ(i), strength = Math.max(0, z * 7 + .15 * Math.sin(azimuth)) * Math.max(0, .48 + y * 2);
-    rgb.push(1, 1 - Math.min(.16, strength * .27), 1 - Math.min(.22, strength * .34));
-  }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(rgb, 3)); return g;
-}
-
+// Bole and crown dimensions in metres. An open cherry / goblet apple have
+// shortened central axes. A pear climbs one leader; mango spreads on lowered
+// laterals; orange carries a much tighter collar of evergreen wood than lemon.
 const habit = {
-  cherry: { spread: 1.26, top: 3.98, sweep: .72, blade: .33, width: .092, rim: margin.cherry },
-  orange: { spread: 1.00, top: 4.05, sweep: .58, blade: .30, width: .106, rim: margin.oval },
-  mango: { spread: 1.36, top: 3.72, sweep: .81, blade: .465, width: .084, rim: margin.lance },
-  apple: { spread: 1.21, top: 3.58, sweep: .72, blade: .33, width: .118, rim: margin.ovate },
-  pear: { spread: .78, top: 4.31, sweep: .48, blade: .35, width: .10, rim: margin.ovate },
-  lemon: { spread: 1.12, top: 3.89, sweep: .56, blade: .34, width: .089, rim: margin.lance },
-};
-interface TreePalette { bark: THREE.Material; leaf: THREE.Material; stalk: THREE.Material; wood: THREE.Material; fruit: THREE.Material }
-/** Six scaffolds, each splitting into two bearing arms with attached leafy
- * laterals and pendant fruiting spurs. The centre stays open in a vase cherry;
- * the pear's leaders instead come back up close to its trunk. */
+  cherry: { arms: 5, leader: 2.29, spread: 1.68, rise: 1.39, skirt: 1.09, top: 4.80, stem: .172, dip: .18, years: 5, tilt: .45 },
+  orange: { arms: 6, leader: 2.64, spread: 1.29, rise: 1.07, skirt: .87, top: 3.62, stem: .154, dip: .11, years: 5, tilt: .59 },
+  mango:  { arms: 5, leader: 2.53, spread: 1.87, rise: 1.11, skirt: 1.12, top: 4.83, stem: .198, dip: .27, years: 5, tilt: .34 },
+  apple:  { arms: 5, leader: 2.01, spread: 1.62, rise: 1.06, skirt: .98, top: 3.33, stem: .181, dip: .13, years: 5, tilt: .43 },
+  pear:   { arms: 7, leader: 3.15, spread: 1.05, rise: 1.22, skirt: 1.23, top: 4.56, stem: .149, dip: .07, years: 4, tilt: .76 },
+  lemon:  { arms: 5, leader: 2.51, spread: 1.46, rise: 1.16, skirt: .98, top: 3.87, stem: .147, dip: .15, years: 4, tilt: .58 },
+} as const;
+interface TreePalette { bark: THREE.MeshStandardMaterial; leaf: THREE.MeshStandardMaterial; stalk: THREE.Material; fruit: THREE.MeshStandardMaterial; wood?: THREE.Material }
+interface Site { base: P3; priority: number; direction: number }
+
+/** Growth is inherited from the parent *branch*, not from a radius around the
+ * tree's origin. Thus gaps extend into the canopy, loads hang at different
+ * depths, and the shoots at a fork share a rind but not a pose. */
 export function addVillaOrchardTree(b: VillaModelBuilder, species: VillaFruitSpecies, s: number, phase: number, paint: TreePalette) {
-  const art = new NaturePalette(), wood = art.get(paint.bark), foliage = art.get(paint.leaf), young = art.get(paint.stalk), ridges = art.get(paint.wood);
-  const shape = habit[species];
-  const trunk: P3[] = [[0, -.03, 0], [.018, .23, -.014], [-.026, .73, .035], [.028, 1.23, .012], [-.02, 1.68, -.015], [.028, 2.02, .032], [.053, 2.32, -.013]];
-  const radius = [.234, .203, .157, .138, .115, .087, .047];
-  wood.stem(trunk.map((p, i) => collar(p, radius[i])), 14, .11, phase);
-  // Roots swell out of the actual lean of the lower bole; creases fork rather
-  // than forming identical parallel stripes all the way around its cylinder.
-  for (let i = 0; i < 7; i++) {
-    const a = i * turn / 7 + phase, foot = polar(a + .24, .40 + .06 * Math.sin(a), -.015);
-    wood.stem([collar(add3(trunk[2], polar(a, .08, 0)), .060), collar(polar(a + .1, .183, .20), .074), collar(foot, .023)], 5, .18, 0, true);
-    const start = polar(a, .193, .19), mid = add3(trunk[2], polar(a + .23, .154, 0));
-    ridges.stem([collar(start, .014), collar(mid, .018), collar(add3(trunk[3], polar(a + .12, .133, 0)), .006)], 4);
-    if (i % 2 === 0) ridges.stem([collar(mid, .012), collar(add3(trunk[3], polar(a + .58, .13, 0)), .004)], 4);
+  const h = habit[species], rand = orchardRandom(0x63a19 + 7937 * orchardSpecies.indexOf(species) + Math.round(phase * 16411));
+  const between = (lo: number, hi: number) => lo + (hi - lo) * rand(), sign = () => rand() < .5 ? -1 : 1;
+  finishOrchardSurfaces(species, paint.bark, paint.leaf);
+  paint.fruit.roughness = species === 'cherry' || species === 'apple' ? .56 : .74;
+  const art = new NaturePalette(), wood = art.get(paint.bark), leaf = art.get(paint.leaf), young = art.get(paint.stalk), fruit = art.get(paint.fruit);
+  const stem = h.stem * between(.92, 1.09), yaw = between(0, turn), lean = between(.12, .29);
+  const trunk: P3[] = [[0, -.038, 0], polar(yaw - 1.3, .009, .074), polar(yaw - 1.24, .022, .28), polar(yaw - .91, lean * .49, .73),
+    polar(yaw + .23, lean * .80, 1.12), polar(yaw + .39, lean * .76, h.leader * .73), polar(yaw - .23, lean, h.leader * .89),
+    polar(yaw - .52, lean * 1.19, h.leader)];
+  orchardBough(wood, species, trunk, [1.58, 1.42, 1.09, .98, .88, .72, .45, .16].map(r => r * stem), 14, s, yaw, true);
+  for (let k = 0; k < 6; k++) {
+    const a = yaw + k * turn / 6 + between(-.32, .28), toe = between(.38, .54), twist = between(-.30, .34);
+    const start = add3(trunk[2], polar(a, stem * .65, between(.006, .17)));
+    orchardBough(wood, species, [start, polar(a + twist * .49, stem * 1.12, .13), polar(a + twist, toe * .79, .028), polar(a + twist * .76, toe, -.027)],
+      [stem * .34, stem * .45, stem * .24, .013], 6, s, a);
   }
-  const spray = (base: P3, mid: P3, tip: P3, a: number, count: number, scale: number) => {
-    young.stem([collar(base, .017 * scale), collar(mid, .012 * scale), collar(tip, .004)], 3, 0, 0, true);
-    for (let k = 0; k < count; k++) {
-      const t = .09 + .91 * (k + .5) / count, side = k % 2 ? 1 : -1;
-      const p = t < .5 ? mix3(base, mid, t * 2) : mix3(mid, tip, t * 2 - 1);
-      const dir = a + side * (1.38 - .68 * t + .18 * Math.cos(k + phase)), len = shape.blade * scale * (.83 + .22 * Math.cos(k * 2 + a));
-      const pendent = species === 'mango' ? -.36 - .58 * t : -.33 + .46 * Math.sin(a + k * 1.19);
-      foliage.tone = .81 + .16 * t + .12 * Math.sin(k * 2.71 + a);
-      foliage.blade(p, polar(dir, len, pendent * len), shape.width * scale * (.84 + .18 * t), shape.rim,
-        len * .22, side * (.27 + .62 * Math.cos(a + k)), -.20, len * .05);
+  const sites: Site[] = [];
+  // An older twig carries regularly spaced buds, *not* a tuft glued at its
+  // final point. Each live bud has a separate local turn, pitch, roll and age.
+  const growth = (base: P3, a: number, extension: number, lift: number, sun: number) => {
+    const d = between(-.35, .35), knee = add3(base, polar(a - d, extension * .48, lift * .49 + between(.017, .073)));
+    const end = add3(base, polar(a + d, extension, lift));
+    const twig = [base, knee, end]; young.tone = between(.63, .92);
+    young.stem([collar(base, between(.0059, .0094)), collar(knee, .0048), collar(end, 0)], 3, 0, 0, true);
+    const count = rand() < .29 ? 4 : 3, hand = sign(), flush = rand() < (species === 'mango' ? .16 : .22) ? between(.41, .89) : between(0, .27);
+    for (let j = 0; j < count; j++) {
+      const t = j === count - 1 ? .99 : (.04 + (j + rand() * .34) / count), side = j % 2 ? -hand : hand;
+      const dir = a + (j === count - 1 ? between(-.40, .40) : side * between(.69, 1.80));
+      const pitch = between(-.42, .90) + .36 * sun - (species === 'mango' ? .55 : .06);
+      orchardSprig(leaf, species, onBough(twig, t), dir, pitch, between(.82, 1.17) / Math.sqrt(s), Math.floor(rand() * 3), flush, rand);
+    }
+    for (let j = 0, n = rand() < .45 ? 2 : 1; j < n; j++) {
+      // Single leaves turning across the larger sprays, including young,
+      // translucent-looking unfurling foliage and tougher shaded basal leaves.
+      orchardSprig(leaf, species, onBough(twig, between(.13, .89)), a + sign() * between(.78, 2.52), between(-.98, .71),
+        between(.75, 1.13) / Math.sqrt(s), 3, rand() < .28 ? .92 : flush, rand);
     }
   };
-  for (let i = 0; i < 6; i++) {
-    const axis = (i * 2 + .5) * Math.PI / 6, variation = Math.sin(axis * 2 + phase);
-    const trunkSegment = 3 + i % 3, root = mix3(trunk[trunkSegment], trunk[trunkSegment + 1], .27 + .16 * Math.sin(i));
-    const elbow = polar(axis - .18, shape.spread * .36, 2.31 + variation * .095);
-    const crotch = polar(axis + .09, shape.spread * .67, 2.72 + variation * .20);
-    wood.stem([collar(root, .092), collar(elbow, .078), collar(crotch, .046)], 7, .07, 0, true);
-    for (let j = 0; j < 2; j++) {
-      const index = 2 * i + j, a = index * Math.PI / 6, r = 1.02 + (index % 2) * .22, py = 2.12 + index % 3 * .24;
-      const arm = polar(a, shape.spread, 2.96 + variation * .19 + j * .11);
-      const fruitSpur = polar(a, r * .90, py + .48);
-      wood.stem([collar(crotch, .049), collar(arm, .035), collar(fruitSpur, .019)], 5, .06, 0, true);
-      for (let k = 0; k < 3; k++) {
-        const dir = a + (k - 1) * .91, start = k === 0 ? crotch : k === 1 ? mix3(crotch, arm, .68) : fruitSpur;
-        const rad = (k === 0 ? (species === 'cherry' ? .87 : .38) : k === 1 ? shape.spread * .93 : shape.spread * 1.24);
-        const h = k === 0 ? shape.top + variation * .17 : k === 1 ? shape.top - .27 + .17 * Math.sin(index) : 2.82 + variation * .18;
-        const fork = polar(dir, rad, h - .23);
-        wood.stem([collar(start, .026), collar(fork, .012)], 4, 0, 0, true);
-        const dir2 = dir + (j ? -.19 : .25);
-        const tip = add3(fork, polar(dir2, shape.sweep * (k === 0 ? .70 : .84), k === 0 ? .33 : k === 1 ? .12 : -.21));
-        spray(fork, add3(mix3(fork, tip, .48), [0, .066, 0]), tip, dir2, 6, 1.07);
-        // A crossing side spray fills the shoulder and exposes the midribs from
-        // below. The stub starts halfway along the woody fork, never in the air.
-        if (k === 0) {
-          const sideBase = mix3(start, fork, .50), da = dir + (j ? -1 : 1) * .88;
-          const sideTip = add3(sideBase, polar(da, shape.sweep * .74, .14));
-          spray(sideBase, add3(mix3(sideBase, sideTip, .5), [0, .055, 0]), sideTip, da, 4, .96);
-        }
+  const crownBias = polar(yaw + between(-1, 1), between(.11, .29), 0);
+  const heavySide = between(0, turn);
+  for (let i = 0; i < h.arms; i++) {
+    const u = (i + rand() * .29) / h.arms, a = yaw + i * 2.39996 + between(-.52, .49), bend = between(-.36, .34);
+    const root = stemAtHeight(trunk, h.skirt + (h.leader - h.skirt) * u);
+    // Two codominant limbs resume strongly above the shade cultivars' lower
+    // laterals. Their split starts down in the bough, not on a pole at the top.
+    const leader = (species === 'mango' || species === 'cherry') && (i === 1 || i === 4) ? between(.66, 1.06) : 0;
+    const long = h.spread * between(.67, .97) * (1 - (species === 'pear' ? .67 : .36) * u), rise = h.rise * between(.73, 1.15) + u * .20;
+    const shoulder = add3(root, polar(a - bend, long * .23, rise * between(.28, .52) + leader * .12));
+    const elbow = add3(root, polar(a + .03, long * .65, rise * between(.60, .83) + leader * .43));
+    const end = add3(add3(root, polar(a + bend, long * (1 - leader * .17), rise + leader)), crownBias), limb = [root, shoulder, elbow, end];
+    const r = stem * (.61 - .22 * u) * between(.88, 1.05);
+    orchardBough(wood, species, limb, [r, r * .77, r * .54, r * .22], 8, s, a);
+    const arms = h.years + (rand() < .55 ? 1 : 0), hand = sign(), stock = between(.7, 1.2);
+    for (let j = 0; j < arms; j++) {
+      const q = (.50 + j + rand() * .42) / arms, root2 = onBough(limb, q), side = (j % 2 ? 1 : -1) * hand;
+      const dir = a + bend * q + side * between(.48, 1.37), reach = stock * between(.37, .67) * (species === 'pear' ? .84 : 1);
+      const climb = h.tilt * between(.47, 1.34) + between(-.10, .20) - h.dip * (1 - q) + leader * (j >= arms - 2 ? .37 : .11);
+      const crook = add3(root2, polar(dir + between(-.28, .28), reach * .54, climb * .6 + between(.036, .13)));
+      const tip = add3(root2, polar(dir, reach, climb)), arm = [root2, crook, tip];
+      orchardBough(wood, species, arm, [r * between(.34, .47), r * .24, .0062], 5, s, dir);
+      const off = sign(), branches = 3 + (rand() < .65 ? 1 : 0);
+      for (let k = 0; k < branches; k++) {
+        const t = (.14 + k + rand() * .61) / branches, node = onBough(arm, t), hi = Math.max(0, Math.min(1, (node[1] - 2.05) / 1.48));
+        const da = dir + off * (k % 2 ? 1 : -1) * between(.50, 1.86), droop = between(-.21, .40) + h.tilt * .26 - h.dip * .55;
+        // Short basal fruiting spur, mid-length lateral, longer extension.
+        // This fills the bearing wood itself rather than leaving bare spokes
+        // between distant tassels. The longest runs carry independent fan tips.
+        const run = k === 0 ? between(.10, .21) : k === branches - 1 ? between(.26, .48) : between(.19, .35);
+        growth(node, da, run * (species === 'pear' ? .77 : 1), Math.min(h.top - .18 - node[1], droop * (k === 0 ? .55 : 1)), hi);
+        // On loaded wood several nearby spurs fruit. Other wood is entirely
+        // vegetative, including most strongly upright watershoots.
+        if (node[1] * s > (species === 'mango' ? 1.98 : species === 'cherry' ? 1.70 : 1.78) && node[1] * s < 3.48 && node[1] < h.top - .15) sites.push({ base: node, direction: da,
+          priority: rand() + .31 * Math.cos(heavySide - a) + .11 * Math.sin(j + yaw) - .13 * hi });
       }
-      for (let f = 0; f < 2; f++) {
-        const offset = (f ? 1 : -1) * (species === 'cherry' ? .12 : .24), pos = polar(a, r + offset, py + f * .11);
-        const g = orchardFruitSkin(species, a + f * .3); g.rotateY(a); g.translate(...pos); g.scale(s, s, s); b.geometry(g, paint.fruit);
-        const capY = profiles[species][profiles[species].length - 1][0], ax = fruitAxis(species, capY);
-        const cap = add3(pos, [Math.cos(a) * ax, capY, -Math.sin(a) * ax]);
-        const kink = add3(mix3(fruitSpur, cap, .59), polar(a + .36, .024, -.011));
-        young.stem([collar(fruitSpur, species === 'cherry' ? .008 : .013), collar(kink, .009), collar(cap, .010)], 4, 0, 0, true);
-        if (species === 'orange' || species === 'lemon') for (let sepal = 0; sepal < 4; sepal++) {
-          young.blade(cap, polar(a + sepal * Math.PI / 2, .051, -.003), .012, margin.spur, .005);
-        }
-      }
+      growth(tip, dir + between(-.37, .37), between(.21, .50), Math.min(h.top - tip[1] - .12, between(-.18, .34) + .13 * u), u);
     }
+    // Inner shoulder and renewed upright shoots occupy the interstices of
+    // successive scaffold forks instead of making a hollow outer shell.
+    growth(onBough(limb, between(.21, .40)), a + hand * between(1.15, 2.55), between(.14, .26), between(.23, .50), .55);
+    growth(onBough(limb, between(.56, .82)), a - hand * between(1.10, 2.48), between(.14, .25), between(.10, .31), .46);
+    growth(end, a + between(-.57, .58), between(.20, .45), Math.min(h.top - .19 - end[1], between(.16, .58)), .92);
+  }
+  if (species !== 'cherry' && species !== 'apple') {
+    for (let k = 0; k < 4; k++) growth(onBough(trunk, .77 + k * .07), yaw + k * 2.2, between(.18, .47), between(.35, .66), .88);
+  }
+
+  sites.sort((a, b) => b.priority - a.priority);
+  const goal = Math.floor(between(species === 'cherry' ? 18 : 12, species === 'cherry' ? 25 : 19));
+  let clusters = 0, minY = Infinity, maxY = -Infinity;
+  const borne: { p: P3; radius: number }[] = [], rFruit = fruitRadius(species);
+  for (const site of sites) {
+    if (clusters >= goal) break;
+    const a = site.direction, origin = site.base, stalkLen = (species === 'mango' ? between(.075, .17) : species === 'cherry' ? between(.031, .057) : between(.015, .039)) / s;
+    const betweenFruit = species === 'cherry' ? between(.015, .019) : rFruit * 1.08;
+    const count = species === 'cherry' ? (rand() < .31 ? 3 : 2) : species === 'apple' || species === 'pear' ? (rand() < .19 ? 2 : 1) : 1;
+    let set = false;
+    for (let f = 0; f < count; f++) {
+      const angle = a + f / count * turn + between(-.14, .14), size = between(.86, 1.11) / s, yawFruit = between(0, turn);
+      const offset = (count > 1 ? betweenFruit : .008) / s, pos = add3(origin, polar(angle, offset, -stalkLen - fruitTop(species) * size - .005 * f));
+      if (borne.some(({ p, radius }) => Math.hypot(pos[0] - p[0], pos[1] - p[1], pos[2] - p[2]) < (rFruit * size + radius) * 1.015)) continue;
+      const range = bearFruit(fruit, species, pos, yawFruit, size, between(.30, .96));
+      minY = Math.min(minY, range[0] * s); maxY = Math.max(maxY, range[1] * s);
+      const cap = fruitSeat(species, pos, yawFruit, size), kink = add3(mix3(origin, cap, .51), polar(a + .46, .0034 / s, 0));
+      const ped = (species === 'cherry' ? .00135 : species === 'mango' ? .0034 : .0021) / s;
+      young.tone = between(.71, .94); young.stem([collar(origin, ped * 1.12), collar(kink, ped), collar(cap, 0)], 3, 0, 0, true);
+      borne.push({ p: pos, radius: rFruit * size }); set = true;
+    }
+    if (set) clusters++;
   }
   art.finish(b, s);
+  return { fruitClusters: clusters, fruitHeight: [minY, maxY] as [number, number] };
 }

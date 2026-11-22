@@ -416,6 +416,7 @@ describe('scene-owned villa pet geometry without WebGL', () => {
       if (o instanceof THREE.Light) lights++;
       if (o instanceof THREE.Mesh) {
         meshes++; expect(o.castShadow).toBe(false);
+        if(o.material instanceof THREE.MeshStandardMaterial)expect(o.receiveShadow).toBe(true);
         expect(o.geometry.getAttribute('position').count).toBeGreaterThan(10);
         o.geometry.computeBoundingBox(); expect(o.geometry.boundingBox!.isEmpty()).toBe(false);
       }

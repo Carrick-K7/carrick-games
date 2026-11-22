@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { millSection, turnSection, type Section } from './villaArchitecturalStock.js';
 import type { VillaSurfaces } from './villaEnvelope.js';
+import { dressTimber, exteriorTimber } from './villaWeatheredFinish.js';
 import { VILLA_RAMPS, VILLA_RAILS, villaTreadLayers, type VillaCollider } from './villaWorld.js';
 
 const grip: Section = [[-.018,-.021],[.018,-.021],[.031,-.014],[.035,-.004],[.035,.010],[.028,.021],[.014,.026],[-.014,.026],[-.028,.021],[-.035,.010],[-.035,-.004],[-.031,-.014]];
@@ -66,25 +67,38 @@ export function createVillaStairAndGuards(parent: THREE.Object3D, m: VillaSurfac
 }
 
 export function createVillaPergola(parent: THREE.Object3D,m:VillaSurfaces,light:THREE.Material) {
-  const b=new VillaModelBuilder(parent,'villa-mortised-pergola'), colliders:VillaCollider[]=[];
+  const b=new VillaModelBuilder(parent,'villa-mortised-pergola'), colliders:VillaCollider[]=[], timber=exteriorTimber(m);
+  let cut=0;
   const postSection:Section=[[-.064,-.08],[.064,-.08],[.08,-.064],[.08,.064],[.064,.08],[-.064,.08],[-.08,.064],[-.08,-.064]];
   for(const x of [-10.3,-3.1]) for(const z of [1.3,7]) {
     // Standoff shoe keeps end grain above the roof. The inset neck enters the carrying beam.
-    b.geometry(millSection('y',.093,postSection),m.bronze,[x,7.2465,z]);
-    b.geometry(millSection('y',2.574,postSection),m.oak,[x,8.58,z]);
-    b.geometry(millSection('y',.114,postSection.map(([u,v])=>[u*.78,v*.80])),m.oak,[x,9.924,z]);
+    b.geometry(millSection('y',.016,postSection.map(([u,v])=>[u*1.53,v*1.53])),m.bronze,[x,7.208,z]);
+    b.geometry(millSection('y',.077,postSection.map(([u,v])=>[u*.68,v*.68])),m.bronze,[x,7.2545,z]);
+    // The shoe is visibly narrower than the end grain. Two cheek plates and a
+    // real side pin bear on the post, leaving an aired/draining gap beneath it.
+    const pin:Section=[[0,0],[.019,0],[.019,.004],[.014,.009],[0,.009]];
+    for(const side of [-1,1]) {
+      const cheek:Section=[[-.062,0],[.062,0],[.062,.137],[.048,.156],[-.048,.156],[-.062,.137]];
+      b.geometry(millSection('x',.008,cheek),m.bronze,[x+side*.084,7.216,z]);
+      b.geometry(turnSection(pin,10),m.bronze,[x+side*.088,7.334,z],[0,0,-side*Math.PI/2]);
+    }
+    b.geometry(dressTimber(millSection('y',2.574,postSection),'y',cut++),timber,[x,8.58,z]);
+    b.geometry(dressTimber(millSection('y',.114,postSection.map(([u,v])=>[u*.78,v*.80])),'y',cut++),timber,[x,9.924,z]);
     colliders.push({minX:x-.08,maxX:x+.08,minZ:z-.08,maxZ:z+.08,minY:7.2,maxY:9.9});
     const side=z<4?1:-1;
     const hanger: Section=[[-.066,-.034],[.063,-.034],[.084,-.015],[.084,.028],[-.015,.045],[-.066,.026]];
     b.geometry(millSection('x',.079,hanger),m.bronze,[x,9.795,z+side*.055]);
     const knee:Section=[[.016,0],[.385,.362],[.385,.412],[.265,.412],[.205,.341],[.145,.273],[.106,.235],[.065,.214],[.016,.197]];
-    b.geometry(millSection('x',.072,knee.map(([u,v])=>[u*side,v])),m.oak,[x,9.44,z]);
+    const brace=dressTimber(millSection('x',.072,knee.map(([u,v])=>[u*side,v])),'z',cut++);
+    const p=brace.getAttribute('position'), uv=brace.getAttribute('uv');
+    for(let j=0;j<p.count;j++) uv.setXY(j,(p.getY(j)+p.getZ(j)*side)*Math.SQRT1_2/2.5,(p.getX(j)+(p.getY(j)-p.getZ(j)*side)*Math.SQRT1_2)/.35);
+    b.geometry(brace,timber,[x,9.44,z]);
     for(const dx of [-.081,.081]) b.geometry(turnSection([[.014,0],[.018,.002],[.018,.006],[.014,.009],[0,.009]],8),m.bronze,[x+dx,9.76,z],[0,0,dx>0?-Math.PI/2:Math.PI/2]);
   }
-  for(const x of [-10.3,-3.1]) b.geometry(millSection('z',6.27,[[-.10,-.098],[-.083,-.116],[.083,-.116],[.10,-.098],[.10,.055],[.063,.055],[.063,.106],[-.063,.106],[-.063,.055],[-.10,.055]]),m.oak,[x,9.95,4.15]);
+  for(const x of [-10.3,-3.1]) b.geometry(dressTimber(millSection('z',6.27,[[-.10,-.098],[-.083,-.116],[.083,-.116],[.10,-.098],[.10,.055],[.063,.055],[.063,.106],[-.063,.106],[-.063,.055],[-.10,.055]]),'z',cut++),timber,[x,9.95,4.15]);
   const rafter:Section=[[-3.93,.062],[-3.88,.085],[3.88,.085],[3.93,.062],[3.90,.016],[3.84,.002],[3.76,-.053],
     [3.69,-.074],[3.66,-.074],[3.66,-.040],[3.53,-.040],[3.53,-.074],[-3.53,-.074],[-3.53,-.040],[-3.66,-.040],[-3.66,-.074],[-3.69,-.074],[-3.76,-.053],[-3.84,.002],[-3.90,.016]];
-  for(let z=1.1;z<=7.2;z+=.4) b.geometry(millSection('z',.112,rafter),m.oak,[-6.7,10.055,z]);
+  for(let z=1.1;z<=7.2;z+=.4) b.geometry(dressTimber(millSection('z',.112,rafter),'x',cut++,(_x,_y,_z,ny)=>ny>.65?1.05:.96),timber,[-6.7,10.055,z]);
   for(const z of [1.4,6.9]) {
     const path=Array.from({length:19},(_,i)=>new THREE.Vector3(-10.25+7.1*i/18,9.8-.42*Math.sin(Math.PI*i/18),z));
     b.geometry(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(path),24,.009,6,false),m.bronze);

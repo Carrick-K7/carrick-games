@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { bent, board, casting, circleXY, loft, oval, rectRing, rectXY, sheet, stock, turn, type FurnitureKit, type Point } from './villaFurnitureForms.js';
 import { vessel } from './villaFurnitureJoinery.js';
-import { leafBlade } from './villaFurniturePlanting.js';
+import { prunedPrivet } from './villaHedgePrivet.js';
 import { teapot } from './villaInteriorKitchen.js';
 
 export function woolRug(w: number, d: number, h: number) {
@@ -40,22 +40,7 @@ export function pebble(w: number, h: number, d: number, seed: number) {
 }
 
 export function topiary(k: FurnitureKit, halfWidth: number, height: number, variant: number, material: THREE.Material) {
-  const { m, put } = k;
-  // Clipped privet: soft shoulders on a denser, nearly level crown; scallops
-  // are cut into the canopy itself instead of arranging overlapping spheres.
-  bent(k, m.walnut, [[0, .004, 0, .033], [0, height * .30, 0, .042], [.022, height * .55, .03, .024]], 7);
-  const ring = (s: number, y: number, noise: number) => oval(halfWidth * 2 * s, 1.64 * s, y * height, 14, .68).map(([x, yy, z], i): Point => {
-    const a = i / 14 * Math.PI * 2, scale = .963 + noise * (.032 * Math.cos(a * 5 + variant) + .022 * Math.sin(a * 3));
-    return [x * scale, yy + height * noise * .026 * Math.cos(a * 4 + variant), z * scale];
-  });
-  put(loft([ring(.44, .224, .4), ring(.85, .273, 1), ring(1, .49, 1), ring(.99, .72, 1), ring(.83, .9, 1), ring(.64, .974, .85), ring(.23, 1, .52)]), material, 0, 0, 0);
-  for (let i = 0; i < 5; i++) {
-    const a = i * 2.4 + variant * .63, upper = i % 2 === 0;
-    const x = Math.sin(a) * halfWidth * (upper ? .59 : .87), z = Math.cos(a) * (upper ? .52 : .733);
-    k.at(x, height * (upper ? .926 : .709), z, a, () => {
-      for (const s of [-1, 1]) put(leafBlade(.024, .085 + .013 * i, .31), i % 2 ? m.leaf : m.leafLight, .009 * s, .001, 0, 0, s * .65);
-    });
-  }
+  prunedPrivet(k, halfWidth, height, variant, material);
 }
 
 export function cueStand(k: FurnitureKit, mahogany: THREE.Material) {

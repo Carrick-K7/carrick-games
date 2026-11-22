@@ -8,6 +8,7 @@ import { createVillaHomeModel } from '../src/villaHomeModel.js';
 import { advanceVillaHome, createVillaHome, setVillaRoomLight, setVillaTimeOfDay } from '../src/villaHome.js';
 import { VILLA_ESTATE_BOUNDS, VILLA_GARAGE_EXTENT } from '../src/villaEstateLayout.js';
 import { VILLA_BLOCKS } from '../src/villaWorld.js';
+import { plantRay, plantSection } from './villaHedgeProbes.js';
 import { VILLA_EAST_WALL as EAST, VILLA_WEST_WALL as WEST, VILLA_NORTH_WALL as NORTH, VILLA_SOUTH_WALL as SOUTH } from '../src/villaEstateLayout';
 import { VILLA_CAR } from '../src/villaActivities';
 
@@ -84,10 +85,22 @@ describe('Villa observed visual regression geometry', () => {
     });
     expect(triangleCount).toBeGreaterThan(1000); expect(intrusions).toBe(0);
     for (const x of [WEST.outer - .55, VILLA_ESTATE_BOUNDS.maxX - 1.15]) for (let i = 0; i < 14; i++) {
-      const z = -12 + i * 2.45, hit = cast(new THREE.Vector3(x, 3, z), new THREE.Vector3(x, -.5, z), foliage)[0];
-      expect(hit, `retained physical hedge ${x}/${z}`).toBeDefined();
-      expect(hit.point.y).toBeGreaterThan(.8); expect(hit.point.y).toBeLessThan(1.4);
-      expect((hit.object as THREE.Mesh).material).toMatchObject({ transparent: false, opacity: 1, visible: true });
+      const z = -12 + i * 2.45, parcel = plantSection(foliage,x,z);
+      try {
+        // Test the crown's occupied AREA, including visible holes; an exact
+        // centre line may pass between cut leaves. Reject bare axes and shells.
+        let hits = 0, high = 0, peak = 0;
+        for (let u=-3;u<=3;u++) for (let v=-4;v<=4;v++) {
+          const hit = plantRay(parcel,[x+u*.102,2,z+v*.144],[0,-1,0],2);
+          if (hit) { hits++; if (hit.point.y>.8) high++; peak=Math.max(peak,hit.point.y); }
+        }
+        expect(hits, `occupied crown ${x}/${z}`).toBeGreaterThan(15); expect(hits).toBeLessThan(63);
+        expect(high).toBeGreaterThan(2); expect(peak).toBeLessThan(1.4);
+        for (const plant of parcel) {
+          expect(plant.material).toMatchObject({ transparent: false, opacity: 1, visible: true });
+          if (x < WEST.outer) { plant.geometry.computeBoundingBox(); expect(plant.geometry.boundingBox!.max.x).toBeLessThan(WEST.outer-.04); }
+        }
+      } finally { parcel.forEach(mesh=>mesh.geometry.dispose()); }
     }
   });
 

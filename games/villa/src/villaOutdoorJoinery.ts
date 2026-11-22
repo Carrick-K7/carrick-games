@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VillaModelBuilder } from './villaModel.js';
 import { NatureMesh, type P3 } from './villaNatureGeometry.js';
+import { finishTexture, sample01 } from './villaWeatheredFinish.js';
 
 /** Sawn member with four true corner chamfers and shorter chamfers across the
  * end grain. Dimensions are measured normal to the member, even on a rake. */
@@ -37,24 +38,52 @@ export function sawnGrain(paint: THREE.MeshStandardMaterial) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 villaTimberUV;')
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 saw = villaTimberUV;
-        float growth = saw.x < -5.0 ? length(vec2(saw.x + 10.03, saw.y - 0.04))
-          : saw.y + 0.012 * sin(saw.x * 1.37 + saw.y * 3.1) + 0.006 * sin(saw.x * 3.13 + saw.y * 11.0);
-        float phase = growth * 118.0 + 1.35 * sin(growth * 16.0);
-        float grain = sin(phase) * (1.0 - smoothstep(0.35, 2.6, fwidth(phase)));
-        float board = sin(growth * 31.0 + saw.x * 0.22) * (1.0 - smoothstep(0.4, 2.5, fwidth(growth * 31.0)));
-        diffuseColor.rgb *= 1.0 + 0.105 * grain + 0.054 * board;
+        bool cut = saw.x < -5.0;
+        float growth = cut ? length(vec2((saw.x + 10.03)*.93, saw.y - .04))
+          : saw.y + .007 * sin(saw.x*2.13 + saw.y*5.8) + .0026*sin(saw.x*5.03 - saw.y*15.);
+        float phase = growth*1770. + 4.2*sin(growth*92.);
+        float grain = sin(phase) * (1.0-smoothstep(.4,2.4,fwidth(phase)));
+        float figure = .56*sin(growth*153.+.4*saw.x) + .44*sin(growth*49.-saw.x*.73);
+        float silver = smoothstep(-.42,.96,figure);
+        diffuseColor.rgb *= (1.+.079*grain+.085*figure)*(cut?.79:1.)
+          * mix(vec3(1.,.97,.94),vec3(.97,1.025,1.09),silver);
       `);
   };
-  paint.customProgramCacheKey = () => 'villa-sawn-grain-v1';
+  paint.customProgramCacheKey = () => 'villa-sawn-grain-v2';
+}
+
+/** 16 cm of uncoated outdoor duck cloth. Paired, irregular over/under yarns
+ * average into a matt, yarn-dyed field with distance; never a normal-map gloss. */
+export function canvasWeave() {
+  const n=128, data=new Uint8Array(4*n*n);
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+    const wx=x>>2,wy=y>>2, warp=((wx+wy)&1)===0, cross=(warp?x:y)%4;
+    const slub=warp?sample01(wx,38):sample01(wy,69), yarn=warp?sample01(wx,y>>5):sample01(x>>5,wy);
+    const tone=222+15*slub+8*yarn+4*Math.sin((x-y)*Math.PI/32)+(cross===0?-13:cross===2?7:0);
+    const i=4*(y*n+x); data[i]=tone;data[i+1]=tone-(warp?2:0);data[i+2]=tone-4;data[i+3]=255;
+  }
+  return finishTexture('garden/sage-basket-duck',n,n,data);
 }
 
 /** A sewn panel under tension, closed along its real thickness. Both panels and
  * edge welts use the identical sampler so stitches follow the loaded canvas. */
 export function fabricPanel(sample: (u: number, v: number) => P3, thickness: P3, nx = 10, ny = 6) {
-  const m = new NatureMesh(), stride = nx + 1, layer = stride * (ny + 1);
-  for (const underside of [false, true]) for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
-    const p = sample(i / nx, j / ny);
-    m.point(underside ? [p[0] + thickness[0], p[1] + thickness[1], p[2] + thickness[2]] : p);
+  const m=new NatureMesh(), uv:number[]=[], cols=[0,.027,...Array.from({length:nx-1},(_,i)=>(i+1)/nx),.973,1];
+  const rows=[0,.035,...Array.from({length:ny-1},(_,j)=>(j+1)/ny),.965,1];
+  nx=cols.length-1;ny=rows.length-1;
+  const stride=nx+1, layer=stride*(ny+1), cloth=rows.map(v=>cols.map(u=>sample(u,v)));
+  const length=(a:P3,c:P3)=>Math.hypot(a[0]-c[0],a[1]-c[1],a[2]-c[2]);
+  for(const underside of [false,true]) {
+    const vDistance=cols.map(()=>0);
+    for(let j=0;j<=ny;j++){
+      let uDistance=0;
+      for(let i=0;i<=nx;i++){
+        const p=cloth[j][i]; if(i)uDistance+=length(p,cloth[j][i-1]); if(j)vDistance[i]+=length(p,cloth[j-1][i]);
+        const hem=i<2||i>=nx-1||j<2||j>=ny-1;
+        m.point(underside?[p[0]+thickness[0],p[1]+thickness[1],p[2]+thickness[2]]:p, (hem?.88:1)*(underside?.89:1));
+        uv.push(uDistance/.16,vDistance[i]/.16);
+      }
+    }
   }
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
     const n = j * stride + i, q = n + stride;
@@ -62,8 +91,14 @@ export function fabricPanel(sample: (u: number, v: number) => P3, thickness: P3,
     m.tri(n, q, n + 1); m.tri(q, q + 1, n + 1);
     m.tri(n + layer, n + 1 + layer, q + layer); m.tri(q + layer, n + 1 + layer, q + 1 + layer);
   }
-  const hem = (i: number, j: number) => { m.tri(i, j, i + layer); m.tri(j, j + layer, i + layer); };
+  const hem = (i: number, j: number) => {
+    // Separate normals at the folded return: averaging it with the whole seat
+    // cast a dark plastic-looking halo over an otherwise taut, flat panel.
+    const ids=[i,j,i+layer,j+layer].map(k=>{
+      uv.push(uv[k*2],uv[k*2+1]);return m.point([m.positions[k*3],m.positions[k*3+1],m.positions[k*3+2]],.79);
+    });m.tri(ids[0],ids[1],ids[2]);m.tri(ids[1],ids[3],ids[2]);
+  };
   for (let i = 0; i < nx; i++) { hem(i, i + 1); hem(ny * stride + i + 1, ny * stride + i); }
   for (let j = 0; j < ny; j++) { hem((j + 1) * stride, j * stride); hem(j * stride + nx, (j + 1) * stride + nx); }
-  return m.geometry();
+  const g=m.geometry(true); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); return g;
 }
