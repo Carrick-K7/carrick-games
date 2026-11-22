@@ -80,5 +80,5 @@ export const pondSlopes = `vec2 wind = vec2(0.80, 0.60), crosswind = vec2(-0.28,
   vec2 ripple = villaAlong(villaSlopes(swell), wind) * (0.38 + 0.91 * villaWind)
     + villaAlong(villaSlopes(shortWave), crosswind) * (0.31 + 0.32 * gust + 0.33 * villaWaterPhase.w);
   // Short fetch on the enclosed pond: waves travel, but their faces stay low.
-  ripple *= 0.40 * (0.44 + 0.62 * absorption) * (0.70 + 0.30 * villaWind);
+  ripple *= 0.25 * (0.44 + 0.62 * absorption) * (0.70 + 0.30 * villaWind);
   float folded = 0.0;`;
