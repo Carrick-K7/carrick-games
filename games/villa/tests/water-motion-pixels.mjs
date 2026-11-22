@@ -158,7 +158,7 @@ export async function compareAndExport(root) {
   const clip=path.join(root,'villa-water-motion.mp4');
   const inputs=names.flatMap(id=>['-framerate',String(fps),'-start_number','0','-i',path.join(afterDir,id,'frame-%03d.png')]);
   ff([...inputs,'-filter_complex_threads','1','-filter_complex','[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv420p[v]','-map','[v]','-frames:v',String(n*3),'-fps_mode','passthrough','-an','-c:v','libx264','-threads','2','-preset','slow','-crf','16','-movflags','+faststart',
-    '-metadata','title','Warm Villa — creek, pond, pool; fixed eye, game-clock time','-y',clip]);
+    '-metadata','title=Warm Villa — creek, pond, pool; fixed eye, game-clock time','-y',clip]);
   // Decode the actual shipping-format movie and compare every corresponding original.
   // This catches stale glob/duplicate shot/order errors, and motion lost to compression.
   const film=decode(clip,3*n),encoded=[];
