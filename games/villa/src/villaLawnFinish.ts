@@ -1,3 +1,4 @@
+import { ShaderChunk, type MeshStandardMaterial } from 'three';
 import { VILLA_GARDEN_TREES } from './villaGarden.js';
 import { drift, mix, saturate, smooth } from './villaRiparianGround.js';
 import { sample01 } from './villaWeatheredFinish.js';
@@ -40,4 +41,23 @@ export function lawnPhotoUV(x: number, z: number): readonly [number, number] {
   const dx = .51 * axisOffset(x, 461, 5.7) + 1.12 * axisOffset(z, 83, 8.3);
   const dz = 1.06 * axisOffset(x, 307, 7.1) + .54 * axisOffset(z, 617, 5.2);
   return [(x + dx) / 2.5, (z + dz) / 2.5];
+}
+
+/** Keep photographed blade edges in their original metre chart. Only a small, softer
+ * layer of clippings samples the wandering phase. Both taps use the SAME mipmapped
+ * scan (or its normal loading/failed-image fallback); neither is a screen-space effect. */
+export function bindManagedLawnPhoto(material: MeshStandardMaterial) {
+  const previous = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey();
+  const varying = '\n#ifdef USE_MAP\nvarying vec2 vLawnMetricUv;\n#endif';
+  const mapChunk = ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )',
+    'mix( texture2D( map, vLawnMetricUv ), texture2D( map, vMapUv, 1.25 ), 0.18 )');
+  material.onBeforeCompile = (shader, renderer) => {
+    previous(shader, renderer);
+    shader.vertexShader = shader.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>' + varying)
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvLawnMetricUv = (mapTransform * vec3(position.xz / 2.5, 1.0)).xy;\n#endif');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_pars_fragment>', '#include <map_pars_fragment>' + varying)
+      .replace('#include <map_fragment>', mapChunk);
+  };
+  material.customProgramCacheKey = () => key + '|lawn-clippings-v1';
+  material.needsUpdate = true;
 }

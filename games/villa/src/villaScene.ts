@@ -34,6 +34,7 @@ import type { VillaSnookerState } from './villaSnooker.js';
 import { createVillaSnookerModel } from './villaSnookerModel.js';
 import { createVillaGarden } from './villaGarden.js';
 import { createCultivatedGround, tintManagedLawn } from './villaGardenFloor.js';
+import { bindManagedLawnPhoto } from './villaLawnFinish.js';
 import { createVillaFenceBankGeometry } from './villaFenceBank.js';
 import { courtyardSwatches, dressSurveyedHardscape } from './villaSoilFinishes.js';
 import { installVillaRoomMirrors } from './villaInteriorMirror.js';
@@ -413,6 +414,7 @@ export class VillaScene {
     this.staticView = new VillaStaticView(this.scene);
     // Fragment-only sunlight sampling is installed after conservative static range classification.
     // It never moves a vertex or changes the bounds used for primary and security views.
+    bindManagedLawnPhoto(grass); // Estate + fence shoulder only, not the distant plane's cloned material.
     bindRoomSurfaces(this.scene,this.roomSwatches.maps);
     installVillaOrchardLight(this.scene);
     this.surveyedSun=addSurveyedSun(this.scene);
