@@ -2,18 +2,18 @@
   "format": "villa-room-radiance-v1",
   "authoring": {
     "version": "1.13.0",
-    "revision": "84b869c1d5b5eb41b223745e92058cd62228db1d",
-    "entrySha256": "a870c585fd81a4e0251946534ec39cf8745bd12664bf0835797500e6a7fdb286",
-    "descriptorSha256": "c88baafed214559bada4a47c47164d4bf8620df7365020cfa1250b814cff62d2",
-    "catalogSha256": "e8a55c053ff96f72b76159f38055317c0b6fc4cbcca2f788870822fa33508f2f",
+    "revision": "3bf125921b0313f22db9a650cfce48374c530c9d",
+    "entrySha256": "04cd53c0d4e454f08b33305ab12042773c142d8ccd4241457504efe36f0cc482",
+    "descriptorSha256": "91aa3d7d2ff537ff005dc98a14977b24fce4e1120dca9f5897b16c6cffcfadc6",
+    "catalogSha256": "888e8b3cb4da97fd5820880457a4fe9dad856e2cde01f2b0343ba305b4aacf3a",
     "chromium": "147.0.7727.15",
     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
     "renderHelperSha256": "733410433a83966bf85f1ec1fb09c0bd93e468859f8433aa9aee0e07866e53c5",
     "bakerSha256": "e745a43e69355790ebaa5e20d2c223197ccf7bb8ffe6327da8a9e1a02ae2a7a9"
   },
-  "sourceSha256": "dbdc8a64e17d5c6f8dcda4adee22aa68b5873fad61edf66c48c25b4e381e3518",
-  "generatedSha256": "56136fe08358c0209b470c9dc488d2d0b12e13624a3fb025ec4e1d9763601e5a",
-  "totalBytes": 255010,
+  "sourceSha256": "75214ac62c626b9d0c5035605ef553883b43e2025172ac1a25c215dc8e9ba855",
+  "generatedSha256": "f52e936a000fa5e581e3a23ccb6ff608252653a70f884df99f4a67efec076136",
+  "totalBytes": 253792,
   "rooms": [
     {
       "room": "master",
@@ -338,75 +338,75 @@
           2.357,
           1.857
         ],
-        "faceOffset": -0.052,
+        "faceOffset": -0.0245,
         "vertices": 42
       },
       "facesSHA256": [
         [
-          "1d6c6f44173de14b3e7ac1ff9325f0975d718e705903c22a6726c33b4fea11f0",
-          "f49dcff4a65d2b75737da958ab8806caa96d6a575e1152bcae4110b1ebd504f7",
-          "5b9f503634bf99dad23128b5dff25a7b1121b57e2e68d207b1c70443008ff501",
-          "5e2bfb6ef804cfb5a24f0ef1fdbee0c6cb581303f6caafb61d12ff29a081fc92",
-          "f8f513bcea71f78fbda54d21e341a7fc500c10051301a6f5e869e1a8c3fc9958"
+          "20c9b93efdb1317d5e1c7790f5a14375a9a6c81f8f570c1b8bee6f32ec84c60a",
+          "efafaec28c4b99bd2f14835ea9bc5fa2c48670344a8ef752c4d70ddf487b3203",
+          "2ede7699ff390e58411452ea28b5a31d5b447134ba20bfc86d32a4aa45282844",
+          "7ac0e6c1d044610b902b173e0f033d8e8e2e1c8019866ce3c291e5e84940a4c8",
+          "70f7e74c79079cb81702ad4ee518927096930f5bdad84807180e1a54d79ffc14"
         ],
         [
-          "fcc7b1e9b84391eed5b7438fc2558d59c5052bb43b9c41fae1f3a1d1301124e6",
-          "8623675e784f21b0257d0181bb319ce8691579c1b8f69a5e19e8fa0fb5fdc4f3",
-          "3b1b2a3e67af613e25fd7a475fd5a544ca5e91c026c8eb3058eb2cea23227b8c",
-          "f35837547a096d3837f5e6e38f77a7062e71f1453bd3c9555cb64daa359165ce",
-          "2bff7a65c3c70e8c3bbfcd1a04573461bce7727f1684dd9715f8f3ce74a4c9c4"
+          "ebebf930a4e736fc552e8a1c4e4744fb26167952788d923a89a88b0fa186f3b8",
+          "a085a288042598aaca8397f17eb0804dbcede9545bc9272abf1ab59618778c3d",
+          "6f74e9245d724f011ac7a8b7ecce3d55cb8be15171d5969293bd64545f161c94",
+          "6be8e855957e0dbcda4dac5ea4ceecb040dacd29be57632fdbf620347e3f7a10",
+          "11a4652a829044424545ac630c5367d070df04e4985de670436d62a56ba8791b"
         ],
         [
-          "391ca1c7aec379edb1c4093383fb47a51ca2df5ea3ae5a93d1ec80b7dd739085",
-          "8fe31af9b80c31a9dbee508bc3ee82741d87efd41dc0290b40330ccb0b143c1c",
-          "30bf6bce4616a94d943cbf6baa6a2563aa0a9d29d702e850ed190ec3f42d34e0",
-          "b584dc018eadf26d8f269e74b729f32bebb0f93db47d98c3862a533f925ff093",
-          "42f3d3530502b4a6eaf8f1574143af76bd366f1d2703f1aa3e45fd03bd0d4364"
+          "a0ce58b03ff087c325d389439f51a0cf564487ddb96f26036ceb623494e7ef37",
+          "0aec29544e964a23f35f92e8c9d9546427b6413ee9184dbc052ab9fcce7eecb2",
+          "bb4008fb1aca2b6276ca8e452c3410478ca725fbcfc94965dbf367a25aa9b9c1",
+          "62c1c4aace98823ee8678c161d1a521574322c0aabd5dd25b6c5905962a3adea",
+          "6882d8084ee9aaff6cfcf95dec0c500a40213fd7a01b2e94080a38a3f9ef2adb"
         ],
         [
-          "e4bb50321b2f1e7185928fd4f78d62026c38c39bb854e823cd560ca70fe3ed0f",
-          "29d56fe03f45c6ac348cfd0adc9e86c3694fd56b4273bbace2b3e441e01004aa",
-          "2d7eecefec41218c31bee4c6bb15443550f8e81181b6e20bf57614af6e6c9846",
-          "4a502a1cf54512a21b6b1205449e76bf771601571ecc7fd5e5ef6653ec822df1",
-          "e4fde556ce9e0f52a1d28325149f9bdd2f31cc8be9b520da8f1241ca13a7f448"
+          "ca0046afc64f91ab4c07afe60d1eef59a040426735be1a9e88f205a11881512e",
+          "0bedd6769593fc5c1367dd28afefc8a5b743978461478a02fa3311cbf402bf0f",
+          "67050df924bb15d00afbb1c8185b084d6702cacb0ae8c69bfe492260383f3e2f",
+          "1d37dc242e7d0cb10b9d9480b7c08ed9f86488623a57e11f82151bcc9572fba9",
+          "3ad9af1a5f8687d33fe3c9a1204374a53d0cb15a7d41fd42972e37f73ee9976a"
         ]
       ],
       "projectedSHA256": [
-        "96deaafe429c274ef343beba918280fe230ce2e0ae1cbf47c84fbf90c79a021a",
-        "882d0f0df0c0d56f32a1832f61e5a06f75cd23665997c31063c3a17dd91db291",
-        "48c45db00570cf8c35fa84342870f87ec9ffd96a76caac4c5de33beb3c7bfc07",
-        "6f584e462e47bd6900bc2abc3f08b9d06bb6b0b6af85d828ecc900f8294c5c57"
+        "cf705ae7e9346a8ffc1cd5696f845389df38e5b1eb6356b52885ce51baf1a056",
+        "97836e5effc3880298b574a328c59b3880098da4fdce0a42b130481759d59dda",
+        "76f7c8b147bb2b9c861a3b13d45077ef68abee7f6537a9bf0748108a9577c34b",
+        "c25bee6279a4e0e7de7d15f063271e92db3211d2f4c169c3a632e3eea9cf371c"
       ],
-      "encodedSha256": "bed48bf25f7a25bb5a3ab6d083c8c54d116e87f01f36bd0373466a11790cb5a2",
-      "bytes": 37650,
+      "encodedSha256": "a6b71b3a8ceb6ecc285aaf177b7993d5b9924fc6d22ee29ec66572890257b115",
+      "bytes": 36432,
       "stats": [
         {
-          "mean": 101.946,
-          "sd": 31.496,
+          "mean": 101.89,
+          "sd": 31.68,
           "levels": 185,
-          "partial": 4635,
-          "minAlpha": 151
+          "partial": 89,
+          "minAlpha": 181
         },
         {
-          "mean": 102.799,
-          "sd": 31.774,
-          "levels": 212,
-          "partial": 4635,
-          "minAlpha": 151
+          "mean": 102.756,
+          "sd": 31.967,
+          "levels": 209,
+          "partial": 89,
+          "minAlpha": 181
         },
         {
-          "mean": 59.157,
-          "sd": 20.785,
-          "levels": 97,
-          "partial": 4635,
-          "minAlpha": 151
+          "mean": 59.067,
+          "sd": 20.912,
+          "levels": 102,
+          "partial": 89,
+          "minAlpha": 181
         },
         {
-          "mean": 72.959,
-          "sd": 27.641,
-          "levels": 251,
-          "partial": 4635,
-          "minAlpha": 151
+          "mean": 73.031,
+          "sd": 27.878,
+          "levels": 250,
+          "partial": 89,
+          "minAlpha": 181
         }
       ]
     }
