@@ -3,8 +3,18 @@ import type { ConsoleMessage, Page, Request, Response, TestInfo } from '@playwri
 
 /** Observe a cold launch without routing requests, importing a module, changing the
  * canvas, or polling the main thread. The Node-side observations survive a stuck tab. */
-export async function observeVillaColdShell(page: Page, info: TestInfo, launch: (mark: (name: string) => void) => Promise<void>) {
+export async function observeVillaColdShell(page: Page, info: TestInfo, launch: (mark: (name: string) => void, waitForReady: (limit: number) => Promise<void>) => Promise<void>) {
   const start = performance.now(), prefix = 'villa:cold-shell ', origin = info.project.use.baseURL && new URL(info.project.use.baseURL).origin;
+  let notify!: (at: number) => void;
+  const delivered = new Promise<number>(resolve => { notify = resolve; });
+  // The deadline uses the worker's monotonic clock. A busy tab cannot pass by
+  // delivering a late observation, even if its next polling tick is delayed.
+  const waitForReady = (limit: number) => new Promise<void>((resolve,reject) => {
+    const deadline = performance.now()+limit;
+    const fail = () => reject(Error(`No usable Villa WebGL frame observed within ${limit}ms`));
+    const timer = setTimeout(fail,limit);
+    delivered.then(at => { clearTimeout(timer); if (at<=deadline) resolve(); else fail(); });
+  });
   const events: { ms: number; event: string; detail?: unknown }[] = [];
   const mark = (event: string, detail?: unknown) => {
     if (events.length < 64) events.push({ ms: Math.round(performance.now() - start), event, detail });
@@ -32,6 +42,12 @@ export async function observeVillaColdShell(page: Page, info: TestInfo, launch: 
     .on('console', consoleEvent).on('pageerror', errorEvent).on('crash', crash);
   let ready = false;
   try {
+    await page.exposeBinding('__villaQaFirstWorld', ({frame}, state) => {
+      const url=new URL(frame.url());
+      if(frame!==page.mainFrame() || url.origin!==origin || url.hash!=='#/villa') return;
+      if(state.id==='villa' && state.renderer==='webgl' && state.running==='true' && state.prepared>0 && !state.inert && state.overlay===false &&
+        state.renderWidth>0 && state.renderHeight>0 && state.aspect>0){ mark('usable real world observed',state); notify(performance.now()); }
+    });
     await page.addInitScript(tag => {
       if (window !== window.top) return;
       // This records a DOM state only when the browser can yield. In particular,
@@ -45,8 +61,16 @@ export async function observeVillaColdShell(page: Page, info: TestInfo, launch: 
             running:c.dataset.gameRunning, size:[c.width,c.height], inert:c.inert, overlay:overlay?.classList.contains('active'),
             status:status?.textContent?.trim().slice(0,90), error:error?.hidden === false ? document.getElementById('loadErrorMessage')?.textContent?.trim().slice(0,90) : undefined };
           const key = JSON.stringify(state);
-          if (key !== previous) { previous = key; count++; console.info(tag + JSON.stringify({ pageMs:Math.round(performance.now()), ...state })); }
-          if (count >= 12 || (state.running === 'true' && !state.overlay)) watcher.disconnect();
+          if (key !== previous && count<12) { previous = key; count++; console.info(tag + JSON.stringify({ pageMs:Math.round(performance.now()), ...state })); }
+          if (state.running === 'true' && !state.inert && state.overlay === false && state.renderer==='webgl') {
+            const w=window as unknown as {__GAME_VIEWPORT_DEBUG__?:{info:()=>{renderWidth?:number;renderHeight?:number;cameraAspect?:number}|null};__villaQaFirstWorld:(x:unknown)=>Promise<void>};
+            const world=w.__GAME_VIEWPORT_DEBUG__?.info();
+            if(world?.renderWidth && world.renderHeight && world.cameraAspect){
+              void w.__villaQaFirstWorld({id:state.id,renderer:state.renderer,running:state.running,prepared:Number(state.prepare),inert:state.inert,overlay:state.overlay,
+                renderWidth:world.renderWidth,renderHeight:world.renderHeight,aspect:world.cameraAspect}).catch(()=>{});
+              watcher.disconnect();
+            }
+          }
         };
         const watcher = new MutationObserver(inspect);
         watcher.observe(c, { attributes:true, attributeFilter:['data-game-id','data-game-prepare-count','data-villa-renderer','data-game-running','inert'] });
@@ -56,7 +80,7 @@ export async function observeVillaColdShell(page: Page, info: TestInfo, launch: 
         inspect();
       }, { once:true });
     }, prefix);
-    mark('navigate'); await launch(mark); ready = true;
+    mark('navigate'); await launch(mark,waitForReady); ready = true;
   } finally {
     page.off('request', requested).off('response', response).off('requestfinished', done).off('requestfailed', failed)
       .off('console', consoleEvent).off('pageerror', errorEvent).off('crash', crash);

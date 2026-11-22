@@ -108,7 +108,18 @@ describe('cold Villa shell projection', () => {
   it('seeds the genuine cold projection from the measured stage before prepare paints; it does not claim a running frame',()=>{
     const {game,canvas}=mount();game.sizeFirstWorld();expect([game.width,game.height]).toEqual([390,664]);
     expect(canvas.dataset).toMatchObject({logicalWidth:'390',logicalHeight:'664'});expect(canvas.dataset).not.toHaveProperty('villaRenderer');
-    expect(game.viewport).toBeNull();expect(game.scene).toBeNull();
+    expect(game.viewport).toMatchObject({width:390,height:664,safeArea:{top:0,right:0,bottom:0,left:0}});expect(game.scene).toBeNull();
+  });
+  it('retains only a painted identical same-turn hardware fit; a notch, resize, restart, or later fit must render',async()=>{
+    for(const mode of ['identical','insets','size','dpr','lost','empty','software','running','later']) {
+      const {game}=mount();game.sizeFirstWorld();let renders=0;
+      const v={...game.viewport,safeArea:{...game.viewport.safeArea}};
+      game.scene={lowSpec:mode==='software',setPrimaryAspect(){},renderer:{info:{render:{frame:mode==='empty'?0:1}},getContext:()=>({isContextLost:()=>mode==='lost'})}};
+      game.resizeLogicalViewport=()=>{renders++;};game.syncUseButton=game.publishState=()=>{};
+      if(mode==='insets')v.safeArea.top=45;if(mode==='size')v.height++;if(mode==='dpr')v.dpr++;if(mode==='running')game.running=true;if(mode==='later')await Promise.resolve();
+      game.setViewport(v);expect(renders,mode).toBe(mode==='identical'?0:1);
+      if(mode==='identical'){expect(game.viewport).toBe(v);game.setViewport(v);expect(renders).toBe(1);}
+    }
   });
   it('does not replace a standalone host, a supplied fit, an in-progress scene, or an unmeasurable stage',()=>{
     for(const mode of ['isolated','unmounted','sized','running','zero','nonfinite']){

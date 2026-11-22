@@ -68,6 +68,7 @@ const LOCK_LOOK_SENSITIVITY = 0.0023;
 const TOUCH_LOOK_SENSITIVITY = 0.0036;
 export class VillaGame extends BaseGame {
   private scene: VillaScene | null = null;
+  private firstStageFit: GameViewport | null = null;
   private unavailable = false;
   private position: VillaPosition = { ...VILLA_SPAWN };
   private yaw = -0.74;
@@ -181,8 +182,15 @@ export class VillaGame extends BaseGame {
   /** Responsive viewport: logical drawing units become CSS pixels. Game state
    * (position, activities, panels) is never reset by a resize. */
   setViewport(viewport: GameViewport) {
+    const seed=this.firstStageFit; this.firstStageFit=null;
     this.scene?.setPrimaryAspect(viewport.width,viewport.height);
-    this.resizeLogicalViewport(viewport);
+    // Only the synchronous handoff immediately after the real preview paint.
+    // Insets, density, physical resize, a lost context or a later turn must redraw.
+    if (seed && this.viewport===seed && !this.running && this.scene && !this.scene.lowSpec && this.scene.renderer.info.render.frame>0 &&
+      !this.scene.renderer.getContext().isContextLost() && seed.width===viewport.width && seed.height===viewport.height && seed.dpr===viewport.dpr &&
+      Object.values(viewport.safeArea).every(n=>n===0) && this.canvas.width===Math.floor(this.width*this.pixelRatio) && this.canvas.height===Math.floor(this.height*this.pixelRatio)) {
+      this.viewport=viewport;
+    } else this.resizeLogicalViewport(viewport);
     this.syncUseButton();
     this.publishState();
   }
@@ -269,11 +277,15 @@ export class VillaGame extends BaseGame {
     const stage = this.canvas.parentElement;
     if (stage?.id !== 'canvasWrapper' || !stage.closest('#gameApp')) return;
     const { width, height } = stage.getBoundingClientRect();
-    if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) || (width === this.width && height === this.height)) return;
-    this.width = width; this.height = height;
-    this.pixelRatio = setCanvasDisplaySize(this.canvas, this.ctx, width, height, width);
-    // This seeds only the preview projection. setViewport still owns safe areas,
-    // later DPR/rotation changes, the HUD and its native touch targets.
+    if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0)) return;
+    const dpr=this.canvas.ownerDocument?.defaultView?.devicePixelRatio || 1;
+    const seed={width,height,dpr,safeArea:{top:0,right:0,bottom:0,left:0}};
+    this.width=width; this.height=height; this.viewport=seed;
+    this.canvas.style.left=this.canvas.style.top='0px';this.canvas.dataset.viewportMode='responsive';
+    this.pixelRatio=setCanvasDisplaySize(this.canvas,this.ctx,width,height,width,dpr);
+    this.firstStageFit=seed;
+    queueMicrotask(()=>{if(this.firstStageFit===seed)this.firstStageFit=null;});
+    // setViewport still owns the authoritative insets, DPR and later rotations.
   }
 
   init() {
