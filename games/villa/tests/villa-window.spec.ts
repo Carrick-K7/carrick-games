@@ -104,6 +104,11 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
       await page.keyboard.press('Control+k');
       await expect(page.locator('#searchInput')).toBeFocused();
       await page.locator(`.game-list-item[data-id="${VILLA_SWITCH_ID}"]`).click();
+      // The picker click starts an async handoff; the *old* Villa canvas is
+      // deliberately inert while it is closing. Check focus on the new game,
+      // after the same real readiness boundary as a direct hash switch.
+      await expect(canvas).toHaveAttribute('data-game-id', VILLA_SWITCH_ID, { timeout: 45_000 });
+      await expect(page.locator('#loadingOverlay')).not.toHaveClass(/active/, { timeout: 45_000 });
       await expect(page.locator('#gameCanvas')).toBeFocused();
       await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
       await expect(canvas).not.toHaveAttribute('data-villa-renderer', /.+/);
