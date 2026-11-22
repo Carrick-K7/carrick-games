@@ -67,10 +67,12 @@ export async function dispose(page: Page) {
 
 export function registerVillaInteractionTests() {
   test('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
-    test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    test.setTimeout(180_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     await installVillaSwitchTarget(page);
     await page.goto('/#/villa');
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+    // The current full suite's software WebKit startup exceeded 45s in both
+    // complete CI runs. Keep the renderer contract; allow the slow startup.
+    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 90_000 });
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
     await page.waitForFunction(() => document.getElementById('gameCanvas')?.dataset.villaTarget === 'pet-dog');
     const button = page.locator('button[data-villa-use]'); await expect(button).toBeVisible(); await button.tap();
