@@ -577,14 +577,14 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     const end = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
     return end === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + end);
   };
-  const budgets = { unlist: 10, plan: 10, common: 90, games: 50, shell: 50, 'bootstrap-shell': 50 };
+  const budgets = { unlist: 10, plan: 10, common: 90, games: 150, shell: 150, 'bootstrap-shell': 150 };
   for (const [name, minutes] of Object.entries(budgets)) {
     assert.match(job(name), new RegExp(`^    timeout-minutes: ${minutes}$`, 'm'), `job ${name} budget`);
   }
   assert.match(job('common'), /run: timeout -k 10 4200 node scripts\/ci\.mjs verify all/);
   for (const name of ['games', 'shell', 'bootstrap-shell']) {
     const body = job(name);
-    assert.match(body, /run: timeout -k 10 1800 node scripts\/ci\.mjs verify/, `verify bound ${name}`);
+    assert.match(body, /run: timeout -k 10 7200 node scripts\/ci\.mjs verify/, `verify bound ${name}`);
     const publish = body.match(/run: timeout -k 10 (\d+) node scripts\/ci\.mjs publish .*?2>&1 \| tee "([^"]+)"/);
     assert.ok(publish, `publish step ${name}`);
     assert.equal(publish[1], '900', `publish bound ${name}`);
@@ -596,9 +596,9 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     assert.ok(preserve.includes(`name: ${artifact}-attempt-\${{ github.run_attempt }}-publish-log`), `artifact name ${name}`);
     assert.ok(preserve.includes(`path: ${publish[2]}`), `upload path matches tee ${name}`);
     assert.match(preserve, /retention-days: 7\s+if-no-files-found: ignore/, name);
-    // Worst case verify 1800s + publish 900s + checkout/install ~120s must fit the job budget,
+    // Worst case verify 7200s + publish 900s + checkout/install ~120s must fit the job budget,
     // otherwise the job dies before this point and the log artifact is never uploaded.
-    assert.ok(1800 + 900 + 120 < budgets[name] * 60, `worst case fits job budget ${name}`);
+    assert.ok(7200 + 900 + 120 < budgets[name] * 60, `worst case fits job budget ${name}`);
   }
   assert.ok(4200 + 120 < budgets.common * 60, 'worst case fits common budget');
 });
