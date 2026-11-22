@@ -60,6 +60,7 @@ jobs:
     name: Select affected releases
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       games: ${{ steps.plan.outputs.games }}
@@ -94,6 +95,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' && needs.plan.outputs.full == 'true'
     # Locked Playwright supports 24.04; ubuntu-latest can now select unsupported 26.04.
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:
@@ -109,7 +111,7 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - name: Typecheck, build, unit and full browser suite
-        run: node scripts/ci.mjs verify all
+        run: timeout -k 10 3300 node scripts/ci.mjs verify all
       - name: Preserve failed shared browser evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -136,6 +138,7 @@ jobs:
       always() && github.event_name != 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.games == 'true' &&
       (needs.common.result == 'success' || needs.common.result == 'skipped')
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -162,7 +165,7 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - name: Verify candidate with pinned published counterparts
-        run: node scripts/ci.mjs verify '${{ matrix.id }}'
+        run: timeout -k 10 1800 node scripts/ci.mjs verify '${{ matrix.id }}'
       - name: Publish only this verified game
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.publish
         env:
@@ -172,7 +175,15 @@ jobs:
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: node scripts/ci.mjs publish '${{ matrix.id }}'
+        run: timeout -k 10 900 node scripts/ci.mjs publish '${{ matrix.id }}' 2>&1 | tee "publish-${{ matrix.id }}-attempt-${{ github.run_attempt }}.log"
+      - name: Preserve publish log on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-${{ matrix.id }}-attempt-${{ github.run_attempt }}-publish-log
+          path: publish-${{ matrix.id }}-attempt-${{ github.run_attempt }}.log
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Cleanup ephemeral deployment credentials
         if: always()
         run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
@@ -196,6 +207,7 @@ jobs:
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
@@ -215,7 +227,7 @@ jobs:
           path: .
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
-      - run: node scripts/ci.mjs verify shell
+      - run: timeout -k 10 1800 node scripts/ci.mjs verify shell
       - name: Publish only the verified shell
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
         env:
@@ -225,7 +237,15 @@ jobs:
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: node scripts/ci.mjs publish shell
+        run: timeout -k 10 900 node scripts/ci.mjs publish shell 2>&1 | tee "publish-shell-attempt-${{ github.run_attempt }}.log"
+      - name: Preserve publish log on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-attempt-${{ github.run_attempt }}-publish-log
+          path: publish-shell-attempt-${{ github.run_attempt }}.log
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Cleanup ephemeral deployment credentials
         if: always()
         run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
@@ -238,6 +258,7 @@ jobs:
       needs.plan.outputs.shell == 'true' && needs.common.result == 'success' &&
       (needs.games.result == 'success' || (github.event_name == 'pull_request' && needs.games.result == 'skipped'))
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     concurrency:
       group: carrick-games-${{ github.ref }}-shell
       cancel-in-progress: false
@@ -259,7 +280,7 @@ jobs:
           path: .
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
-      - run: node scripts/ci.mjs verify shell
+      - run: timeout -k 10 1800 node scripts/ci.mjs verify shell
       - name: Activate the modern shell last
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
         env:
@@ -269,7 +290,15 @@ jobs:
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: node scripts/ci.mjs publish shell
+        run: timeout -k 10 900 node scripts/ci.mjs publish shell 2>&1 | tee "publish-bootstrap-shell-attempt-${{ github.run_attempt }}.log"
+      - name: Preserve publish log on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-shell-attempt-${{ github.run_attempt }}-publish-log
+          path: publish-bootstrap-shell-attempt-${{ github.run_attempt }}.log
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Cleanup ephemeral deployment credentials
         if: always()
         run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
