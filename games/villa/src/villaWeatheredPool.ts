@@ -54,7 +54,7 @@ export function glazedBasin(tile: THREE.Texture, ripple: THREE.Texture, flow: Po
         vec2 surfaceMetres = vec2(basinPosition.x - ${POOL.minX.toFixed(2)}, ${POOL.maxZ.toFixed(2)} - basinPosition.z);
         // Move the sampling footprint a little with depth, not the stone geometry.
         vec3 wav = poolOptics(poolNormalFocus,surfaceMetres + poolDepth * vec2(.063,-.081));
-        vec2 distortion = wav.xy * (.012 + .17 * poolDepth);
+        vec2 distortion = wav.xy * (.008 + .105 * poolDepth);
         vec3 glaze = texture2D(map, vMapUv + distortion).rgb;
         float directSun = 0.;
         #if NUM_DIR_LIGHTS > 0
@@ -66,14 +66,14 @@ export function glazedBasin(tile: THREE.Texture, ripple: THREE.Texture, flow: Po
         // the waterline, terminating on the tile joints rather than halfway across a tile.
         float border = smoothstep(-.232,-.228,basinPosition.y) * (1.-smoothstep(-.132,-.128,basinPosition.y));
         diffuseColor.rgb *= glaze * mix(vec3(1.),vec3(.57,.76,.74),border)
-          * mix(vec3(1.),vec3(.70,.95,.93),poolDepth) * (1.0 + (.61*wav.z - .16)*directSun*poolDepth);
+          * mix(vec3(1.),vec3(.70,.95,.93),poolDepth) * (1.0 + (.35*wav.z - .093)*directSun*poolDepth);
       `);
   };
   ceramic.customProgramCacheKey = ()=>'villa-submerged-glaze-flow-v2'; return ceramic;
 }
 export function surfaceWater(root: THREE.Object3D, ripple: THREE.Texture, w: number, l: number, flow:PoolCirculation) {
   ripple.repeat.set(w/RIPPLE_X,l/RIPPLE_Z);
-  const paint = new THREE.MeshPhongMaterial({color:0x659a91, specular:0xd6dcd5, shininess:82, normalMap:ripple, normalScale:new THREE.Vector2(.76,.76),
+  const paint = new THREE.MeshPhongMaterial({color:0x659a91, specular:0xd6dcd5, shininess:82, normalMap:ripple, normalScale:new THREE.Vector2(.49,.49),
     map:gardenReflection(root), transparent:true, opacity:.18, depthWrite:false});
   paint.name='pool/air-water-interface'; paint.onBeforeCompile = shader => {
     shader.uniforms.poolPhase=flow.phase;shader.uniforms.poolRain=flow.rain;

@@ -11,7 +11,7 @@ type Profile = { shelfDepth: number; centreDepth: number; shelfOffset: number };
  * the bottom rather than treating its 2.5m width as a uniform tinted ribbon. */
 export function riparianWaterMaterial(profile?: Profile) {
   const pond = !profile, motion = waterMotion(pond);
-  const m = new THREE.MeshStandardMaterial({ color: pond ? '#547c78' : '#678987', roughness: pond ? .22 : .25,
+  const m = new THREE.MeshStandardMaterial({ color: pond ? '#547c78' : '#678987', roughness: pond ? .34 : .25,
     metalness: 0, transparent: true, opacity: 1, depthWrite: false, normalMap: rippleNormals(pond), normalMapType: THREE.ObjectSpaceNormalMap });
   m.name = pond ? 'estate-pond-water' : 'villa-stream-flowing-water';
   m.onBeforeCompile = shader => {
