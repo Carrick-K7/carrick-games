@@ -6,6 +6,7 @@ import { createVillaRoomMirror, decodeVillaMirrorPlate, installVillaRoomMirrors,
 import { mirrorPlateDirection, VILLA_MIRROR_BUDGET, VILLA_MIRROR_LAYERS, VILLA_MIRROR_ROOMS, VILLA_MIRROR_SITES, VILLA_MIRROR_SIZE, type MirrorRoom } from '../src/villaMirrorPlateLayout.js';
 import { VILLA_MIRROR_FRAGMENT, VILLA_MIRROR_LOOKUP } from '../src/villaMirrorPlateOptics.js';
 import { furnishVilla } from '../src/villaFurnishings.js';
+import { createVillaEnvelope, type VillaSurfaces } from '../src/villaEnvelope.js';
 import { capturePolicy, faceLookup, faces, measureGlass, opaque, projectFaces, toWorld } from './bake-room-mirrors-render.mjs';
 import { mirrorOptions, plateHeader, roomSources, verifyMirrorEntry, verifyReceipt } from './bake-room-mirrors.mjs';
 import { sampleMirrorShader } from './bake-room-mirrors-optics.mjs';
@@ -46,20 +47,36 @@ function shader(m:THREE.MeshStandardMaterial) {
 const tick=async()=>{await Promise.resolve();await Promise.resolve();};
 
 describe('offline furnished mirror optics',()=>{
-  it('finds a room-sized facing silver surface at each surveyed datum in the actual furnishings, not its trim',()=>{
+  it('sees the real silver before wall, frame or furniture on five rays per pane',()=>{
     const scene=new THREE.Scene(), context=new Proxy({},{get:()=>()=>undefined,set:()=>true});
+    const base=Object.fromEntries(['oak','stone','plaster','glass','bronze','roof'].map(id=>[id,new THREE.MeshStandardMaterial({transparent:id==='glass'})])) as VillaSurfaces;
     vi.stubGlobal('document',{createElement:()=>({getContext:()=>context})});
     try {
-      furnishVilla(scene);scene.updateMatrixWorld(true);
+      createVillaEnvelope(scene,base);furnishVilla(scene);scene.updateMatrixWorld(true);
+      const solid:THREE.Mesh[]=[];scene.traverseVisible(o=>{
+        if(o instanceof THREE.Mesh && [o.material].flat().some(m=>m.visible&&!m.transparent)) {o.geometry.computeBoundingBox();solid.push(o);}
+      });
       const {result,materials}=measureGlass(scene,VILLA_MIRROR_SITES,new THREE.PerspectiveCamera());
       expect([...materials.keys()]).toEqual([...VILLA_MIRROR_ROOMS]);
+      const up=new THREE.Vector3(0,1,0);
       for(const room of VILLA_MIRROR_ROOMS){
         const site=VILLA_MIRROR_SITES[room], n=V(site.axis), e=V(site.eye), pane=materials.get(room)!;
-        const ray=new THREE.Raycaster(e.clone().addScaledVector(n,.25),n.clone().negate(),0,.39);
-        const meshes:THREE.Mesh[]=[];scene.traverse(o=>{if(o instanceof THREE.Mesh&&o.material===pane)meshes.push(o);});
-        const hit=ray.intersectObjects(meshes)[0];expect(hit).toBeDefined();
-        expect(hit.face!.normal.clone().transformDirection(hit.object.matrixWorld).dot(n)).toBeGreaterThan(.98);
-        expect(result[room].extent[0]).toBeCloseTo(capturePolicy.measuredGlass[room][0],1);
+        const eye=e.clone().addScaledVector(n,2.08).addScaledVector(up,.035), right=n.clone().cross(up), {extent,faceOffset}=result[room];
+        // Centre and four inset corners from the actual centre study camera.
+        // Raycasting ONLY tagged silver missed the gym glass 62mm inside plaster.
+        for(const [u,v] of [[0,0],[-.36,-.30],[-.36,.30],[.36,-.30],[.36,.30]]) {
+          const target=e.clone().addScaledVector(n,faceOffset).addScaledVector(right,extent[0]*u).addScaledVector(up,extent[1]*v);
+          const ray=new THREE.Raycaster(eye,target.clone().sub(eye).normalize(),0,eye.distanceTo(target)+.2);
+          const hits=ray.intersectObjects(solid,false), hit=hits[0], mat=(hit?.object as THREE.Mesh|undefined)?.material as THREE.Material|undefined;
+          expect(mat===pane,`${room} (${u},${v}) blocked by ${mat?.name} at ${hit?.point.toArray()}`).toBe(true);
+          expect(hit!.point.distanceTo(target)).toBeLessThan(.004);
+          expect(hit!.face!.normal.clone().transformDirection(hit!.object.matrixWorld).dot(n)).toBeGreaterThan(.98);
+          if(room==='gym') {
+            const plaster=hits.find(x=>((x.object as THREE.Mesh).material as THREE.Material).name==='inside/lime-finish');
+            expect(plaster?.point.z).toBeCloseTo(-18.09,4); expect(hit!.point.z-plaster!.point.z).toBeGreaterThan(.02);
+          }
+        }
+        expect(extent[0]).toBeCloseTo(capturePolicy.measuredGlass[room][0],1);
         expect(pane.transparent).toBe(false);expect(pane.userData.villaMirrorRoom).toBe(room);
       }
       const unrelated=new THREE.MeshStandardMaterial();scene.add(new THREE.Mesh(new THREE.PlaneGeometry(8,5),unrelated));

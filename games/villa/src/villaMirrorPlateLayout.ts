@@ -7,7 +7,8 @@ export const VILLA_MIRROR_SITES = {
   dressing: { eye:[-13.31,4.94,-2],  axis:[-1,0,0], lo:[-24.09,3.61,-8.89], hi:[-13.11,6.99,-.11] },
   ensuite:  { eye:[-8,5.56,-8.75],   axis:[0,0,1],  lo:[-12.89,3.61,-8.89], hi:[-4.11,6.99,-.11] },
   bath:     { eye:[13.7,5.56,.75],   axis:[0,0,-1], lo:[8.11,3.61,-8.89],   hi:[16.89,6.99,.89] },
-  gym:      { eye:[15.5,1.45,-18.1], axis:[0,0,1],  lo:[5.65,.01,-18.09],   hi:[16.89,3.39,1] },
+  // North wall's occupied face is z=-18.09; keep the eye in front of the mounted silver, not inside solid plaster.
+  gym:      { eye:[15.5,1.45,-18.03],axis:[0,0,1],  lo:[5.65,.01,-18.09],   hi:[16.89,3.39,1] },
 } as const;
 export const VILLA_MIRROR_LIGHT = { master:'master', dressing:'wardrobe', ensuite:'ensuite', bath:'bath', gym:'gym' } as const;
 export const VILLA_MIRROR_LAYERS = ['dayOff', 'dayLit', 'nightOff', 'nightLit'] as const;

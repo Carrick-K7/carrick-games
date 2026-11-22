@@ -162,8 +162,8 @@ export function gymEquipment(k: FurnitureKit) {
     put(wrapCut(exercisePad(.350,1.134,true),'saddle','zx'),equipmentSurface(k),0,.493,.272,-.062);
     hit(0, 0, 0, .50, .60, 1.9);
   });
-  put(casting(rectXY(2.4, 1.9, .062), .043, [rectXY(2.347, 1.847, .047)]), m.dark, 4.2, 1.45, -4.565);
-  // Keep the mirror on its dedicated planar room-reflection material. The
-  // narrow backing still takes the edge load and every bracket stays steel.
-  put(casting(rectXY(2.357, 1.857, .050), .016), createVillaRoomMirror('gym','#c8d2cf'), 4.2, 1.45, -4.560);
+  // The north partition is 220 mm thick: mount on the FINISHED room face,
+  // not against the wall's centreline. The bezel's back is at -18.089 m.
+  put(casting(rectXY(2.4, 1.9, .062), .043, [rectXY(2.347, 1.847, .047)]), m.dark, 4.2, 1.45, -4.4675);
+  put(casting(rectXY(2.357, 1.857, .050), .016), createVillaRoomMirror('gym','#c8d2cf'), 4.2, 1.45, -4.4625);
 }

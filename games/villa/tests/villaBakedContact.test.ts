@@ -28,12 +28,18 @@ it('never bakes a moving bath or wardrobe leaf at its closed position, but prese
     const paint = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} };
     vi.stubGlobal('document', { createElement: () => ({ getContext: () => paint }) });
     const renderer = Object.assign(Object.create(VillaScene.prototype), { scene }) as { addContactShadows(parts: readonly VillaCollider[]): void };
-    // Inspect the actual authored decal vertices, not metadata or draw-call totals.
+    // Inside the rooms the measured floor field already includes fixed carcases;
+    // drawing the old collider rectangle as well would leave a ghost or double shadow.
     renderer.addContactShadows([...moving]); expect(scene.getObjectByName('villa-contact-shadows')).toBeUndefined();
-    renderer.addContactShadows(all);
+    renderer.addContactShadows(all); expect(scene.getObjectByName('villa-contact-shadows')).toBeUndefined();
+    // The exterior and roof still keep their legacy contacts. Inspect the actual
+    // emitted vertices with a mixed list and one elevated (non-floor) fitting.
+    const courtyard = {minX:-29,maxX:-28.7,minZ:12,maxZ:12.3,minY:0,maxY:.45};
+    const roof = {minX:-7.3,maxX:-5.8,minZ:3,maxZ:4,minY:7.2,maxY:8};
+    renderer.addContactShadows([...all,courtyard,{...courtyard,minY:.7,maxY:.8},roof]);
     const mesh = scene.getObjectByName('villa-contact-shadows') as THREE.Mesh;
     const pos = mesh.geometry.getAttribute('position');
-    const atFloor = expected.filter(c => [0, 3.6, 7.2].some(y => Math.abs(c.minY - y) < .08));
+    const atFloor = [courtyard,roof];
     expect(pos.count).toBe(atFloor.length * 4);
     atFloor.forEach((c, i) => {
       let x = 0, y = 0, z = 0;
