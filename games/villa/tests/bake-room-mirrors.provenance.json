@@ -1,19 +1,19 @@
 {
   "format": "villa-room-radiance-v1",
   "authoring": {
-    "version": "1.13.0",
-    "revision": "3bf125921b0313f22db9a650cfce48374c530c9d",
-    "entrySha256": "04cd53c0d4e454f08b33305ab12042773c142d8ccd4241457504efe36f0cc482",
-    "descriptorSha256": "91aa3d7d2ff537ff005dc98a14977b24fce4e1120dca9f5897b16c6cffcfadc6",
-    "catalogSha256": "888e8b3cb4da97fd5820880457a4fe9dad856e2cde01f2b0343ba305b4aacf3a",
+    "version": "1.13.1",
+    "revision": "1836ecaa7c4ec9473bba02e6ce87465c4c118504",
+    "entrySha256": "183da113ebe41a3b0b054ef8a7cfbbd07cd238aebbf962e770d645e48f9f2c36",
+    "descriptorSha256": "39ca1e6a2369ffce0dbb01f83e45da3805be3048fee8597196d72d7c1d77504e",
+    "catalogSha256": "d6b7bf84a402c5094f76190d2ee0796593fd4d8445d89d7cab082ddee965cf95",
     "chromium": "147.0.7727.15",
     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
     "renderHelperSha256": "733410433a83966bf85f1ec1fb09c0bd93e468859f8433aa9aee0e07866e53c5",
     "bakerSha256": "e745a43e69355790ebaa5e20d2c223197ccf7bb8ffe6327da8a9e1a02ae2a7a9"
   },
-  "sourceSha256": "75214ac62c626b9d0c5035605ef553883b43e2025172ac1a25c215dc8e9ba855",
-  "generatedSha256": "f52e936a000fa5e581e3a23ccb6ff608252653a70f884df99f4a67efec076136",
-  "totalBytes": 253792,
+  "sourceSha256": "254f0a9d0dc613c2fea22e7a197bbb88b87e403c27a44db52af1dfc09f8326fe",
+  "generatedSha256": "b656d15ff03873c38ca50ad3ec339efd2eb4ba5bc35e4c547a8ee823e41a4eb9",
+  "totalBytes": 253824,
   "rooms": [
     {
       "room": "master",
@@ -27,67 +27,67 @@
       },
       "facesSHA256": [
         [
-          "b8543b0820de1677f5068255e79fc4e3844955458d6f6522199a8874c17d5cbb",
-          "c6c7b829c623fee4e711271ab5110092da3f614517ee1a9354ae8afb30d87e95",
-          "4239dc089ef09e8c71c5f67a3eaf3f0cc13d578f903fbb5fb50ea59504d0e5ca",
+          "11089ad260f7f9e77b298acd34e0e302d5d5eadcd571e07b5c94b08d4bc3c38c",
+          "0c1ea17e7c667e5b22df91670f0c79f6216e18f15e1db4c17ccb6f3b7f4914c8",
+          "c31f8883dabdde8c2a74deacc1d171ac44f69968a3e8d521b3d4082e82abb8ed",
           "eb3946aaf5ee359e8f9b8b8af8aa59ab388bcbe032f18fe8607440fa47be5778",
           "eb6efc380f76028960a31770a900262c6152ecd3a2e4d445ca4eefcc0bab450b"
         ],
         [
-          "3febaf2c38cdbc18b069719e54bd778ba8ab709781559683c35d98ce23bc9f5e",
-          "160996104f7f62f17ccf9508d609d5d3dbb030bbbb30585ba0bf8c75205ca2b7",
-          "5ab82cf366dba188372a5305b9aadf0e78859e3faa7e65c817f3abf079ed7b33",
+          "953667f3ade5ce277fea0fabdc021a6e7c473306f52b7589e94873034502f579",
+          "930d193d9f1f84846acad04bbd29bfc18e4a8508bd7433f919201893566a8d1e",
+          "71869f4debfa9c0d163fa2bc78544e6b7ff1401c7f24d86b830ab7f4ce6d59b2",
           "5cebea65c8f4b1df52f1f899ce8201ca05893cf779dc7f0b1f197d1926491c2e",
           "5ac63501ff2d270e063966b9d4d645ef8fd31079c75ffcf7e22a898e930b45ab"
         ],
         [
-          "dd044b8e35223eb4484111756588a17eafce061abecfd09d391dc9f3736996e7",
-          "50f923390311c2cc776b8b733ff16eed69d10c79b90849e0d875214276e04de2",
-          "dfda6b64b8af4280bac9c30079272ae707198adba01cd5c00a9a3f3285ac9c58",
+          "c488388b978d5aa9926e75c8a2b8ea318c6b3ef138ccc8978756ff6163e24417",
+          "640ff02078f5d150144a358e7fe37a98951f9fd781a6b27dc1ab62183a8123e0",
+          "d153abf3b8dba5a228836abcffdfc61e04be6ed3c0b0918deb094c9d181129e9",
           "36e5b75c11d481f5a666643af548bd9bb206e55b7619011c161e04483c5c767a",
           "3f1309ef53fab1d825bf0ea89bfe64a526458a53101a3fbc46dd60c814f46429"
         ],
         [
-          "ddf287a40b30b1164815fcdab45eb9f56725dff785e58531f283fae81c753662",
-          "3c09b511d4713fad0388028db2fce8665a9e5a2373914744c63c2de46a26cca2",
-          "ccb3498027e8ea942ef3b71ddf00414039686f853b9b1197e975b0fda113b105",
+          "27b16f1c048fe796c71160c66ad8a965104c73e6cca24cd05d5edcb541451feb",
+          "84c27f7212d399975909e51dd3c3380cb2d58d1cdbc40cbf94c8747c33851208",
+          "bdca8039612dadbb556a2947d1f3fdcf064873ddae0d3c42470ac5ed95845460",
           "e4fe7e4b24c4aeed9635480c84198e37b7354c70b4b61efe4ca9fb94f6d7a644",
           "1567d27623f7e83e33ea5b8fe058b5697d432fb44368e7b0499ea29c993dcf02"
         ]
       ],
       "projectedSHA256": [
-        "bdc6fa60ad93c97d21cddf14610987a5314a0cedb37b6f88c51c885ec720a3ac",
-        "768d8b57d67943989162bd0743d157c83c088dfd0cc3ded5fcf2e2dc03972f7c",
-        "ac89fecaa1520782e00efa008a4ac7f891eeef4359512e109f5ad636689a0207",
-        "e0af035d1553e5b1278f5801961228b0ea66272c5515036b617141d903367870"
+        "d83cbf2d7d82f9bdd0f3a33ab3e05127fb9e2050a19dd35fbc91d776f2069d7f",
+        "1137632871f62ec4dec072c6258997a46f098d8e33de3088719355a100afb019",
+        "f1a7da15ed8c16b99667e2e3939c0abb36ae86d4ad0f6e99dd081d90281ffb06",
+        "cd013184a96e5f15a797288410443e079607c48305da5a7c166a8186e84ff7e2"
       ],
-      "encodedSha256": "9d35cea758c36296d41710f37019ec1bf33a7f4628c5498aa824af7fbd84f691",
-      "bytes": 74972,
+      "encodedSha256": "be175b2685b9df1b09022d75775c9a5728cb5030c01ca0dc18b725b472a229cf",
+      "bytes": 74952,
       "stats": [
         {
-          "mean": 144.403,
-          "sd": 26.209,
+          "mean": 144.4,
+          "sd": 26.215,
           "levels": 192,
           "partial": 2384,
           "minAlpha": 158
         },
         {
-          "mean": 145.601,
-          "sd": 26.485,
+          "mean": 145.597,
+          "sd": 26.491,
           "levels": 209,
           "partial": 2384,
           "minAlpha": 158
         },
         {
-          "mean": 68.12,
-          "sd": 13.643,
+          "mean": 68.118,
+          "sd": 13.645,
           "levels": 95,
           "partial": 2384,
           "minAlpha": 158
         },
         {
-          "mean": 95.394,
-          "sd": 28.453,
+          "mean": 95.392,
+          "sd": 28.456,
           "levels": 246,
           "partial": 2384,
           "minAlpha": 158
@@ -185,28 +185,28 @@
       },
       "facesSHA256": [
         [
-          "733a3328065fb2a05b9280bdb91d631c7a10227312c96ff0bb8141817b313378",
+          "c05eedefe96e42a042721607c59c2ed0448e85e0c3dcfcceaf192d81d148f34a",
           "8af7d4e1bd7901ab50a32349e136bcd5ba023efeb2cd977bdba8e1368d08f104",
           "7115416f53aacf4af174e33676415277b193fd467a5081c77f5cf13606aa9050",
           "afa9ef147a79030345551a366ff5d5b91a2197cc59b01ba7a6f7366362fb43b0",
           "1e7bef838982571fdb1e24582261debc33a10fa9b4dfc906b9f42a40e41a3590"
         ],
         [
-          "b572f15bba015e16ff9eb2fbe7ef9899e24625c0490cc5b3a2bc0fb4425a19a4",
+          "5fb35a02d9c5129af8d0bfd9a45c6a0e1e33d064fd7acf7fa578e38f90c6127d",
           "be209105a676f789f574c0129cbf22d534f565a4886917d5e13b9c7b200c657a",
           "b3bf6155a50dcf35e65eb77115448bb08d7962b5df3dc63fbb47afdeda8fbbae",
           "34d79f0c2affa73989aa5b5fafd43224011c08c547b89586791338973eaebc38",
           "93ea39498a9e0ae36126512c01fbfe7ec74379b655d0d9ac2a7afc88e521545e"
         ],
         [
-          "44ff495e0b4cf111eb73e1366a4fcdc2d3aa2045cce3afbbbfd707a88488b333",
+          "934321c363169ca009a3d11b587a17f0bddd30976b71b5ba017a2a150b379019",
           "28e71288a2a4efea3f063994530ee2417624b152358bacd8bf455aa30076e534",
           "3ebb1089358628f99b4a00c5718907b64f57a46b526d5cdad1a0b7e1c0f496eb",
           "bfd151f244eeb0e2bd3fa68aead3890f91a9f4aef1dee2b3ba94fc8ff1d42f74",
           "763217f4ce71f566130b6fd021ba388942dc10d56e47725d70bf07116bd487ef"
         ],
         [
-          "457b8f8934daa6c80fe8df36920d88b255b16167a4b6ba6c874faefc7b9e5e03",
+          "9e174c29a0edf6dba1f5296d89669cb27ed6cd8404a299042f2758a7f993d184",
           "bfcb456b29066b57ca16e478f05414497f77416268aef23f1169a1cf53695389",
           "85f1ad33a83bfe1068cee64a8b6ae449be5c9ad814b4031e72d50daaabfd9ed4",
           "f009126eae34521f2e9c42120120e02236e280f36faf568290459f8241c82290",
@@ -214,13 +214,13 @@
         ]
       ],
       "projectedSHA256": [
-        "8335e2e0739492dc10c717338704a076aad25b6b607f39ae311da768a60ca798",
-        "f57c50f8bb9915557b3a3ae7075b59d1be14b1f142c6eb02e7f2a4aadbd48340",
-        "8e22cb0ae561b2678f871e2d3fa44737bb2e23fb00145ffc07b15a0675fe71b9",
-        "57ab9a368895ba6f80b393d064913e1179ee5fcc90e2f796ac7a5b672fb83e73"
+        "3138c9271159a4284699f5aad6751ba2501558172b969ae5f7ec11b31ab0666b",
+        "e06dbdf91cf17e3a1202785ac149b432ece24afc9dc88b9ce92442fb96781d07",
+        "fb80fd46e680f1d4213c2299ae01ff67dceb106d107f925313c0ead8e22674af",
+        "ec44c0f864769444129085ef86ed19e9b9087218e1ebe8864e2db1aa7342a749"
       ],
-      "encodedSha256": "342482e41c411d03686e80744266aea67f64a914342662e982bdcfc432c16552",
-      "bytes": 35026,
+      "encodedSha256": "76546053ac20087b368c74d8b67a281e371a34b76b78e38f20ef987fee07450b",
+      "bytes": 35030,
       "stats": [
         {
           "mean": 115.848,
@@ -230,7 +230,7 @@
           "minAlpha": 255
         },
         {
-          "mean": 118.408,
+          "mean": 118.409,
           "sd": 15.475,
           "levels": 177,
           "partial": 0,
@@ -343,47 +343,47 @@
       },
       "facesSHA256": [
         [
-          "20c9b93efdb1317d5e1c7790f5a14375a9a6c81f8f570c1b8bee6f32ec84c60a",
-          "efafaec28c4b99bd2f14835ea9bc5fa2c48670344a8ef752c4d70ddf487b3203",
+          "20fdf41147681a3de84928bb5b25740abd1277bab1c4a9e669e325d235b4a0ea",
+          "bc7f9c04b36f7d9cc75b3bd078778d96a7ee0dddb948686358c56854f94c3b34",
           "2ede7699ff390e58411452ea28b5a31d5b447134ba20bfc86d32a4aa45282844",
           "7ac0e6c1d044610b902b173e0f033d8e8e2e1c8019866ce3c291e5e84940a4c8",
           "70f7e74c79079cb81702ad4ee518927096930f5bdad84807180e1a54d79ffc14"
         ],
         [
-          "ebebf930a4e736fc552e8a1c4e4744fb26167952788d923a89a88b0fa186f3b8",
-          "a085a288042598aaca8397f17eb0804dbcede9545bc9272abf1ab59618778c3d",
+          "516a282f464780eb058be6254f5a733049c5d43f5108018c191c3adeeead791f",
+          "b05b88846baa5aed5b971ac7b00c1b2a4f0c48ebbf3bbaac9e62aed29205cdf6",
           "6f74e9245d724f011ac7a8b7ecce3d55cb8be15171d5969293bd64545f161c94",
           "6be8e855957e0dbcda4dac5ea4ceecb040dacd29be57632fdbf620347e3f7a10",
           "11a4652a829044424545ac630c5367d070df04e4985de670436d62a56ba8791b"
         ],
         [
-          "a0ce58b03ff087c325d389439f51a0cf564487ddb96f26036ceb623494e7ef37",
-          "0aec29544e964a23f35f92e8c9d9546427b6413ee9184dbc052ab9fcce7eecb2",
+          "66ef73bcb64426814fcc5afed3f19c462d220583af0426bf02e518283ed61919",
+          "726d13cbd2efefc9cf34ed23da6965ea198969a7a7ceeca67c885c7430a3c41b",
           "bb4008fb1aca2b6276ca8e452c3410478ca725fbcfc94965dbf367a25aa9b9c1",
           "62c1c4aace98823ee8678c161d1a521574322c0aabd5dd25b6c5905962a3adea",
           "6882d8084ee9aaff6cfcf95dec0c500a40213fd7a01b2e94080a38a3f9ef2adb"
         ],
         [
-          "ca0046afc64f91ab4c07afe60d1eef59a040426735be1a9e88f205a11881512e",
-          "0bedd6769593fc5c1367dd28afefc8a5b743978461478a02fa3311cbf402bf0f",
+          "1207cd7fbd263382ab17b13651a0181fe7ea64c01e2add80fecec168cc531362",
+          "62f39a52ddab5f22314399b4b28e2181e8486f4c21f0cf93d1295c1a6429e654",
           "67050df924bb15d00afbb1c8185b084d6702cacb0ae8c69bfe492260383f3e2f",
           "1d37dc242e7d0cb10b9d9480b7c08ed9f86488623a57e11f82151bcc9572fba9",
           "3ad9af1a5f8687d33fe3c9a1204374a53d0cb15a7d41fd42972e37f73ee9976a"
         ]
       ],
       "projectedSHA256": [
-        "cf705ae7e9346a8ffc1cd5696f845389df38e5b1eb6356b52885ce51baf1a056",
-        "97836e5effc3880298b574a328c59b3880098da4fdce0a42b130481759d59dda",
-        "76f7c8b147bb2b9c861a3b13d45077ef68abee7f6537a9bf0748108a9577c34b",
-        "c25bee6279a4e0e7de7d15f063271e92db3211d2f4c169c3a632e3eea9cf371c"
+        "ba1585842ad083349a767edd817915c8392bacfcea9af4afd18b397afe4c852a",
+        "22c67495340c6f1cca0ee322b217d4e0b4f6d9786fa7842c3b98374fbf95da32",
+        "ad2f4d8bb7047eec9896dcec8495e1271ae84a93a827c73c581eb0a0d017db98",
+        "94ec8781f879fc1e4f6fa1214fb6d4dd28947f0fa4c1bcd669ac0d6cd398ac9e"
       ],
-      "encodedSha256": "a6b71b3a8ceb6ecc285aaf177b7993d5b9924fc6d22ee29ec66572890257b115",
-      "bytes": 36432,
+      "encodedSha256": "e32c432ca676af3ba1397c44a0f14fdd292f4749a23b072fff6875bb491b14b5",
+      "bytes": 36480,
       "stats": [
         {
           "mean": 101.89,
           "sd": 31.68,
-          "levels": 185,
+          "levels": 184,
           "partial": 89,
           "minAlpha": 181
         },
