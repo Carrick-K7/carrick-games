@@ -1,3 +1,4 @@
+import { villaCore, villaRegression } from './villaBrowserCases';
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { gameModuleUrl } from '../../../tests/support/releases';
@@ -10,7 +11,7 @@ function villaModule(): string {
 }
 
 test.describe('Warm Villa', () => {
-  test('real shell renders the home, supports walking and map, and cleans up on switch', async ({ page }) => {
+  villaCore('real shell renders the home, supports walking and map, and cleans up on switch', async ({ page }) => {
     test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -87,7 +88,7 @@ test.describe('Warm Villa', () => {
     expect(errors).toEqual([]);
   });
 
-  test('furnished controller walks both stairs up and down, enters every room, and interacts', async ({ page }) => {
+  villaRegression('furnished controller walks both stairs up and down, enters every room, and interacts', async ({ page }) => {
     test.setTimeout(60_000);
     await openVillaFixturePage(page);
     const result = await page.evaluate(async ({ moduleUrl, aquariumApproach, garageBay }) => {
@@ -196,7 +197,7 @@ test.describe('Warm Villa', () => {
     await test.info().attach('interior', { body: Buffer.from(result.interiorImage.split(',')[1], 'base64'), contentType: 'image/png' });
   });
 
-  test('two-finger touch keeps independent movement and look and clears cancelled input', async ({ page }) => {
+  villaRegression('two-finger touch keeps independent movement and look and clears cancelled input', async ({ page }) => {
     test.setTimeout(60_000);
     await openVillaFixturePage(page);
     const result = await page.evaluate(async (moduleUrl) => {

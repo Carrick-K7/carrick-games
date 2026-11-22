@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage } from './villaBrowserHost';
@@ -75,7 +76,7 @@ async function dispose(page: Page) {
   await page.evaluate(() => { const f = (window as any).garden; if (f) { f.game.destroy(); f.game.canvas.remove(); delete (window as any).garden; } });
 }
 
-test('villa garden: walk to the real kitchen sink and toggle an animated, draining tap', async ({ page }) => {
+villaRegression('villa garden: walk to the real kitchen sink and toggle an animated, draining tap', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -97,7 +98,7 @@ test('villa garden: walk to the real kitchen sink and toggle an animated, draini
   } finally { await dispose(page); }
 });
 
-test('villa garden: authored plants, open aisles and six independently feedable pets, including visiting cats/dogs and both rabbits', async ({ page }) => {
+villaRegression('villa garden: authored plants, open aisles and six independently feedable pets, including visiting cats/dogs and both rabbits', async ({ page }) => {
   test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
   try {
     const result = await page.evaluate(petIds => {
@@ -136,7 +137,7 @@ test('villa garden: authored plants, open aisles and six independently feedable 
   } finally { await dispose(page); }
 });
 
-test('villa garden: sedan stops before peaceful animals without pushing or harming them', async ({ page }) => {
+villaRegression('villa garden: sedan stops before peaceful animals without pushing or harming them', async ({ page }) => {
   await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -164,7 +165,7 @@ test('villa garden: sedan stops before peaceful animals without pushing or harmi
   } finally { await dispose(page); }
 });
 
-test('villa garden: native coarse taps feed a pet, switch the faucet and restore quiet controls', async ({ browser }) => {
+villaRegression('villa garden: native coarse taps feed a pet, switch the faucet and restore quiet controls', async ({ browser }) => {
   test.setTimeout(90_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   const page = await context.newPage(); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -204,7 +205,7 @@ test('villa garden: native coarse taps feed a pet, switch the faucet and restore
   } finally { await context.close(); }
 });
 
-test('villa home: walk upstairs to fitted wardrobes and dressing table without losing bed or balcony access', async ({ page }) => {
+villaRegression('villa home: walk upstairs to fitted wardrobes and dressing table without losing bed or balcony access', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -231,7 +232,7 @@ test('villa home: walk upstairs to fitted wardrobes and dressing table without l
   } finally { await dispose(page); }
 });
 
-test('villa home: safely walk to tea, progressively brew, retain a ready cup, drink empty and bound repeat/range/reset actions', async ({ page }) => {
+villaRegression('villa home: safely walk to tea, progressively brew, retain a ready cup, drink empty and bound repeat/range/reset actions', async ({ page }) => {
   test.setTimeout(90_000); await mount(page);
   try {
     const result = await page.evaluate(teaApproach => {

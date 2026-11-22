@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { createVillaElevator, villaElevatorPanelButtons as gamePanelButtons } from '../src/villaElevator';
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { openVillaFixturePage } from './villaBrowserHost';
 
 const moduleUrl = () => gameModuleUrl('villa');
 
-test('villa elevator carries a walking passenger continuously, interlocks landings and preserves stairs', async ({ page }) => {
+villaRegression('villa elevator carries a walking passenger continuously, interlocks landings and preserves stairs', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -85,7 +86,7 @@ test('villa elevator carries a walking passenger continuously, interlocks landin
   await test.info().attach('elevator-roof-cabin', { body: Buffer.from(result.cabinImage.split(',')[1], 'base64'), contentType: 'image/png' });
 });
 
-test('villa car panel lists floors top-first and drives real open/close buttons', async ({ page }) => {
+villaRegression('villa car panel lists floors top-first and drives real open/close buttons', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openVillaFixturePage(page);
@@ -122,7 +123,7 @@ test('villa car panel lists floors top-first and drives real open/close buttons'
   expect(errors).toEqual([]);
 });
 
-test('a real click on the lift panel works while the pointer is locked', async ({ page }) => {
+villaRegression('a real click on the lift panel works while the pointer is locked', async ({ page }) => {
   test.setTimeout(90_000);
   const pageErrors: string[] = [];
   const recordError = (error: Error) => { if (pageErrors.length < 16) pageErrors.push(error.message.slice(0, 2048)); };
@@ -231,7 +232,7 @@ test('a real click on the lift panel works while the pointer is locked', async (
   }
 });
 
-test('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {
+villaRegression('villa elevator floor buttons accept real coarse-pointer taps', async ({ browser }) => {
   test.setTimeout(60_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
@@ -277,7 +278,7 @@ test('villa elevator floor buttons accept real coarse-pointer taps', async ({ br
   } finally { await context.close(); }
 });
 
-test('villa shell supports a real keyboard elevator trip and walking out', async ({ page }) => {
+villaRegression('villa shell supports a real keyboard elevator trip and walking out', async ({ page }) => {
   // A two-floor trip is seconds of simulation but can be minutes of wall-clock
   // under software rasterisation, so this budget follows the same reasoning as
   // the walk legs below rather than assuming a nominal renderer speed.

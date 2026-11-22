@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage } from './villaBrowserHost';
@@ -6,7 +7,7 @@ import { VILLA_ESTATE_BOUNDS } from '../src/villaEstateLayout';
 
 const villaUrl = () => gameModuleUrl('villa');
 
-test('villa sedan drives onto the scenic road, turns, safely exits at an angle and continues around the bend', async ({ page }) => {
+villaRegression('villa sedan drives onto the scenic road, turns, safely exits at an angle and continues around the bend', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openVillaFixturePage(page);
@@ -85,7 +86,7 @@ test('villa sedan drives onto the scenic road, turns, safely exits at an angle a
   await test.info().attach('scenic-driving-cockpit', { body: Buffer.from(result.image.split(',')[1], 'base64'), contentType: 'image/png' });
 });
 
-test('villa rejects an exit across the garage wall and stops at the rendered garden fence', async ({ page }) => {
+villaRegression('villa rejects an exit across the garage wall and stops at the rendered garden fence', async ({ page }) => {
   await openVillaFixturePage(page);
   const result = await page.evaluate(async ([url, car, bounds] : [string, { center: { x: number; z: number } }, { maxX: number }]) => {
     const { VillaGame } = await import(url); const canvas = document.createElement('canvas'); document.body.append(canvas);

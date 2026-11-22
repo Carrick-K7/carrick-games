@@ -1,8 +1,9 @@
+import { villaCore } from './villaBrowserCases';
 import { expect, test } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage } from './villaBrowserHost';
 
-test('software world presents the actual completed RGBA frame and its camera; an intervening action discards the pending frame',async({page})=>{
+villaCore('software world presents the actual completed RGBA frame and its camera; an intervening action discards the pending frame',async({page})=>{
   test.setTimeout(90_000); await openVillaFixturePage(page);
   const result=await page.evaluate(async url=>{
     const { VillaGame }=await import(url);const canvas=document.createElement('canvas');document.querySelector('#gameApp')!.append(canvas);

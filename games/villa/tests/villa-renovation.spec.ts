@@ -1,3 +1,4 @@
+import { villaOutdoor, villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { VILLA_SUV } from '../src/villaSuv.js';
@@ -22,7 +23,7 @@ async function fixture(page: Page) {
   await page.goto('/__villa-renovation', { waitUntil: 'load' });
 }
 
-test('native audio activation, mute, pause and destroy follow the game lifecycle', async ({ page }) => {
+villaRegression('native audio activation, mute, pause and destroy follow the game lifecycle', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await fixture(page);
@@ -61,7 +62,7 @@ test('native audio activation, mute, pause and destroy follow the game lifecycle
   expect(closed).toEqual({ silent: true, state: 'closed' }); expect(errors).toEqual([]);
 });
 
-test('SUV boards by the real driver-door action, clears bay four, then exits safely', async ({ page }) => {
+villaRegression('SUV boards by the real driver-door action, clears bay four, then exits safely', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await fixture(page);
   const result = await page.evaluate(exit => {
@@ -81,7 +82,7 @@ test('SUV boards by the real driver-door action, clears bay four, then exits saf
   expect(result).toEqual({ target: 'suv', seated: true, cleared: true, safeExit: true }); expect(errors).toEqual([]);
 });
 
-test('first real mobile tap unlocks audio only in an active touch gesture', async ({ browser }) => {
+villaRegression('first real mobile tap unlocks audio only in an active touch gesture', async ({ browser }) => {
   test.setTimeout(60_000);
   const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 430, height: 780 } });
   try {
@@ -95,7 +96,7 @@ test('first real mobile tap unlocks audio only in an active touch gesture', asyn
   } finally { await context.close(); }
 });
 
-test('walks from the house across the north bridge, stops at water and plays local stream sound', async ({ page }) => {
+villaOutdoor('walks from the house across the north bridge, stops at water and plays local stream sound', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await fixture(page); await page.keyboard.press('w');
   await expect.poll(() => page.evaluate(() => (window as any).__villaRenovation.audio.ctx?.state)).toBe('running');
@@ -136,7 +137,7 @@ test('walks from the house across the north bridge, stops at water and plays loc
   expect(errors).toEqual([]);
 });
 
-test('bath doors block closed, open with Use from both sides and never close through the player; grill lids reset', async ({ page }) => {
+villaRegression('bath doors block closed, open with Use from both sides and never close through the player; grill lids reset', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await fixture(page);

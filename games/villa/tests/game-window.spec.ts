@@ -1,3 +1,4 @@
+import { villaCore, villaOutdoor } from './villaBrowserCases';
 import { expect, test, type Page } from '@playwright/test';
 
 // Moved intact in scope from the generic game-window suite: camera, player
@@ -16,7 +17,7 @@ async function metrics(page: Page) {
   });
 }
 
-test('Villa: real viewport aspect, all screen shapes, and resize without reinitializing', async ({ page }, testInfo) => {
+villaCore('Villa: real viewport aspect, all screen shapes, and resize without reinitializing', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -63,7 +64,7 @@ test('Villa: real viewport aspect, all screen shapes, and resize without reiniti
 
 test.describe('Villa bounded high-density renderer', () => {
   test.use({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 2 });
-  test('real 3D renderer keeps its pixel budget at 4K / DPR 2', async ({ page }) => {
+  villaOutdoor('real 3D renderer keeps its pixel budget at 4K / DPR 2', async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto('/#/villa');
     await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true', { timeout: 45_000 });

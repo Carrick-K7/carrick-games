@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
@@ -64,7 +65,7 @@ async function photo(page: Page, name: string) {
   await tick(page, 0, true); const path = test.info().outputPath(`${name}.png`); await canvas(page).screenshot({ path }); await test.info().attach(name, { path, contentType: 'image/png' });
 }
 
-test('Villa1.1 table activities: aligned tea station brews, stays ready, drinks empty, and snooker starts with physical assistance', async ({ page }) => {
+villaRegression('Villa1.1 table activities: aligned tea station brews, stays ready, drinks empty, and snooker starts with physical assistance', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     const alignment = await page.evaluate(() => {
@@ -96,7 +97,7 @@ test('Villa1.1 table activities: aligned tea station brews, stays ready, drinks 
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 interiors: nearest sofa cushion, every seat kind, bed lie and real reversible wardrobe doors', async ({ page }) => {
+villaRegression('Villa1.1 interiors: nearest sofa cushion, every seat kind, bed lie and real reversible wardrobe doors', async ({ page }) => {
   test.setTimeout(150_000); await mount(page);
   try {
     const couchPositions: number[] = [];
@@ -132,7 +133,7 @@ test('Villa1.1 interiors: nearest sofa cushion, every seat kind, bed lie and rea
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 vehicles: actual pickup entry, forward/brake/reverse/safe exit and scooter S reverse', async ({ page }) => {
+villaRegression('Villa1.1 vehicles: actual pickup entry, forward/brake/reverse/safe exit and scooter S reverse', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     await page.evaluate(() => { const f = (window as any).__villaV110; f.pose(f.layout.pickup.exit, Math.PI / 2); });
@@ -153,7 +154,7 @@ test('Villa1.1 vehicles: actual pickup entry, forward/brake/reverse/safe exit an
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 garden furniture: Q carries, E refuses water then places/sits, and swing camera follows real damped motion', async ({ page }) => {
+villaRegression('Villa1.1 garden furniture: Q carries, E refuses water then places/sits, and swing camera follows real damped motion', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     await page.evaluate(() => { const f = (window as any).__villaV110, p = f.layout.camping; f.pose({ x: p.x, y: p.y, z: p.z - 1.1 }); });
@@ -183,7 +184,7 @@ test('Villa1.1 garden furniture: Q carries, E refuses water then places/sits, an
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 racing: a genuinely placed camping chair blocks entry without teleporting, and clearing it restores entry/exit', async ({ page }) => {
+villaRegression('Villa1.1 racing: a genuinely placed camping chair blocks entry without teleporting, and clearing it restores entry/exit', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     await page.evaluate(() => { const f = (window as any).__villaV110, p = f.layout.camping; f.pose({ x: p.x, y: p.y, z: p.z - 1.1 }); });
@@ -205,7 +206,7 @@ test('Villa1.1 racing: a genuinely placed camping chair blocks entry without tel
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 rain: all six pets physically travel to dry rooms and remain feedable in a real security image', async ({ page }) => {
+villaRegression('Villa1.1 rain: all six pets physically travel to dry rooms and remain feedable in a real security image', async ({ page }) => {
   test.setTimeout(180_000); await mount(page);
   try {
     const initial = await readState(page, 'pets'); expect(initial).toHaveLength(6); expect(initial.filter((p: any) => p.kind === 'rabbit').map((p: any) => p.sex).sort()).toEqual(['female', 'male']);

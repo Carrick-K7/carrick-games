@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
@@ -45,7 +46,7 @@ const attach = async (name: string, image: string) => {
   await test.info().attach(name, { path, contentType: 'image/png' });
 };
 
-test('villa car uses one-action automatic doors, rotating cockpit wheel and safe cancellation', async ({ page }) => {
+villaRegression('villa car uses one-action automatic doors, rotating cockpit wheel and safe cancellation', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
   const r = await page.evaluate((carExit) => {
@@ -87,7 +88,7 @@ test('villa car uses one-action automatic doors, rotating cockpit wheel and safe
   await attach('villa-updated-cockpit-steering', r.cockpit);
 });
 
-test('villa car door steps the driver back out of a blocked swing instead of refusing', async ({ page }) => {
+villaRegression('villa car door steps the driver back out of a blocked swing instead of refusing', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
   const r = await page.evaluate((carExit) => {
@@ -128,7 +129,7 @@ test('villa car door steps the driver back out of a blocked swing instead of ref
   expect(r.scores).toBe(0); expect(errors).toEqual([]);
 });
 
-test('villa all furniture seats and bed poses support free look and collision-safe standing', async ({ page }) => {
+villaRegression('villa all furniture seats and bed poses support free look and collision-safe standing', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
   const blockedSeat = VILLA_RELAX_SEATS.find(seat => seat.id === 'sofa-master')!;
@@ -207,7 +208,7 @@ test('villa all furniture seats and bed poses support free look and collision-sa
   await attach('villa-lounger-facing-enlarged-pool', r.poolView);
 });
 
-test('villa electric scooter has reachable parking, handbrake, steering and safe dismount/reset', async ({ page }) => {
+villaRegression('villa electric scooter has reachable parking, handbrake, steering and safe dismount/reset', async ({ page }) => {
   test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await fixture(page);
   const r = await page.evaluate(() => {

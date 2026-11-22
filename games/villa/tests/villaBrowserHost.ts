@@ -28,8 +28,11 @@ const destination: GameRelease = {
 export async function installVillaSwitchTarget(page: Page) {
   await page.route('**/games/index.json', async route => {
     const response = await route.fetch();
+    if (response.status() !== 200) { await route.fulfill({ response }); return; }
     const catalog = await response.json();
-    await route.fulfill({ response, json: { ...catalog, games: [...catalog.games, destination] } });
+    // Changed JSON is a new representation: the source Content-Length, compression
+    // and ETag describe different bytes. Let Playwright frame this fixture itself.
+    await route.fulfill({ status: response.status(), headers: { 'cache-control': 'no-store' }, json: { ...catalog, games: [...catalog.games, destination] } });
   });
   await page.route(`**${destination.icon}`, route => route.fulfill({ contentType: 'image/svg+xml',
     body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="#0d9488"/></svg>' }));

@@ -1,11 +1,5 @@
-import { test, devices } from '@playwright/test';
-import { createRequire } from 'node:module';
-import { join } from 'node:path';
-import { registerVillaInteractionTests } from './villaInteractionCases';
+import { lateVillaWebKit } from './villaBrowserCases';
+import { villaWebKitSuite } from './villaWebkitSuite';
 
-const loadRuntime = createRequire(join(process.cwd(), 'package.json'));
-const webkitOptions = process.env.VILLA_WEBKIT_RUNTIME ? loadRuntime(process.env.VILLA_WEBKIT_RUNTIME) : {};
-
-test.use({ ...devices['iPhone 13'], browserName: 'webkit', defaultBrowserType: 'webkit', launchOptions: webkitOptions });
-
-test.describe('villa native interaction / webkit', registerVillaInteractionTests);
+// Exercise cumulative GPU/browser pressure in the original collection position.
+if (lateVillaWebKit) villaWebKitSuite();

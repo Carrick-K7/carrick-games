@@ -1,6 +1,8 @@
+import { villaCore, villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage, installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
+import { observeVillaColdShell } from './villaColdShellWitness';
 import { VILLA_TEA_BAR } from '../src/villaLivingLayout';
 import { VILLA_CAR } from '../src/villaActivities';
 import { villaRelaxSeat } from '../src/villaSeating';
@@ -66,18 +68,26 @@ export async function dispose(page: Page) {
 }
 
 export function registerVillaInteractionTests() {
-  test('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
+  villaCore('real phone shell uses a native, single-fire interaction control', async ({ page }) => {
     test.setTimeout(90_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-    await installVillaSwitchTarget(page);
-    await page.goto('/#/villa');
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
-    await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+    // No routing on cold entry: in WebKit, even a destination-only route enables
+    // page-wide network interception. Let the real browser discover and load Villa.
+    await observeVillaColdShell(page, test.info(), async mark => {
+      await page.goto('/#/villa'); mark('navigation returned; renderer assertion begins');
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-villa-renderer', 'webgl', { timeout: 45_000 });
+      mark('renderer observed');
+      await expect(page.locator('#gameCanvas')).toHaveAttribute('data-game-running', 'true');
+      mark('running observed');
+    });
     await page.waitForFunction(() => document.getElementById('gameCanvas')?.dataset.villaTarget === 'pet-dog');
     const button = page.locator('button[data-villa-use]'); await expect(button).toBeVisible(); await button.tap();
     await page.waitForFunction(() => JSON.parse(document.getElementById('gameCanvas')!.dataset.villaPets!).find((p: any) => p.id === 'dog').feedCount === 1);
     await button.tap();
     await page.waitForFunction(() => /吃饱|full/.test(document.getElementById('gameCanvas')!.dataset.villaUseFeedback!));
     expect(await page.locator('#gameCanvas').evaluate(c => JSON.parse(c.dataset.villaPets!).find((p: any) => p.id === 'dog').feedCount)).toBe(1);
+    // A different hash refreshes discovery before resolving its destination.
+    // Only now add our tiny handoff target, leaving the actual cold launch untouched.
+    await installVillaSwitchTarget(page);
     await page.goto(`/#/${VILLA_SWITCH_ID}`);
     // Hash navigation is not a completed game handoff. In software WebKit the
     // old 3D teardown may keep the main thread busy beyond the default5s poll.
@@ -87,7 +97,7 @@ export function registerVillaInteractionTests() {
     await expect(page.locator('[data-villa-use]')).toHaveCount(0); expect(errors).toEqual([]);
   });
 
-  test('painted button activates every fixture family once, including Safari tap and native keyboard activation', async ({ page }) => {
+  villaRegression('painted button activates every fixture family once, including Safari tap and native keyboard activation', async ({ page }) => {
     test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
     try {
       await tapPaintedUse(page, { compatibilityClick: true });
@@ -199,7 +209,7 @@ export function registerVillaInteractionTests() {
     } finally { await dispose(page); }
   });
 
-  test('failed actions remain readable and narrow Exit, rotation, cancellation and quiet-mode recovery remain usable', async ({ page }) => {
+  villaRegression('failed actions remain readable and narrow Exit, rotation, cancellation and quiet-mode recovery remain usable', async ({ page }) => {
     test.setTimeout(120_000); await page.setViewportSize({ width: 360, height: 780 }); await mount(page);
     try {
       // Use with nothing in range is a silent no-op: the proximity badges already

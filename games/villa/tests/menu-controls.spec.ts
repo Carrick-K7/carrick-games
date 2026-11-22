@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { rectsOverlap, type HudRect } from '@carrick/game-sdk/layout';
 import { VILLA_ENTRANCE } from '../src/villaWorld';
@@ -24,7 +25,7 @@ async function tapUtility(page: Page, id: string) {
 if (!process.env.GAME_ID || process.env.GAME_ID === 'villa') {
   test.describe('Villa direct utilities and game menu', () => {
     test.use({ hasTouch: true });
-    test('two44 CSS utilities clear chrome, open map/terminal and preserve menu pause ownership', async ({ page }) => {
+    villaRegression('two44 CSS utilities clear chrome, open map/terminal and preserve menu pause ownership', async ({ page }) => {
       test.setTimeout(60_000);
       await page.addInitScript(() => localStorage.setItem('cg-lang', 'en'));
       await page.setViewportSize({ width: 320, height: 568 });

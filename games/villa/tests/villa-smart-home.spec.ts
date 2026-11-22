@@ -1,3 +1,4 @@
+import { villaOutdoor, villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
@@ -74,7 +75,7 @@ async function feedStats(page: Page) {
   });
 }
 
-test('Villa1.1 terminal: native P releases capture, clears held walking/rally input, and closes without recapture', async ({ page }) => {
+villaRegression('Villa1.1 terminal: native P releases capture, clears held walking/rally input, and closes without recapture', async ({ page }) => {
   test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
   try {
     await page.evaluate(() => (window as any).__villaSmart.pose({ x: 0, y: 0, z: 20 }));
@@ -106,7 +107,7 @@ test('Villa1.1 terminal: native P releases capture, clears held walking/rally in
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 terminal: real camera feeds differ, preserve the main view, and native light/weather commands fade gradually', async ({ page }) => {
+villaOutdoor('Villa1.1 terminal: real camera feeds differ, preserve the main view, and native light/weather commands fade gradually', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     const main = await page.evaluate(() => { const f = (window as any).__villaSmart; return { view: f.g.view(), position: { ...f.g.position }, camera: f.g.scene.camera.matrixWorld.toArray() }; });
@@ -144,7 +145,7 @@ test('Villa1.1 terminal: real camera feeds differ, preserve the main view, and n
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup is safe, and aiming guides remain optional', async ({ page }) => {
+villaRegression('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup is safe, and aiming guides remain optional', async ({ page }) => {
   test.setTimeout(120_000); await mount(page);
   try {
     const otherSettings = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => /sensitivity/i.test(key) && key !== 'carrick:villa:look-sensitivity')));
@@ -184,7 +185,7 @@ test('Villa1.1 terminal: keyboard range is Villa-only and persistent, UI keyup i
   } finally { await cleanup(page); }
 });
 
-test('Villa1.1 terminal: coarse portrait/landscape entry and native controls fit without stealing touch or keyboard input', async ({ browser }, testInfo) => {
+villaRegression('Villa1.1 terminal: coarse portrait/landscape entry and native controls fit without stealing touch or keyboard input', async ({ browser }, testInfo) => {
   test.setTimeout(120_000);
   const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 360, height: 780 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await context.newPage();

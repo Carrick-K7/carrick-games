@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, devices } from '@playwright/test';
 import { registerVillaInteractionTests, mount, tapPaintedUse, dispose } from './villaInteractionCases';
 
@@ -6,7 +7,7 @@ test.use({ ...devices['iPhone 13'], browserName: 'chromium', defaultBrowserType:
 test.describe('villa native interaction / chromium', registerVillaInteractionTests);
 
 test.describe('villa native multi-touch', () => {
-  test('Use works while another finger holds the movement stick, without stealing or latching it', async ({ page, context }) => {
+  villaRegression('Use works while another finger holds the movement stick, without stealing or latching it', async ({ page, context }) => {
     test.setTimeout(90_000); await mount(page); const cdp = await context.newCDPSession(page);
     try {
       const points = await page.evaluate(() => {

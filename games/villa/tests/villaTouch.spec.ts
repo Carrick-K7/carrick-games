@@ -1,7 +1,8 @@
+import { villaCore, villaRegression } from './villaBrowserCases';
 import { test, expect } from '@playwright/test';
 import { installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 
-test('villa captures the mouse on the first canvas click and releases it for its picker', async ({ page }) => {
+villaRegression('villa captures the mouse on the first canvas click and releases it for its picker', async ({ page }) => {
   test.setTimeout(60_000);
   await installVillaSwitchTarget(page);
   try {
@@ -34,7 +35,7 @@ test('villa captures the mouse on the first canvas click and releases it for its
   }
 });
 
-test('villa coarse-pointer map and real multi-touch use usable targets and independent fingers', async ({ browser }) => {
+villaCore('villa coarse-pointer map and real multi-touch use usable targets and independent fingers', async ({ browser }) => {
   test.setTimeout(90_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 });
   const page = await context.newPage();
@@ -104,7 +105,7 @@ test('villa coarse-pointer map and real multi-touch use usable targets and indep
   await context.close();
 });
 
-test('villa hover-look works without dragging when capture is denied, and Escape frees the cursor', async ({ page }) => {
+villaRegression('villa hover-look works without dragging when capture is denied, and Escape frees the cursor', async ({ page }) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => {
     HTMLCanvasElement.prototype.requestPointerLock = () => Promise.reject(new DOMException('Capture disabled by this test', 'NotAllowedError'));

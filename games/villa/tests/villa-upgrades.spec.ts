@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { gameModuleUrl } from '../../../tests/support/releases';
@@ -5,7 +6,7 @@ import { openVillaFixturePage } from './villaBrowserHost';
 import { VILLA_ANIME_FIGURES } from '../src/villaGaming';
 import { VILLA_CAR } from '../src/villaActivities';
 
-test('villa upgrades are physical models with reachable car seats, simulator inputs and safe running', async ({ page }) => {
+villaRegression('villa upgrades are physical models with reachable car seats, simulator inputs and safe running', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));

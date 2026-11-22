@@ -1,3 +1,4 @@
+import { villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { installVillaSwitchTarget, VILLA_SWITCH_ID } from './villaBrowserHost';
 
@@ -51,7 +52,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
   test.use({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
   test.setTimeout(90_000);
 
-  test('captured play → ? → read → close continues directly without held movement or an extra Resume', async ({ page }, testInfo) => {
+  villaRegression('captured play → ? → read → close continues directly without held movement or an extra Resume', async ({ page }, testInfo) => {
     const errors = captureErrors(page), canvas = await startVilla(page, false);
     await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id), { timeout: 30_000 }).toBe('gameCanvas');
     await assertWindow(page);
@@ -90,7 +91,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
     expect(errors).toEqual([]);
   });
 
-  test('window resizing, picker focus and switching keep the persistent root and clear old game state', async ({ page }) => {
+  villaRegression('window resizing, picker focus and switching keep the persistent root and clear old game state', async ({ page }) => {
     await installVillaSwitchTarget(page);
     const errors = captureErrors(page);
     try {
@@ -119,7 +120,7 @@ test.describe('Villa’s direct help and browser-owned game window', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the retired F shortcut never requests fullscreen, even when its API rejects', async ({ page }) => {
+  villaRegression('the retired F shortcut never requests fullscreen, even when its API rejects', async ({ page }) => {
     await page.addInitScript(() => {
       (window as any).__nativeCalls = 0;
       Element.prototype.requestFullscreen = async () => {

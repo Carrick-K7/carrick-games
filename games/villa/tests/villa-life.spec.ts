@@ -1,3 +1,4 @@
+import { villaOutdoor, villaRegression } from './villaBrowserCases';
 import { test, expect, type Page } from '@playwright/test';
 import { gameModuleUrl } from '../../../tests/support/releases';
 import { openVillaFixturePage } from './villaBrowserHost';
@@ -58,7 +59,7 @@ async function dispose(page: Page) {
 
 // The shared Playwright configuration uses one GPU worker; cases remain independent.
 
-test('villa life: walk to the furnished snooker table, aim, shoot real balls, reset and safely leave', async ({ page }) => {
+villaRegression('villa life: walk to the furnished snooker table, aim, shoot real balls, reset and safely leave', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await mount(page);
@@ -112,7 +113,7 @@ test('villa life: walk to the furnished snooker table, aim, shoot real balls, re
   } finally { await dispose(page); }
 });
 
-test('villa life: crouching slows walking, jumping moves feet, and low stairs prevent standing', async ({ page }) => {
+villaRegression('villa life: crouching slows walking, jumping moves feet, and low stairs prevent standing', async ({ page }) => {
   test.setTimeout(90_000); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -146,7 +147,7 @@ test('villa life: crouching slows walking, jumping moves feet, and low stairs pr
   } finally { await dispose(page); }
 });
 
-test('villa life: immersive HUD keeps only location/map and terminal; an occupied lift stays open until departure', async ({ page }) => {
+villaRegression('villa life: immersive HUD keeps only location/map and terminal; an occupied lift stays open until departure', async ({ page }) => {
   test.setTimeout(90_000); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -185,7 +186,7 @@ test('villa life: immersive HUD keeps only location/map and terminal; an occupie
   } finally { await dispose(page); }
 });
 
-test('villa life: nearby badges attach to visible props and disappear behind obstructions or out of view', async ({ page }) => {
+villaOutdoor('villa life: nearby badges attach to visible props and disappear behind obstructions or out of view', async ({ page }) => {
   test.setTimeout(90_000); await mount(page);
   try {
     const result = await page.evaluate(() => {
@@ -206,7 +207,7 @@ test('villa life: nearby badges attach to visible props and disappear behind obs
   } finally { await dispose(page); }
 });
 
-test('villa life: coarse taps operate crouch/jump and snooker buttons with scaled coordinates and cancellation', async ({ browser }) => {
+villaRegression('villa life: coarse taps operate crouch/jump and snooker buttons with scaled coordinates and cancellation', async ({ browser }) => {
   test.setTimeout(90_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   const page = await context.newPage();
