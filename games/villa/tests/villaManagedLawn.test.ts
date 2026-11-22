@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createVillaTerrainGeometry } from '../src/villaTerrainModel.js';
 import { createVillaFenceBankGeometry } from '../src/villaFenceBank.js';
 import { createCultivatedGround, kitchenCourtDistance, tintManagedLawn } from '../src/villaGardenFloor.js';
-import { lawnPatch } from '../src/villaLawnFinish.js';
+import { bindManagedLawnPhoto, lawnPatch } from '../src/villaLawnFinish.js';
+import { addSurveyedSun } from '../src/villaSolarSurvey.js';
 import { VILLA_ESTATE_BOUNDS as B } from '../src/villaEstateLayout.js';
 import { VILLA_GARDEN_TREES } from '../src/villaGarden.js';
+import { VillaVisibleRanges } from '../src/villaVisibleRanges.js';
 
 const mean = (v: number[]) => v.reduce((sum, a) => sum + a, 0) / v.length;
 const median = (v: number[]) => v.sort((a, b) => a - b)[v.length >> 1]!;
@@ -54,6 +57,28 @@ describe('maintained estate sward', () => {
     } finally { lawn.dispose(); bank.dispose(); }
   });
 
+  it('retains the sharp metric sample when the sun survey wraps the two-phase material', () => {
+    const scan = new THREE.Texture(), turf = new THREE.MeshStandardMaterial({ map: scan }), distant = turf.clone();
+    const scene = new THREE.Scene(), receiver = new THREE.Mesh(new THREE.BufferGeometry(), turf);
+    receiver.receiveShadow = true; scene.add(receiver); bindManagedLawnPhoto(turf);
+    const sun = addSurveyedSun(scene);
+    try {
+      const shader = { ...THREE.ShaderLib.standard, uniforms: {} } as Parameters<typeof turf.onBeforeCompile>[0];
+      turf.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+      expect(shader.vertexShader).toContain('mapTransform * vec3(position.xz / 2.5, 1.0)');
+      expect(shader.fragmentShader).toContain('float estateSolarVisibility()');
+      const taps = shader.fragmentShader.match(/texture2D\(\s*map\s*,/g);
+      expect(taps).toHaveLength(2);
+      const blend = shader.fragmentShader.match(/mix\( texture2D\( map, vLawnMetricUv \), texture2D\( map, vMapUv, ([.\d]+) \), ([.\d]+) \)/);
+      expect(blend).not.toBeNull();
+      expect(Number(blend![1])).toBeGreaterThan(0); // Shifted clippings use softer mips than in-place blade detail.
+      expect(Number(blend![2])).toBeGreaterThanOrEqual(.15); expect(Number(blend![2])).toBeLessThanOrEqual(.25);
+      expect(turf.map).toBe(scan); expect(distant.map).toBe(scan);
+      expect(distant.onBeforeCompile).toBe(THREE.Material.prototype.onBeforeCompile);
+      expect(turf.customProgramCacheKey()).not.toBe(distant.customProgramCacheKey());
+    } finally { sun?.dispose(); receiver.geometry.dispose(); turf.dispose(); distant.dispose(); scan.dispose(); }
+  });
+
   it('neighbouring blades share two scales of growth without erasing the mower passes', () => {
     const near: number[] = [], apart: number[] = [], short: number[] = [], long: number[] = [];
     const lightPass: number[] = [], darkPass: number[] = [];
@@ -72,7 +97,7 @@ describe('maintained estate sward', () => {
     expect(contrast).toBeGreaterThan(.04); expect(contrast).toBeLessThan(.11);
   });
 
-  it('puts short, quiet-coloured blades in the real expanse and rebuilds the same single receiver', () => {
+  it('keeps the 1.13.0 roots, silhouettes and submission budget and only varies their local pigments', () => {
     const make = () => createCultivatedGround(new THREE.Group(), new THREE.MeshStandardMaterial());
     const a = make(), b = make(), name = 'garden-substrate/grass-tillers';
     try {
@@ -82,7 +107,13 @@ describe('maintained estate sward', () => {
       expect(bytes(g.index!.array).equals(bytes(replay.index!.array))).toBe(true);
       expect(g.index!.count / 3).toBeLessThanOrEqual(57_705); // previous single tiller batch
       const p = g.getAttribute('position'), c = g.getAttribute('color'), cells = new Set<string>(), cut: number[] = [], meadow: number[] = [];
-      const freshRG: number[] = [], wornRG: number[] = [], withPass: number[] = [], againstPass: number[] = [];
+      // Reference: the ordered five-position blades of bec75b77, excluding only the
+      // clearance omissions. A comparison against that release matched *every* retained
+      // five-vertex record, UV and normal byte. These hashes pin zero root or tip displacement.
+      const digest = (values: ArrayBufferView) => createHash('sha256').update(bytes(values)).digest('hex');
+      expect(digest(p.array)).toBe('ad3e8a6374b202d81d1592b9bb0927b0819f4a7579971f1af3406704c58fb15b');
+      expect(digest(g.getAttribute('normal').array)).toBe('e24c215de44d52e432cff1c528c778d827ef80d6becba24137346a43323aeea2');
+      const freshRG: number[] = [], wornRG: number[] = [];
       let interior = 0, maxHueShift = 0, minGreenLead = Infinity, cutEdge = Infinity, footHits = 0;
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), z = p.getZ(i), distance = kitchenCourtDistance(x, z); cutEdge = Math.min(cutEdge, distance);
@@ -96,19 +127,36 @@ describe('maintained estate sward', () => {
         const h = Math.max(p.getY(i+2),p.getY(i+3),p.getY(i+4)) - p.getY(i);
         if (z < 35) cut.push(h); else if (z > 60) meadow.push(h);
         if (z < 29) {
-          const f = lawnPatch(x, z), dx = p.getX(i+4) - x, dz = p.getZ(i+4) - z;
+          const f = lawnPatch(x, z);
           if (f.fresh > .63) freshRG.push(rg); else if (f.fresh < .37) wornRG.push(rg);
-          if (f.swath > .8) withPass.push(dz / Math.hypot(dx, dz)); else if (f.swath < -.8) againstPass.push(dz / Math.hypot(dx, dz));
         }
       }
-      const pigmentChange = mean(wornRG) - mean(freshRG), layChange = mean(withPass) - mean(againstPass);
-      expect(pigmentChange).toBeGreaterThan(.02); expect(pigmentChange).toBeLessThan(.11);
-      expect(layChange).toBeGreaterThan(.12); expect(layChange).toBeLessThan(.45); // fans, not a field of identical leaning needles
-      expect(interior / (p.count / 5)).toBeGreaterThan(.55); expect(cells.size).toBeGreaterThan(235);
-      expect(mean(cut)).toBeGreaterThan(.035); expect(mean(cut)).toBeLessThan(.08);
-      expect(mean(meadow)).toBeGreaterThan(1.35 * mean(cut)); expect(Math.max(...meadow)).toBeLessThan(.18);
+      // In the original 6,495 interior blades this statistic was <.001: a seeded palette
+      // lottery, not a local growing condition. Avoid both that and a conspicuous colour change.
+      const pigmentChange = mean(wornRG) - mean(freshRG);
+      expect(pigmentChange).toBeGreaterThan(.012); expect(pigmentChange).toBeLessThan(.04);
+      expect(interior).toBeGreaterThan(.90 * 6495); expect(interior).toBeLessThanOrEqual(6495);
+      expect(cells.size).toBeGreaterThan(.95 * 214); expect(cells.size).toBeLessThanOrEqual(214);
+      expect(mean(cut)).toBeCloseTo(.0635, 2); expect(mean(meadow)).toBeCloseTo(.1012, 2);
       expect(cutEdge).toBeGreaterThan(0); expect(footHits).toBe(0);
-      expect(minGreenLead).toBeGreaterThan(.08); expect(maxHueShift).toBeLessThan(.001);
+      expect(minGreenLead).toBeGreaterThan(0); expect(maxHueShift).toBeLessThan(.00001);
+
+      // The full batch alone cannot catch a frustum regression. Use released 1.13.0
+      // grass submissions at the creek, meadow verge and crouched low meadow cameras.
+      const ranges = VillaVisibleRanges.forMesh(grass)!;
+      try {
+        const cam = new THREE.PerspectiveCamera(64, 1.6, .065, 650);
+        for (const [x, y, z, yaw, pitch, originalTris] of [
+          [7.7, .9, -31.5, -.34009712, -.16, 3144], [14, 2.55537018, 91.5, -2.95848184, -.07, 9759],
+          [13.4, 1.80476009, 91.6, -2.77607445, -.285, 10566],
+        ]) {
+          cam.position.set(x, y, z); cam.rotation.set(pitch, yaw, 0, 'YXZ'); cam.updateMatrixWorld();
+          const clip = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+          const visible = ranges.select(new THREE.Frustum().setFromProjectionMatrix(clip, cam.coordinateSystem))!;
+          const submitted = Math.min(visible.drawRange.count, visible.index!.count) / 3;
+          expect(submitted).toBeLessThanOrEqual(originalTris); expect(submitted).toBeGreaterThan(.85 * originalTris);
+        }
+      } finally { ranges.dispose(); }
     } finally { dispose(a); dispose(b); }
   });
 });

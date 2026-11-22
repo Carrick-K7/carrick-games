@@ -170,8 +170,15 @@ export async function observePlay(cap, shell=false) {
     try {for(let i=0;i<12;i++)await new Promise(requestAnimationFrame);
       check(g.time===pausedAt && s.cachedTime===displayedAt && bytes(s.cachedFrame)===world && bytes(g.canvas)===shown,'SDK presentation pause did not freeze the presented picture and game clock');
     }finally{g.setPresentationPaused(false);}
-    const pauseWallMs=performance.now()-start;await new Promise(requestAnimationFrame);
-    check(g.time>pausedAt && g.time-pausedAt<=.050001,'SDK resume did not advance a bounded game step');
-    return {callbacks,wallMs:performance.now()-begin,samples,pause:{source:'VillaGame.setPresentationPaused on running SDK RAF',pausedAt,displayedAt,pauseWallMs,pausedCallbacks:12,bothPicturesBitExact:true,resumedDt:g.time-pausedAt}};
+    // Resume resets lastTime to performance.now(). The browser can deliver an
+    // already-timestamped RAF next; that update correctly advances zero seconds.
+    const pauseWallMs=performance.now()-start,resumeSteps=[];let previous=pausedAt;
+    for(let i=0;i<4;i++){
+      const raf=await new Promise(requestAnimationFrame),dt=g.time-previous;
+      resumeSteps.push({raf,gameTime:g.time,dt});check(dt>=0 && dt<=.050001,`Out-of-bounds SDK resume step ${dt}`);
+      if(dt>0)break;previous=g.time;
+    }
+    check(g.time>pausedAt,'SDK resume did not advance in four observed RAFs');
+    return {callbacks,wallMs:performance.now()-begin,samples,pause:{source:'VillaGame.setPresentationPaused on running SDK RAF',pausedAt,displayedAt,pauseWallMs,pausedCallbacks:12,bothPicturesBitExact:true,resumedDt:g.time-pausedAt,resumeSteps}};
   } finally {if(!shell)cancelAnimationFrame(g.animationId);}
 }
