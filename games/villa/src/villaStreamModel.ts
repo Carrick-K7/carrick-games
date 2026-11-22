@@ -57,11 +57,12 @@ export function createVillaStreamModel(parent: THREE.Object3D): {
   const stone = villaMaterial('#9c9b8d', 1), paleStone = villaMaterial('#b0ab95', 1);
   timber.name = 'stream-bridge-timber'; edgeTimber.name = 'stream-bridge-framing';
   for (const wood of [timber, edgeTimber]) {
-    sawnGrain(wood); const fallback = wood.onBeforeCompile;
-    // The scene may bind a real cedar study to these metre-space faces. Do
-    // not draw simulated growth rings a second time over the photographed grain.
+    const mappedKey = wood.customProgramCacheKey();
+    sawnGrain(wood); const fallback = wood.onBeforeCompile, grainKey = wood.customProgramCacheKey();
+    // A bound cedar swatch uses exactly the stock mapped shader. Reuse its
+    // program, not a second identical compile just for these two timbers.
     wood.onBeforeCompile = (shader, renderer) => { if (!wood.map) fallback.call(wood, shader, renderer); };
-    wood.customProgramCacheKey = () => wood.map ? 'villa-bridge-cedar' : 'villa-sawn-grain-v1';
+    wood.customProgramCacheKey = () => wood.map ? mappedKey : grainKey;
   }
   const bridge = VILLA_STREAM_BRIDGE, centreZ = (bridge.minZ + bridge.maxZ) / 2, width = bridge.maxX - bridge.minX, length = bridge.maxZ - bridge.minZ;
   // Continuous underdeck beneath tiny plank joints, two stout stringers and a

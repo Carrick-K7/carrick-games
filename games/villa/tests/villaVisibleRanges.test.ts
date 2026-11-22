@@ -33,6 +33,28 @@ describe('visible detail ranges, without detail substitution',()=>{
     fail=true;expect(draw).toThrow('lost output');expect(m.geometry).toBe(g);fail=false;renderer.shadowMap.enabled=true;renderer.shadowMap.needsUpdate=true;draw();expect(picked).toBe(g);
     const original=g.getAttribute('position');v.dispose();expect(g.getAttribute('position')).toBe(original);g.dispose();m.material.dispose();
   });
+  it('uses software occlusion only for the sealed leaf mesh and an actual depth viewport; restores it even after failure',()=>{
+    const scene=new THREE.Scene(), fabric=new THREE.Group();fabric.name='villa-fabric-and-joinery';scene.add(fabric);
+    const stock=new THREE.BufferGeometry();stock.setAttribute('position',new THREE.Float32BufferAttribute([-2,-2,0,2,-2,0,2,2,0,-2,-2,0,2,2,0,-2,2,0],3));stock.userData.villaRigidBatch=true;
+    const wall=new THREE.Mesh(stock,new THREE.MeshStandardMaterial());wall.name=fabric.name+'/surface';fabric.add(wall);
+    const detail=new THREE.BoxGeometry(.2,.3,.2,6,6,6), tint=new THREE.MeshStandardMaterial();detail.userData.villaRigidBatch=true;
+    const piece=new THREE.Mesh(detail,tint);piece.position.set(-1.1,.7,-4);scene.add(piece);
+    const cam=new THREE.PerspectiveCamera(65,1.4,.065,650);cam.position.z=8;cam.updateMatrixWorld(true);
+    const index=new VillaStaticView(scene,true);index.sealEstateFinishes();let seen=true,fail=false,depth=true,width=512;
+    const renderer={shadowMap:{enabled:false,autoUpdate:false,needsUpdate:false},clippingPlanes:[],localClippingEnabled:false,
+      getCurrentViewport:(out:THREE.Vector4)=>out.set(0,0,width,320),getRenderTarget:()=>({depthBuffer:depth}),
+      render(){seen=piece.visible;if(fail)throw Error('interrupted');}};
+    const draw=()=>index.draw(renderer as unknown as THREE.WebGLRenderer,scene,cam);
+    try{draw();expect(seen).toBe(false);expect(piece.visible).toBe(true);
+      fail=true;expect(draw).toThrow('interrupted');expect(piece.visible).toBe(true);fail=false;
+      depth=false;draw();expect(seen).toBe(true);depth=true;width=0;draw();expect(seen).toBe(true);width=512;
+      renderer.shadowMap.enabled=true;draw();expect(seen).toBe(true);renderer.shadowMap.enabled=false;
+      renderer.localClippingEnabled=true;draw();expect(seen).toBe(true);renderer.localClippingEnabled=false;
+      const child=new THREE.Object3D();piece.add(child);draw();expect(seen).toBe(true);piece.remove(child);
+      const before=tint.onBeforeCompile;tint.onBeforeCompile=()=>{};draw();expect(seen).toBe(true);tint.onBeforeCompile=before;
+      draw();expect(seen).toBe(false);fabric.visible=false;draw();expect(seen).toBe(true);
+    }finally{index.dispose();detail.dispose();stock.dispose();tint.dispose();wall.material.dispose();}
+  });
   it('leaves transparent, pre-ranged, untagged, morph and multi-material draws alone',()=>{
     const {m,g}=fixture();m.material.transparent=true;expect(VillaVisibleRanges.forMesh(m)).toBeNull();m.material.transparent=false;
     g.setDrawRange(0,3);expect(VillaVisibleRanges.forMesh(m)).toBeNull();g.setDrawRange(0,Infinity);

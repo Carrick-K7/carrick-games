@@ -26,10 +26,12 @@ async function mount(page: Page) {
     const canvas = document.createElement('canvas'); canvas.id = 'villa-smart-home-test'; canvas.tabIndex = 0;
     Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' }); document.querySelector('#gameApp')!.append(canvas);
     const f: any = { scores: 0, keyups: [], pRepeats: [] };
-    const g = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
+    const g = new VillaGame({ canvas, logicalWidth: innerWidth, logicalHeight: innerHeight, isDarkTheme: () => false, isZhLang: () => false,
       isPixelMode: () => false, getRecord: () => null, reportScore: () => f.scores++, requestShellRender: () => {} }) as any;
-    g.prepare(); g.start(); cancelAnimationFrame(g.animationId); f.g = g;
     f.resize = () => g.setViewport({ width: innerWidth, height: innerHeight, dpr: Math.min(2, devicePixelRatio), safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
+    // prepare() paints a real world. Give it the measured viewport rather than first painting a discarded 1120×700 view.
+    f.resize(); g.prepare(); g.start(); cancelAnimationFrame(g.animationId); f.g = g;
+    if (!(g.scene?.renderer.info.render.frame > 0) || g.getDiagnostics().cameraAspect !== innerWidth / innerHeight) throw new Error('Expected a real world frame at the fixture viewport');
     f.tick = (count = 1) => { for (let i = 0; i < count; i++) g.update(.05); };
     f.render = () => { g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.scene.securityLastAt = -Infinity; g.renderFrame(); };
     f.pose = (p: { x: number; y: number; z: number }, yaw = 0) => {
@@ -39,7 +41,7 @@ async function mount(page: Page) {
     };
     f.onKeyup = (event: KeyboardEvent) => f.keyups.push(event.key.toLowerCase()); window.addEventListener('keyup', f.onKeyup);
     f.onKeydown = (event: KeyboardEvent) => { if (event.key.toLowerCase() === 'p') f.pRepeats.push(event.repeat); }; window.addEventListener('keydown', f.onKeydown, true);
-    f.resize(); f.render(); canvas.focus(); (window as any).__villaSmart = f;
+    canvas.focus(); (window as any).__villaSmart = f;
   }, moduleUrl());
   await expect(canvas(page)).toHaveAttribute('data-villa-version', VILLA_VERSION, { timeout: 60_000 });
   await expect(canvas(page)).toHaveAttribute('data-villa-renderer', 'webgl');

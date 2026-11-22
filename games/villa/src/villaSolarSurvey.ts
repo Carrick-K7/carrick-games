@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createIndoorContacts, VILLA_FLOOR_CONTACT_GLSL } from './villaInteriorContacts.js';
 import { createVillaInteriorDaylight,VILLA_INTERIOR_DAYLIGHT_GLSL } from './villaInteriorDaylight.js';
 import { VILLA_SUN_BYTES } from './villaSunSurveyData.js';
+import { allowVillaWallLighting } from './villaWallVisibility.js';
 
 /** The software bridge does not render a live shadow pass. Its outdoor sun uses a baked
  * orthographic depth field of the *actual fixed meshes*, including their cut-out leaves.
@@ -47,7 +48,7 @@ export function addSurveyedSun(root:THREE.Scene){
     directLight.color *= roomLight.b>.5 ? roomLight.r : estateSolarVisibility();`);
   const wireReceiver=(mat:THREE.Material)=>{
       if(seen.has(mat)||(!(mat instanceof THREE.MeshStandardMaterial)&&!(mat instanceof THREE.MeshLambertMaterial)&&!(mat instanceof THREE.MeshPhongMaterial)))return;seen.add(mat);
-      const prev=mat.onBeforeCompile.bind(mat),key=mat.customProgramCacheKey();
+      const original=mat.onBeforeCompile, prev=original.bind(mat),key=mat.customProgramCacheKey();
       mat.onBeforeCompile=(shader,renderer)=>{prev(shader,renderer);shader.uniforms.villaSunDepth={value:map};shader.uniforms.villaFloorContact={value:contact};shader.uniforms.villaSunStrength=strength;Object.assign(shader.uniforms,room.uniforms);
         shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vEstateSun;').replace('#include <project_vertex>',`#include <project_vertex>
           vec4 vSunLocal=vec4(transformed,1.0);
@@ -64,6 +65,7 @@ export function addSurveyedSun(root:THREE.Scene){
           radiance+=villaRoomReflection(roomLight,roomReflectionY,material.roughness)*floorLight.r;}
         #endif
         #include <lights_fragment_end>`);};
+      allowVillaWallLighting(mat,original);
       mat.customProgramCacheKey=()=>key+'|estate-sun-and-room-field-v2';mat.needsUpdate=true;
   };
   root.traverse(object=>{if(object instanceof THREE.Mesh&&object.receiveShadow)for(const mat of Array.isArray(object.material)?object.material:[object.material])wireReceiver(mat);});

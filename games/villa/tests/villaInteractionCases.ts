@@ -30,28 +30,35 @@ export async function mount(page: Page) {
     };
     document.addEventListener('touchstart', e => { if ((e.target as Element)?.closest?.('[data-villa-use]')) f.trusted.push(e.isTrusted); }, { capture: true });
     f.tick = (n = 1) => { for (let i = 0; i < n; i++) g.update(.05); };
-    f.render = () => { f.words = []; g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.renderFrame(); };
+    f.render = () => { f.words = []; f.use = null; g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.renderFrame(); };
     f.scooterHome = structuredClone(g.state.scooter);
     f.pose = (x: number, z: number) => {
       g.init(); g.enterCarAt = g.exitCarAt = g.closeCarAt = Infinity;
       g.state.seated = null; g.state.relaxSeatId = null; g.state.carDoorOpen = false; g.transition = null;
       Object.assign(g.state.scooter, f.scooterHome);
-      g.position = { x, y: 0, z }; g.eyeY = 0; g.yaw = 0; g.pitch = -.2; f.tick(2); f.render();
+      // Finish the full pose (including any case-specific changes) before measuring the painted Use label.
+      f.use = null; g.position = { x, y: 0, z }; g.eyeY = 0; g.yaw = 0; g.pitch = -.2; f.tick(2);
     };
-    f.pose(-5.67, -7.2); (window as any).villaInput = f;
+    f.pose(-5.67, -7.2); f.render(); (window as any).villaInput = f;
   }, moduleUrl());
 }
-export async function tapPaintedUse(page: Page, offsetY = 0, compatibilityClick = false) {
+export async function tapPaintedUse(page: Page, { offsetY = 0, compatibilityClick = false, paintAfter = true }:
+  { offsetY?: number; compatibilityClick?: boolean; paintAfter?: boolean } = {}) {
   const point = await page.evaluate(offsetY => {
-    const f = (window as any).villaInput, p = { x: f.use.x, y: f.use.y + offsetY };
+    const f = (window as any).villaInput;
+    if (!f.use) throw new Error('No Use or Exit label measured in the current painted pose');
+    const p = { x: f.use.x, y: f.use.y + offsetY };
     if (!document.elementFromPoint(p.x, p.y)?.closest('[data-villa-use]')) throw new Error('Painted interaction is not covered by its native button');
     return p;
   }, offsetY);
   await page.touchscreen.tap(point.x, point.y);
-  await page.evaluate(compatibilityClick => {
+  await page.evaluate(({ compatibilityClick, paintAfter }) => {
     if (compatibilityClick) document.querySelector('[data-villa-use]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
-    const f = (window as any).villaInput; f.tick(); f.render();
-  }, compatibilityClick);
+    const f = (window as any).villaInput;
+    f.tick(); // Advances the real scene's colliders, activities, and published state even between pictures.
+    if (paintAfter) f.render();
+    else { f.use = null; f.words = []; } // Never reuse the previous label/feedback for another tap or reading.
+  }, { compatibilityClick, paintAfter });
 }
 export async function dispose(page: Page) {
   await page.evaluate(() => { const f = (window as any).villaInput; if (f) { f.g.destroy(); f.g.canvas.remove(); } });
@@ -83,7 +90,7 @@ export function registerVillaInteractionTests() {
   test('painted button activates every fixture family once, including Safari tap and native keyboard activation', async ({ page }) => {
     test.setTimeout(120_000); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await mount(page);
     try {
-      await tapPaintedUse(page, 0, true);
+      await tapPaintedUse(page, { compatibilityClick: true });
       expect(await page.evaluate(() => { const f = (window as any).villaInput; return { on: f.g.state.faucetOn, calls: f.calls, trusted: f.trusted }; })).toEqual({ on: true, calls: 1, trusted: [true] });
       await tapPaintedUse(page); expect(await page.evaluate(() => (window as any).villaInput.g.state.faucetOn)).toBe(false);
       // Native keyboard/assistive button activation must not become Space/jump.
@@ -111,8 +118,9 @@ export function registerVillaInteractionTests() {
             const bird = f.g.state.pets.pets.find((p: any) => p.id === 'parrot-blue');
             Object.assign(bird, { y: 0, flightHeight: 0, verticalSpeed: 0, wingFold: 0, speed: 0, mode: 'idle', timer: 100,
               targetX: bird.x, targetZ: bird.z });
-            f.tick(2); f.render();
+            f.tick(2);
           }
+          f.render();
           return { seat: f.g.state.seated, relax: f.g.state.relaxSeatId,
             scooterReset: JSON.stringify(f.g.state.scooter) === JSON.stringify(f.scooterHome),
             scooterApproachSafe: action !== 'scooter' || f.g.canFit(1.75),
@@ -126,7 +134,9 @@ export function registerVillaInteractionTests() {
         })).toEqual({ phase: 'empty', fill: 0, liquidVisible: false, safe: true });
         const before = await page.evaluate(() => (window as any).villaInput.calls);
         const trustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
-        await tapPaintedUse(page);
+        // Only blue is tapped again in this pose. All other immediate checks read game state;
+        // the next input uses the separately painted settled seat or the next fully posed target.
+        await tapPaintedUse(page, { paintAfter: action === 'blue' });
         const result = await page.evaluate(({ action, target, trustedBefore }) => {
           const f = (window as any).villaInput, g = f.g;
           const changed = action === 'tea' ? g.state.tea.phase === 'brewing' && g.state.tea.fill > 0 && g.state.tea.fill < 1 && g.state.teaUntil > g.time
@@ -151,7 +161,7 @@ export function registerVillaInteractionTests() {
               scooterSpeed: JSON.parse(f.g.canvas.dataset.villaScooter).speed, settled: f.g.transition === null };
           })).toEqual({ seat: action, relax: action === 'scooter' ? '' : target, scooterSpeed: 0, settled: true });
           const exitTrustedBefore = await page.evaluate(() => (window as any).villaInput.trusted.length);
-          await tapPaintedUse(page);
+          await tapPaintedUse(page, { paintAfter: false }); // The next observation is the settled, freshly rendered exit below.
           expect(await page.evaluate(({ exitTrustedBefore, action, loungerExit }) => {
             const f = (window as any).villaInput; f.tick(12); f.render();
             const exits = action === 'sofa' ? [[-5.25, 5.45], [-6.1, 4.6]]
@@ -203,7 +213,7 @@ export function registerVillaInteractionTests() {
       expect(await page.evaluate(() => (window as any).villaInput.words.join(''))).toContain('请先落地');
       // The wider door arc now accepts the spot it used to refuse, so the
       // refusal text is gone: a real action must start instead of a dead end.
-      await page.evaluate((exit) => { const f = (window as any).villaInput; f.pose(exit.x, exit.z); }, { x: VILLA_CAR.exit.x, z: VILLA_CAR.exit.z }); await tapPaintedUse(page);
+      await page.evaluate((exit) => { const f = (window as any).villaInput; f.pose(exit.x, exit.z); f.render(); }, { x: VILLA_CAR.exit.x, z: VILLA_CAR.exit.z }); await tapPaintedUse(page);
       const doorWords = await page.evaluate(() => (window as any).villaInput.words.join(''));
       expect(doorWords).toContain('开门');
       await page.evaluate(() => { const f = (window as any).villaInput; f.pose(-5.67, -7.2); f.g.activate('immersion'); f.render(); });
@@ -220,10 +230,10 @@ export function registerVillaInteractionTests() {
       await page.setViewportSize({ width: 844, height: 390 });
       await page.evaluate(() => { const f = (window as any).villaInput; f.g.setDisplayScale(550); f.render(); }); await tapPaintedUse(page);
       await page.setViewportSize({ width: 360, height: 780 });
-      await page.evaluate(() => { const f = (window as any).villaInput; f.g.setDisplayScale(340); f.pose(9.15, -.95); }); await tapPaintedUse(page);
+      await page.evaluate(() => { const f = (window as any).villaInput; f.g.setDisplayScale(340); f.pose(9.15, -.95); f.render(); }); await tapPaintedUse(page);
       await page.evaluate(() => { const f = (window as any).villaInput; f.tick(12); f.g.activate('shoot'); f.tick(); f.render(); });
       expect(await page.evaluate(() => (window as any).villaInput.g.state.snooker.moving)).toBe(true);
-      await tapPaintedUse(page, -20); // Previously this visible upper cap hit Shot on narrow phones.
+      await tapPaintedUse(page, { offsetY: -20 }); // Previously this visible upper cap hit Shot on narrow phones.
       expect(await page.evaluate(() => (window as any).villaInput.g.state.snookerActive)).toBe(false);
     } finally { await dispose(page); }
   });

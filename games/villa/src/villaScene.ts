@@ -411,7 +411,7 @@ export class VillaScene {
     // Rig setup is now complete: re-index only immutable, nondeforming source arrays.
     // Bounding/range preparation must see the final uploaded attributes and triangle stream.
     indexVillaRigidSurfaces(this.scene);
-    this.staticView = new VillaStaticView(this.scene);
+    this.staticView = new VillaStaticView(this.scene, this.lowSpec);
     // Fragment-only sunlight sampling is installed after conservative static range classification.
     // It never moves a vertex or changes the bounds used for primary and security views.
     bindManagedLawnPhoto(grass); // Estate + fence shoulder only, not the distant plane's cloned material.
@@ -419,6 +419,7 @@ export class VillaScene {
     installVillaOrchardLight(this.scene);
     this.surveyedSun=addSurveyedSun(this.scene);
     this.roomMirrors=installVillaRoomMirrors(this.scene,indoorReady);
+    this.staticView.sealEstateFinishes();
     // Room names belong to the optional floor plan/HUD, never pasted onto the house.
   }
 

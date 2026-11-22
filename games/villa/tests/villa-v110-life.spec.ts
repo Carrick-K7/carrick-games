@@ -33,10 +33,12 @@ async function mount(page: Page) {
     const { VillaGame } = await import(url), canvas = document.createElement('canvas'); canvas.id = 'villa-v110-life-test'; canvas.tabIndex = 0;
     Object.assign(canvas.style, { position: 'fixed', inset: '0', zIndex: '5' }); document.querySelector('#gameApp')!.append(canvas);
     const f: any = { scores: 0, layout };
-    const g = new VillaGame({ canvas, logicalWidth: 1120, logicalHeight: 700, isDarkTheme: () => false, isZhLang: () => false,
+    const g = new VillaGame({ canvas, logicalWidth: innerWidth, logicalHeight: innerHeight, isDarkTheme: () => false, isZhLang: () => false,
       isPixelMode: () => false, getRecord: () => null, reportScore: () => f.scores++, requestShellRender: () => {} }) as any;
-    g.prepare(); g.start(); cancelAnimationFrame(g.animationId); f.g = g;
+    // prepare() paints a real world. Give it the measured viewport rather than first painting a discarded 1120×700 view.
     g.setViewport({ width: innerWidth, height: innerHeight, dpr: Math.min(2, devicePixelRatio), safeArea: { top: 0, right: 0, bottom: 0, left: 0 } });
+    g.prepare(); g.start(); cancelAnimationFrame(g.animationId); f.g = g;
+    if (!(g.scene?.renderer.info.render.frame > 0) || g.getDiagnostics().cameraAspect !== innerWidth / innerHeight) throw new Error('Expected a real world frame at the fixture viewport');
     f.tick = (count = 1) => { for (let i = 0; i < count; i++) g.update(.05); };
     f.render = () => { g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity; g.scene.securityLastAt = -Infinity; g.renderFrame(); };
     f.pose = (p: { x: number; y: number; z: number }, yaw = 0, pitch = -.12) => {
@@ -45,7 +47,7 @@ async function mount(page: Page) {
       g.enterCarAt = g.exitCarAt = g.closeCarAt = Infinity; g.motion.offset = g.motion.velocity = 0;
       g.scene.updateActivities(g.time, g.state, g.position, g.yaw); g.publishState();
     };
-    f.render(); canvas.focus(); (window as any).__villaV110 = f;
+    canvas.focus(); (window as any).__villaV110 = f;
   }, { url: moduleUrl(), layout: { tea: VILLA_TEA_BAR, aquarium: VILLA_AQUARIUM, fireplace: VILLA_FIREPLACE_WALL, wardrobe: VILLA_MASTER_WARDROBE, seats: VILLA_RELAX_SEATS, camping: VILLA_CAMPING_HOME, swing: VILLA_SWING, pickup: VILLA_PICKUP, scooter: VILLA_SCOOTER, pool: POOL } });
   await expect(canvas(page)).toHaveAttribute('data-villa-version', VILLA_VERSION, { timeout: 60_000 });
   await expect(canvas(page)).toHaveAttribute('data-villa-renderer', 'webgl'); expect(await page.evaluate(() => (window as any).__villaV110.g.running)).toBe(true);

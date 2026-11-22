@@ -574,6 +574,9 @@ export function furnishVilla(scene: THREE.Scene): {
   let staticVertices = 0;
   for (const [material, parts] of batches) {
     const geometry = mergeGeometries(parts, false); for (const part of parts) part.dispose();
+    // dispose() releases GPU handles, not the 5,000 CPU-side staging arrays.
+    // The update closure outlives construction; keep only the merged, drawn buffers.
+    parts.length = 0;
     if (!geometry) continue;
     geometry.userData.villaRigidBatch = true;
     geometry.computeBoundingSphere(); staticVertices += geometry.getAttribute('position').count;

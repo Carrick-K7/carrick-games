@@ -25,6 +25,14 @@ describe('Villa stream model geometry, resources and support fidelity', () => {
       for (const material of Array.isArray(m.material) ? m.material : [m.material]) expect((material as THREE.MeshStandardMaterial).map).toBeNull();
     }
   });
+  it('selects the stock cedar shader only when the real swatch is bound', () => {
+    const m=meshes.map(o=>o.material as THREE.MeshStandardMaterial).find(m=>m.name==='stream-bridge-timber')!, stock=new THREE.MeshStandardMaterial(), image=new THREE.Texture();
+    const compile=()=>{const x={...THREE.ShaderLib.standard, uniforms:{}};m.onBeforeCompile(x as Parameters<typeof m.onBeforeCompile>[0],{} as THREE.WebGLRenderer);return x;};
+    try { const fallback=compile();expect(fallback.fragmentShader).not.toBe(THREE.ShaderLib.standard.fragmentShader);expect(m.customProgramCacheKey()).not.toBe(stock.customProgramCacheKey());
+      m.map=image;expect(m.customProgramCacheKey()).toBe(stock.customProgramCacheKey());expect(compile().fragmentShader).toBe(THREE.ShaderLib.standard.fragmentShader);
+      expect(compile().vertexShader).toBe(THREE.ShaderLib.standard.vertexShader);
+    } finally {m.map=null;stock.dispose();image.dispose();}
+  });
   it('renders precisely the tested shoreline, not a wider water texture over grass', () => {
     const water = root.getObjectByName('villa-stream-water') as THREE.Mesh, p = water.geometry.getAttribute('position');
     expect((water.material as THREE.Material).transparent).toBe(true);

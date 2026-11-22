@@ -16,16 +16,18 @@ export class VillaVisibleRanges {
   readonly proxy: THREE.BufferGeometry;
   private readonly attribute: THREE.BufferAttribute;
   private lastCount = -1;
-  static forMesh(mesh: THREE.Mesh): VillaVisibleRanges | null {
+  static forMesh(mesh: THREE.Mesh, roomScale=false): VillaVisibleRanges | null {
     const g=mesh.geometry, p=g.getAttribute('position');
-    if (!g.userData.villaRigidBatch || !p || (g.index?.count??p.count)<24_576 || Array.isArray(mesh.material) || mesh.material.transparent || !mesh.material.depthWrite ||
+    if (!g.userData.villaRigidBatch || !p || (g.index?.count??p.count)<(roomScale?6144:24_576) || Array.isArray(mesh.material) || mesh.material.transparent || !mesh.material.depthWrite ||
       mesh instanceof THREE.InstancedMesh || mesh instanceof THREE.SkinnedMesh || mesh.morphTargetInfluences || Object.keys(g.morphAttributes).length ||
       g.drawRange.start!==0 || g.drawRange.count!==Infinity || g.groups.length) return null;
     g.computeBoundingBox(); const box=g.boundingBox!;
-    if (Math.max(box.max.x-box.min.x,box.max.z-box.min.z)<12) return null;
-    return new VillaVisibleRanges(g, p);
+    const span=Math.max(box.max.x-box.min.x,box.max.z-box.min.z);
+    if (span<(roomScale?2:12)) return null;
+    return new VillaVisibleRanges(g,p,span>=12 && (g.index?.count??p.count)>=24_576);
   }
-  private constructor(private readonly source:THREE.BufferGeometry,p:THREE.BufferAttribute|THREE.InterleavedBufferAttribute) {
+  private constructor(private readonly source:THREE.BufferGeometry,p:THREE.BufferAttribute|THREE.InterleavedBufferAttribute,private readonly estateSpan:boolean) {
+    const chunkTriangles=estateSpan?192:96;
     const n=source.index?.count??p.count, Idx=p.count<=65535?Uint16Array:Uint32Array;
     if (source.index?.array instanceof Uint32Array || source.index?.array instanceof Uint16Array) this.full=source.index.array;
     else {this.full=new Idx(n);for(let i=0;i<n;i++)this.full[i]=source.index?source.index.getX(i):i;}
@@ -41,7 +43,7 @@ export class VillaVisibleRanges {
     for(let i=0;i<n;i+=3){
       tri.makeEmpty();for(let j=0;j<3;j++)tri.expandByPoint(pt.fromBufferAttribute(p,this.full[i+j]!));
       const size=i-start;
-      if(size>=3*192 || (size>=3*32 && (tri.min.x>box.max.x+2 || tri.min.z>box.max.z+2 || tri.min.y>box.max.y+1.1 ||
+      if(size>=3*chunkTriangles || (size>=3*32 && (tri.min.x>box.max.x+2 || tri.min.z>box.max.z+2 || tri.min.y>box.max.y+1.1 ||
         tri.max.x<box.min.x-2 || tri.max.z<box.min.z-2 || tri.max.y<box.min.y-1.1))){
         this.chunks.push({start,end:i,box:box.expandByScalar(.06)});box=new THREE.Box3();start=i;
       }
@@ -52,10 +54,13 @@ export class VillaVisibleRanges {
   }
   /** null = no visible range; the actual immutable source is returned when nothing worthwhile
    * can be omitted. Only the index buffer changes, and only after the visible set changes. */
-  select(frustum:THREE.Frustum):THREE.BufferGeometry|null {
+  select(frustum:THREE.Frustum, hidden?: (localBounds:THREE.Box3)=>boolean):THREE.BufferGeometry|null {
+    // Room-sized continuous pieces keep their crossing faces as a whole for wall
+    // depth; partition them only against the actual camera frustum.
+    if(!this.estateSpan) hidden=undefined;
     let count=0,changed=false;
     for(let k=0;k<this.chunks.length;k++){
-      const q=this.chunks[k]!,v=frustum.intersectsBox(q.box)?1:0;this.current[k]=v;if(v)count+=q.end-q.start;
+      const q=this.chunks[k]!,v=frustum.intersectsBox(q.box) && !hidden?.(q.box)?1:0;this.current[k]=v;if(v)count+=q.end-q.start;
       if(v!==this.previous[k])changed=true;
     }
     if(!count)return null;
