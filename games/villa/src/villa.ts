@@ -276,7 +276,8 @@ export class VillaGame extends BaseGame {
     if (this.viewport || this.scene || !this.host?.presentation?.setActions || this.canvas.id !== 'gameCanvas' || !this.canvas.isConnected) return;
     const stage = this.canvas.parentElement;
     if (stage?.id !== 'canvasWrapper' || !stage.closest('#gameApp')) return;
-    const { width, height } = stage.getBoundingClientRect();
+    // Layout pixels of the drawing area, not transformed screen/pointer coordinates.
+    const width=stage.clientWidth, height=stage.clientHeight;
     if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0)) return;
     const dpr=this.canvas.ownerDocument?.defaultView?.devicePixelRatio || 1;
     const seed={width,height,dpr,safeArea:{top:0,right:0,bottom:0,left:0}};

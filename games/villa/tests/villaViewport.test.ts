@@ -100,7 +100,7 @@ describe('Villa HUD clears the brand/help/menu cluster', () => {
 
 describe('cold Villa shell projection', () => {
   function mount(width=390,height=664) {
-    const stage={id:'canvasWrapper',closest:()=>({}),getBoundingClientRect:()=>({width,height})};
+    const stage={id:'canvasWrapper',closest:()=>({}),clientWidth:width,clientHeight:height};
     const canvas={id:'gameCanvas',isConnected:true,parentElement:stage,style:{},dataset:{},width:2240,height:1400};
     const game=Object.assign(Object.create(VillaGame.prototype), {host:{presentation:{setActions:()=>{}}},canvas,ctx:{setTransform(){}},width:1120,height:700,pixelRatio:2,viewport:null,scene:null});
     return {game,stage,canvas};
