@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { POOL } from './villaEstateLayout.js';
+import { POOL_CREST_GLSL, POOL_OPTICS_GLSL, POOL_RIPPLE_METRES, type PoolCirculation } from './villaPoolCirculation.js';
 import { clamp01, sample01, finishTexture, gardenReflection, reflectedFieldGLSL } from './villaWeatheredFinish.js';
 
 export const POOL_TILE_SHEET = 8 * .10;
-const RIPPLE_X = 2.80, RIPPLE_Z = 2.32;
+const [RIPPLE_X,RIPPLE_Z] = POOL_RIPPLE_METRES;
 const tau = 2 * Math.PI;
 
 /** An original 8x8 sheet of fired, submerged celadon tiles. Mortar is 3.5 mm,
@@ -40,20 +41,20 @@ export function createVillaPoolFinishMaps() {
   return {tile: finishTexture('pool/kiln-glazed-tesserae',size,size,chips), ripple: finishTexture('pool/capillary-normal-focus',n,n,ripples,false)};
 }
 
-export function glazedBasin(tile: THREE.Texture, ripple: THREE.Texture) {
+export function glazedBasin(tile: THREE.Texture, ripple: THREE.Texture, flow: PoolCirculation) {
   const ceramic = new THREE.MeshLambertMaterial({map:tile}); ceramic.name = 'pool/fired-mosaic';
   ceramic.onBeforeCompile = shader => {
-    shader.uniforms.poolNormalFocus = { value: ripple }; shader.uniforms.poolDrift = { value: ripple.offset };
+    shader.uniforms.poolNormalFocus = { value: ripple }; shader.uniforms.poolPhase = flow.phase; shader.uniforms.poolRain=flow.rain;
     shader.vertexShader = shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 basinPosition;')
       .replace('#include <begin_vertex>','#include <begin_vertex>\nbasinPosition = position;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>',`#include <common>
-        varying vec3 basinPosition; uniform sampler2D poolNormalFocus; uniform vec2 poolDrift;`)
+        varying vec3 basinPosition; uniform sampler2D poolNormalFocus; ${POOL_OPTICS_GLSL}`)
       .replace('#include <map_fragment>',`
         float poolDepth = clamp((-.034 - basinPosition.y)/.94, 0., 1.);
-        vec2 surfaceUV = vec2((basinPosition.x - ${POOL.minX.toFixed(2)})/${RIPPLE_X.toFixed(2)}, (${POOL.maxZ.toFixed(2)} - basinPosition.z)/${RIPPLE_Z.toFixed(2)}) + poolDrift;
+        vec2 surfaceMetres = vec2(basinPosition.x - ${POOL.minX.toFixed(2)}, ${POOL.maxZ.toFixed(2)} - basinPosition.z);
         // Move the sampling footprint a little with depth, not the stone geometry.
-        vec4 wav = texture2D(poolNormalFocus, surfaceUV + poolDepth * vec2(.044, -.062));
-        vec2 distortion = (wav.rg * 2.0 - 1.0) * (.009 + .16 * poolDepth);
+        vec3 wav = poolOptics(poolNormalFocus,surfaceMetres + poolDepth * vec2(.063,-.081));
+        vec2 distortion = wav.xy * (.012 + .17 * poolDepth);
         vec3 glaze = texture2D(map, vMapUv + distortion).rgb;
         float directSun = 0.;
         #if NUM_DIR_LIGHTS > 0
@@ -65,17 +66,24 @@ export function glazedBasin(tile: THREE.Texture, ripple: THREE.Texture) {
         // the waterline, terminating on the tile joints rather than halfway across a tile.
         float border = smoothstep(-.232,-.228,basinPosition.y) * (1.-smoothstep(-.132,-.128,basinPosition.y));
         diffuseColor.rgb *= glaze * mix(vec3(1.),vec3(.57,.76,.74),border)
-          * mix(vec3(1.),vec3(.70,.95,.93),poolDepth) * (1.0 + (.49*wav.a - .105)*directSun*poolDepth);
+          * mix(vec3(1.),vec3(.70,.95,.93),poolDepth) * (1.0 + (.61*wav.z - .16)*directSun*poolDepth);
       `);
   };
-  ceramic.customProgramCacheKey = ()=>'villa-submerged-glaze-v1'; return ceramic;
+  ceramic.customProgramCacheKey = ()=>'villa-submerged-glaze-flow-v2'; return ceramic;
 }
-export function surfaceWater(root: THREE.Object3D, ripple: THREE.Texture, w: number, l: number) {
+export function surfaceWater(root: THREE.Object3D, ripple: THREE.Texture, w: number, l: number, flow:PoolCirculation) {
   ripple.repeat.set(w/RIPPLE_X,l/RIPPLE_Z);
   const paint = new THREE.MeshPhongMaterial({color:0x659a91, specular:0xd6dcd5, shininess:82, normalMap:ripple, normalScale:new THREE.Vector2(.76,.76),
     map:gardenReflection(root), transparent:true, opacity:.18, depthWrite:false});
   paint.name='pool/air-water-interface'; paint.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '// map describes incident skylight, not surface pigment')
+    shader.uniforms.poolPhase=flow.phase;shader.uniforms.poolRain=flow.rain;
+    shader.vertexShader = shader.vertexShader.replace('#include <common>',`#include <common>\n${POOL_CREST_GLSL}\nvarying vec2 poolSurfaceMetres;`)
+      .replace('#include <beginnormal_vertex>',`#include <beginnormal_vertex>\nvec3 poolRelief=poolCrest(position.xy);objectNormal=normalize(vec3(-poolRelief.xy,1.));`)
+      .replace('#include <begin_vertex>',`#include <begin_vertex>\ntransformed.z=poolRelief.z;poolSurfaceMetres=position.xy+vec2(${(w/2).toFixed(4)},${(l/2).toFixed(4)});`);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>',`#include <common>\nvarying vec2 poolSurfaceMetres;\n${POOL_OPTICS_GLSL}`)
+      .replace('#include <map_fragment>', '// map describes incident skylight, not surface pigment')
+      .replace('#include <normal_fragment_maps>',`vec2 fineSlope=poolOptics(normalMap,poolSurfaceMetres).xy;
+        normal=normalize(tbn*normalize(vec3(fineSlope*normalScale,1.)));`)
       .replace('#include <opaque_fragment>', `${reflectedFieldGLSL}
         float reflected = .024 + .93 * glancing;
         // Reflection and transmissive water colour are mixed in linear light;
@@ -85,5 +93,5 @@ export function surfaceWater(root: THREE.Object3D, ripple: THREE.Texture, w: num
           + reflectedLight.directSpecular * .28;
         #include <opaque_fragment>`);
   };
-  paint.customProgramCacheKey=()=>'villa-pool-air-interface-v1'; return paint;
+  paint.customProgramCacheKey=()=>'villa-pool-air-interface-flow-v2'; return paint;
 }

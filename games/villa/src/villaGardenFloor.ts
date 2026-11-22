@@ -3,8 +3,10 @@ import { VILLA_GARDEN_TREES, VILLA_VEGETABLE_BEDS } from './villaGarden.js';
 import { POOL, VILLA_BUILDING_GROUND_CUTS, VILLA_ESTATE_BOUNDS, VILLA_ESTATE_FIELDS, VILLA_ESTATE_VIEWPOINT, VILLA_POND, villaTerrainGroundHeight } from './villaEstateLayout.js';
 import { VILLA_ESTATE_ROAD_PATHS, VILLA_GARAGE_DRIVE } from './villaDrivingCourse.js';
 import { VILLA_SCENIC_ROAD } from './villaDriving.js';
-import { VILLA_STREAM_PATH, villaStreamContains } from './villaStream.js';
+import { VILLA_STREAM, VILLA_STREAM_BOUNDS, VILLA_STREAM_PATH, villaStreamContains, villaStreamSectionAt } from './villaStream.js';
 import { NatureMesh } from './villaNatureGeometry.js';
+import { lawnPatch, lawnPhotoUV } from './villaLawnFinish.js';
+import { sample01 } from './villaWeatheredFinish.js';
 
 // A gardener can walk to all four sides of each raised bed. The dressing is part of
 // the walking surface, NOT a fifth raised box or a collider across the pet route.
@@ -75,8 +77,9 @@ interface Segment {x:number;z:number;dx:number;dz:number;inv:number;radius:numbe
 function roadExclusion(){const cells=new Map<string,Segment[]>(),size=8;
   for(const road of VILLA_ESTATE_ROAD_PATHS)for(let i=1;i<road.length;i++){const a=road[i-1]!,b=road[i]!,dx=b.x-a.x,dz=b.z-a.z;
     const radius=(road===VILLA_GARAGE_DRIVE?VILLA_SCENIC_ROAD.drivewayWidth:VILLA_SCENIC_ROAD.width)/2+.57,seg={x:a.x,z:a.z,dx,dz,inv:1/(dx*dx+dz*dz||1),radius};
-    for(let ix=Math.floor((Math.min(a.x,b.x)-radius)/size);ix<=Math.floor((Math.max(a.x,b.x)+radius)/size);ix++)for(let iz=Math.floor((Math.min(a.z,b.z)-radius)/size);iz<=Math.floor((Math.max(a.z,b.z)+radius)/size);iz++){const k=`${ix},${iz}`;let v=cells.get(k);if(!v){v=[];cells.set(k,v);}v.push(seg);}}
-  return(x:number,z:number)=>{const s=cells.get(`${Math.floor(x/size)},${Math.floor(z/size)}`);return s?.some(v=>{const u=x-v.x,w=z-v.z,t=clamp((u*v.dx+w*v.dz)*v.inv);return (u-t*v.dx)**2+(w-t*v.dz)**2<v.radius**2;})??false;};
+    const reach=radius+.16; // Also index the longest blade reaching over the verge.
+    for(let ix=Math.floor((Math.min(a.x,b.x)-reach)/size);ix<=Math.floor((Math.max(a.x,b.x)+reach)/size);ix++)for(let iz=Math.floor((Math.min(a.z,b.z)-reach)/size);iz<=Math.floor((Math.max(a.z,b.z)+reach)/size);iz++){const k=`${ix},${iz}`;let v=cells.get(k);if(!v){v=[];cells.set(k,v);}v.push(seg);}}
+  return(x:number,z:number,blade=false)=>{const s=cells.get(`${Math.floor(x/size)},${Math.floor(z/size)}`);return s?.some(v=>{const u=x-v.x,w=z-v.z,t=clamp((u*v.dx+w*v.dz)*v.inv);return (u-t*v.dx)**2+(w-t*v.dz)**2<(v.radius+(blade?.16:0))**2;})??false;};
 }
 function groundRoom(x:number,z:number,isRoad:(x:number,z:number)=>boolean){
   if(isRoad(x,z)||kitchenCourtDistance(x,z)<.035||VILLA_BUILDING_GROUND_CUTS.some(b=>x>b.minX-.20&&x<b.maxX+.20&&z>b.minZ-.2&&z<b.maxZ+.2))return false;
@@ -87,13 +90,41 @@ function groundRoom(x:number,z:number,isRoad:(x:number,z:number)=>boolean){
   if(Math.hypot(x-VILLA_ESTATE_VIEWPOINT.x,z-VILLA_ESTATE_VIEWPOINT.z)<4.5 || x>-15&&x<-11&&z>23&&z<64 || z>=88&&z<128&&Math.abs(x-(-5+(z-88)*.51))<2.4)return false;
   return true;
 }
-function groundGrowth(turf:NatureMesh,x:number,y:number,z:number,len:number,random:()=>number){
-  const green=colour('#65733d'),dry=colour('#9f925b'),young=colour('#718745'),a0=random()*Math.PI*2,n=3+Math.floor(random()*4);
-  for(let k=0;k<n;k++){const a=a0+k*2.399+(random()-.5)*.54,h=len*(.58+random()*.67),r=random()*.019;
-    const ox=x+Math.cos(a)*r,oz=z+Math.sin(a)*r,dx=Math.cos(a)*h*.78,dz=Math.sin(a)*h*.78,w=h*(.036+random()*.024);
-    const c=random()<.10?dry:((k&1)?green:young),point=(s:number,offset:number,lift:number,tone:number)=>surface(turf,ox+dx*s-dz/h*offset,y+h*lift,oz+dz*s+dx/h*offset,c,tone);
-    const l=point(0,-w,0,.56),r0=point(0,w,0,.56),lm=point(.36,-w*.66,.79,.93),rm=point(.36,w*.66,.77,.93),tip=point(1,0,.68+random()*.22,1.05);
-    turf.tri(l,lm,r0);turf.tri(r0,lm,rm);turf.tri(lm,tip,rm);}
+const potPairs = [[-10.5, 16], [-22.6, 11.5], [8.5, 18]] as const;
+function clearPlantedFeet(x: number, z: number) {
+  // The larger orchard collars may still carry short grass outside the trunks.
+  for (const tree of VILLA_GARDEN_TREES) if (Math.max(Math.abs(x - tree.x), Math.abs(z - tree.z)) < .25 * tree.scale + .18) return false;
+  for (const [px, pz] of potPairs) if (Math.max(Math.abs(x - px), Math.abs(z - pz)) < .43 ||
+    Math.max(Math.abs(x - px - .8), Math.abs(z - pz - .3)) < .35) return false;
+  // Mown up to the woody feet of the two clipped privet rows, not a sterile strip under their full canopies.
+  const row = Math.round((z + 12) / 2.45);
+  if (row >= 0 && row < 14 && Math.abs(z + 12 - row * 2.45) < .93 &&
+    (Math.abs(x - (VILLA_BUILDING_GROUND_CUTS[0].minX - .55)) < .45 || Math.abs(x - (VILLA_ESTATE_BOUNDS.maxX - 1.15)) < .47)) return false;
+  return true;
+}
+const restedGreen = colour('#59734d'), cutGreen = colour('#6c7e52');
+function groundGrowth(turf: NatureMesh, x: number, y: number, z: number, len: number, random: () => number, visible = true) {
+  const patch = lawnPatch(x, z), pigment = restedGreen.clone().lerp(cutGreen, 1 - patch.fresh);
+  // The fan still opens in several directions. A portion of its bend follows the
+  // local mower pass, with a little more freedom in the southern meadow.
+  const grain = 1.9 * patch.reach + .95 * patch.fleck;
+  const leanX = .19 * Math.sin(grain), leanZ = .13 * Math.cos(grain) + .16 * patch.swath * (1 - .65 * patch.meadow);
+  // Keep the collar's original draw sequence: its following leaf litter is not lawn dressing.
+  const a0 = random() * Math.PI * 2, n = 3 + Math.floor(random() * 4);
+  for (let k = 0; k < n; k++) {
+    const a = a0 + k * 2.399 + (random() - .5) * .54, h = len * (.72 + random() * .45), r = random() * .019;
+    const w = h * (.030 + random() * .016), lightness = .975 + .05 * random(), tipLift = .68 + random() * .22;
+    if (!visible) continue;
+    const u = Math.cos(a), v = Math.sin(a), ox = x + u * r, oz = z + v * r;
+    const dx = (.69 * u + leanX) * h, dz = (.69 * v + leanZ) * h;
+    // One pigment per patch. The quiet heel-to-tip change is lightness, not a
+    // lottery between green and straw on adjacent triangles or alternate blades.
+    const point = (s: number, offset: number, lift: number, tone: number) =>
+      surface(turf, ox + dx * s - v * offset, y + h * lift, oz + dz * s + u * offset, pigment, tone * lightness);
+    const l = point(0, -w, 0, .72), r0 = point(0, w, 0, .72), lm = point(.36, -w * .66, .79, .96), rm = point(.36, w * .66, .77, .96);
+    const tip = point(1, 0, tipLift, 1.02);
+    turf.tri(l, lm, r0); turf.tri(r0, lm, rm); turf.tri(lm, tip, rm);
+  }
 }
 function rootSkirt(soil:NatureMesh,litter:NatureMesh,turf:NatureMesh,x:number,z:number,s:number,random:()=>number,isRoad:(x:number,z:number)=>boolean){
   // Do not put a horizontal plate under a neighbouring porch/road or across a bank on a hill.
@@ -108,10 +139,64 @@ function rootSkirt(soil:NatureMesh,litter:NatureMesh,turf:NatureMesh,x:number,z:
   for(let j=1;j<rings.length;j++)for(let i=0;i<n;i++){const k=(i+1)%n;soil.tri(rings[j-1]![i]!,rings[j-1]![k]!,rings[j]![i]!);soil.tri(rings[j-1]![k]!,rings[j]![k]!,rings[j]![i]!);}
   for(let j=0;j<65;j++){const a=random()*6.28,d=(.12+random()**.55*.77)*s,xx=x+Math.cos(a)*d,zz=z+Math.sin(a)*d*.86;
     if(!groundRoom(xx,zz,isRoad))continue;const y=villaTerrainGroundHeight(xx,zz)-.020+.013*Math.max(0,1-d/s);
-    if(j%4===0){groundGrowth(turf,xx,y,zz,.075+random()*.062,random);continue;}
+    if(j%4===0){groundGrowth(turf,xx,y,zz,.075+random()*.062,random,clearPlantedFeet(xx,zz));continue;}
     const dir=random()*6.28,l=.026+random()*.067,w=l*(.17+random()*.10),u=Math.cos(dir),v=Math.sin(dir),t=.66+random()*.32;
     const p=(d:number,e:number,h:number)=>surface(litter,xx+d*u-e*v,y+h,zz+d*v+e*u,leafCol,t);
     const base=p(-l*.5,0,.009),m=p(0,0,.013),lt=p(.006,w,.017+random()*.009),rt=p(-.002,-w,.012),tip=p(l*.54,w*.24,.009);litter.tri(base,lt,m);litter.tri(base,m,rt);litter.tri(lt,tip,m);litter.tri(m,tip,rt);
+  }
+}
+// Broad lawn stations stop before the gravel/grit outside the cutout, not at the
+// waterline or a guessed diagonal from the pond to its lookout. These masks only
+// dress the floor: they never become a support surface or an obstacle.
+function openSward(x: number, z: number, courtLip: boolean, isRoad: (x: number, z: number) => boolean) {
+  if (!groundRoom(x, z, isRoad) || kitchenCourtDistance(x, z) < (courtLip ? .095 : .93) || !clearPlantedFeet(x, z)) return false;
+  const b = VILLA_ESTATE_BOUNDS;
+  if (Math.min(x - b.minX, b.maxX - x, z - b.minZ, b.maxZ - z) < .25) return false;
+  if (z > VILLA_STREAM_BOUNDS.minZ - .2 && z < VILLA_STREAM_BOUNDS.maxZ + .2) {
+    const s = villaStreamSectionAt(x);
+    if (s && Math.abs(z - s.z) < s.halfWidth + VILLA_STREAM.bankWidth + .2) return false;
+  }
+  if (((x - VILLA_POND.x) / 10.55) ** 2 + ((z - VILLA_POND.z) / 14.35) ** 2 < 1) return false;
+  const v = VILLA_ESTATE_VIEWPOINT;
+  if (z > 86.5 && z < v.z + 1.5) {
+    const trailX = z < 100 ? -5 + (z - 88) : z < 114 ? 7 + (z - 100) * 6 / 14 : 13 + (z - 114) / 13;
+    if (Math.abs(x - trailX) < 1.8) return false;
+  }
+  if (x > v.x + 1.9 && x < v.x + 5.2 && z > v.z + 1.7 && z < v.z + 5.4) return false; // lookout boulders
+  if (x > -27.2 && x < -24.6 && z > -10.2 && z < 10.2) return false; // pool-side flags
+  return true;
+}
+
+function plantLawn(turf: NatureMesh, isRoad: (x: number, z: number) => boolean) {
+  const b = VILLA_ESTATE_BOUNDS;
+  // Spend fewer of the existing blades in a 2 m ribbon at the east/west fences.
+  // The centre is still predominantly clipped photo turf, with occasional low groups.
+  const courtShots = 280, fenceShots = 300, broadShots = 2170;
+  for (let i = 0; i < courtShots + fenceShots + broadShots; i++) {
+    const random = rng(1 + Math.floor(sample01(i, 849023) * 0x7fffffff));
+    const lip = i < courtShots, fence = !lip && i < courtShots + fenceShots;
+    let x = b.minX + (b.maxX - b.minX) * random(), z = b.minZ + (b.maxZ - b.minZ) * random();
+    if (lip) {
+      const a = random() * 2 * Math.PI, r = courtRadius(a) + .11 + random() ** 1.5 * .34;
+      x = cx + Math.cos(a) * r; z = cz + Math.sin(a) * r;
+    } else if (fence) {
+      const margin = .30 + 2.1 * random() ** 1.4;
+      if (random() < .68) x = random() < .5 ? b.minX + margin : b.maxX - margin;
+      else z = random() < .5 ? b.minZ + margin : b.maxZ - margin;
+    }
+    if (!openSward(x, z, lip, isRoad)) continue;
+    const patch = lawnPatch(x, z);
+    // Less frequent and shorter in worn stretches. The clipped kitchen lip stays
+    // short, while uncut perimeter tufts ease into longer southern pasture.
+    if (!lip && random() > .47 + .45 * patch.fresh + .06 * patch.shade) continue;
+    const len = lip ? .042 + .023 * random() : (.049 + .036 * random() + .053 * patch.meadow + (fence ? .008 : 0)) * (.84 + .31 * patch.fresh);
+    const count = lip ? 1 : 2 + Math.floor(1.75 * patch.fresh + .98 * random());
+    for (let j = 0; j < count; j++) {
+      const a = random() * 2 * Math.PI, r = j === 0 ? 0 : (.08 + .24 * patch.fresh) * Math.sqrt(random());
+      const xx = x + Math.cos(a) * r, zz = z + Math.sin(a) * r;
+      if (j && !openSward(xx, zz, lip, isRoad)) continue;
+      groundGrowth(turf, xx, villaTerrainGroundHeight(xx, zz) - .021, zz, len, random);
+    }
   }
 }
 export function createCultivatedGround(parent:THREE.Object3D,gravel:THREE.MeshStandardMaterial){
@@ -120,22 +205,22 @@ export function createCultivatedGround(parent:THREE.Object3D,gravel:THREE.MeshSt
   granular.name='embedded-grit-and-loam';grass.name='rooted-verge-blades';leaf.name='fallen-leaf-litter';
   buildCourt(root,gravel,chips,soil);
   const rand=rng(849023);for(const t of VILLA_GARDEN_TREES)rootSkirt(soil,litter,turf,t.x,t.z,t.scale,rand,isRoad);
-  const b=VILLA_ESTATE_BOUNDS;
-  for(let i=0;i<1850;i++){
-    let x=b.minX+(b.maxX-b.minX)*rand(),z=b.minZ+(b.maxZ-b.minZ)*rand();const edge=i<360;
-    if(edge){const a=rand()*Math.PI*2,r=courtRadius(a)+.035+rand()**1.5*.40;x=cx+Math.cos(a)*r;z=cz+Math.sin(a)*r;}
-    else if(i<1150){x=rand()>.5?b.minX+.3+rand()*1.8:b.maxX-.3-rand()*1.8;}
-    if(!groundRoom(x,z,isRoad))continue;
-    const h=edge?.028+rand()*.045:z<35?.047+rand()*.059:.09+rand()*.095;
-    for(let j=0;j<(edge?1:3);j++){const a=rand()*6.28,r=rand()*(edge?.065:.12),xx=x+Math.sin(a)*r,zz=z+Math.cos(a)*r;if(groundRoom(xx,zz,isRoad))groundGrowth(turf,xx,villaTerrainGroundHeight(xx,zz)-.021,zz,h,rand);}
-  }
+  plantLawn(turf,(x,z)=>isRoad(x,z,true));
   finish(root,'garden-substrate/stone-chips',chips,granular);finish(root,'garden-substrate/soil-collars',soil,granular);finish(root,'garden-substrate/grass-tillers',turf,grass);finish(root,'garden-substrate/leaf-litter',litter,leaf);return root;
 }
-/** Coarse planting variation modulates the photographic microstructure across tile boundaries.
- * Do not change the authoritative lawn mesh, normals, UVs, triangles or clipping. */
-export function tintManagedLawn(g:THREE.BufferGeometry){const p=g.getAttribute('position'),rgb=new Float32Array(p.count*3);
-  for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),wet=Math.sin(x*.19+Math.sin(z*.28))*.5+.5*Math.cos(z*.13+x*.057),band=Math.sin((x+.08*z+Math.sin(z*.17)*.23)*1.79),t=clamp((z-24)/33);
-    const m=1+.10*wet+(.035+.016*(1-t))*band,straw=(1+Math.sin(x*.075-z*.13))*.5*t;
-    rgb[i*3]=m*(.98+.14*straw);rgb[i*3+1]=m*(1-.025*straw);rgb[i*3+2]=m*(.93-.070*straw);}
-  g.setAttribute('color',new THREE.BufferAttribute(rgb,3));return g;
+/** Finish only: one metric chart for both the clipped estate and its separate fence shoulder.
+ * The original metre grid, normals, winding, holes and support remain authoritative. */
+export function tintManagedLawn(g: THREE.BufferGeometry) {
+  const p = g.getAttribute('position'), uv = g.getAttribute('uv'), rgb = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), { value, fresh, meadow } = lawnPatch(x, z);
+    // The scan already contains green blades and clipped ends. Vary reflectance
+    // more than hue; even the driest open meadow keeps living green underneath.
+    rgb[3 * i] = value * (.972 + .046 * (1 - fresh) + .026 * meadow);
+    rgb[3 * i + 1] = value * (.995 + .018 * fresh);
+    rgb[3 * i + 2] = value * (.955 + .053 * fresh - .025 * meadow);
+    uv.setXY(i, ...lawnPhotoUV(x, z));
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  return g;
 }

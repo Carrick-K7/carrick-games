@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { millSection, turnSection, type Section } from './villaArchitecturalStock.js';
+import {poolCirculation, POOL_SURFACE_Y, restingPoolHeight} from './villaPoolCirculation.js';
 import { glazedBasin, surfaceWater } from './villaWeatheredPool.js';
 import { clamp01, dressedCourses, exteriorTimber, stoneTint } from './villaWeatheredFinish.js';
 import { linedPool, poolDeck } from './villaExteriorBuildPool.js';
@@ -12,10 +13,10 @@ import type { VillaSurfaces } from './villaEnvelope.js';
 
 /** Equipment remains outside the analytically unsupported water rectangle. No ladder or
  * drain creates a new step, no visual fill caps the basin or occupies a lounger footprint. */
-export function createVillaPoolside(parent:THREE.Object3D,m:VillaSurfaces,tileMap:THREE.Texture,ripple:THREE.Texture, gardenLight:THREE.Material) {
+export function createVillaPoolside(parent:THREE.Object3D,m:VillaSurfaces,tileMap:THREE.Texture,ripple:THREE.Texture, gardenLight:THREE.Material, flow=poolCirculation()) {
   const b=new VillaModelBuilder(parent,'villa-terraces-and-pool'), w=POOL.maxX-POOL.minX,l=POOL.maxZ-POOL.minZ;
   const cx=(POOL.minX+POOL.maxX)/2,cz=(POOL.minZ+POOL.maxZ)/2;
-  const ceramic=glazedBasin(tileMap,ripple), steel=villaMaterial('#b7c2be',.29,.49);
+  const ceramic=glazedBasin(tileMap,ripple,flow), steel=villaMaterial('#b7c2be',.29,.49);
   const deep=villaMaterial('#454d46',.81), grout=villaMaterial('#8d8574',.97);
   const copingStone=m.stone.clone(); copingStone.vertexColors=true; copingStone.roughness=.85; copingStone.name='exterior/honed-limestone';
   function pave(x:number,top:number,z:number,width:number,depth:number,brick:number,row:number,planted=false){
@@ -87,10 +88,13 @@ export function createVillaPoolside(parent:THREE.Object3D,m:VillaSurfaces,tileMa
   b.finish();
   const wave=new THREE.PlaneGeometry(w,l,28,42), p=wave.getAttribute('position');
   for(let i=0;i<p.count;i++){
-    const x=p.getX(i),y=p.getY(i),margin=Math.min(w/2-Math.abs(x),l/2-Math.abs(y));
-    p.setZ(i,Math.min(1,Math.max(0,margin)*3)*(.008*Math.sin(2.94*x+3.1*y)+.005*Math.cos(4.28*x-2.40*y)));
+    p.setZ(i,restingPoolHeight(p.getX(i),p.getY(i)));
   }
-  wave.computeVertexNormals();
-  const water=new THREE.Mesh(wave,surfaceWater(parent,ripple,w,l));
-  water.name='villa-pool-water';water.rotation.x=-Math.PI/2;water.position.set(cx,-.035,cz);parent.add(water);return water;
+  wave.computeVertexNormals();wave.computeBoundingBox();
+  // The two moving crests are at most (8 + 5) mm, with up to 18% rain gain.
+  // Keep that complete room in the culling bounds, not just the time-zero mesh.
+  const bounds=wave.boundingBox!;bounds.min.z=-.01534;bounds.max.z=.01534;
+  wave.boundingSphere=bounds.getBoundingSphere(new THREE.Sphere());
+  const water=new THREE.Mesh(wave,surfaceWater(parent,ripple,w,l,flow));
+  water.name='villa-pool-water';water.rotation.x=-Math.PI/2;water.position.set(cx,POOL_SURFACE_Y,cz);parent.add(water);return water;
 }

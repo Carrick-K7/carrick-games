@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createVillaPeripheralLandscape, createVillaStreamModel } from '../src/villaStreamModel.js';
-import { VILLA_LANDSCAPE_RENDER_BUDGET, VILLA_LANDSCAPE_TREES, VILLA_STREAM, VILLA_STREAM_BRIDGE, VILLA_STREAM_RENDER_BUDGET, villaStreamBridgeHeight, villaStreamContains, villaStreamSectionAt, villaStreamTerrainHeight } from '../src/villaStream.js';
+import { VILLA_LANDSCAPE_RENDER_BUDGET, VILLA_LANDSCAPE_TREES, VILLA_STREAM, VILLA_STREAM_BRIDGE, VILLA_STREAM_RENDER_BUDGET, VILLA_STREAM_SECTIONS, villaStreamBridgeHeight, villaStreamContains, villaStreamSectionAt, villaStreamTerrainHeight } from '../src/villaStream.js';
+import { fitStreamSurfaceChart } from '../src/villaStreamSurfaceChart.js';
 
 const meshesIn = (root: THREE.Object3D) => { const meshes: THREE.Mesh[] = []; root.traverse(n => { if (n instanceof THREE.Mesh) meshes.push(n); }); return meshes; };
 function dispose(root: THREE.Object3D) {
@@ -80,16 +81,51 @@ describe('Villa stream model geometry, resources and support fidelity', () => {
     }
     expect(root.getObjectByName('villa-stream-timber-footbridge')!.userData).toMatchObject({ abutments: 2, stringers: 3 });
   });
-  it('animates only one shader uniform, preserving shoreline geometry and stable cache identity', () => {
+  it('charts every original shore pair in metres along and across the bent +X channel, without restarting at a station', () => {
+    const g = (root.getObjectByName('villa-stream-water') as THREE.Mesh).geometry, uv = g.getAttribute('uv'), frame = g.getAttribute('waterSection');
+    expect(uv.count).toBe(VILLA_STREAM_SECTIONS.length * 2); expect(frame.count).toBe(uv.count);
+    let arc = 0, minTz = 0, maxTz = 0;
+    VILLA_STREAM_SECTIONS.forEach((s, i, rows) => {
+      const a = rows[Math.max(0, i - 1)], b = rows[Math.min(rows.length - 1, i + 1)], t = new THREE.Vector2(b.x - a.x, b.z - a.z).normalize();
+      arc += Math.hypot(s.x - a.x, s.z - a.z); minTz = Math.min(minTz, t.y); maxTz = Math.max(maxTz, t.y);
+      for (const side of [-1, 1]) {
+        const k = 2 * i + (side > 0 ? 1 : 0), dz = side * s.halfWidth;
+        expect(frame.getX(k)).toBeCloseTo(t.x, 6); expect(frame.getY(k)).toBeCloseTo(t.y, 6); expect(frame.getZ(k)).toBe(side);
+        expect(uv.getX(k)).toBeCloseTo(arc + t.y * dz, 4); expect(uv.getY(k)).toBeCloseTo(t.x * dz, 6);
+      }
+    });
+    expect(arc).toBeGreaterThan(VILLA_STREAM.maxX - VILLA_STREAM.minX + .8); expect(minTz).toBeLessThan(-.12); expect(maxTz).toBeGreaterThan(.20);
+  });
+  it('ties lee ripples to the real wet stones, not to dry ground or a line of nonexistent bridge piers', () => {
+    const g = (root.getObjectByName('villa-stream-water') as THREE.Mesh).geometry, wakes = g.getAttribute('waterSection');
+    const at = (frame: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, x: number, side: number) => frame.getW(2 * VILLA_STREAM_SECTIONS.findIndex(s => s.x === x) + side);
+    const bare = new THREE.BufferGeometry(), bank = new THREE.Group(); fitStreamSurfaceChart(bare, bank);
+    const noStone = bare.getAttribute('waterSection');
+    // The south shingle beside the crossing is actually rough; the opposite bank is clear here.
+    expect(at(wakes, 9, 1)).toBeGreaterThan(.5); expect(at(wakes, 9, 0)).toBe(0); expect(at(noStone, 9, 1)).toBe(0);
+    expect(at(noStone, 3, 1)).toBeGreaterThan(.3); expect(at(noStone, 0, 1)).toBe(0);
+    const x = 18, s = villaStreamSectionAt(x)!, material = new THREE.MeshStandardMaterial(), stone = new THREE.BufferGeometry();
+    stone.setAttribute('position', new THREE.Float32BufferAttribute([x, VILLA_STREAM.waterY + .1, s.z - s.halfWidth + .42, x, .05, s.z + s.halfWidth + .3], 3));
+    material.name = 'stream/eroded-bars-and-stone'; bank.add(new THREE.Mesh(stone, material)); fitStreamSurfaceChart(bare, bank);
+    const wet = bare.getAttribute('waterSection');
+    expect(at(wet, x + .5, 0)).toBeGreaterThan(.75); expect(at(wet, x - .5, 0)).toBe(0); expect(at(wet, x + 2.5, 0)).toBe(0); expect(at(wet, x + .5, 1)).toBe(0);
+    bare.dispose(); stone.dispose(); material.dispose();
+  });
+  it('updates one existing uniform at absolute time, preserving geometry, texture uploads and cache identity', () => {
     const water = root.getObjectByName('villa-stream-water') as THREE.Mesh, material = water.material as THREE.MeshStandardMaterial;
-    const shader = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>' };
+    const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     material.onBeforeCompile(shader as Parameters<typeof material.onBeforeCompile>[0], null as unknown as THREE.WebGLRenderer);
-    const uniform = (shader.uniforms as Record<string, { value: number }>).villaStreamTime!, positions = water.geometry.getAttribute('position');
-    const values = Array.from(positions.array), version = (positions as THREE.BufferAttribute).version, cacheKey = material.customProgramCacheKey();
-    stream.update(12.25); expect(uniform.value).toBe(12.25); stream.update(NaN); expect(uniform.value).toBe(12.25);
-    stream.update(14); expect(uniform.value).toBe(14); expect(material.customProgramCacheKey()).toBe(cacheKey);
-    expect(Array.from(positions.array)).toEqual(values); expect((positions as THREE.BufferAttribute).version).toBe(version);
-    expect(shader.fragmentShader).toContain('villaStreamTime * 0.24'); expect(shader.vertexShader).toContain('villaStreamUV = uv');
+    expect(Object.keys(shader.uniforms)).toEqual(['villaWaterPhase']);
+    const uniform = (shader.uniforms as Record<string, { value: THREE.Vector4 }>).villaWaterPhase, phase = uniform.value;
+    const p = water.geometry.getAttribute('position') as THREE.BufferAttribute, values = Array.from(p.array), version = p.version, key = material.customProgramCacheKey();
+    const map = material.normalMap!, upload = map.version, program = material.version;
+    stream.update(12.25, .6); const a = phase.toArray(); stream.update(NaN, 1); expect(phase.toArray()).toEqual(a);
+    stream.update(14, 4); expect(phase.toArray().slice(0, 3)).not.toEqual(a.slice(0, 3)); expect(phase.w).toBe(1);
+    stream.update(1e9); const atLongTime = phase.x; stream.update(1e9 + .125); expect(phase.x).not.toBe(atLongTime);
+    expect(phase.toArray().every(x => x >= 0 && x < 1)).toBe(true); stream.update(12.25, .6); expect(phase.toArray()).toEqual(a);
+    expect(uniform.value).toBe(phase); expect(material.customProgramCacheKey()).toBe(key); expect(material.version).toBe(program); expect(map.version).toBe(upload);
+    expect(Array.from(p.array)).toEqual(values); expect(p.version).toBe(version);
+    expect(shader.vertexShader).toContain('villaSection = waterSection'); expect(shader.fragmentShader).toContain('villaAlong(ripple, normalize(villaSection.xy))');
   });
 });
 

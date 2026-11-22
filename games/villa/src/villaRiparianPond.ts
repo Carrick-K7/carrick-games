@@ -30,7 +30,7 @@ function triHeight(p: XZ, a: P3, b: P3, c: P3) {
 /** One continuous silt floor, intertidal shelf, and rim. The grass cutout is
  * circumscribed about the hazard ellipse: carry a scalloped earthen toe beyond
  * that cut and bury its outermost edge below the EXISTING lawn (-22mm). */
-export function addRiparianPond(root: THREE.Object3D): GroundHeight {
+export function addRiparianPond(root: THREE.Object3D) {
   const terrain = new RiparianMesh(), rows: P3[][] = [], waterPositions: number[] = [], depths: number[] = [], uv: number[] = [], waterIds: number[] = [];
   const groundIds: number[][] = [], waterRows: number[][] = [], source: P3 = [pond.x, cutHeight(pond.x, pond.z, 0, 0), pond.z];
   const centre = terrain.vertex(...source, sediment(...source, pond.waterY, 0));
@@ -69,10 +69,10 @@ export function addRiparianPond(root: THREE.Object3D): GroundHeight {
   const water = new THREE.BufferGeometry(); water.setAttribute('position', new THREE.Float32BufferAttribute(waterPositions, 3)); water.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   water.setAttribute('waterColumn', new THREE.Float32BufferAttribute(depths, 1)); water.setAttribute('waterBreeze', new THREE.Float32BufferAttribute(breeze, 1));
   water.setIndex(waterIds); water.computeVertexNormals();
-  const surface = new THREE.Mesh(water, riparianWaterMaterial().material); surface.name = 'estate-pond-water'; surface.receiveShadow = true; root.add(surface);
+  const finish = riparianWaterMaterial(), surface = new THREE.Mesh(water, finish.material); surface.name = 'estate-pond-water'; surface.receiveShadow = true; root.add(surface);
   // Sample the actual piecewise-planar faces, not the smooth profile that was
   // used to author their vertices. Stones, petals and exposed roots all use it.
-  return (x, z) => {
+  const height: GroundHeight = (x, z) => {
     const theta = Math.atan2((z - pond.z) / pond.radiusZ, (x - pond.x) / pond.radiusX), i = Math.floor((theta + turn) / turn * spokes) % spokes;
     const a = rows[i], b = rows[(i + 1) % spokes], point = { x, z };
     let y = triHeight(point, source, b[1], a[1]);
@@ -81,6 +81,7 @@ export function addRiparianPond(root: THREE.Object3D): GroundHeight {
     const outside = ((x - pond.x) / pond.radiusX) ** 2 + ((z - pond.z) / pond.radiusZ) ** 2 > 1.001;
     const lawn = villaTerrainGroundHeight(x, z) - .022; return y === undefined ? lawn : outside ? Math.max(y, lawn) : y;
   };
+  return { height, update: finish.update };
 }
 
 export function addRiparianLilies(model: VillaModelBuilder, height: GroundHeight, leaf: THREE.Material, green: THREE.Material) {

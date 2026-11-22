@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { VillaScene, VILLA_SECURITY_FEED_SIZE, villaFlipSecurityPixels, villaSceneInputKey, type VillaSceneState } from '../src/villaScene.js';
+import {poolCirculation} from '../src/villaPoolCirculation.js';
 import { createVillaHome, VILLA_SECURITY_CAMERAS } from '../src/villaHome.js';
 import { VILLA_ENTRANCE } from '../src/villaWorld.js';
 import { createVillaHomeModel } from '../src/villaHomeModel.js';
@@ -61,7 +62,7 @@ function fixture() {
   const sky = new THREE.ShaderMaterial({ uniforms: { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, sunColor: { value: new THREE.Color() } } }); scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 4, 3), sky));
   Object.assign(h, {
     renderer, scene, camera, primaryView, homeModel, outdoorModel, fallbackHome: createVillaHome(), fallbackOutdoor: createVillaOutdoor(),
-    sky, water, waterMap, sun: new THREE.DirectionalLight(), hemi: new THREE.HemisphereLight(), ambient: new THREE.AmbientLight(), atmosphereColor: new THREE.Color(),
+    sky, poolFlow:poolCirculation(), updatePond:vi.fn(), sun: new THREE.DirectionalLight(), hemi: new THREE.HemisphereLight(), ambient: new THREE.AmbientLight(), atmosphereColor: new THREE.Color(),
     securityCamera: new THREE.PerspectiveCamera(66, 16 / 9, .065, 650), securityTarget: null, securityCanvas: null, securityContext: null, securityPixels: null, securityImage: null,
     securityKey: '', securityLastAt: -Infinity, securityLastTime: -Infinity,
     disposed: false, contextLost: false, environment: new THREE.CubeTexture(), lowSpec: true,
@@ -105,6 +106,20 @@ describe('Villa scene logical cache and live Home/Outdoor integration', () => {
     expect(renderer.render).toHaveBeenCalledTimes(2); expect(h.camera.rotation.z).toBe(.15); expect(renderer.toneMappingExposure).toBeGreaterThan(beforeExposure);
     expect(h.furnishings.update.mock.lastCall[1]).toMatchObject({ roomLights: state.home!.roomLights, nightFactor: state.home!.darkness });
     state.home!.revision++; now += 20; api.render(ctx, 800, 500, 1, primaryView, 8 / 60, state); expect(renderer.render).toHaveBeenCalledTimes(3);
+  });
+  it('advects all three outdoor surfaces on a fresh stationary view or CCTV pass only, using the same simulation time and rain',()=>{
+    const {api,h,renderer,state,primaryView}=fixture(),ctx=canvas().context as unknown as CanvasRenderingContext2D;
+    const pool=vi.spyOn(h.poolFlow,'update'),brook=h.stream.update,pond=h.updatePond;
+    let now=1200;vi.spyOn(performance,'now').mockImplementation(()=>now);state.home!.rain=.42;
+    const signature=villaSceneInputKey(state);api.render(ctx,800,500,1,primaryView,5,state);
+    for(let i=1;i<=6;i++){now+=20;api.render(ctx,800,500,1,primaryView,5+i/60,state);}
+    for(const f of [pool,brook,pond]){expect(f).toHaveBeenCalledTimes(1);expect(f).toHaveBeenLastCalledWith(5,.42);}
+    now+=20;api.render(ctx,800,500,1,primaryView,5+7/60,state);
+    for(const f of [pool,brook,pond])expect(f).toHaveBeenLastCalledWith(5+7/60,.42);
+    const old=h.poolFlow.phase.value.clone();state.home!.rain=.7;now+=100;api.renderSecurityFeed('pool',5+7/60,state);
+    for(const f of [pool,brook,pond]){expect(f).toHaveBeenCalledTimes(3);expect(f).toHaveBeenLastCalledWith(5+7/60,.7);}
+    expect(h.poolFlow.phase.value.equals(old)).toBe(true);expect(h.poolFlow.rain.value).toBe(.7);expect(villaSceneInputKey(state)).toBe(signature);
+    now+=5;api.renderSecurityFeed('pool',5+7/60,state);expect(pool).toHaveBeenCalledTimes(3);expect(renderer.readRenderTargetPixels).toHaveBeenCalledTimes(1);
   });
   it('keeps input and collision updates live with a GPU ticket outstanding, showing only a completed camera and discarding stale action frames',()=>{
     const {api,h,renderer,state,primaryView}=fixture(),ctx=canvas().context as unknown as CanvasRenderingContext2D;

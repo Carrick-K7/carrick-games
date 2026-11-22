@@ -18,6 +18,7 @@ import { VILLA_ESTATE_BOUNDS } from './villaEstateLayout.js';
 import { createVillaEnvelope } from './villaEnvelope.js';
 import { createVillaStairAndGuards, createVillaPergola } from './villaCirculationModel.js';
 import { createVillaPoolside } from './villaPoolside.js';
+import {poolCirculation} from './villaPoolCirculation.js';
 import { createVillaPoolFinishMaps } from './villaWeatheredPool.js';
 import { addVillaDistantRidges } from './villaDistantRidges.js';
 import { VillaStaticView } from './villaStaticView.js';
@@ -220,8 +221,8 @@ export class VillaScene {
   private lastStateKey = '';
   // Non-null from an explicit Home cut until its first matching destination pixels are installed.
   private homeCutKey: string | null = null;
-  private readonly water: THREE.Mesh;
-  private readonly waterMap: THREE.Texture;
+  private readonly poolFlow=poolCirculation();
+  private readonly updatePond: ReturnType<typeof createVillaEstateModel>['updatePond'];
   private readonly roomMirrors: ReturnType<typeof installVillaRoomMirrors>;
   private readonly roomSwatches: ReturnType<typeof interiorSwatches>;
   private readonly groundSwatches: ReturnType<typeof courtyardSwatches>;
@@ -367,8 +368,8 @@ export class VillaScene {
     createVillaEnvelope(this.scene, materials);
     createVillaStairAndGuards(this.scene, materials, glow);
     this.colliders = [...VILLA_WALL_COLLIDERS, ...VILLA_RAILS, ...createVillaPergola(this.scene, materials, glow('terrace'))];
-    const poolFinishes=createVillaPoolFinishMaps();this.waterMap=poolFinishes.ripple;
-    this.water = createVillaPoolside(this.scene, materials, poolFinishes.tile, this.waterMap, glow('garden'));
+    const poolFinishes=createVillaPoolFinishMaps();
+    createVillaPoolside(this.scene,materials,poolFinishes.tile,poolFinishes.ripple,glow('garden'),this.poolFlow);
     const grass = new THREE.MeshStandardMaterial({ map:this.groundSwatches.maps.turf,roughness:.99,vertexColors:true });grass.name='living-lawn';
     const meadow = new THREE.Mesh(tintManagedLawn(createVillaTerrainGeometry('shared')), grass); meadow.name = 'estate-lawn'; meadow.receiveShadow = true; this.scene.add(meadow);
     const bankMesh=new THREE.Mesh(tintManagedLawn(createVillaFenceBankGeometry()),grass);bankMesh.name='estate-turf-shoulder';bankMesh.receiveShadow=true;this.scene.add(bankMesh);
@@ -392,6 +393,7 @@ export class VillaScene {
     this.course = createVillaDrivingCourse(this.scene);
     this.snooker = createVillaSnookerModel(this.scene);
     const garden = createVillaGarden(this.scene), estate = createVillaEstateModel(this.scene);
+    this.updatePond=estate.updatePond;
     this.stream = createVillaStreamModel(this.scene); createVillaPeripheralLandscape(this.scene);
     dressSurveyedHardscape(this.scene,this.groundSwatches.maps);
     this.outdoorModel = createVillaOutdoorModel(this.scene);
@@ -466,7 +468,7 @@ export class VillaScene {
     this.elevatorCollisions.update(state.elevator);
     if (this.elevator.update(state.elevator)) this.renderer.shadowMap.needsUpdate = true;
     if (this.snooker.update(state.snooker, state.snookerActive)) this.renderer.shadowMap.needsUpdate = true;
-    this.course.update(state.driving); this.stream.update(time);
+    this.course.update(state.driving);
     this.updatePets(time, state.pets);
   }
 
@@ -540,8 +542,8 @@ export class VillaScene {
   private prepareVisuals(time: number, state: VillaSceneState, eye: VillaPosition): void {
     const home = this.homeState(state);
     this.updateAtmosphere(home); this.homeModel.update(time, home, eye);
-    this.waterMap.offset.set(Math.sin(time * .025) * .12, time * .012 % 1);
-    this.water.position.y = -.035 + Math.sin(time * .8) * .008;
+    // Read the simulation clock only on an actual world or security pass. No independent RAF, input-key revision or texture uploads.
+    this.poolFlow.update(time,home.rain);this.stream.update(time,home.rain);this.updatePond(time,home.rain);
     this.gaming.update(time, state);
   }
 

@@ -43,14 +43,14 @@ class LandscapeRegionBuilder extends VillaModelBuilder {
 
 /** Scene-owned stream/basin, timber bridge and low planting. No network, DOM,
  * timers, reflection passes or per-frame geometry uploads. Host scene traversal
- * disposes every resource. update() only changes a water shader uniform; do NOT
- * insert its clock into the software-renderer's discrete-input cache key. */
+ * disposes every resource. update() writes only bounded water phases and rain
+ * into one existing uniform; do not add it to the discrete-input cache key. */
 export function createVillaStreamModel(parent: THREE.Object3D): {
-  root: THREE.Group; colliders: VillaCollider[]; update: (elapsedSeconds: number) => void;
+  root: THREE.Group; colliders: VillaCollider[]; update: (elapsedSeconds: number, rain?: number) => void;
 } {
   const root = new THREE.Group(); root.name = 'villa-north-stream'; parent.add(root);
   root.userData = { waterY: VILLA_STREAM.waterY, flowing: true, waterUnsupportedExceptBridge: true, renderBudget: VILLA_STREAM_RENDER_BUDGET };
-  const update = addRiparianStreamWater(root, geometry);
+  const flow = addRiparianStreamWater(root, geometry);
 
   const b = new VillaModelBuilder(root, 'villa-stream-bank-details');
   const timber = villaMaterial('#a18360', .9), edgeTimber = villaMaterial('#80674a', .95), darkWood = villaMaterial('#665640', .98);
@@ -131,8 +131,8 @@ export function createVillaStreamModel(parent: THREE.Object3D): {
     trail.path([{ x: 0, z: za }, { x: 0, z: zb }], p => 2 * VILLA_STREAM_PATH.halfWidth
       + (width - 2 * VILLA_STREAM_PATH.halfWidth) * Math.max(0, 1 - (wideningEnd ? zb - p.z : p.z - za) / 2), true);
   }
-  trail.finish(b); addStreamHabitat(b); b.finish();
-  return { root, colliders: b.colliders, update };
+  trail.finish(b); addStreamHabitat(b); flow.chartFrom(b.finish());
+  return { root, colliders: b.colliders, update: flow.update };
 }
 
 /** The open near meadow, wooded middle distance and planted uplands remain

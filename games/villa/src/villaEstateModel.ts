@@ -11,9 +11,9 @@ import { VILLA_SOUTH_ROAD_SAMPLES } from './villaDrivingCourse.js';
 import { VILLA_SCENIC_ROAD } from './villaDriving.js';
 import type { VillaCollider } from './villaWorld.js';
 
-/** Static scene-owned additions ONLY: no base lawn, old garden, garage shell or
- * perimeter fence. Builder batches by material; scene traversal owns disposal. */
-export function createVillaEstateModel(parent: THREE.Object3D): { colliders: VillaCollider[] } {
+/** Fixed geometry; only the pond's surface normal field advances. No base lawn,
+ * old garden, garage shell or fence. Scene traversal owns every resource. */
+export function createVillaEstateModel(parent: THREE.Object3D): { colliders: VillaCollider[]; updatePond: (elapsedSeconds: number, rain?: number) => void } {
   const root = new THREE.Group(); root.name = 'villa-estate-additions'; root.userData = { static: true, terrainSampled: true }; parent.add(root);
   const model = new FieldModelBuilder(root, 'estate-landscape'), soil = cultivatedSoil();
   const timber = villaMaterial(0x907451, .87), leaf = villaMaterial(0x637c46, .97), cabbage = villaMaterial(0x87a16e, .96);
@@ -69,9 +69,9 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
   // Level natural pond: shape follows an irregular shoreline inside the exact
   // unsafe ellipse. A sloping bank fills the ground cutout without covering water.
   const pondRoot = new THREE.Group(); pondRoot.name = 'estate-natural-pond'; root.add(pondRoot);
-  pondRoot.userData = { waterY: VILLA_POND.waterY, unsupported: true, staticWater: true };
-  const pondGround = addRiparianPond(pondRoot);
-  addPondHabitat(model, pondGround); addRiparianLilies(model, pondGround, leaf, cabbage);
+  pondRoot.userData = { waterY: VILLA_POND.waterY, unsupported: true };
+  const pond = addRiparianPond(pondRoot);
+  addPondHabitat(model, pond.height); addRiparianLilies(model, pond.height, leaf, cabbage);
   const v = VILLA_ESTATE_VIEWPOINT; trail.landing(v, v.radius); trail.finish(model);
   const view = new THREE.Object3D(); view.name = 'estate-hill-viewpoint'; view.position.set(v.x, villaTerrainHeight(v.x, v.z), v.z); view.userData = { northViewToHouse: true }; root.add(view);
   for (const [x, z, scale] of [[18, 130, .8], [16.8, 131, .6], [17.7, 131.6, .5]]) {
@@ -175,5 +175,5 @@ export function createVillaEstateModel(parent: THREE.Object3D): { colliders: Vil
   charge.box(cx, .032, -6.30, .345, .064, .310, charcoal, .009);
   for (const dx of [-.13,.13]) for (const dz of [-.115,.115]) charge.cylinder(cx + dx, .068, -6.30 + dz, .016, .016, .01, metal, [0, 0, 0], 6);
   charge.collide(cx, 0, -6.27, .47, 1.5, .47); charge.finish(); workshop.finish();
-  return { colliders: [...model.colliders, ...workshop.colliders, ...charge.colliders] };
+  return { colliders: [...model.colliders, ...workshop.colliders, ...charge.colliders], updatePond: pond.update };
 }

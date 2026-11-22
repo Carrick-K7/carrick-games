@@ -14,4 +14,8 @@ export const exteriorViews = [
   ['brook-bank', 7.7,0,-31.5, 10,-38.0,-.16,'crouch'],
   ['southern-verge', 14,0,91.5, 16.5,105.0,-.07],
   ['porch-to-garden', -.83,0,11.55, -9.6,20.8,-.08],
+  // Matched stationary eyes: the low northern sward reads against the unchanged trees;
+  // the shallow southern grazing angle shows irregular meadow tufts between the paths.
+  ['cut-sward', -12,0,-32, -18,-26,-.285,'crouch'],
+  ['meadow-tufts', 13.4,0,91.6, 16.5,99.7,-.285,'crouch'],
 ];
