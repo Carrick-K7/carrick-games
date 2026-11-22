@@ -1,4 +1,5 @@
 import { BaseGame, createDefaultGameHost, type GameHost, type GameViewport } from '@carrick/game-sdk/game';
+import { setCanvasDisplaySize } from '@carrick/game-sdk/render';
 import { VillaScene, type VillaSceneState, type VillaView } from './villaScene.js';
 import { createVillaActivities, CAR_DOOR_SECONDS, VILLA_CAR, VILLA_RACING, VILLA_SNOOKER, VILLA_RUN_SPEED, VILLA_WALK_SPEED, nextVillaScreen } from './villaActivities.js';
 import {
@@ -260,7 +261,23 @@ export class VillaGame extends BaseGame {
     };
   }
 
+  /** API-1 prepares before its first fit. The shell's responsive stage already
+   * has its real CSS size then: don't compile/rasterise a discarded landscape
+   * view on a portrait device. Embedded and already-fitted hosts own their size. */
+  private sizeFirstWorld() {
+    if (this.viewport || this.scene || !this.host?.presentation?.setActions || this.canvas.id !== 'gameCanvas' || !this.canvas.isConnected) return;
+    const stage = this.canvas.parentElement;
+    if (stage?.id !== 'canvasWrapper' || !stage.closest('#gameApp')) return;
+    const { width, height } = stage.getBoundingClientRect();
+    if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) || (width === this.width && height === this.height)) return;
+    this.width = width; this.height = height;
+    this.pixelRatio = setCanvasDisplaySize(this.canvas, this.ctx, width, height, width);
+    // This seeds only the preview projection. setViewport still owns safe areas,
+    // later DPR/rotation changes, the HUD and its native touch targets.
+  }
+
   init() {
+    this.sizeFirstWorld();
     this.audio.setPaused(true); this.audioEngine = null; this.stepDistance = 0; this.driveAudioDirection.clear(); this.elevatorAudioPhase = 'closed'; this.rallyAudioHandbrake = false;
     this.clearInput();
     this.position = { ...VILLA_SPAWN }; this.yaw = -0.74; this.pitch = 0.14; this.eyeY = 0;

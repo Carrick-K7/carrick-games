@@ -98,6 +98,28 @@ describe('Villa HUD clears the brand/help/menu cluster', () => {
   });
 });
 
+describe('cold Villa shell projection', () => {
+  function mount(width=390,height=664) {
+    const stage={id:'canvasWrapper',closest:()=>({}),getBoundingClientRect:()=>({width,height})};
+    const canvas={id:'gameCanvas',isConnected:true,parentElement:stage,style:{},dataset:{},width:2240,height:1400};
+    const game=Object.assign(Object.create(VillaGame.prototype), {host:{presentation:{setActions:()=>{}}},canvas,ctx:{setTransform(){}},width:1120,height:700,pixelRatio:2,viewport:null,scene:null});
+    return {game,stage,canvas};
+  }
+  it('seeds the genuine cold projection from the measured stage before prepare paints; it does not claim a running frame',()=>{
+    const {game,canvas}=mount();game.sizeFirstWorld();expect([game.width,game.height]).toEqual([390,664]);
+    expect(canvas.dataset).toMatchObject({logicalWidth:'390',logicalHeight:'664'});expect(canvas.dataset).not.toHaveProperty('villaRenderer');
+    expect(game.viewport).toBeNull();expect(game.scene).toBeNull();
+  });
+  it('does not replace a standalone host, a supplied fit, an in-progress scene, or an unmeasurable stage',()=>{
+    for(const mode of ['isolated','unmounted','sized','running','zero','nonfinite']){
+      const {game,canvas,stage}=mount(mode==='zero'?0:390,mode==='nonfinite'?NaN:664);
+      if(mode==='isolated')stage.id='embedding';if(mode==='unmounted')canvas.isConnected=false;
+      if(mode==='sized')game.viewport={width:320,height:568};if(mode==='running')game.scene={};
+      game.sizeFirstWorld();expect([game.width,game.height],mode).toEqual([1120,700]);expect(canvas.dataset,mode).toEqual({});
+    }
+  });
+});
+
 describe('villaRendererSize', () => {
   it('keeps the actual viewport aspect at dpr 1', () => {
     expect(villaRendererSize(1280, 720, 1, false)).toEqual({ w: 1280, h: 720 });
