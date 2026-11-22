@@ -95,7 +95,9 @@ jobs:
     if: github.event_name != 'workflow_dispatch' && needs.plan.outputs.full == 'true'
     # Locked Playwright supports 24.04; ubuntu-latest can now select unsupported 26.04.
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # Full suite: 46.5 min on run 44917285119, 55:50 and still running when the
+    # 3300s verify bound fired on run 44969213021. Budget the observed worst case.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
         with:
@@ -111,7 +113,7 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - name: Typecheck, build, unit and full browser suite
-        run: timeout -k 10 3300 node scripts/ci.mjs verify all
+        run: timeout -k 10 4200 node scripts/ci.mjs verify all
       - name: Preserve failed shared browser evidence
         if: failure()
         uses: actions/upload-artifact@v4

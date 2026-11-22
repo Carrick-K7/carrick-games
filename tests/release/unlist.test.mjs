@@ -564,7 +564,7 @@ test('workflow isolates dispatch, uses exact SHA/Node22 and constant unlist with
 test('the shared full gate retains failed browser evidence without weakening verification', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
   const common = workflow.slice(workflow.indexOf('\n  common:'), workflow.indexOf('\n  games:'));
-  assert.match(common, /run: timeout -k 10 3300 node scripts\/ci\.mjs verify all/);
+  assert.match(common, /run: timeout -k 10 4200 node scripts\/ci\.mjs verify all/);
   assert.match(common, /name: Preserve failed shared browser evidence\s+if: failure\(\)\s+uses: actions\/upload-artifact@v4/);
   assert.match(common, /name: shared-attempt-\$\{\{ github.run_attempt \}\}-failure\s+path: test-results\/\s+retention-days: 1\s+if-no-files-found: ignore/);
   assert.doesNotMatch(common, /continue-on-error|--update-snapshots|--retries/);
@@ -577,11 +577,11 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     const end = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
     return end === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + end);
   };
-  const budgets = { unlist: 10, plan: 10, common: 60, games: 50, shell: 50, 'bootstrap-shell': 50 };
+  const budgets = { unlist: 10, plan: 10, common: 90, games: 50, shell: 50, 'bootstrap-shell': 50 };
   for (const [name, minutes] of Object.entries(budgets)) {
     assert.match(job(name), new RegExp(`^    timeout-minutes: ${minutes}$`, 'm'), `job ${name} budget`);
   }
-  assert.match(job('common'), /run: timeout -k 10 3300 node scripts\/ci\.mjs verify all/);
+  assert.match(job('common'), /run: timeout -k 10 4200 node scripts\/ci\.mjs verify all/);
   for (const name of ['games', 'shell', 'bootstrap-shell']) {
     const body = job(name);
     assert.match(body, /run: timeout -k 10 1800 node scripts\/ci\.mjs verify/, `verify bound ${name}`);
@@ -600,7 +600,7 @@ test('every deploy job is bounded and the publish log survives a failed publish 
     // otherwise the job dies before this point and the log artifact is never uploaded.
     assert.ok(1800 + 900 + 120 < budgets[name] * 60, `worst case fits job budget ${name}`);
   }
-  assert.ok(3300 + 120 < budgets.common * 60, 'worst case fits common budget');
+  assert.ok(4200 + 120 < budgets.common * 60, 'worst case fits common budget');
 });
 test('stage integration retains fresh inputs, post-test CAS/counterpart and push-only publication guards', async () => {
   const source = await readFile(new URL('../../scripts/ci.mjs', import.meta.url), 'utf8');
