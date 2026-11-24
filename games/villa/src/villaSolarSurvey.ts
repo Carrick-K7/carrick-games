@@ -3,6 +3,7 @@ import { createIndoorContacts, VILLA_FLOOR_CONTACT_GLSL } from './villaInteriorC
 import { createVillaInteriorDaylight,VILLA_INTERIOR_DAYLIGHT_GLSL } from './villaInteriorDaylight.js';
 import { VILLA_SUN_BYTES } from './villaSunSurveyData.js';
 import { allowVillaWallLighting } from './villaWallVisibility.js';
+import { villaLocalLampCount, villaLocalLampLoop } from './villaLocalLampLoop.js';
 
 /** The software bridge does not render a live shadow pass. Its outdoor sun uses a baked
  * orthographic depth field of the *actual fixed meshes*, including their cut-out leaves.
@@ -23,7 +24,7 @@ export function addSurveyedSun(root:THREE.Scene){
   const map=new THREE.DataTexture(unpackSurvey(bytes,f.rows*f.cols),f.cols,f.rows,THREE.RedFormat);map.name='estate/static-sun-heights';map.generateMipmaps=false;map.minFilter=map.magFilter=THREE.NearestFilter;map.needsUpdate=true;
   const room=createVillaInteriorDaylight(), contact=createIndoorContacts(unpackSurvey);
   const strength={value:.90}, seen=new Set<THREE.Material>();
-  const fn=`uniform sampler2D villaSunDepth; uniform float villaSunStrength; varying vec3 vEstateSun;
+  const fn=`uniform int villaLocalLightCount; uniform sampler2D villaSunDepth; uniform float villaSunStrength; varying vec3 vEstateSun;
     float villaSunLit(vec2 p,float y){float h=texture2D(villaSunDepth,p).r;return 1.0-smoothstep(.02,.19,(h*${f.maxY-f.minY}.0+(${f.minY}.0))-y);}
     float estateSolarVisibility(){vec3 p=vEstateSun;
       if (p.y<7.16 && ((p.x>-24.25 && p.x<28.25 && p.z>-18.25 && p.z<9.02) || (p.x>28.15 && p.x<51.05 && p.z>-12.05 && p.z<2.04))) return 1.0;
@@ -37,7 +38,7 @@ export function addSurveyedSun(root:THREE.Scene){
   // screens and fitted LEDs never pass through the room or outdoor shadow field.
   const stockShadow = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
   const liveExpr=stockShadow.slice('directLight.color *= '.length,-1);
-  const lights='vec3 roomLight = villaRoomLight(vEstateSun);vec2 floorLight=villaFixedFloor(vEstateSun,roomLight.b);roomLight.r=min(roomLight.r,mix(1.,floorLight.g,villaRoomClimate.x));\n'+THREE.ShaderChunk.lights_fragment_begin.replace(stockShadow,`{
+  const lights='vec3 roomLight = villaRoomLight(vEstateSun);vec2 floorLight=villaFixedFloor(vEstateSun,roomLight.b);roomLight.r=min(roomLight.r,mix(1.,floorLight.g,villaRoomClimate.x));\n'+villaLocalLampLoop(THREE.ShaderChunk.lights_fragment_begin).replace(stockShadow,`{
     vec3 win=vDirectionalShadowCoord[ i ].xyz/vDirectionalShadowCoord[ i ].w;
     bool liveWindow=all(greaterThanEqual(win,vec3(0.)))&&all(lessThanEqual(win,vec3(1.)));
     float liveLight=${liveExpr};
@@ -49,7 +50,7 @@ export function addSurveyedSun(root:THREE.Scene){
   const wireReceiver=(mat:THREE.Material)=>{
       if(seen.has(mat)||(!(mat instanceof THREE.MeshStandardMaterial)&&!(mat instanceof THREE.MeshLambertMaterial)&&!(mat instanceof THREE.MeshPhongMaterial)))return;seen.add(mat);
       const original=mat.onBeforeCompile, prev=original.bind(mat),key=mat.customProgramCacheKey();
-      mat.onBeforeCompile=(shader,renderer)=>{prev(shader,renderer);shader.uniforms.villaSunDepth={value:map};shader.uniforms.villaFloorContact={value:contact};shader.uniforms.villaSunStrength=strength;Object.assign(shader.uniforms,room.uniforms);
+      mat.onBeforeCompile=(shader,renderer)=>{prev(shader,renderer);shader.uniforms.villaLocalLightCount=villaLocalLampCount(shader.uniforms.pointLights);shader.uniforms.villaSunDepth={value:map};shader.uniforms.villaFloorContact={value:contact};shader.uniforms.villaSunStrength=strength;Object.assign(shader.uniforms,room.uniforms);
         shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vEstateSun;').replace('#include <project_vertex>',`#include <project_vertex>
           vec4 vSunLocal=vec4(transformed,1.0);
           #ifdef USE_INSTANCING
@@ -66,7 +67,7 @@ export function addSurveyedSun(root:THREE.Scene){
         #endif
         #include <lights_fragment_end>`);};
       allowVillaWallLighting(mat,original);
-      mat.customProgramCacheKey=()=>key+'|estate-sun-and-room-field-v2';mat.needsUpdate=true;
+      mat.customProgramCacheKey=()=>key+'|estate-sun-and-room-field-v2|local-lamp-loop-v1';mat.needsUpdate=true;
   };
   root.traverse(object=>{if(object instanceof THREE.Mesh&&object.receiveShadow)for(const mat of Array.isArray(object.material)?object.material:[object.material])wireReceiver(mat);});
   return{map,strength,room,wireReceiver,dispose(){seen.clear();map.dispose();contact.dispose();room.dispose();}};
