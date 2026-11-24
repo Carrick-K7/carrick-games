@@ -116,7 +116,9 @@ export function scooterInstruments(b:VillaModelBuilder, fork:THREE.Object3D, dar
   const rotor=new THREE.Mesh(sectionLoft([0,.0017].map(y=>[[-.003,y,-.006],[.003,y,-.006],[.0027,y,.004],[.00065,y,.027],[-.00065,y,.027],[-.0027,y,.004]] as P3[])),ivory);
   rotor.name='scooter-speed-pointer';rotor.castShadow=false;rotor.receiveShadow=true;dial.add(rotor);return rotor;
 }
-export const scooterNeedleAngle=(metresPerSecond:number)=>-Math.PI*2/3+Math.PI*4/3*THREE.MathUtils.clamp(Math.abs(metresPerSecond)*3.6/25,0,1);
+// From the seat the fork's +X projects left. Sweep clockwise from the lower
+// left zero mark through vertical to the right, including in reverse travel.
+export const scooterNeedleAngle=(metresPerSecond:number)=>Math.PI*2/3-Math.PI*4/3*THREE.MathUtils.clamp(Math.abs(metresPerSecond)*3.6/25,0,1);
 
 /** A rider's fingers bear against a broad cast lever, not the tip of a wire.
  * The curved return and the pivot boss sit outside the switch pod. */
