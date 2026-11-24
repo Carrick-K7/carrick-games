@@ -191,6 +191,19 @@ describe('Villa electric scooter physics and safe interaction', () => {
 });
 
 describe('Villa scene-owned electric scooter model', () => {
+  it('moves the analogue speed pointer on its tilted fork face, including a parked reset and reverse travel',()=>{
+    const scene=new THREE.Group(),m=createVillaScooterModel(scene),s=createVillaScooter();
+    try {
+      const needle=scene.getObjectByName('scooter-speed-pointer') as THREE.Mesh;expect(needle.isMesh).toBe(true);
+      const mount=needle.parent!,fork=scene.getObjectByName('scooterSteeringFork')!;expect(mount.parent).toBe(fork);
+      const p=needle.geometry.getAttribute('position'),tip=new THREE.Vector3();for(let i=0;i<p.count;i++){const q=new THREE.Vector3().fromBufferAttribute(p,i);if(q.z>tip.z)tip.copy(q);}
+      const pointer=(speed:number)=>{m.update(12,{scooter:{...s,speed,steering:.24},seated:'scooter'});scene.updateMatrixWorld(true);return mount.worldToLocal(needle.localToWorld(tip.clone()));};
+      const home=pointer(0),middle=pointer(12.5/3.6),rolling=pointer(6.1),back=pointer(-1.35);
+      expect(home.x).toBeLessThan(-.020);expect(home.z).toBeLessThan(0);expect(Math.abs(middle.x)).toBeLessThan(.002);expect(middle.z).toBeGreaterThan(.025);
+      expect(rolling.x).toBeGreaterThan(.025);expect(back.distanceTo(pointer(1.35))).toBeLessThan(1e-7);
+      expect(m.update(400,{scooter:{...s,speed:1.35,steering:.24},seated:'scooter'})).toBe(false);expect(pointer(0).distanceTo(home)).toBeLessThan(1e-7);
+    }finally{const mats=new Set<THREE.Material>(),maps=new Set<THREE.Texture>();scene.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();mats.add(o.material);}});mats.forEach(m=>{Object.values(m).forEach(t=>{if(t instanceof THREE.Texture)maps.add(t);});m.dispose();});maps.forEach(t=>t.dispose());}
+  });
   it('animates bounded fork/lean, both tyres and folding stand with reset-safe state and stable colliders', () => {
     const scene = new THREE.Group(), model = createVillaScooterModel(scene), collider = model.colliders[0]!, reference = collider;
     const root = scene.getObjectByName('rideableElectricScooter')!, front = scene.getObjectByName('scooterFrontWheel')!, rear = scene.getObjectByName('scooterRearWheel')!, fork = scene.getObjectByName('scooterSteeringFork')!, lean = scene.getObjectByName('scooterLean')!, stand = scene.getObjectByName('scooterFoldingStand')!;

@@ -162,6 +162,12 @@ try {
       g.toast=''; g.toastUntil=0;
       const open = name === 'bath-open';
       Object.assign(g.state.bathDoors, { west: open, east: open, progressW: open ? 1 : 0, progressE: open ? 1 : 0 });
+      // Two pose studies use the same 12s clock. Start a door inspection (or
+      // the first view after it) at its real closed mechanical stop, then let
+      // the model advance to the requested hinge state; never set a mesh angle.
+      if (driver?.startsWith('door-') || g.scene.carDoorProgress || g.scene.pickupDoorProgress || g.scene.suvDoorProgress) {
+        g.scene.updateActivities(0, {...g.state,carDoorOpen:false,pickupDoorOpen:false,suvDoorOpen:false}, g.position,g.yaw);
+      }
       // Auditing the same pose alone or after another room must yield the same sun, water and limbs.
       g.time = name === 'robot' ? 0 : 12;
       g.scene.softwareInputFrames = 0; g.scene.lastDrawAt = -Infinity;

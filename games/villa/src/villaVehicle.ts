@@ -4,10 +4,11 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { registerVillaVehicleColliders, type VillaDrivingState } from './villaDriving.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
-import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachProjector, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
+import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachHeadlamp, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachHatch, coachWheels } from './villaCoachwork.js';
 import { finishCoachPaint, motorContact } from './villaMotorFinish.js';
 
-import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+import { cabinMap, cupConsole, doorMirror, trimDoor } from './villaVehicleTrim.js';
+import { trimSteeringWheel } from './villaCabinWheel.js';
 import { roundedLoop, sectionLoft, type P3 } from './villaVehicleSections.js';
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -37,47 +38,41 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   const hull = coachHull([
     [-2.34, .735, .742], [-2.09, .878, .856], [-1.46, .941, .943], [-.3, .928, .935],
     [.43, .921, .93], [.9, .910, .912], [1.46, .936, .871], [2.09, .855, .721], [2.34, .710, .661],
-  ], axles, .355, .383, .249, .045);
+  ], axles, .355, .383, .249, .045, { style: 'fastback', hoodBase: .9, rearGlass: -1.84, front: .21, rear: .13 });
   const canopy = coachCanopy(hull, { frontBase: .9, rearBase: -1.84, front: [.17, .750, 1.407], rear: [-.95, .751, 1.40], crown: .060 });
   for (const side of [-1, 1]) {
     hull.sides(body, paint, side, -2.34, -.3); hull.sides(body, paint, side, .9, 2.34);
     body.box(side * .852, .234, .01, .12, .046, 1.84, dark, .013);
-    coachLine(body, t => hull.side(side, coachMix(-2.08, -.32, t), .83), paint, .007);
     for (const z of [-1.08]) coachLine(body, t => hull.side(side, z + .055 * (1 - t), t), seam, .0025, 16);
     body.box(side * .933, .855, -.98, .010, .018, .13, dark, .005);
   }
-  hull.deckPanel(body, paint, .9, 2.34); hull.deckPanel(body, paint, -2.34, -1.84);
-  hull.endPanel(body, paint, 2.34); hull.endPanel(body, paint, -2.34); hull.arches(body, paint, .013);
+  hull.deckPanel(body, paint, .9, 2.34, dark); hull.deckPanel(body, paint, -2.34, -1.84);
+  const [intake, left, right] = hull.endPanel(body, paint, 2.34, [
+    { rect: [-.91, .91, .13, .41], shape: 'duct', depth: .073, stock: dark },
+    { rect: [-.36, -.996, .62, .976], shape: 'wing', depth: .032, stock: dark },
+    { rect: [.36, .996, .62, .976], shape: 'wing', depth: .032, stock: dark },
+  ]);
+  coachHatch(body, hull, -2.34, paint, dark, silver, taillight, headlight);
+  hull.arches(body, paint, dark);
   const tyres = coachWheels(body, { axles, x: .875, y: .355, radius: .347, width: .15, spokes: 5, design: 'aero' }, rubber, dark, silver, paint);
   // Tucked aerodynamic closeout under the sill; no visible road through the rear valance.
   body.box(0,.222,-.10,1.60,.048,3.97,dark,.018);
   // A wrapped, swept-back nose with actual front-facing lamp recesses. The
   // bonnet is clean; optics no longer read as black stickers laid on its top.
-  const intake = coachFasciaPatch(body, hull, 2.34, -.82, .82, .20, .39, dark);
-  coachCoolingFins(body,intake,true,11);
-  coachLine(body, t => intake(t, .04, .003), silver, .004, 24);
-  coachFasciaPatch(body, hull, 2.34, -.90, .90, .055, .13, dark, .006);
-  for (const side of [-1, 1]) {
-    const lamp = coachFasciaPatch(body, hull, 2.34, side * .50, side * .98, .65, .94, dark, .010);
-    coachLine(body, t => lamp(coachMix(.055, .945, t), .84, .005), headlight, .007, 20);
-    coachLine(body, t => lamp(coachMix(.12, .88, t), .16, .004), silver, .004, 18);
-    for (const u of [.30,.69]) coachProjector(body,lamp,u,.179,silver,headlight);
-    coachLine(body, t => hull.deck(side * coachMix(.25, .53, t), coachMix(.96, 1.99, t), .002), paint, .004);
-    const rearLamp=coachFasciaPatch(body,hull,-2.34,side*.45,side*.974,.765,.92,dark,.006);
-    coachTailLens(body,rearLamp,taillight,headlight);
-  }
-  coachLine(body, t => hull.fascia(-2.34, coachMix(-.60, .60, t), .84, .010), taillight, .005, 32);
+  coachCoolingFins(body, intake, true, 13);
+  coachLine(body, t => intake(t, .10, .022), silver, .004, 24);
+  for (const lamp of [left, right]) coachHeadlamp(body, lamp, silver, headlight, 'fastback');
   coachFasciaPatch(body, hull, -2.34, -.91, .91, .12, .29, dark, .007);
   coachPanel(glazing, canopy.roof, roofGlass, [0, 1, 0], [0, -.033, 0], 28, 30);
   canopy.frame(body, paint, dark);
   cabin.geometry(coachSheet(24, 24, (u, v) => { const p = canopy.roof(u, v); p[1] -= .037; return p; }, [0, -1, 0]), dark);
   for (const side of [-1, 1]) cabin.box(side * .42, 1.365, .125, .35, .024, .14, insert, .010);
-  for (const front of [true, false]) glazing.geometry(coachSheet(28, 26, (u, v) => canopy.wind(front, u, v), [0, 1, front ? 1 : -1]), glass);
+  for (const front of [true, false]) canopy.windPane(glazing, glass, front, 26);
   for (const side of [-1, 1]) {
     canopy.pane(glazing, glass, side, -1.84, -.3);
     coachLine(body, t => canopy.window(side, -.3, t), dark, .020, 14);
     coachLine(body, t => canopy.window(side, coachMix(-1.81, -.3, t), 0), silver, .007);
-    coachLine(body, t => canopy.window(side, -1.24, t), paint, .022, 12);
+    coachLine(body, t => canopy.window(side, -1.24, t), paint, .020, 12);
   }
   for (const side of [-1, 1]) coachLine(body, t => { const p = canopy.wind(true, coachMix(side > 0 ? .54 : .07, side > 0 ? .93 : .46, t), .032); p[1] += .006; return p; }, dark, .006, 12);
   // A low, sealed floor and front bulkhead preserve the corrected tyre
@@ -140,15 +135,7 @@ export function createVillaVehicle(parent: THREE.Object3D): {
   steering.root.position.set(.43, .935, .62); steering.root.rotation.x = .30;
   steering.root.userData = { kind: 'steering', driverSide: '+X', position: [.43, .935, .62], shaftTilt: .30, animated: true };
   const wheel = new VillaModelBuilder(steering.root, 'vehicle-steering-wheel');
-  wheel.geometry(new THREE.TorusGeometry(.174, .020, 10, 48), rubber);
-  wheel.geometry(new THREE.TorusGeometry(.148, .004, 6, 40), silver, [0, 0, -.005]);
-  wheel.box(0, -.008, -.008, .104, .076, .046, dark, .018);
-  for (const side of [-1, 1]) {
-    wheel.beam([side * .037, -.006, 0], [side * .157, .016, 0], .016, dark);
-    wheelThumbPod(wheel,side,.085,.006,-.02,false,rubber,silver,silver);
-  }
-  for (const x of [-.025, .025]) wheel.beam([x, -.029, 0], [x, -.157, 0], .011, dark);
-  wheel.box(0, .175, -.005, .026, .025, .037, upholstery, .004);
+  trimSteeringWheel(wheel,'fastback',.174,rubber,dark,silver,upholstery);
   const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'vehicle-wheel-top-marker'; wheelMarker.position.set(0, .174, 0); wheel.root.add(wheelMarker);
   wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true };
   const doorPivot = new THREE.Group(); doorPivot.name = 'vehicle-driver-door'; doorPivot.position.set(.96, 0, .9);

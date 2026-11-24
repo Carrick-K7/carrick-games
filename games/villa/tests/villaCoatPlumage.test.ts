@@ -86,6 +86,36 @@ describe('outdoor coat, plumage and support', () => {
     }
   });
 
+  it('fits both eyes above a cheekbone in the continuous mammal hide', () => {
+    for (const id of ['dog','cat','rabbit','rabbit-female']) {
+      // Cut the actual skull, not the outermost ear/eye or a painted contour.
+      // There must be positive relief across a length of the cheek, returning
+      // below it into the jaw, not just one proud vertex or a detached pad.
+      const [skull,...features] = islands(batch(`${id}/head`)), hit = new THREE.Vector3();
+      const eyes=features.filter(i=>i.vertices.some(v=>v.u>.84 && v.v>.88) && i.vertices.some(v=>v.u<.78 && v.v>.88));
+      expect(eyes).toHaveLength(2);
+      for(const eye of eyes){
+        const side=Math.sign(eye.vertices[0].p.x);
+        for(const {p} of eye.vertices){
+          expect(side*p.x, `${id}: lid stays on its own cheek`).toBeGreaterThan(.034);
+          expect(Math.abs(signedDistance(p,skull)), `${id}: flush orbital fit`).toBeLessThan(.006);
+        }
+      }
+      const breadth = (y:number,z:number) => {
+        const ray = new THREE.Ray(new THREE.Vector3(.25,y,z), new THREE.Vector3(-1,0,0));
+        let x = -Infinity;
+        for (const f of skull.faces) if (ray.intersectTriangle(f.a,f.b,f.c,false,hit)) x=Math.max(x,hit.x);
+        expect(Number.isFinite(x), `${id} has a closed cheek at ${y}/${z}`).toBe(true);
+        return x;
+      };
+      for (const z of [.033,.043]) {
+        const cheek=breadth(-.021,z);
+        expect(cheek-breadth(.028,z), `${id}: infraorbital relief`).toBeGreaterThan(.004);
+        expect(cheek-breadth(-.068,z), `${id}: return under jaw`).toBeGreaterThan(.010);
+      }
+    }
+  });
+
   it.each(['parrot', 'parrot-blue'])('%s wraps separately tapered asymmetric remiges over the wing and has a small flush ocular surface', id => {
     const [scapula, ...vanes] = islands(batch(`${id}/wing-right`)); expect(vanes.length).toBeGreaterThanOrEqual(11);
     const lengths: number[] = []; let asymmetric = 0;

@@ -6,12 +6,13 @@ import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { bentRail, ovalLoop, roundedLoop, sectionLoft, turnedSection, type P3 } from './villaVehicleSections.js';
 import { motorContact, motorTyreStock } from './villaMotorFinish.js';
 import { coachLine, coachSheet } from './villaCoachwork.js';
+import { scooterBench, scooterLegShield, scooterMirror, scooterInstruments, scooterNeedleAngle, scooterHandControl } from './villaScooterPresswork.js';
 
 /** A mudguard pressed over the tyre, with returned edges and a free underside.
  * Its transverse crown widens through the spray area, then tapers at the tip. */
 function mudguard(b: VillaModelBuilder, y: number, z: number, rear: boolean, mat: THREE.Material) {
-  const rows = Array.from({length:25},(_,i)=>{
-    const t=i/24,a=(rear ? -1.34+t*2.45 : -1.13+t*2.47), w=.061+.024*Math.sin(t*Math.PI);
+  const rows = Array.from({length:19},(_,i)=>{
+    const t=i/18,a=(rear ? -1.34+t*2.45 : -1.13+t*2.47), w=.061+.024*Math.sin(t*Math.PI);
     const crown=[[-1,.249],[-.94,.263],[-.62,.278],[0,.285],[.62,.278],[.94,.263],[1,.249],
       [.91,.249],[.84,.259],[.58,.270],[0,.277],[-.58,.270],[-.84,.259],[-.91,.249]];
     return crown.map(([x,r]):P3=>[x*w,y+Math.cos(a)*r,z+Math.sin(a)*r]);
@@ -55,7 +56,9 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
   const radius=VILLA_SCOOTER_LIMITS.wheelRadius, stock=motorTyreStock(radius,radius,.107,'scooter',0x252928);
   const lens = new THREE.MeshPhysicalMaterial({ color: '#eae7d4', emissive: '#e7ddb9', emissiveIntensity: .63, roughness: .26, clearcoat:.92,clearcoatRoughness:.10 });
   const rearLens = new THREE.MeshPhysicalMaterial({ color: '#af382e', emissive: '#b93223', emissiveIntensity: .35, roughness: .31,clearcoat:.88,clearcoatRoughness:.12 });
-  const mirror = villaMaterial('#a8c2c6', .12, .85);
+  // Silver retains a readable diffuse edge on unprobed software GL, instead of
+  // turning into the same black disk as its gasket. Hardware still catches IBL.
+  const mirror = villaMaterial('#b6c8c8', .21, .38);
   // Low battery tray, generous open step-through and ribbed floor mat.
   const tray=(w:number,l:number,y:number,bow=0)=>roundedLoop(w,l,.096,5).map(([x,z]):P3=>
     [x*(.89+.10*Math.cos((z+.09)*8)),y+bow*(z/.44)**4,z]);
@@ -70,7 +73,6 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
     [side*.180,.272,.102],[side*.150,.284,.279]],.007,7),trim);
   for (const side of [-1, 1]) {
     body.beam([side * .14, .3, -.4], [side * .13, .62, -.51], .026, steel);
-    body.beam([side * .14, .3, .29], [side * .105, .81, .5], .026, steel);
   }
   // Rear motor/battery cowl and a single padded bench: visibly not a bicycle.
   const cowl=(y:number,rx:number,rz:number,z:number)=>ovalLoop(rx,rz,32,.71).map(([x,v]):P3=>[x*(1-.16*v/rz),y+.018*(v/rz)**2,z+v]);
@@ -102,33 +104,15 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
     coachLine(body,t=>skin(side,.590+.02*t,-.705+.35*t,.003),trim,.0037,12);
     coachLine(body,t=>skin(side,.646+.010*Math.sin(t*Math.PI),-.737+.462*t,.0008),dark,.0033,20);
   }
-  const saddle=(y:number,rx:number,rz:number)=>ovalLoop(rx,rz,32,.67).map(([x,v]):P3=>
-    [x*(1-.21*v/rz),y+.015*(v/rz)**2+.008*(x/rx)**2-.013*v/rz,-.478+v]);
-  const cushion=sectionLoft([saddle(.674,.17,.27),saddle(.696,.204,.296),saddle(.734,.207,.298),saddle(.751,.193,.28),
-    saddle(.757,.159,.24),saddle(.757,.089,.137)]);
-  body.geometry(cushion,saddleVinyl(cushion));
-  const piping=saddle(.734,.209,.299);body.geometry(bentRail([...piping,piping[0]],.0037,7),rubber);
-  // The bench's retaining strap rolls down around both squab edges and is
-  // anchored to the seat base, not drawn as a stripe across the synthetic skin.
-  const strap:[number,number][]=[[-.212,.711],[-.215,.737],[-.198,.754],[-.16,.767],[-.085,.766],[0,.762],[.085,.766],[.16,.767],[.198,.754],[.215,.737],[.212,.711]];
-  body.geometry(sectionLoft(strap.map(([x,y])=>roundedLoop(.040,.004,.0015).map(([z,h]):P3=>[x,y+h,-.516+z]))),dark);
-  for(const side of [-1,1]) body.cylinder(side*.213,.715,-.516,.0062,.0068,.005,steel,[0,0,Math.PI/2],8);
+  scooterBench(body,saddleVinyl,rubber,dark,steel);
   const tailPort=(z:number,w:number,h:number)=>roundedLoop(w,h,.015).map(([x,y]):P3=>[x,.625+y,z+.43*x*x]);
   body.geometry(sectionLoft([tailPort(-.792,.205,.062),tailPort(-.836,.189,.063),tailPort(-.840,.173,.051)],true,false),dark);
   body.geometry(sectionLoft([tailPort(-.839,.173,.051),tailPort(-.847,.159,.044),tailPort(-.850,.144,.032)]),rearLens);
   for(const y of [-.008,.008])coachLine(body,t=>{const x=(t-.5)*.135;return [x,.625+y,-.852+.43*x*x];},rearLens,.0018,10);
   body.geometry(bentRail([[-.164,.696,-.655],[-.202,.750,-.729],[-.196,.781,-.797],[-.137,.79,-.840],
     [0,.791,-.853],[.137,.79,-.840],[.196,.781,-.797],[.202,.750,-.729],[.164,.696,-.655]],.013,9),steel);
-  // Curved shin shield rises only in front, preserving the open footwell.
-  const apron = (width:number,z:number,y:number,turn:number,skin:number):P3[] => {
-    const strip=(a:number,d:number):P3=>[a*width,y+.017*(1-a*a),z+turn*(1-a*a)-d];
-    return [...Array.from({length:13},(_,i)=>strip((i-6)/6,0)),...Array.from({length:13},(_,i)=>strip((6-i)/6,skin))];
-  };
-  body.geometry(sectionLoft([apron(.159,.262,.336,.078,.017),apron(.207,.287,.432,.110,.019),
-    apron(.232,.326,.620,.133,.021),apron(.210,.368,.792,.094,.021),apron(.132,.394,.922,.048,.023)]),sage);
-  body.geometry(sectionLoft([apron(.124,.287,.441,.058,.011),apron(.180,.307,.574,.092,.016),
-    apron(.168,.347,.706,.075,.014),apron(.140,.369,.802,.054,.014)]),dark);
-  body.geometry(bentRail([[0,.59,.365],[0,.571,.337],[0,.585,.322],[0,.597,.324]],.008,8),trim);
+  scooterLegShield(body,sage,dark,trim);
+  body.geometry(bentRail([[0,.607,.443],[0,.593,.399],[0,.603,.382],[0,.618,.386]],.007,7),trim);
   body.geometry(sectionLoft([[.215,.065,.051],[.222,.080,.058],[.226,.072,.050]].map(([x,w,h])=>
     roundedLoop(w,h,.014).map(([z,y]):P3=>[x,.52+y,-.407+z]))),dark);
   for (const side of [-1,1]) {
@@ -190,7 +174,9 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
   fork.beam([-.075,.045,-.012],[-.066,.076,-.071],.009,steel);
   fork.geometry(bentRail([[-.077,.088,-.085],[-.087,.107,-.104],[-.087,.144,-.104],[-.093,.285,-.105],[-.088,.439,-.141],
     [-.071,.555,-.161],[-.058,.681,-.219],[-.093,.766,-.263],[-.178,.784,-.265],[-.228,.837,-.254]],.0046,7),rubber);
-  fork.beam([0, .38, -.105], [0, .83, -.2], .032, steel);
+  const clamp=(width:number,y:number,depth:number)=>ovalLoop(width,depth,18,.69).map(([x,z]):P3=>[x,y-.016*(x/width)**2,-.112+z]);
+  fork.geometry(sectionLoft([clamp(.093,.389,.024),clamp(.108,.400,.033),clamp(.104,.424,.034),clamp(.091,.431,.027)]),dark);
+  fork.beam([0, .414, -.110], [0, .83, -.2], .031, steel);
   mudguard(fork,0,0,false,sage);
   const nacelle=(y:number,w:number,d:number)=>ovalLoop(w,d,26,.7).map(([x,z]):P3=>[x,y-z*.15,z-.19]);
   fork.geometry(sectionLoft([nacelle(.775,.136,.082),nacelle(.808,.182,.10),nacelle(.856,.19,.101),
@@ -202,21 +188,15 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
   const flutes=coachSheet(24,4,(u,v)=>{const x=(u-.5)*(.192+.035*Math.sin(Math.PI*v));
     return [x,.84+(v-.5)*.055,-.069-x*x*1.52+.005*Math.sin(Math.PI*v)+.0026*(1-2*Math.abs((u*12%1)-.5))];},[0,0,1]);
   const face=flutes.toNonIndexed();flutes.dispose();face.computeVertexNormals();fork.geometry(face,lens);
-  const instrument=(w:number,d:number,h:number)=>roundedLoop(w,d,.018).map(([x,z]):P3=>[x,.901+h-z*.17,-.219+z]);
-  fork.geometry(sectionLoft([instrument(.159,.082,0),instrument(.154,.081,.008),instrument(.135,.064,.010)],true,false),dark);
-  fork.geometry(sectionLoft([instrument(.135,.064,.010),instrument(.128,.059,.011)]),mirror);
-  for(let i=0;i<4;i++) fork.geometry(bentRail([[.028+i*.005,.913,-.215],[.028+i*.005,.916,-.229]],.0012,5),trim);
+  const speedPointer=scooterInstruments(fork,front,dark,rubber,trim,amber);
   fork.geometry(bentRail([[-.345,.846,-.225],[-.245,.849,-.212],[-.165,.833,-.18],[0,.829,-.17],
     [.165,.833,-.18],[.245,.849,-.212],[.345,.846,-.225]],.014,8),steel);
   for (const side of [-1, 1]) {
     fork.geometry(turnedSection([[-.061,.014],[-.061,.029],[-.055,.029],[-.050,.020],[-.033,.021],
-      [-.031,.019],[-.026,.021],[.011,.021],[.015,.019],[.020,.022],[.055,.023],[.060,.019],[.060,.014]].map(([x,r])=>[side*x,r]),18),rubber,[side*.313,.846,-.225]);
-    fork.box(side * .234, .848, -.233, .035, .044, .054, dark, .007);
-    fork.geometry(bentRail([[side*.225,.837,-.251],[side*.235,.837,-.271],[side*.278,.833,-.283],
-      [side*.33,.829,-.279],[side*.355,.831,-.274]],.0055,8),steel);
+      [-.031,.019],[-.026,.021],[.011,.021],[.015,.019],[.020,.022],[.055,.023],[.060,.019],[.060,.014]].map(([x,r])=>[side*x,r]),14),rubber,[side*.313,.846,-.225]);
+    scooterHandControl(fork,side,dark,rubber,steel);
     fork.geometry(bentRail([[side*.234,.862,-.222],[side*.246,.904,-.212],[side*.308,1.003,-.155],[side*.366,1.042,-.13]],.006,8),steel);
-    fork.ellipsoid(side * .367, 1.047, -.13, .065, .043, .019, dark);
-    fork.ellipsoid(side * .367, 1.047, -.149, .055, .034, .004, mirror);
+    scooterMirror(fork,side,dark,mirror);
   }
   fork.finish();
   const frontWheel = tyre(front, 'scooterFrontWheel');
@@ -224,7 +204,10 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
   const standBuilder = new VillaModelBuilder(lean, 'scooterFoldingStand');
   standBuilder.root.position.set(.14, .345, -.38);
   standBuilder.beam([0, 0, 0], [.15, -.333, -.035], .012, steel);
-  standBuilder.box(.15, -.337, -.035, .076, .016, .060, dark, .003); standBuilder.finish();
+  // A flared all-steel landing shoe is welded to the arm. One material batch
+  // here funds the independently moving speedometer without adding a draw.
+  const shoe=(y:number,w:number,d:number)=>roundedLoop(w,d,.009,2).map(([x,z]):P3=>[.15+x,y,-.035+z+x*.18]);
+  standBuilder.geometry(sectionLoft([shoe(-.345,.073,.055),shoe(-.339,.078,.058),shoe(-.334,.054,.040),shoe(-.328,.024,.025)]),steel);standBuilder.finish();
   const stand = standBuilder.root;
   root.userData = { rideable: true, electric: true, stepThrough: true, wheels: 2, front: '+Z', dynamicTransforms: ['scooterFrontWheel', 'scooterRearWheel', 'scooterSteeringFork', 'scooterFoldingStand', 'scooterLean'] };
   const fallback = createVillaScooter();
@@ -254,6 +237,7 @@ export function createVillaScooterModel(parent: THREE.Object3D): {
     root.position.set(pose.x, terrain.y, pose.z); root.rotation.set(terrain.pitch, pose.yaw, terrain.roll, terrain.order);
     lean.rotation.z = mounted ? Math.max(-.1, Math.min(.1, steering * speed * .032)) : 0;
     front.rotation.y = steering === 0 ? 0 : -steering;
+    speedPointer.rotation.y=scooterNeedleAngle(speed);
     const spin = (wheelTravel / VILLA_SCOOTER_LIMITS.wheelRadius) % (Math.PI * 2);
     frontWheel.rotor.rotation.x = rear.rotor.rotation.x = spin;
     // Spokes, hub and rotor roll. The mould travels into a load patch which

@@ -16,7 +16,7 @@ export const noise = (i: number) => { const n = Math.sin(i * 17.133 + 5.783) * 4
 const W = 256, H = 128;
 export const fibreUV = (around: number, along: number): UV => [(4 + 118 * clamp(around)) / W, (4 + 119 * clamp(along)) / H];
 export const vaneUV = (across: number, along: number): UV => [(135 + 116 * clamp(across)) / W, (3 + 104 * clamp(along)) / H];
-const dry: UV = [146 / W, 120 / H], wet: UV = [227 / W, 120 / H];
+const dry: UV = [146 / W, 120 / H], irisGlaze: UV = [181 / W, 120 / H], wet: UV = [227 / W, 120 / H];
 export const wetKeratin = () => wet;
 
 /** One local, mip-filtered multiplier for all six rigs, generated at construction. No
@@ -33,7 +33,8 @@ export function companionMaterial() {
       const u = (x - 193) / 58, s = Math.abs(u), wave = y * .87 - 15 * s - 2.1 * Math.sin(y * .073 + u * 2) + .7 * Math.sin(y * .19 + u * 6);
       const barb = (9 * Math.sin(wave) + 4 * Math.sin(wave * 2.13 + u)) * Math.min(1, s * 11);
       set(x, y, 227 - 10 * s + barb + 16 * Math.exp(-((u / .028) ** 2)) - (u < 0 ? 13 * Math.exp(-((u / .13) ** 2)) : 0));
-    } else if (x > 201) set(x, y, 114); // lower diffuse reflectance and roughness, not the fur's swatch
+    } else if (x > 201) set(x, y, 94); // polished pupil and nasal leather
+    else if (x > 165) set(x, y, 175); // lighter iris remains legible beneath the lid
   }
   // Groups of differently pigmented, curved guard hairs. Fibre width is sub-texel
   // at the tips; this is correlated in the direction of growth, not pixel noise.
@@ -92,6 +93,52 @@ export function form(rows: Sections, sides = 14, deform: (x: number, y: number, 
   })));
   return skin.geometry();
 }
+/** Anatomical sections can sweep forward at the brow and back at the jaw. A
+ * lock samples the submitted triangle on that loft, not an ellipsoid outside
+ * it. Rings start at the spine and wind toward -X looking back from the nose. */
+export function drapedHide(stations: readonly number[], rings: P3[][]) {
+  const mesh = new NatureMesh(); mesh.skin(rings);
+  const sides = rings[1].length;
+  const at: PointOnHide = (z, angle) => {
+    let i = 1; while (i < stations.length - 1 && z > stations[i]) i++;
+    const v = clamp((z - stations[i - 1]) / (stations[i] - stations[i - 1]));
+    const a = ((-angle / turn) % 1 + 1) % 1 * sides, j = Math.floor(a), k = (j + 1) % sides, u = a - j;
+    const back = rings[i-1], front = rings[i];
+    const p = back[j % back.length], q = back[k % back.length], r = front[j % front.length], s = front[k % front.length];
+    const axis = (n: number) => u + v <= 1 ? p[n] + u*(q[n]-p[n]) + v*(r[n]-p[n]) : s[n] + (1-u)*(r[n]-s[n]) + (1-v)*(q[n]-s[n]);
+    return [axis(0), axis(1), axis(2)];
+  };
+  return { geometry: mesh.geometry(), at };
+}
+
+/** Fit eyelids and lips to the actual sculpted side of the face. Project onto
+ * the outermost triangle in the YZ section; offset along its interpolated skin
+ * normal, including the forward-facing component of a brow or muzzle. */
+export function faceOf(g: THREE.BufferGeometry) {
+  const p = g.getAttribute('position'), n = g.getAttribute('normal'), index = g.index!;
+  type Facet = Record<'ia'|'ib'|'ic'|'y'|'z'|'by'|'bz'|'cy'|'cz'|'det', number>;
+  const facets: Facet[] = [];
+  for (let i=0; i<index.count; i+=3) {
+    const ia=index.getX(i), ib=index.getX(i+1), ic=index.getX(i+2);
+    if (p.getX(ia)+p.getX(ib)+p.getX(ic) <= 0) continue;
+    const y=p.getY(ia), z=p.getZ(ia), by=p.getY(ib)-y, bz=p.getZ(ib)-z, cy=p.getY(ic)-y, cz=p.getZ(ic)-z, det=by*cz-bz*cy;
+    if (det > 1e-10) facets.push({ia,ib,ic,y,z,by,bz,cy,cz,det});
+  }
+  return (side: number, z: number, y: number, lift: number): P3 => {
+    let x=0, nx=1, ny=0, nz=0;
+    for (const f of facets) {
+      const dy=y-f.y, dz=z-f.z, b=(dy*f.cz-dz*f.cy)/f.det, c=(f.by*dz-f.bz*dy)/f.det, a=1-b-c;
+      if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
+      const depth=a*p.getX(f.ia)+b*p.getX(f.ib)+c*p.getX(f.ic);
+      if (depth < x) continue;
+      x=depth; nx=a*n.getX(f.ia)+b*n.getX(f.ib)+c*n.getX(f.ic);
+      ny=a*n.getY(f.ia)+b*n.getY(f.ib)+c*n.getY(f.ic); nz=a*n.getZ(f.ia)+b*n.getZ(f.ib)+c*n.getZ(f.ic);
+    }
+    const d=lift/(Math.hypot(nx,ny,nz)||1);
+    return [side*(x+nx*d), y+ny*d, z+nz*d];
+  };
+}
+
 export function axialFur(rows: Sections): Field<UV> {
   return (x, y, z) => {
     const [, cy, w, h] = section(rows, z), a = Math.atan2(Math.abs(x) / (w || 1), (y - cy) / (h || 1)) / Math.PI;
@@ -103,16 +150,20 @@ export function axialFur(rows: Sections): Field<UV> {
 /** One almond of skin/lid/iris/pupil fitted directly to the sloping face. z and y
  * trace the real hide, so a sideways rabbit eye isn't a sphere glued to a cheek. */
 export function eyelids(c: Surface, side: number, face: (z: number, y: number, lift: number) => P3, z0: number, y0: number,
-  halfZ: number, halfY: number, coat: number, iris: number, pupilWidth: number, slope = 0) {
+  halfZ: number, halfY: number, coat: number, iris: number, pupilWidth: number, slope = 0, lowerIris?: number) {
   const m = new NatureMesh(), colors: number[] = [], glaze: UV[] = [], n = 14;
   const rim = (w: number, h: number, depth: number, kind: 'skin' | 'lid' | 'iris' | 'pupil') => Array.from({ length: n }, (_, j) => {
     const a = -side * turn * j / n, u = Math.cos(a), v = Math.sin(a), almond = kind === 'pupil' ? 1 : .71 + .29 * Math.abs(v);
-    const color = kind === 'skin' ? coat : kind === 'lid' ? tint(0x423a35, 0x8c7966, Math.max(0, -v) * .7) : kind === 'iris' ? tint(iris, 0x262925, .48 * Math.max(0, v)) : 0x272726;
-    colors.push(color); glaze.push(kind === 'skin' || kind === 'lid' ? dry : wet);
-    return face(z0 + halfZ * w * u, y0 + halfY * (h * v * almond - slope * u * w), depth);
+    // Warmer iris visible below a mammal's upper lid, not a fixed white
+    // catchlight. The actual corneal dome still responds to the scene light.
+    const lower=lowerIris===undefined ? iris : tint(iris,lowerIris,.88*fade(-v,.08,.85));
+    const color = kind === 'skin' ? coat : kind === 'lid' ? tint(0x443d38, 0x9b8974, Math.max(0,-v)*.66) : kind === 'iris' ? tint(lower, 0x464238, .32*Math.max(0,v)) : 0x312e2b;
+    colors.push(color); glaze.push(kind === 'pupil' ? wet : kind === 'iris' ? irisGlaze : dry);
+    const pupilY=kind==='pupil' && lowerIris!==undefined ? .105 : 0;
+    return face(z0 + halfZ * w * u, y0 + halfY * (h * v * almond - slope * u * w + pupilY), depth);
   });
-  const rings = [rim(1.23, 1.40, -.0026, 'skin'), rim(1, 1, .0008, 'lid'), rim(.86, .77, .0019, 'iris'), rim(pupilWidth, .63, .0034, 'pupil')];
-  colors.push(0x252728); glaze.push(wet); m.skin([...rings, [face(z0, y0, .0039)]]);
+  const rings = [rim(1.18, 1.28, -.0023, 'skin'), rim(1, 1, .0008, 'lid'), rim(.89, .81, .0022, 'iris'), rim(pupilWidth, .54, .0037, 'pupil')];
+  colors.push(0x2a2928); glaze.push(wet); m.skin([...rings, [face(z0, y0+(lowerIris===undefined?0:.105*halfY), .0046)]]);
   c.put(m.geometry(), (_x, _y, _z, i) => colors[i], (_x, _y, _z, i) => glaze[i]);
 }
 

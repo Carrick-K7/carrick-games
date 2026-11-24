@@ -4,10 +4,11 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaSuv, registerVillaSuvColliders, VILLA_SUV, VILLA_SUV_LIMITS, type VillaSuvState } from './villaSuv.js';
-import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachProjector, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
+import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachHeadlamp, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachHatch, coachWheels } from './villaCoachwork.js';
 import { finishCoachPaint, motorContact } from './villaMotorFinish.js';
 
-import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+import { cabinMap, cupConsole, doorMirror, trimDoor } from './villaVehicleTrim.js';
+import { trimSteeringWheel } from './villaCabinWheel.js';
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** Original grand-touring SUV: broad shoulders, substantial glazed cabin and a
@@ -32,36 +33,37 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   const hull = coachHull([
     [-2.44, .79, .97], [-2.20, .91, 1.055], [-1.45, .955, 1.105], [-.65, .941, 1.10],
     [.4, .935, 1.105], [.92, .948, 1.10], [1.45, .955, 1.075], [2.13, .902, .985], [2.44, .76, .88],
-  ], axles, .42, .437, .32, .046);
+  ], axles, .42, .437, .32, .046, { style: 'touring', hoodBase: .92, rearGlass: -2.08, front: .22, rear: .13 });
   const canopy = coachCanopy(hull, { frontBase: .92, rearBase: -2.08, front: [.13, .787, 1.661], rear: [-1.35, .799, 1.61], crown: .047 });
   for (const side of [-1, 1]) {
     hull.sides(body, paint, side, -2.44, -.62); hull.sides(body, paint, side, .92, 2.44);
     body.box(side * .869, .30, .01, .105, .085, 1.94, dark, .025);
-    coachLine(body, t => hull.side(side, coachMix(-2.2, -.65, t), .84), metal, .004);
   }
-  hull.deckPanel(body, paint, .92, 2.44); hull.deckPanel(body, paint, -2.44, -2.08);
-  hull.endPanel(body, paint, 2.44); hull.endPanel(body, paint, -2.44); hull.arches(body, dark, .026);
+  hull.deckPanel(body, paint, .92, 2.44, dark); hull.deckPanel(body, paint, -2.44, -2.08);
+  const [grille, leftDuct, rightDuct, leftLamp, rightLamp] = hull.endPanel(body, paint, 2.44, [
+    { rect: [-.58, .58, .25, .73], shape: 'grille', depth: .077, stock: dark },
+    { rect: [-.61, -.975, .17, .52], shape: 'duct', depth: .105, stock: dark },
+    { rect: [.61, .975, .17, .52], shape: 'duct', depth: .105, stock: dark },
+    { rect: [-.39, -.996, .732, .992], shape: 'wing', depth: .034, stock: dark },
+    { rect: [.39, .996, .732, .992], shape: 'wing', depth: .034, stock: dark },
+  ]);
+  coachHatch(body, hull, -2.44, paint, dark, metal, taillight, headlight, true);
+  hull.arches(body, dark, dark);
   const tyres = coachWheels(body, { axles, x: .858, y: .42, radius: .407, width: .164, spokes: 5, design: 'split' }, rubber, dark, metal, metal);
   body.box(0,.296,-.10,1.60,.064,4.08,dark,.020);
   // A compact shield grille, separated corner intakes and wraparound optical
   // housings articulate the nose. Every recess follows the sculpted bumper.
-  const grille = coachFasciaPatch(body, hull, 2.44, -.53, .53, .32, .69, dark);
-  coachCoolingFins(body,grille,false,4);
-  for (let i = 0; i < 9; i++) coachLine(body, t => grille(.08 + i * .105, coachMix(.12, .88, t), .004), metal, .004, 5);
-  coachLine(body, t => grille(t, .98, .003), metal, .005, 20);
+  coachCoolingFins(body, grille, false, 5);
+  for (let i = 0; i < 9; i++) coachLine(body, t => grille(.06 + i * .11, coachMix(.06, .94, t), .027), metal, .0055, 5);
+  coachLine(body, t => grille(t, .98, .016), metal, .005, 20);
   const skid = coachFasciaPatch(body, hull, 2.44, -.61, .61, .08, .17, metal, .006);
   coachLine(body, t => skid(t, .02, .002), dark, .005, 20);
   for (const side of [-1, 1]) {
-    coachFasciaPatch(body, hull, 2.44, side * .65, side * .96, .22, .44, dark, .008);
-    const lamp = coachFasciaPatch(body, hull, 2.44, side * .52, side * .97, .72, .96, dark, .010);
-    coachLine(body, t => lamp(coachMix(.04, .96, t), .85, .005), headlight, .007, 18);
-    coachLine(body, t => lamp(.94, coachMix(.12, .85, t), .005), headlight, .006, 8);
-    for (const u of [.28,.66]) coachProjector(body,lamp,u,.171,metal,headlight);
-    coachLine(body, t => hull.deck(side * coachMix(.20, .48, t), coachMix(1.05, 2.08, t), .002), paint, .005);
-    const rearLamp=coachFasciaPatch(body,hull,-2.44,side*.48,side*.977,.749,.906,dark,.006);
-    coachTailLens(body,rearLamp,taillight,headlight);
+    const duct = side < 0 ? leftDuct : rightDuct;
+    // A stiff turned vane bridges each real air curtain, ahead of the back wall.
+    body.geometry(coachSheet(9, 3, (u, v) => duct(u, .37 + .11 * u + .065 * v, .042 + .013 * Math.sin(v * Math.PI)), [0, 0, 1]), metal);
+    coachHeadlamp(body, side < 0 ? leftLamp : rightLamp, metal, headlight, 'touring');
   }
-  coachLine(body, t => hull.fascia(-2.44, coachMix(-.66, .66, t), .835, .010), taillight, .005, 30);
   coachFasciaPatch(body, hull, -2.44, -.93, .93, .09, .27, dark, .007);
   coachFasciaPatch(body, hull, -2.44, -.54, .54, .09, .15, metal, .011);
   // One continuous opaque roof, with matching inner skin and sealed edges.
@@ -69,7 +71,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   canopy.frame(roofHeaders, paint, dark);
   cabin.geometry(coachSheet(24, 24, (u, v) => { const p = canopy.roof(u, v); p[1] -= .042; return p; }, [0, -1, 0]), stitch);
   for (const side of [-1, 1]) cabin.box(side * .44, 1.609, .065, .35, .026, .15, leather, .010);
-  for (const front of [true, false]) glazing.geometry(coachSheet(28, 24, (u, v) => canopy.wind(front, u, v), [0, 1, front ? 1 : -1]), glass);
+  for (const front of [true, false]) canopy.windPane(glazing, glass, front, 24);
   for (const side of [-1, 1]) {
     canopy.pane(glazing, glass, side, -2.08, -.62);
     coachLine(roofHeaders, t => canopy.window(side, -.62, t), dark, .028, 12);
@@ -84,7 +86,8 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   cabin.box(0, .715, .897, 1.76, .69, .065, dark, .014);
   cabin.box(0, .67, -1.91, 1.68, .57, .06, dark, .014);
   for (const side of [-1, 1]) {
-    cabin.box(side * .865, .655, .68, .05, .54, .43, dark, .012);
+    // Leave clearance behind the stamped waist even with the driver leaf shut.
+    cabin.box(side * .844, .655, .68, .05, .54, .43, dark, .012);
     cabin.box(side * .52, .407, .39, .53, .016, .63, rubber, .016);
     coachSeat(cabin, side * .52, .662, -.26, .575, leather, insert, dark, stitch, .55);
     cabin.beam([side * .84, 1.41, -.66], [side * .79, .66, -.72], .011, dark, 6);
@@ -128,13 +131,7 @@ export function createVillaSuvModel(parent: THREE.Object3D): {
   steering.root.userData = { kind: 'steering', driverSide: '+X', position: [.52, 1.06, .40], shaftTilt };
   steering.beam([0, 0, shaftLength], [0, 0, .025], .033, dark);
   const wheel = new VillaModelBuilder(steering.root, 'suv-steering-wheel');
-  wheel.geometry(new THREE.TorusGeometry(.19, .022, 10, 40), leather);
-  wheel.box(0, 0, 0, .11, .08, .05, dark, .02); wheel.box(0, 0, -.032, .05, .04, .012, metal, .004);
-  for (const side of [-1, 1]) {
-    wheel.beam([side*.175,.015,0],[side*.045,.012,0],.016,metal);
-    wheelThumbPod(wheel,side,.092,.016,-.022,false,dark,leather,metal);
-  }
-  wheel.beam([0, -.035, 0], [0, -.175, 0], .016, metal);
+  trimSteeringWheel(wheel,'touring',.19,leather,dark,metal);
   for (const x of [-.12, .12]) wheel.box(x, .04, .04, .03, .06, .01, metal, .002);
   const wheelMarker = new THREE.Object3D(); wheelMarker.name = 'suv-wheel-top-marker'; wheelMarker.position.set(0, .19, 0); wheel.root.add(wheelMarker);
   wheel.root.userData = { localAxis: 'z', steeringRatio: 4.5, rightInputClockwiseFromSeat: true }; steering.finish(); wheel.finish();

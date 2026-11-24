@@ -4,10 +4,11 @@ import { VillaModelBuilder, villaMaterial } from './villaModel.js';
 import { PLAYER_RADIUS, setVillaColliderNarrowPhase, type VillaCollider } from './villaWorld.js';
 import { villaTerrainOrientation } from './villaEstateLayout.js';
 import { createVillaPickup, registerVillaPickupColliders, VILLA_PICKUP, VILLA_PICKUP_LIMITS, type VillaPickupState } from './villaPickup.js';
-import { coachCanopy, coachCoolingFins, coachFasciaPatch, coachGlass, coachHull, coachLine, coachMix, coachPanel, coachProjector, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
+import { coachCanopy, coachCoolingFins, coachGlass, coachHull, coachHeadlamp, coachLine, coachMix, coachPanel, coachSeat, coachSheet, coachTailLens, coachWheels } from './villaCoachwork.js';
 import { finishCoachPaint, motorContact } from './villaMotorFinish.js';
 
-import { cabinMap, cupConsole, doorMirror, trimDoor, wheelThumbPod } from './villaVehicleTrim.js';
+import { cabinMap, cupConsole, doorMirror, trimDoor } from './villaVehicleTrim.js';
+import { trimSteeringWheel } from './villaCabinWheel.js';
 import { sectionLoft, type P2, type P3 } from './villaVehicleSections.js';
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -32,10 +33,10 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   const hull = coachHull([
     [-.73, 1.01, 1.265], [-.45, 1.026, 1.27], [.60, 1.032, 1.275], [1.21, 1.038, 1.265],
     [1.725, 1.052, 1.225], [2.40, .99, 1.13], [2.78, .857, 1.035],
-  ], [1.725], .41, .442, .43, .045, { front: .22, rear: 0 });
-  const bedHull = coachHull([[-2.80, .935, 1.22], [-2.5, 1.027, 1.265], [-1.725, 1.052, 1.265], [-.77, 1.01, 1.255]], [-1.725], .41, .442, .43, .026, { front: 0, rear: 0 });
+  ], [1.725], .41, .442, .43, .045, { style: 'utility', hoodBase: 1.21, front: .24, rear: 0 });
+  const bedHull = coachHull([[-2.80, .935, 1.22], [-2.5, 1.027, 1.265], [-1.725, 1.052, 1.265], [-.77, 1.01, 1.255]], [-1.725], .41, .442, .43, .026, { style: 'utility', front: 0, rear: 0 });
   const canopy = coachCanopy(hull, { frontBase: 1.21, rearBase: -.73, front: [.65, .913, 1.9], rear: [-.58, .926, 1.9], crown: .047 });
-  for (const x of [-.69, .69]) body.box(x, .375, -.02, .13, .16, 5.25, dark, .024);
+  for (const x of [-.69, .69]) body.box(x, .375, -.06, .13, .16, 5.07, dark, .024);
   for (const side of [-1, 1]) {
     hull.sides(body, paint, side, -.73, -.56); hull.sides(body, paint, side, 1.21, 2.78);
     bedHull.sides(bed, paint, side, -2.8, -.77);
@@ -43,8 +44,13 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     body.box(side * 1.003, .439, .22, .14, .009, 1.67, metal, .003);
     for (let i = 0; i < 8; i++) body.box(side * 1.002, .446, -.43 + i * .18, .10, .004, .013, rubber, .002);
   }
-  hull.deckPanel(body, paint, 1.21, 2.78); hull.endPanel(body, paint, 2.78);
-  hull.arches(body, dark, .024); bedHull.arches(bed, dark, .024);
+  hull.deckPanel(body, paint, 1.21, 2.78, dark);
+  const [grille, leftLamp, rightLamp] = hull.endPanel(body, paint, 2.78, [
+    { rect: [-.61, .61, .382, .810], shape: 'grille', depth: .057, stock: dark },
+    { rect: [-.625, -.987, .54, .938], shape: 'wing', depth: .036, stock: dark },
+    { rect: [.625, .987, .54, .938], shape: 'wing', depth: .036, stock: dark },
+  ]);
+  hull.arches(body, paint, dark); bedHull.arches(bed, paint, dark);
   const tyres = coachWheels(body, { axles: [-1.725, 1.725], x: .967, y: .41, radius: .397, width: .19, spokes: 6, design: 'utility' }, rubber, dark, metal, metal);
   // The raised open bed exposes its transverse axle and central differential below the ladder rails.
   body.cylinder(0,.402,-1.725,.055,.055,1.75,dark,[0,0,Math.PI/2],12);
@@ -52,56 +58,92 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   // A pressed tailgate, capped load rails, ribbed liner and enclosed wheel tubs.
   // The 40mm cab/bed joint is deliberate; it is not a hole into the cab.
   // One pressed liner: its corrugations ease into flat flanges at either end.
+  const insideX = (z: number, y: number) => {
+    const low = bedHull.lower(z), t = THREE.MathUtils.clamp((y - low) / (bedHull.section(z).belt - low), 0, 1);
+    return bedHull.side(1, z, t)[0] - .043;
+  };
   const loadFloor=(z:number,rise:number):P3[]=>{
-    const top:P2[]=[[-.975,.770]];
-    for(let i=0;i<12;i++) {
-      const x=-.858+i*.156;
+    // Trim the floor at both tapered bedsides and the REAL wheel boxes. The
+    // old constant-width liner poked through the green paint in rear 3/4.
+    const tub = smooth(THREE.MathUtils.clamp((.59 - Math.abs(z + 1.725)) / .20, 0, 1));
+    const w = coachMix(Math.min(insideX(z,.706), insideX(z,.770))+.004, .839, tub);
+    const top:P2[]=[[-w,.770]];
+    for(let i=0;i<10;i++) {
+      const x=-.702+i*.156;
       top.push([x-.028,.770],[x-.016,.770+rise*.84],[x-.010,.770+rise],[x+.010,.770+rise],[x+.016,.770+rise*.84],[x+.028,.770]);
     }
-    return [...top,[.975,.770],[.975,.706],[-.975,.706]].map(([x,y])=>[x,y,z]);
+    return [...top,[w,.770],[w,.706],[-w,.706]].map(([x,y])=>[x,y,z]);
   };
-  bed.geometry(sectionLoft([[-2.780,0],[-2.723,0],[-2.681,.013],[-2.639,.018],[-.922,.018],[-.875,.013],[-.831,0],[-.789,0]]
+  bed.geometry(sectionLoft([[-2.704,0],[-2.674,0],[-2.625,.013],[-2.596,.018],[-2.30,.018],[-2.11,.018],[-1.725,.018],[-1.34,.018],[-1.15,.018],[-.922,.018],[-.875,.013],[-.831,0],[-.789,0]]
     .map(([z,r])=>loadFloor(z,r))),dark);
   for (const side of [-1, 1]) {
     coachPanel(bed, (u, v) => {
       const z = coachMix(-2.77, -.79, u), s = bedHull.section(z);
-      return [side * (s.width - .047), coachMix(.765, s.belt - .012, v), z];
-    }, dark, [-side, 0, 0], [side * .020, 0, 0], 32, 8);
-    coachLine(bed, t => { const z = coachMix(-2.8, -.77, t), s = bedHull.section(z); return [side * (s.width - .015), s.belt, z]; }, dark, .027);
+      const y = coachMix(Math.max(.765, bedHull.lower(z) - .007), s.belt - .012, v);
+      return [side * insideX(z, y), y, z];
+    }, dark, [-side, 0, 0], [side * .015, 0, 0], 36, 6);
+    // A wide top land, rolled just over the inner and outer painted returns.
+    coachPanel(bed, (u, v) => {
+      const z = coachMix(-2.797, -.774, u), s = bedHull.section(z);
+      return [side * (s.width - .026 + (v - .5) * .067), s.belt + .008 - .008 * (2 * v - 1) ** 4, z];
+    }, dark, [0, 1, 0], [0, -.022, 0], 24, 4);
     bed.geometry(sectionLoft([[-.488,.018,.018],[-.424,.100,.084],[-.296,.180,.171],[-.130,.229,.228],[.079,.231,.235],
       [.263,.193,.189],[.404,.124,.104],[.493,.019,.020]].map(([dz,w,h])=>{
       const profile:P2[]=[[0,0],[w,0],[w,.030*h],[w*.88,h*.15],[w*.78,h*.71],[w*.63,h*.92],[w*.44,h],[0,h]];
       return profile.map(([inset,up]):P3=>[side*(.993-inset),.773+up,-1.725+dz]);
     })),dark);
     for (const z of [-2.5, -.94]) bed.geometry(new THREE.TorusGeometry(.034, .006, 6, 18), metal, [side * .965, 1.135, z], [0, Math.PI / 2, 0]);
-    const rearLamp=coachFasciaPatch(bed,bedHull,-2.80,side*.79,side*.985,.55,.905,dark,.010);
-    coachTailLens(bed,rearLamp,tail,headlight,true);
   }
-  bedHull.endPanel(bed, paint, -2.8);
-  bed.box(0, 1.0, -.79, 1.96, .50, .034, dark, .009);
-  bed.box(0, 1.12, -2.824, .224, .047, .017, dark, .010);
-  bed.box(0, .902, -2.822, 1.09, .008, .006, metal, .002);
-  bed.box(0, .478, -2.803, 1.94, .135, .095, dark, .026);
-  bed.box(0, .55, -2.801, 1.80, .028, .094, metal, .010);
+  const [, latch, leftTail, rightTail] = bedHull.endPanel(bed, paint, -2.8, [
+    { rect: [-.763, .763, .20, .735], shape: 'gate', depth: .068, stock: paint },
+    { rect: [-.22, .22, .752, .949], shape: 'press', depth: .083, stock: dark },
+    { rect: [-.778, -.997, .523, .930], shape: 'press', depth: .023, stock: dark },
+    { rect: [.778, .997, .523, .930], shape: 'press', depth: .023, stock: dark },
+  ]);
+  for (const lamp of [leftTail, rightTail]) coachTailLens(bed, lamp, tail, headlight, true);
+  // The pull bridges a hand-deep draw in the steel. Both ends return to the
+  // moulding; a finger fits underneath without passing through the gate.
+  coachPanel(bed, (u, v) => latch(.066 + .868 * u, .54 + .27 * v,
+    .012 + .050 * Math.min(1, 5 * u, 5 * (1 - u)) + .004 * Math.sin(v * Math.PI)), metal,
+  [0, 0, -1], [0, 0, .016], 12, 3);
+  for (const side of [-1, 1]) coachLine(bed, t => bedHull.fascia(-2.8, side * .772, coachMix(.167, .994, t), .001), dark, .0035, 12);
+  coachPanel(bed, (u, v) => {
+    const y = coachMix(.758, 1.235, v);
+    return [(2 * u - 1) * (insideX(-.79, y) + .004), y, -.79];
+  }, dark, [0, 0, -1], [0, 0, .022], 8, 6);
+  // Cranked rear step beam. Both toe lands drop below the central sill and
+  // the ends wrap forward around the rear corners instead of sticking out.
+  const stepRail = (x: number, top: number, wrap: number): P3[] => {
+    const section: P2[] = [[.430, -.692], [.423, -.786], [.434, -.838 + wrap], [.461, -.854 + wrap],
+      [top - .013, -.854 + wrap], [top, -.841 + wrap], [top, -.737], [top - .021, -.692]];
+    return section.map(([y, dz]) => [x, y, -2 + dz]);
+  };
+  bed.geometry(sectionLoft([[-.983,.489,.079],[-.932,.517,.036],[-.853,.521,.007],[-.669,.521,0],[-.60,.570,0],
+    [-.52,.574,0],[.52,.574,0],[.60,.570,0],[.669,.521,0],[.853,.521,.007],[.932,.517,.036],[.983,.489,.079]]
+    .map(([x, y, turn]) => stepRail(x, y, turn))), dark);
+  for (const side of [-1, 1]) coachPanel(bed, (u, v) => [side * (.69 + .160 * u), .522 + .004 * Math.sin(v * Math.PI),
+    coachMix(-2.827 + .006 * u, -2.752, v)], metal, [0, 1, 0], [0, -.008, 0], 4, 3);
   // A softly wrapped utility face rather than a cab-width rectangular block.
   // The lamp housings, slats and textured lower bumper share its curved skin.
-  const grille = coachFasciaPatch(body, hull, 2.78, -.58, .58, .46, .85, dark, .012);
-  coachCoolingFins(body,grille,true,12);
-  for (const v of [.12, .36, .60, .84]) coachLine(body, t => grille(coachMix(.04, .96, t), v, .004), metal, .004, 20);
-  for (const side of [-1, 1]) {
-    const lamp = coachFasciaPatch(body, hull, 2.78, side * .63, side * .98, .51, .91, dark, .012);
-    coachLine(body, t => lamp(.89, coachMix(.12, .88, t), .006), headlight, .010, 10);
-    coachLine(body, t => lamp(coachMix(.08, .87, t), .84, .006), headlight, .008, 12);
-    coachProjector(body,lamp,.42,.294,metal,headlight);
-    coachLine(body, t => hull.deck(side * coachMix(.35, .50, t), coachMix(1.30, 2.38, t), .002), paint, .006);
-  }
-  coachFasciaPatch(body, hull, 2.78, -.98, .98, .045, .26, dark, .012);
-  coachFasciaPatch(body, hull, 2.78, -.46, .46, .05, .16, metal, .016);
+  coachCoolingFins(body, grille, true, 12);
+  for (const v of [.13, .42, .71]) body.geometry(coachSheet(18, 3, (u, h) => grille(u, v + h * .060,
+    .015 + .015 * Math.sin(Math.PI * h)), [0, 0, 1]), metal);
+  for (const lamp of [leftLamp, rightLamp]) coachHeadlamp(body, lamp, metal, headlight, 'utility');
+  // Deep wrapped impact cover hides the ends of both ladder rails. A separate
+  // scuff land sits on its lower return rather than floating in the grille.
+  const bumper = (u: number, v: number, lift = 0): P3 => {
+    const a = u * 2 - 1, y = coachMix(.318 + .037 * a * a, .562 - .026 * a * a, v);
+    const p = hull.fascia(2.78, a, Math.max(0, (y - .43) / (.605 + .08 * (1 - a * a))));
+    return [p[0] + a * .010 * Math.sin(v * Math.PI), y, p[2] + .004 + .017 * Math.sin(Math.PI * v) + lift];
+  };
+  coachPanel(body, bumper, dark, [0, 0, 1], [0, 0, -.074], 24, 6);
+  coachPanel(body, (u, v) => bumper(.5 + (u - .5) * (.62 + .07 * v), .10 + .245 * v, .0025),
+    metal, [0, 0, 1], [0, 0, -.005], 14, 3);
   coachPanel(body, canopy.roof, paint, [0, 1, 0], [0, -.044, 0], 28, 26);
   canopy.frame(body, paint, dark);
   cabin.geometry(coachSheet(24, 24, (u, v) => { const p = canopy.roof(u, v); p[1] -= .048; return p; }, [0, -1, 0]), insert);
   for (const side of [-1, 1]) cabin.box(side * .49, 1.845, .60, .40, .026, .17, fabric, .012);
-  for (const front of [true, false]) glazing.geometry(coachSheet(28, 24, (u, v) => canopy.wind(front, u, v), [0, 1, front ? 1 : -1]), glass);
+  for (const front of [true, false]) canopy.windPane(glazing, glass, front, 24);
   for (const side of [-1, 1]) {
     canopy.pane(glazing, glass, side, -.73, -.56);
     coachLine(body, t => canopy.window(side, -.56, t), paint, .035, 16);
@@ -152,12 +194,7 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
   cabin.beam([.52, 1.24, 1.05], [.52, 1.31, .83], .035, dark);
   const mount = new THREE.Group(); mount.name = 'pickup-steering-mount'; mount.position.set(.52, 1.33, .80); mount.rotation.x = .24; root.add(mount);
   const wheel = new VillaModelBuilder(mount, 'pickup-steering-wheel');
-  wheel.geometry(new THREE.TorusGeometry(.183, .022, 10, 40), rubber); wheel.box(0, 0, 0, .115, .083, .045, dark, .015);
-  for (const side of [-1, 1]) {
-    wheel.beam([0,0,0],[side*.15,.015,0],.019,dark);
-    wheelThumbPod(wheel,side,.095,.009,-.022,true,dark,metal,metal);
-  }
-  wheel.beam([0, -.03, 0], [0, -.17, 0], .019, dark);
+  trimSteeringWheel(wheel,'utility',.183,rubber,dark,metal);
   const marker = new THREE.Object3D(); marker.name = 'pickup-wheel-top-marker'; marker.position.set(0, .183, 0); wheel.root.add(marker); wheel.finish();
   const doors: { root: THREE.Group; bounds: THREE.Box3 }[] = [];
   for (const side of [1, -1]) {
@@ -166,7 +203,7 @@ export function createVillaPickupModel(parent: THREE.Object3D): {
     door.at(-side * 1.02, 0, -1.21, 0, () => {
       hull.sides(door, paint, side, -.56, 1.21); canopy.pane(door, glass, side, -.56, 1.21);
       coachLine(door, t => canopy.window(side, coachMix(-.56, 1.21, t), 0), dark, .011);
-      for (const z of [-.56, 1.21]) coachLine(door, t => hull.side(side, z, t), dark, .003, 12);
+      for (const z of [-.56, 1.21]) coachLine(door, t => hull.side(side, z, .003 + .994 * t), dark, .003, 12);
       trimDoor(door,hull,side,'utility',-.54,1.19,.655,1.245,fabric,insert,dark,metal,insert);
       door.box(side * 1.036, 1.177, -.36, .017, .029, .184, dark, .008);
       doorMirror(door,side,[.981,1.35,.95],[1.13,1.442,1.016],.124,.137,.174,'utility',paint,dark,metal);

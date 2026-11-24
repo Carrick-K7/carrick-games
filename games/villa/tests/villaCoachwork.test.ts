@@ -86,8 +86,11 @@ describe.each(specs)('$id fitted coachwork geometry', spec => {
         actual.copy(b).sub(a).cross(c.sub(a));
         if (actual.lengthSq() < 1e-24) degenerate++;
         else {
-          actual.normalize(); n.fromBufferAttribute(ns, i);
-          if (actual.dot(n) < -.001) { reversed++; normalFailures.push(`${mesh.name} vertex ${i}: ${a.toArray()} dot ${actual.dot(n)}`); }
+          actual.normalize();
+          for (let j = i; j < i + 3; j++) {
+            n.fromBufferAttribute(ns, j);
+            if (actual.dot(n) < -.001) { reversed++; normalFailures.push(`${mesh.name} vertex ${j}: ${a.toArray()} dot ${actual.dot(n)}`); }
+          }
         }
         count++;
       }
@@ -115,6 +118,50 @@ describe.each(specs)('$id fitted coachwork geometry', spec => {
     const near = f.root.worldToLocal(f.ray([0, 3, spec.hood[0]], [0, -1, 0])[0].point.clone());
     const far = f.root.worldToLocal(f.ray([0, 3, spec.hood[3]], [0, -1, 0])[0].point.clone());
     expect(near.y - far.y).toBeGreaterThan(.075);
+  });
+  it('raises each front wing above the bonnet valley and returns the wheel house over the tread', () => {
+    const f = fixture(spec);
+    const [valley, peak, edge, track] = spec.id === 'pickup' ? [.62, .82, 1.02, .967]
+      : spec.id === 'suv' ? [.46, .73, .93, .858] : [.50, .76, .92, .875];
+    const cowl = spec.id === 'pickup' ? 1.21 : spec.id === 'suv' ? .92 : .90;
+    const parts = meshes(f.root), steel = material(f.ray([peak, 2, spec.axle], [0, -1, 0])[0]);
+    const paint = parts.filter(m => m.material === steel), panes = parts.filter(m => (m.material as THREE.Material).transparent);
+    for (const side of [-1, 1]) {
+      // Probe the two actual skins on either side of the cowl; exclude its
+      // rubber rail so it cannot conceal a bad hood-to-glass registration.
+      for (const x of [.33, .49, .82]) {
+        const hood = f.ray([side * x, 2, cowl + .0002], [0, -1, 0], 2, paint)[0];
+        const glass = f.ray([side * x, 2, cowl - .0002], [0, -1, 0], 2, panes)[0];
+        expect(Math.abs(hood.distance - glass.distance)).toBeLessThan(.001);
+      }
+      const hoodY = (x: number) => f.root.worldToLocal(f.ray([side * x, 2, spec.axle], [0, -1, 0])[0].point.clone()).y;
+      const y = hoodY(peak);
+      expect(y - hoodY(valley)).toBeGreaterThan(.052); expect(y - hoodY(edge)).toBeGreaterThan(.052);
+      for (const z of [-spec.axle, spec.axle]) {
+        const gap: Point = [side * track, spec.hubY + spec.arch - .015, z];
+        const liner = f.ray(gap, [0, 1, 0], .045)[0], tread = f.ray(gap, [0, -1, 0], .055)[0];
+        expect(liner?.face?.normal.y).toBeLessThan(-.95); expect((tread?.object as THREE.Mesh).morphTargetInfluences).toHaveLength(1);
+        expect(liner.distance + tread.distance).toBeGreaterThan(.03);
+      }
+    }
+  });
+  it('carries the upper swage, drawn waist and lower rocker on the moving steel, not on the fixed sill', () => {
+    const f = fixture(spec), leaf = f.scene.getObjectByName(`${spec.prefix}-driver-door`)!;
+    const [sill, belt] = spec.id === 'pickup' ? [.43, 1.275] : spec.id === 'suv' ? [.32, 1.10] : [.249, .93];
+    for (const open of [false, true]) {
+      f.update(open);
+      const depth = (h: number) => {
+        const origin = new THREE.Vector3(2 - leaf.position.x, sill + h * (belt - sill), .14 - leaf.position.z);
+        return new THREE.Raycaster(leaf.localToWorld(origin), new THREE.Vector3(-1, 0, 0).transformDirection(leaf.matrixWorld))
+          .intersectObject(leaf, true)[0].distance;
+      };
+      expect(depth(.60) - depth(.82)).toBeGreaterThan(.042);
+      expect(depth(.60) - depth(.16)).toBeGreaterThan(.025);
+      if (!open) {
+        const visible = f.ray([2, sill + .585 * (belt - sill), .55], [-1, 0, 0])[0];
+        expect(leaf.getObjectById(visible.object.id)).toBe(visible.object); // no fixed footwell through the waist
+      }
+    }
   });
   it('intercepts real grazing rays across roof/side/windscreen seams without a far-side fallback', () => {
     const f = fixture(spec);
@@ -259,6 +306,23 @@ it('has a separate pickup bed with an open volume, low ribbed floor and four con
   for (const direction of [[1, 0, 0], [-1, 0, 0], [0, 0, -1], [0, 0, 1]] as Point[]) {
     const hit = f.ray([0, 1.02, -1.75], direction)[0]; expect(hit).toBeDefined(); expect(material(hit).transparent).toBe(false);
     expect(hit.object.parent!.name).toBe('pickup-cargo-bed');
+  }
+});
+
+it('sets the pickup pull above a hand opening and presses the tailgate ribs into one closed gate', () => {
+  const f = fixture(specs[1]);
+  const rear = (x: number, y: number) => f.root.worldToLocal(f.ray([x, y, -3.3], [0, 0, 1])[0].point.clone()).z;
+  const wall = rear(.02, 1.11), grip = rear(.02, 1.145), top = rear(.24, 1.11);
+  expect(wall - grip).toBeGreaterThan(.051); expect(grip - top).toBeGreaterThan(.009);
+  // Depressed field and both stiffening beads are paint; the liner must not
+  // cut through them (its old square rear edge was ahead of the pressing).
+  for (const x of [-.36, .09, .38]) {
+    const valley = rear(x, .82);
+    for (const y of [.72, .90]) {
+      const hit = f.ray([x, y, -3.3], [0, 0, 1])[0];
+      expect(material(hit).name).toBe('sage-utility-clearcoat');
+      expect(valley - f.root.worldToLocal(hit.point.clone()).z).toBeGreaterThan(.025);
+    }
   }
 });
 

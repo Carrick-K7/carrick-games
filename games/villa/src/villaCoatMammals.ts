@@ -1,19 +1,45 @@
-import * as THREE from 'three';
 import { NatureMesh, turn, type Collar, type P3 } from './villaNatureGeometry.js';
 import type { VillaPetId } from './villaPets.js';
-import { Surface, axialFur, clamp, coatLocks, eyelids, fade, fibreUV, form, hide, section, tint, wetKeratin, type Sections, type PointOnHide } from './villaCoatSurface.js';
+import { Surface, axialFur, clamp, coatLocks, drapedHide, eyelids, faceOf, fade, fibreUV, form, hide, tint, wetKeratin, type Sections, type Section } from './villaCoatSurface.js';
 
-const dogBody: Sections = [[-.24,.247,0,0],[-.212,.236,.080,.078],[-.161,.236,.129,.113],[-.080,.247,.114,.105],[-.016,.257,.107,.097],[.017,.255,.117,.114],
-  [.050,.251,.13,.136],[.103,.258,.112,.134],[.143,.286,.086,.101],[.174,.308,.062,.071],[.194,.318,0,0]];
-const rabbitBody: Sections = [[-.234,.198,0,0],[-.216,.191,.064,.081],[-.172,.194,.124,.132],[-.143,.204,.138,.149],[-.111,.208,.144,.153],[-.083,.208,.141,.147],
-  [-.035,.200,.130,.124],[.030,.189,.113,.101],[.087,.217,.098,.090],[.13,.252,.074,.077],[.158,.273,0,0]];
-const skull: Record<'cat'|'rabbit'|'dog', Sections> = {
-  dog: [[-.100,.003,0,0],[-.084,.001,.067,.062],[-.052,.008,.095,.084],[-.014,.014,.103,.091],[.022,.014,.096,.088],
-    [.051,.006,.081,.065],[.073,-.014,.062,.045],[.090,-.024,.053,.039],[.116,-.028,.056,.035],[.139,-.031,.043,.028],[.153,-.027,.029,.021],[.157,-.027,0,0]],
-  cat: [[-.092,.005,0,0],[-.076,.010,.060,.063],[-.043,.014,.092,.079],[-.011,.015,.102,.087],[.021,.011,.099,.078],
-    [.047,.004,.083,.065],[.065,-.008,.068,.054],[.081,-.023,.061,.041],[.093,-.026,.054,.032],[.103,-.024,.035,.025],[.110,-.020,.018,.016],[.114,-.020,0,0]],
-  rabbit: [[-.096,.004,0,0],[-.076,.010,.064,.065],[-.039,.010,.094,.086],[-.001,.009,.103,.091],[.037,.004,.101,.083],
-    [.061,-.005,.087,.069],[.081,-.015,.071,.059],[.106,-.026,.058,.041],[.123,-.028,.041,.033],[.134,-.021,.024,.021],[.138,-.023,0,0]],
+// Croup, loin, rib cage, withers and throat. The front continues under the
+// moving poll rather than ending in a point where a separate head would sit.
+const dogBody: Sections = [[-.248,.230,0,0],[-.232,.232,.062,.077],[-.200,.244,.106,.107],[-.158,.250,.122,.120],
+  [-.103,.250,.110,.106],[-.058,.250,.101,.091],[-.016,.252,.104,.098],[.018,.252,.121,.122],
+  [.050,.250,.132,.138],[.082,.248,.129,.150],[.111,.264,.110,.143],[.143,.286,.087,.124],
+  [.168,.303,.080,.114],[.193,.313,.063,.084],[.213,.308,.037,.048],[.223,.304,0,0]];
+const rabbitBody: Sections = [[-.248,.166,0,0],[-.231,.167,.077,.102],[-.201,.171,.124,.136],[-.161,.182,.145,.163],
+  [-.111,.183,.148,.173],[-.066,.177,.140,.150],[-.023,.175,.123,.140],[.022,.184,.108,.126],
+  [.057,.193,.102,.115],[.087,.190,.094,.106],[.121,.205,.084,.107],[.152,.231,.079,.104],[.178,.250,.066,.081],[.199,.252,0,0]];
+const catBody: Sections = [[-.245,.222,0,0],[-.226,.228,.058,.070],[-.204,.235,.079,.093],[-.180,.236,.084,.100],
+  // Keep the tabby bars in their original continuous arched mantle. The lower
+  // flank, breast and neck are not surfaces of that ellipsoid.
+  ...[-.164,-.146,-.127,-.108,-.088,-.067,-.046,-.025,-.004,.015,.034,.051].map((z): Section => {
+    const r=Math.sqrt(1-((z+.035)/.195)**2); return [z,.235,.105*r,.13*r];
+  }),[.071,.249,.087,.111],[.096,.262,.079,.112],[.122,.278,.073,.115],
+  [.148,.299,.064,.109],[.173,.321,.058,.088],[.193,.327,.044,.062],[.209,.329,0,0]];
+
+// Profiles run along four different anatomical rails. They need not swell and
+// collapse together as radii of revolution: e.g. the cheekbone can flare just
+// below a recessed orbit, and the two fleshy whisker pads widen again past the stop.
+// z, crest, chin; half-breadths at brow, orbit, cheek and jaw, in metres.
+type FaceRib = readonly [number, number, number, number, number, number, number];
+const skull: Record<'cat'|'rabbit'|'dog', readonly FaceRib[]> = {
+  dog: [[-.169,-.040,-.040,0,0,0,0],[-.140,.007,-.100,.046,.058,.060,.044],[-.111,.048,-.104,.065,.078,.079,.061],
+    [-.077,.080,-.096,.080,.094,.093,.071],[-.045,.102,-.085,.088,.103,.101,.078],[-.009,.110,-.091,.087,.098,.103,.081],
+    [.024,.103,-.093,.081,.088,.099,.082],[.049,.085,-.090,.074,.076,.095,.078],[.067,.058,-.085,.063,.064,.083,.068],
+    [.081,.031,-.079,.047,.050,.068,.056],[.101,.020,-.073,.039,.047,.060,.047],[.124,.014,-.067,.037,.047,.061,.048],
+    [.145,.008,-.060,.033,.043,.054,.042],[.158,-.005,-.052,.025,.033,.039,.029],[.168,-.026,-.026,0,0,0,0]],
+  cat: [[-.156,-.036,-.036,0,0,0,0],[-.127,.012,-.093,.037,.052,.054,.043],[-.097,.055,-.091,.057,.072,.074,.055],
+    [-.064,.084,-.080,.073,.090,.092,.067],[-.031,.098,-.083,.077,.095,.102,.075],[.001,.100,-.085,.079,.087,.110,.081],
+    [.027,.087,-.082,.077,.078,.106,.077],[.048,.071,-.077,.066,.064,.090,.063],[.063,.054,-.074,.051,.047,.071,.050],
+    [.077,.033,-.069,.033,.037,.060,.044],[.092,.020,-.061,.025,.034,.053,.039],[.105,.008,-.054,.019,.028,.043,.032],
+    [.116,-.005,-.043,.016,.020,.025,.018],[.120,-.020,-.020,0,0,0,0]],
+  rabbit: [[-.153,-.032,-.032,0,0,0,0],[-.126,.008,-.096,.040,.060,.069,.055],[-.095,.051,-.099,.060,.079,.090,.074],
+    [-.067,.079,-.095,.074,.092,.104,.082],[-.035,.096,-.093,.080,.097,.114,.089],[.000,.098,-.095,.082,.095,.117,.091],
+    [.034,.081,-.092,.080,.090,.110,.089],[.054,.066,-.089,.072,.079,.100,.082],[.073,.049,-.084,.057,.065,.085,.070],
+    [.090,.031,-.078,.040,.049,.076,.061],[.106,.017,-.072,.030,.044,.070,.055],[.117,.005,-.063,.023,.037,.056,.044],
+    [.125,-.007,-.052,.014,.028,.040,.029],[.132,-.024,-.024,0,0,0,0]],
 };
 const breed = (id: VillaPetId) => id === 'dog' ? 'dog' : id === 'cat' ? 'cat' : 'rabbit';
 const colors = (id: VillaPetId) => id === 'dog' ? {base:0xb68457, dark:0x785942, pale:0xdfcdb1} : id === 'cat' ? {base:0xa1988a, dark:0x5d5b58, pale:0xddd2bd}
@@ -38,27 +64,31 @@ function mammalPigment(id: VillaPetId) {
     return tint(back, pale, chest * (dog ? .94 : .49) + (1 - fade(y, .113, .183)) * (dog ? .62 : .89));
   };
 }
-const catForm = (x: number, y: number, z: number): P3 => {
-  const front = Math.max(0, (z - .09) / .105), hip = Math.max(0, (-z - .14) / .055);
-  const tuck = clamp((-y - .03) / .10) * Math.exp(-((z + .055) ** 2) / .0024);
-  return [x * (1 - .24 * front + .18 * hip), y + .235 + .058 * front + .012 * hip + .027 * tuck, z - .035];
-};
+const bell = (v: number) => Math.exp(-v*v);
 export function mammalBody(c: Surface, id: VillaPetId) {
   const pigment = mammalPigment(id), dog = id === 'dog', cat = id === 'cat';
-  let sample: PointOnHide;
-  if (cat) {
-    // Keep the continuous tucked rib-cage skin rather than wrapping painted wire rings around it.
-    const g = new THREE.SphereGeometry(1,16,28); g.rotateX(Math.PI/2); g.scale(.105,.13,.195);
-    const p = g.getAttribute('position'); for (let i=0;i<p.count;i++) p.setXYZ(i,...catForm(p.getX(i),p.getY(i),p.getZ(i)));
-    g.computeVertexNormals(); c.put(g,pigment,(x,y,z)=>fibreUV(.10 + .78*Math.atan2(Math.abs(x)/.105,(y-.235)/.13)/Math.PI - .08*Math.sin((z+.23)*8), .08 + .84*(.16-z)/.39));
-    sample = (z,a) => { const r = Math.sqrt(clamp(1 - ((z+.035)/.195)**2)); return catForm(.105*r*Math.sin(a),.13*r*Math.cos(a),z+.035); };
-  } else {
-    const rows = dog ? dogBody : rabbitBody; c.put(form(rows,18),pigment,axialFur(rows)); sample=hide(rows);
-  }
-  // The short saddle lies close; only the nape, lower flank, bib and breeches
-  // carry a broken edge. No loose hair quads scattered in the air.
-  coatLocks(c,sample,pigment,[[.130,.035,.70,.66,8,cat?.012:.017], [.086,-.145,2.00,.48,11,dog?.018:.015],
-    [-.082,-.167,1.22,.74,7,.014],[.113,.054,2.44,.74,5,.018]],cat?161:dog?113:227);
+  const rows = cat ? catBody : dog ? dogBody : rabbitBody, sides = 20;
+  const rings = rows.map(([z,cy,w,h]): P3[] => !w ? [[0,cy,z]] : Array.from({length:sides},(_,i): P3 => {
+    const a=-turn*i/sides, up=Math.cos(a), side=Math.sin(a), y=cy+h*up;
+    const breast=bell((z-.092)/.081), loin=bell((z+.060)/.062), croup=bell((z+.145)/.080);
+    // The shoulder blade runs obliquely back from the foreleg. Ribs round
+    // out above a narrower brisket; the lower flank draws up in front of the hip.
+    const blade=bell((z-.082+.039*up)/.037)*bell((up-.18)/.58);
+    if (cat) {
+      const below=1-fade(y,.164,.225), neck=fade(z,.052,.130);
+      return [side*w*(1 - below*(.27*loin+.09*breast) + .13*blade*neck),
+        y + below*(.051*loin-.021*breast) + .006*neck*up,
+        z + .015*neck*up*up*(1-2*fade(up,-.3,.6))];
+    }
+    return [side*w*(1 + (dog?.095:.035)*blade + (dog?.065:.115)*croup*bell((up+.31)/.47) - .11*breast*Math.max(0,-up)),
+      y + (dog?.019:.004)*loin*Math.max(0,-up) - (dog?.008:.011)*breast*bell((up+.73)/.36),
+      // Preserve the lateral hip/chest cuts; sweep the breastbone ahead of them.
+      z + (dog?.023:.016)*breast*up*up*(1-2*fade(up,-.3,.6))];
+  }));
+  const skin=drapedHide(rows.map(row=>row[0]), rings);
+  c.put(skin.geometry,pigment,axialFur(rows));
+  coatLocks(c,skin.at,pigment,[[.130,.035,.70,.66,7,cat?.012:.017], [.086,-.145,2.00,.48,8,dog?.018:.015],
+    [-.082,-.167,1.22,.74,5,.014],[.113,.054,2.44,.74,3,.018]],cat?161:dog?113:227);
 }
 
 function pinna(c: Surface, id: VillaPetId, side: number) {
@@ -66,21 +96,30 @@ function pinna(c: Surface, id: VillaPetId, side: number) {
   if (id === 'dog') {
     // The ear first rolls OUT from its root, folds across the cheek, then turns
     // IN toward the jaw. Its leading lip and furred back aren't two oval paddles.
-    const stations = [[-.103,.097,-.032,0,0],[-.093,.108,-.035,.006,.025],[-.073,.116,-.039,.009,.043],[-.042,.118,-.037,.011,.053],
-      [-.005,.113,-.034,.013,.058],[.029,.107,-.027,.017,.056],[.051,.095,-.022,.022,.042],[.063,.083,-.019,.014,.025],[.065,.076,-.020,0,0]];
-    m.skin(stations.map(([y,cx,cz,d,w])=>!w?[[side*cx,y,cz]]:Array.from({length:14},(_,i):P3=>{
-      const a=-turn*i/14, along=Math.sin(a), out=side*Math.cos(a), lip=Math.exp(-(((along-.70)/.24)**2));
-      return [side*(cx + d*out - .008*lip*fade(.04-y,0,.11)),y + .003*along,cz+w*along];
+    const stations = [[-.121,.112,-.042,0,0],[-.118,.119,-.044,.006,.014],[-.110,.127,-.044,.009,.031],
+      [-.088,.135,-.046,.012,.046],[-.055,.136,-.046,.012,.057],[-.020,.131,-.044,.013,.062],
+      [.016,.125,-.038,.016,.061],[.045,.118,-.033,.020,.054],[.066,.104,-.028,.022,.043],
+      [.077,.091,-.030,.017,.030],[.072,.072,-.033,0,0]];
+    m.skin(stations.map(([y,cx,cz,d,w])=>!w?[[side*cx,y,cz]]:Array.from({length:16},(_,i):P3=>{
+      const a=-turn*i/16, across=Math.sin(a), out=side*Math.cos(a), fold=fade(.075-y,0,.105);
+      const curl=.018*across*across*fold, ridge=.008*bell((across-.47)/.28)*fold;
+      return [side*(cx+d*out-curl+ridge), y+.009*across*fold, cz+w*across+.005*out*fold];
     })));
-    c.put(m.geometry(),(x,y,z)=>tint(tint(0x77533e,0xa87951,fade(y,.012,.065)*.52),0x624a40,(1-fade(Math.abs(x),.084,.116))*.6+fade(z,-.013,.012)*.29),
-      (_x,y,z)=>fibreUV(.11+.80*(z+.094)/.127,.10+.80*(.065-y)/.168));
+    c.put(m.geometry(),(x,y,z)=>tint(tint(0x825738,0xb3865d,fade(y,.026,.076)*.74),0x634934,
+      (1-fade(Math.abs(x),.094,.126))*.52+.32*bell((z+.007)/.012)*fade(.067-y,0,.08)),
+      (_x,y,z)=>fibreUV(.11+.80*(z+.110)/.144,.10+.80*(.077-y)/.198));
     return;
   }
-  const stations = cat ? [[.049,.043,.028],[.079,.045,.029],[.109,.036,.022],[.140,.020,.014],[.161,.005,.005]]
-    : [[.054,.023,.025],[.085,.031,.027],[.138,.040,.026],[.192,.035,.020],[.232,.022,.013],[.253,.006,.005]];
-  const pos = (x: number, h: number, z: number):P3 => [side*(cat?.055+.15*h:.040+h*(female?.28:.08))+x,h*(female?.93:1),
-    -.015-.105*h-.008*fade(h,.12,.25)*(side+1)*.5+z];
-  const cross = [[-1,0],[-.88,.52],[-.72,.78],[-.46,.40],[0,.18],[.43,.38],[.72,.76],[.89,.48],[1,0],[.70,-.72],[0,-.97],[-.67,-.74]];
+  const stations = cat ? [[.044,.041,.030],[.065,.049,.036],[.085,.046,.034],[.111,.034,.027],[.138,.019,.016],[.157,.007,.006]]
+    : [[.048,.023,.026],[.076,.030,.032],[.102,.034,.033],[.148,.040,.030],[.192,.035,.025],[.228,.026,.018],[.250,.014,.010],[.258,.006,.005]];
+  const pos = (x: number, h: number, z: number):P3 => {
+    const free=fade(h,.069,.253), centre=cat ? .048+.24*h : .029+h*(female?.29:.071)+.004*free;
+    // The spoon twists about its root; the near and far ear do not have the
+    // same back contour. At midlength both rims still stand ahead of the well.
+    const sweep=cat ? -.024-.16*h : -.015-.14*h-(female?.026:.016)*free*free*(side>0?1:.51);
+    return [side*centre+x,h*(female?.93:1),sweep+z-side*x*(cat?.22:.10)*free];
+  };
+  const cross = [[-1,0],[-.88,.69],[-.72,.89],[-.46,.21],[0,-.19],[.43,.20],[.72,.85],[.89,.61],[1,0],[.70,-.75],[0,-1.08],[-.67,-.80]];
   const rings:P3[][] = [[pos(0,.043,0)],...stations.map(([h,w,d])=>cross.map(([x,z])=>pos(x*w,h,z*d))),[pos(0,stations[stations.length-1][0]+.003,0)]];
   m.skin(rings); const last=m.positions.length/3-1;
   c.put(m.geometry(),(_x,y,_z,i)=>{
@@ -90,29 +129,47 @@ function pinna(c: Surface, id: VillaPetId, side: number) {
   }, (_x,y,_z,i)=>fibreUV(.1+.78*(i===0||i===last?.5:(cross[(i-1)%cross.length][0]+1)*.5),.90-.8*fade(y,.04,cat?.163:.255)));
 }
 
-function nose(c: Surface, tip: number, y: number, width: number, h: number, dog: boolean) {
-  const m=new NatureMesh(), n=16;
-  m.skin([[ [0,y,tip-.016] ], ...[[-.011,.74],[-.005,1],[.001,.91],[.003,.63]].map(([z,r])=>Array.from({length:n},(_,i):P3=>{
-    const a=turn*i/n, sx=Math.cos(a),sy=Math.sin(a), notch=Math.exp(-(((Math.abs(sx)-.65)/.19)**2 + ((sy-.05)/.56)**2));
-    return [width*sx*(.82+.23*sy)*r,y+h*sy*r,tip+z-.0024*notch];
-  })), [[0,y+.001,tip+.0038]]]);
-  c.put(m.geometry(),(x,yy,z)=>{
-    const wing=Math.abs(x)/width, fy=(yy-y)/h;
-    return tint(dog?0x524a42:0xbf8e84,dog?0x252725:0x876b63,(1-fade(Math.abs(wing-.61),.08,.34))*(1-fade(Math.abs(fy-.06),.12,.65))+.25*(1-fade(z,tip-.01,tip)));
-  },dog?wetKeratin:undefined);
+function nose(c: Surface, tip: number, y: number, w: number, h: number, dog: boolean) {
+  // A single rounded shield, curling under to the philtrum. The narial folds
+  // are depressions in the same continuous face as the septum, not two bulbs.
+  const m=new NatureMesh(), tones:number[]=[], across=[-1,-.79,-.56,-.32,0,.32,.56,.79,1], up=[-1,-.52,.04,.44,1];
+  const rows=up.map(v=>across.map(u=>{
+    const x=w*u*(.85+.18*v)*(1-.15*v*v), under=(1-v)*.5;
+    const yy=y+h*(v*(1-.43*u*u)-.14*(1-u*u)*under), slit=bell((Math.abs(u)-.56)/.17)*bell((v-.06-.33*(Math.abs(u)-.56))/.24);
+    const front=1-u*u, z=tip+h*(.40*front+.33*(1-v*v)-.56*(dog?1:.40)*slit-.20*under);
+    tones.push(tint(dog?0x504b44:0xb99388,dog?0x292a28:0x9c7a70,.76*slit+.23*under));
+    return m.point([x,yy,z]);
+  }));
+  for(let i=1;i<rows.length;i++) for(let j=1;j<across.length;j++) {
+    const a=rows[i-1], b=rows[i]; m.tri(a[j-1],a[j],b[j]); m.tri(a[j-1],b[j],b[j-1]);
+  }
+  const rim=[...rows[0],...rows.slice(1).map(row=>row[row.length-1]),...rows[rows.length-1].slice(0,-1).reverse(),...rows.slice(1,-1).reverse().map(row=>row[0])];
+  const base=rim.map(i=>{const [x,yy]=m.positions.slice(i*3,i*3+2); tones.push(dog?0x50483f:0xb79488);return m.point([x*.83,y+(yy-y)*.83,tip-h]);});
+  rim.forEach((i,j)=>{const k=(j+1)%rim.length;m.tri(base[j],base[k],i);m.tri(base[k],rim[k],i);});
+  c.put(m.geometry(),(_x,_y,_z,i)=>tones[i],dog?wetKeratin:undefined);
 }
 export function mammalHead(c: Surface, id: VillaPetId) {
   const kind=breed(id), dog=kind==='dog', cat=kind==='cat', rows=skull[kind], {base,dark,pale}=colors(id), end=rows[rows.length-1][0];
-  const deform=(x:number,y:number,z:number):P3=>{
-    // The whisker pads open towards the sides and a shallow cleft divides the upper lip.
-    const pad=fade(z,dog?.074:.052,end-.026)*(1-fade(y,-.039,.003)), cleft=1-fade(Math.abs(x),.002,.022);
-    return [x*(1+.14*pad), y+.005*cleft*pad, z-.0055*cleft*pad];
-  };
-  const underlying = hide(rows), sample:PointOnHide=(z,a)=>deform(...underlying(z,a));
-  const face=(side:number,z:number,y:number,lift:number):P3=>{
-    const [,cy,w,h]=section(rows,z), x=side*w*Math.sqrt(clamp(1-((y-cy)/(h||1))**2)), p=deform(x,y,z);
-    return [p[0]+side*lift*.88,p[1]+.08*lift,p[2]+.44*lift];
-  };
+  const rings=rows.map(([z,crest,chin,brow,orbit,cheek,jaw]):P3[]=>{
+    if(!brow) return [[0,crest,z]];
+    const sweep=fade(z,-.160,-.075)*(1-fade(z,.067,end)), pad=fade(z,dog?.077:.054,end-.020);
+    // Spine → eyebrow → socket → zygomatic arch → whisker bed → lower jaw.
+    // The brows lead the cheek; the lip leads the chin. These are oblique
+    // courses, not circles all terminating in one plane perpendicular to Z.
+    const arc=[ [0,1,-.014], [brow*.47,.974,-.006], [brow*.80,.918,.005], [brow,.821,.014],
+      [orbit,.641,.011], [cheek*.994,.505,-.004], [cheek,.365,-.012], [jaw*1.08,.207,-.009],
+      [jaw*.90,.130,-.014], [jaw*.51,.042,-.020], [0,0,-.022] ];
+    const p=(i:number,side:number):P3=>{
+      const [w,t,dz]=arc[i], puffy=pad*bell((t-.42)/.19);
+      // The side pads project on either side of the central nose, especially
+      // on the short, split muzzle of a rabbit. The small chin returns behind.
+      const padLead=dog?.010:cat?.013:.018;
+      return [side*w,chin+(crest-chin)*t+(dog?.004:.007)*puffy,z+dz*sweep+padLead*puffy-.007*pad*bell(t/.18)];
+    };
+    return [...arc.map((_,i)=>p(i,-1)),...arc.slice(1,-1).reverse().map((_,i)=>p(arc.length-2-i,1))];
+  });
+  const skin=drapedHide(rows.map(row=>row[0]),rings), face=faceOf(skin.geometry);
+  const fur: Sections=rows.map(([z,top,bottom,brow,orbit,cheek])=>[z,(top+bottom)/2,Math.max(brow,orbit,cheek),(top-bottom)/2]);
   const pigment=(x:number,y:number,z:number)=>{
     const stipple=.50+.24*Math.sin(80*x+38*y-19*z)+.18*Math.sin(z*74+y*61);
     if(dog){
@@ -131,22 +188,29 @@ export function mammalHead(c: Surface, id: VillaPetId) {
     const shaded=tint(base,dark,(.15+.36*stipple)*fade(y,-.014,.074)+fade(Math.abs(x),.060,.102)*(1-fade(z,-.012,.07))*.19);
     return tint(shaded,pale,.55*fade(z,.067,.134)+.58*(1-fade(y,-.056,-.013)));
   };
-  c.put(form(rows,20,deform),pigment,axialFur(rows));
-  coatLocks(c,sample,pigment,[[.070,-.046,1.87,.94,9,dog?.012:.016],[.039,-.049,2.33,.85,6,.015],[.005,-.048,.78,.38,4,.010]],cat?439:dog?337:509);
+  const facialCoat=(x:number,y:number,z:number)=>{
+    const baseColor=pigment(x,y,z), mantle=fade(Math.abs(x),.042,.086), eyeBand=bell((y-.030-.21*(z-.043))/.023);
+    const mask=mantle*eyeBand*bell((z-.047)/.066), pad=fade(z,cat?.066:.088,end-.014)*(1-fade(y,-.032,.012));
+    return tint(tint(baseColor,dark,mask*(dog?.36:cat?.51:.21)),pale,pad*(cat?.83:.58));
+  };
+  c.put(skin.geometry,facialCoat,axialFur(fur));
+  coatLocks(c,skin.at,facialCoat,[[.053,-.051,1.95,.94,8,dog?.012:.019],[.024,-.062,2.30,.85,5,.017]],cat?439:dog?337:509);
   for(const side of [-1,1]){
     pinna(c,id,side);
-    const z=dog?.055:cat?.048:.047, y=dog?.023:cat?.026:.018;
-    eyelids(c,side,(s,h,l)=>face(side,s,h,l),z,y,dog?.016:cat?.018:.0155,dog?.0127:cat?.0125:.0117,pigment(...face(side,z,y,0)),cat?0x9d9d71:dog?0xa2835c:0x87725d,cat?.23:.54,cat?.29:.10);
-    const mouthY=dog?-.029:-.022;
-    c.cord(dog?0x776250:cat?0x8a7567:0xa78e7d,[[0,mouthY-.009,end+.0007,.0014],[side*.002,mouthY-.022,end-.005,.0013],
-      [...face(side,end-.013,mouthY-.030,.001),.0013],[...face(side,end-.029,mouthY-.031,0),0]],4);
+    const z=dog?.054:.047, y=dog?.024:.023;
+    eyelids(c,side,(s,h,l)=>face(side,s,h,l),z,y,dog?.015:cat?.017:.016,.014,
+      facialCoat(...face(side,z,y,0)),cat?0xb0bb85:dog?0xb0936b:0xa48d76,cat?.22:dog?.51:.58,cat?.18:.08,
+      cat?undefined:dog?0xe6bd82:0xd5b391);
+    const mouth=(s:number,y:number,r:number):Collar=>[...face(side,end-s,y,.0014),r];
+    c.cord(dog?0x715746:cat?0x827268:0xa08877,[[0,-.027,end+.0003,.0015],
+      mouth(.006,-.039,.0017),mouth(.016,-.049,.0019),mouth(.031,-.053,.0018),mouth(.047,-.054,.0012),mouth(.060,-.048,0)],5);
     for(let i=0;i<(dog?2:3);i++){
-      const start=face(side,end-(dog?.029:.027)-i*.005,-.033+.005*i,.0016), w=dog?.042:cat?.074:.056;
-      const p1:P3=[start[0]+side*w*.40,start[1]+.003+i*.001,start[2]+.003];
-      c.cord(dog?0xa6937c:0xc6bbae,[[...start,.00076],[...p1,.00060],[start[0]+side*w,start[1]+.008-.007*i,start[2]-.015-.009*i,0]],3);
+      const start=face(side,end-(dog?.029:.027)-i*.005,-.038+.005*i,.0013), w=dog?.040:cat?.074:.056;
+      const p1:P3=[start[0]+side*w*.40,start[1]+.004+i*.001,start[2]+.003];
+      c.cord(dog?0xa6937c:0xc6bbae,[[...start,.00078],[...p1,.00065],[start[0]+side*w,start[1]+.008-.007*i,start[2]-.015-.009*i,0]],3);
     }
   }
-  nose(c,end,dog?-.027:-.021,dog?.029:cat?.019:.0175,dog?.015:.0105,dog);
+  nose(c,end-(dog?.004:.002),-.018,dog?.033:cat?.019:.018,dog?.016:.010,dog);
 }
 
 export function mammalTail(c: Surface,id: VillaPetId) {
@@ -164,34 +228,69 @@ export function mammalTail(c: Surface,id: VillaPetId) {
     (x,y,z)=>fibreUV(.16+.68*clamp(.5+x/.11),.10+.80*clamp((y-z)/.235)));
 }
 
+/** One pad branches into four digits. The top and sole vertices of each web
+ * are shared at the knuckles, but the toes turn, taper and terminate separately.
+ * No closed toe bulbs or coplanar caps buried inside a second heel. */
+function pawSkin(len:number, width:number, longHindFoot:boolean) {
+  const m=new NatureMesh();
+  const join=(a:number[],b:number[])=>{
+    let i=0,j=0;
+    while(i<a.length || j<b.length){
+      const ia=a[i%a.length], ib=b[j%b.length];
+      if(j===b.length || (i+1)*b.length<=(j+1)*a.length){ m.tri(ia,a[++i%a.length],ib); }
+      else { m.tri(ia,b[++j%b.length],ib); }
+    }
+  };
+  const heel=m.point([0,.018,-len]);
+  const roll=Array.from({length:10},(_,i)=>{
+    const a=turn*i/10; return m.point([width*.77*Math.cos(a),.022+.019*Math.sin(a),-.44*len]);
+  });
+  roll.forEach((p,i)=>m.tri(heel,roll[(i+1)%roll.length],p));
+  const top:number[]=[],sole:number[]=[];
+  for(let j=0;j<9;j++){
+    const u=(j-4)/4, z=len*(.31-.09*u*u);
+    top.push(m.point([u*width,.016+(.018*(1-u*u))*(j%2?1:.65),z]));
+    sole.push(m.point([u*width,.0031+.003*u*u,z]));
+  }
+  join(roll,[...top].reverse().concat(sole));
+  for(let toe=0;toe<4;toe++){
+    const i=toe*2, axis=(toe-1.5)*.50, length=longHindFoot?1.19-.26*Math.abs(axis):1.05-.20*Math.abs(axis), x=axis*width;
+    let web=[top[i+2],top[i+1],top[i],sole[i],sole[i+1],sole[i+2]];
+    for(const [t,spread,high] of [[.58,.245,.032],[.86,.204,.024]]){
+      const z=len*t*length, w=width*spread, mid=x*(1+.055*t), h=high-.003*Math.abs(axis);
+      const ring=[[w,h*.59],[0,h],[-w,h*.59],[-w*.78,.007],[0,.0031],[w*.78,.007]].map(([dx,y])=>m.point([mid+dx,y,z]));
+      join(web,ring); web=ring;
+    }
+    const tip=m.point([x*1.058,.010,len*length]); web.forEach((p,j)=>m.tri(p,web[(j+1)%6],tip));
+  }
+  return m.geometry();
+}
+
 export function mammalLegs(c: Surface,id: VillaPetId,pair: number) {
-  const cat=id==='cat', rabbit=breed(id)==='rabbit', {base,dark,pale}=colors(id);
+  const cat=id==='cat', rabbit=breed(id)==='rabbit', {base,dark,pale}=colors(id), bodyCoat=mammalPigment(id);
   for(const side of [-1,1]){
-    const fore=(pair===0?side:-side)>0,z=fore?.102:-.126,x=side*(cat?.078:.087);
+    const fore=(pair===0?side:-side)>0,z=fore?.102:-.126,x=side*(cat?.074:rabbit&&fore?.063:.087);
     // Bury the narrow proximal ends well inside the rib cage. A shoulder blade
     // runs down/forward; a wider thigh folds back at the hock. Neither ends in
     // a cut-off cylinder perched ON the flank when viewed from above.
-    const joint:Collar[]=fore?[[x*(rabbit?.30:.42),.286,z-(rabbit?.018:.043),.012],[x*.68,.246,z-.031,.035],[x*.91,.205,z-.019,.043],
-      [x,.164,z-.019,.033],[x,.108,z-.001,.022],[x,.063,z+.008,.017],[x,.034,z+.024,.022]]
-      :[[x*.49,.290,z-.018,.013],[x*.70,.246,z-.008,rabbit?.051:.039],[x*.94,.200,z+.011,rabbit?.060:.049],
-        [x*1.04,.151,z+(rabbit?.053:.038),rabbit?.048:.039],[x*1.02,.099,z-.006,.028],[x,.064,z-(rabbit?.043:.030),.019],[x,.032,z-.022,.018]];
+    const joint:Collar[]=fore?[[x*(rabbit?.30:.42),.286,z-.038,.012],[x*.59,.251,z-.035,.031],[x*.75,.219,z-.015,cat?.031:.037],
+      [x*.88,.181,z-.002,.034],[x*.96,.144,z-.013,.028],[x,.098,z-(rabbit?.014:.006),cat?.018:.022],[x,.059,z+(rabbit?0:.010),.018],[x,.031,z+(rabbit?.006:.022),.021]]
+      :[[x*.46,.290,z-.018,.013],[x*.70,.246,z-.011,rabbit?.057:.043],[x*.97,.201,z+.015,rabbit?.071:.052],
+        [x*1.06,.152,z+(rabbit?.050:.040),rabbit?.057:.042],[x*1.07,.116,z+(rabbit?.046:.022),rabbit?.047:.032],
+        [x*1.03,.084,z-(rabbit?.028:.016),rabbit?.035:.025],[x,.060,z-(rabbit?.052:.039),.021],[x,.030,z-(rabbit?.012:.021),.018]];
     const sock=cat?.074:rabbit?.091:.055, skin = new NatureMesh(), lower=joint[joint.length-1], upper=joint[0];
     skin.skin([[[lower[0],lower[1],lower[2]]], ...joint.slice().reverse().map(([cx,y,cz,r])=>Array.from({length:9},(_,i):P3=>{
-      const a=-turn*i/9, muscle=fade(y,.113,.205);
-      return [cx+r*Math.cos(a)*(1-.12*muscle), y, cz+r*Math.sin(a)*(1+(fore?.22:.43)*muscle)];
+      const a=-turn*i/9, muscle=fade(y,.113,.205), blade=bell((y-.18)/.050);
+      return [cx+r*Math.cos(a)*(1-.15*muscle), y+blade*(.014*side*Math.cos(a)-.009*Math.sin(a)), cz+r*Math.sin(a)*(1+(fore?.22:.43)*muscle)];
     })),[[upper[0],upper[1],upper[2]]]]);
-    c.put(skin.geometry(),(ax,y,s)=>tint(tint(base,dark,fade(y,.13,.221)*(.18+.11*Math.sin(31*s))),pale,1-fade(y+.010*Math.sin(49*s+61*ax),sock-.015,sock+.015)),
+    c.put(skin.geometry(),(ax,y,s)=>{
+      const distal=tint(tint(base,dark,.11),pale,1-fade(y+.010*Math.sin(49*s+61*ax),sock-.018,sock+.019));
+      return tint(distal,bodyCoat(ax,y,s),fade(y,.092,.170));
+    },
       (ax,y,s)=>fibreUV(.14+.70*clamp(.50+(ax-x+.26*(s-z))/.094),.1+.78*fade(.239-y,0,.210)));
-    const last=joint[joint.length-1], len=rabbit&&!fore?.063:cat?.034:.039, centre=last[2]+(rabbit&&!fore?.021:.010);
-    const heel:Sections=[[-len,.018,0,0],[-.74*len,.020,.019,.016],[-.24*len,.023,.026,.021],[.25*len,.023,.030,.020],[.66*len,.019,.028,.015],[.82*len,.016,.018,.011],[.87*len,.016,0,0]];
-    const paw=(ax:number,y:number,s:number)=>tint(pale,base,.19+.22*fade(y,.015,.042)+.09*Math.sin(ax*95+s*30));
-    c.put(form(heel,10),paw,axialFur(heel),[x,0,centre]);
-    // A broad, planted metacarpus feeds four interleaved digits; no row of spheres.
-    for (const n of [-1.5,-.5,.5,1.5]) {
-      const long=len*(1.12-.13*Math.abs(n)),w=.0105-.0009*Math.abs(n),d=n*.013;
-      const toes:Sections=[[len*.13,.022,0,0],[len*.49,.020,w,.015],[long*.85,.016,w*.87,.012],[long,.014,w*.39,.007],[long+.002,.014,0,0]];
-      c.put(form(toes,7,(a,y,s)=>[a+d*(.55+.45*s/long),y,s]),(ax,y,s)=>tint(paw(ax,y,s),dark,.16*(1-fade(y,.01,.021))+.10*(1-fade(s,len*.4,len*.69))),
-        (_a,y,s)=>fibreUV(.27+.36*fade(y,.002,.036),.40+.46*fade(s,0,long)),[x,0,centre]);
-    }
+    const last=joint[joint.length-1], len=rabbit&&!fore?.072:cat?.036:.044, centre=last[2]+(rabbit&&!fore?.013:.012), width=cat?.027:rabbit?.031:.034;
+    c.put(pawSkin(len,width,rabbit&&!fore),(ax,y,s)=>tint(tint(pale,base,.19+.24*fade(y,.015,.042)),dark,
+      .16*fade(s,0,len)*(1-fade(y,.006,.016))+.11*Math.cos(ax/width*turn/.47)*fade(s,0,len)),
+      (ax,_y,s)=>fibreUV(.14+.72*(.5+ax/(2*width)),.12+.75*(len-s)/(2*len)),[x,0,centre]);
   }
 }
