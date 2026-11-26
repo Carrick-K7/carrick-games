@@ -2,6 +2,8 @@
 
 This is the repository's development authority. `README.md` is for external readers; `DESIGN.md` is the visual and interaction authority. Keep only these three root project documents; do not add deployment, heartbeat, memory or visual-style documents without explicit approval.
 
+**Local publication (2026-11-26):** Public SSH port 2222 is retired. GitHub Actions continues running full verification on `ubuntu-24.04`; after `main` CI is green, publish locally on OrangeVPS via `carrick-publish-games` (or `carrick-publish-games <id>`, `carrick-publish-games --unlist <id>`), which calls `/usr/local/sbin/carrick-local-deploy-games` -> `/usr/local/libexec/carrick-games-publish.py` with the same CAS/generation fences.
+
 **Release evidence:** this document records contracts and required closure, not proof of a verified deployment. Use exact-SHA CI results and live component descriptors. A documentation-only delegation does not authorize builds, commits, pushes or production mutation.
 
 **Last reconciled with production:** 2026-11-24 (Asia/Shanghai). Villa **1.14.0**, API 1, `86e8e8a8`, generation 21/sequence 300002: [release run 45420110370/2](<https://github.com/Carrick-K7/carrick-games/actions/runs/45420110370/attempts/2>). Catalog 121; Shell, six other games and 22 tombstones unchanged. All 61 browser cases passed. All 28 public views matched; desktop fed/drove, WebKit touch fed the puppy. 1.13.3 remains reachable.

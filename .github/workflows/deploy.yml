@@ -42,19 +42,13 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - name: Unlist with fixed snapshot fences and report public truth
+      - name: Local unlist notice (public SSH 2222 retired)
         env:
           GAME_IDS: ${{ inputs.game_ids }}
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: node scripts/ci.mjs unlist
-      - name: Cleanup ephemeral deployment credentials
-        if: always()
-        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+        run: |
+          echo "Public SSH 2222 deployment is retired. Run locally on OrangeVPS:"
+          echo "  carrick-publish-games --unlist ${GAME_IDS}"
+          exit 1
 
   plan:
     name: Select affected releases
@@ -168,27 +162,11 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - name: Verify candidate with pinned published counterparts
         run: timeout -k 10 7200 node scripts/ci.mjs verify '${{ matrix.id }}'
-      - name: Publish only this verified game
+      - name: Ready for local publish (public SSH 2222 retired)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.publish
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: timeout -k 10 900 node scripts/ci.mjs publish '${{ matrix.id }}' 2>&1 | tee "publish-${{ matrix.id }}-attempt-${{ github.run_attempt }}.log"
-      - name: Preserve publish log on failure or cancellation
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: game-${{ matrix.id }}-attempt-${{ github.run_attempt }}-publish-log
-          path: publish-${{ matrix.id }}-attempt-${{ github.run_attempt }}.log
-          retention-days: 7
-          if-no-files-found: ignore
-      - name: Cleanup ephemeral deployment credentials
-        if: always()
-        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+        run: |
+          echo "CI verified '${{ matrix.id }}' at ${RELEASE_SHA}. Public SSH 2222 is retired."
+          echo "Publish locally on OrangeVPS with: carrick-publish-games '${{ matrix.id }}'"
       - name: Preserve failed browser evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -230,27 +208,11 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - run: timeout -k 10 7200 node scripts/ci.mjs verify shell
-      - name: Publish only the verified shell
+      - name: Ready for local publish (public SSH 2222 retired)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: timeout -k 10 900 node scripts/ci.mjs publish shell 2>&1 | tee "publish-shell-attempt-${{ github.run_attempt }}.log"
-      - name: Preserve publish log on failure or cancellation
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: shell-attempt-${{ github.run_attempt }}-publish-log
-          path: publish-shell-attempt-${{ github.run_attempt }}.log
-          retention-days: 7
-          if-no-files-found: ignore
-      - name: Cleanup ephemeral deployment credentials
-        if: always()
-        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+        run: |
+          echo "CI verified shell at ${RELEASE_SHA}. Public SSH 2222 is retired."
+          echo "Publish locally on OrangeVPS with: carrick-publish-games shell"
 
   bootstrap-shell:
     name: Initial shell cutover after every game is seeded
@@ -283,24 +245,8 @@ jobs:
       - run: npm ci --include=dev
       - run: npx playwright install --with-deps chromium webkit
       - run: timeout -k 10 7200 node scripts/ci.mjs verify shell
-      - name: Activate the modern shell last
+      - name: Ready for local bootstrap shell publish (public SSH 2222 retired)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.shell_publish == 'true'
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: timeout -k 10 900 node scripts/ci.mjs publish shell 2>&1 | tee "publish-bootstrap-shell-attempt-${{ github.run_attempt }}.log"
-      - name: Preserve publish log on failure or cancellation
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bootstrap-shell-attempt-${{ github.run_attempt }}-publish-log
-          path: publish-bootstrap-shell-attempt-${{ github.run_attempt }}.log
-          retention-days: 7
-          if-no-files-found: ignore
-      - name: Cleanup ephemeral deployment credentials
-        if: always()
-        run: rm -rf -- "${RUNNER_TEMP:?}"/carrick-ssh-*
+        run: |
+          echo "CI verified bootstrap shell at ${RELEASE_SHA}. Public SSH 2222 is retired."
+          echo "Publish locally on OrangeVPS with: carrick-publish-games shell"

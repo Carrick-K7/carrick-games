@@ -503,14 +503,31 @@ export async function publish(plan, id) {
   assert(goodInteger(expectedCounterpartGeneration), 'Missing tested counterpart generation');
   const archive = join(CI_DIR, `${id}.tar.gz`);
   try {
-    await withDeploymentSSH(async sshArgs => {
-      await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
-      const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
-      await runRestrictedPublication({ sshArgs, command, archive });
+    const command = id === 'shell' ? `deploy ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}` : `deploy-game ${id} ${target.version} ${plan.revision} ${verified.expectedGeneration} ${sequence} ${expectedCounterpartGeneration}`;
+    const finishPublish = async () => {
       const observed = componentState(await fetchProductionSnapshot(), id);
       assert(observed.revision === plan.revision && observed.version === target.version, 'Public state does not identify the published target');
       console.log(JSON.stringify({ status: 'deployed', id, revision: plan.revision, generation: observed.generation, sequence: observed.sequence }));
-    });
+    };
+    if (process.env.CARRICK_LOCAL_PUBLISH === '1') {
+      const helper = process.env.LOCAL_PUBLISH_CMD || '/usr/local/sbin/carrick-local-deploy-games';
+      await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
+      await new Promise((resolvePromise, reject) => {
+        const input = createReadStream(archive);
+        const child = spawn(helper, [command], { cwd: ROOT, stdio: ['pipe', 'inherit', 'inherit'] });
+        input.on('error', reject);
+        child.on('error', reject);
+        child.on('exit', (code, signal) => code === 0 ? resolvePromise() : reject(new Error(`Local publish exited with ${signal || code}`)));
+        input.pipe(child.stdin);
+      });
+      await finishPublish();
+    } else {
+      await withDeploymentSSH(async sshArgs => {
+        await run('tar', ['-C', candidate.directory, '-czf', archive, '.']);
+        await runRestrictedPublication({ sshArgs, command, archive });
+        await finishPublish();
+      });
+    }
   } finally {
     await rm(archive, { force: true });
   }
